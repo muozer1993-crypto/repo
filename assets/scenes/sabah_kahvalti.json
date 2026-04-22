@@ -1,0 +1,79 @@
+{
+  "id": "sabah_kahvalti",
+  "titleTr": "Kahvaltı Hazırla",
+  "instructionTr": "Masayı kahvaltıya hazırlayalım. Her şeyi kendi tabağına koy.",
+  "instructionAudioPath": "assets/audio/instructions/sabah_kahvalti.wav",
+  "window": "sabah",
+  "backgroundAsset": "assets/images/scenes/sabah/masa_bg.png",
+  "slots": [
+    {"id": "slot_peynir", "rect": [0.12, 0.55, 0.20, 0.25], "acceptedItemId": "peynir",  "labelTr": "peynir tabağı"},
+    {"id": "slot_zeytin", "rect": [0.35, 0.55, 0.20, 0.25], "acceptedItemId": "zeytin",  "labelTr": "zeytinlik"},
+    {"id": "slot_cay",    "rect": [0.58, 0.55, 0.20, 0.25], "acceptedItemId": "cay",     "labelTr": "çay bardağı"},
+    {"id": "slot_ekmek",  "rect": [0.81, 0.55, 0.15, 0.25], "acceptedItemId": "ekmek",   "labelTr": "ekmek sepeti"}
+  ],
+  "variants": [
+    {
+      "level": 0,
+      "distractorMode": "absent",
+      "sequenceRequired": false,
+      "items": [
+        {"id": "peynir", "assetPath": "assets/images/scenes/sabah/peynir.png", "audioLabelPath": "assets/audio/labels/peynir.wav", "labelTr": "peynir", "acceptedSlotId": "slot_peynir"},
+        {"id": "zeytin", "assetPath": "assets/images/scenes/sabah/zeytin.png", "audioLabelPath": "assets/audio/labels/zeytin.wav", "labelTr": "zeytin", "acceptedSlotId": "slot_zeytin"},
+        {"id": "cay",    "assetPath": "assets/images/scenes/sabah/cay.png",    "audioLabelPath": "assets/audio/labels/cay.wav",    "labelTr": "çay",    "acceptedSlotId": "slot_cay"},
+        {"id": "ekmek",  "assetPath": "assets/images/scenes/sabah/ekmek.png",  "audioLabelPath": "assets/audio/labels/ekmek.wav",  "labelTr": "ekmek",  "acceptedSlotId": "slot_ekmek"}
+      ]
+    },
+    {
+      "level": 1,
+      "distractorMode": "far",
+      "sequenceRequired": false,
+      "items": [
+        {"id": "peynir", "assetPath": "assets/images/scenes/sabah/peynir.png", "audioLabelPath": "assets/audio/labels/peynir.wav", "labelTr": "peynir", "acceptedSlotId": "slot_peynir"},
+        {"id": "zeytin", "assetPath": "assets/images/scenes/sabah/zeytin.png", "audioLabelPath": "assets/audio/labels/zeytin.wav", "labelTr": "zeytin", "acceptedSlotId": "slot_zeytin"},
+        {"id": "cay",    "assetPath": "assets/images/scenes/sabah/cay.png",    "audioLabelPath": "assets/audio/labels/cay.wav",    "labelTr": "çay",    "acceptedSlotId": "slot_cay"},
+        {"id": "ekmek",  "assetPath": "assets/images/scenes/sabah/ekmek.png",  "audioLabelPath": "assets/audio/labels/ekmek.wav",  "labelTr": "ekmek",  "acceptedSlotId": "slot_ekmek"},
+        {"id": "terlik",     "assetPath": "assets/images/distractors/terlik.png",     "audioLabelPath": "assets/audio/labels/terlik.wav",     "labelTr": "terlik",     "distractor": true, "distractorCategory": "far"},
+        {"id": "dis_fircasi","assetPath": "assets/images/distractors/dis_fircasi.png","audioLabelPath": "assets/audio/labels/dis_fircasi.wav","labelTr": "diş fırçası","distractor": true, "distractorCategory": "far"}
+      ]
+    },
+    {
+      "level": 2,
+      "distractorMode": "near",
+      "sequenceRequired": false,
+      "items": [
+        {"id": "peynir", "assetPath": "assets/images/scenes/sabah/peynir.png", "audioLabelPath": "assets/audio/labels/peynir.wav", "labelTr": "peynir", "acceptedSlotId": "slot_peynir"},
+        {"id": "zeytin", "assetPath": "assets/images/scenes/sabah/zeytin.png", "audioLabelPath": "assets/audio/labels/zeytin.wav", "labelTr": "zeytin", "acceptedSlotId": "slot_zeytin"},
+        {"id": "cay",    "assetPath": "assets/images/scenes/sabah/cay.png",    "audioLabelPath": "assets/audio/labels/cay.wav",    "labelTr": "çay",    "acceptedSlotId": "slot_cay"},
+        {"id": "ekmek",  "assetPath": "assets/images/scenes/sabah/ekmek.png",  "audioLabelPath": "assets/audio/labels/ekmek.wav",  "labelTr": "ekmek",  "acceptedSlotId": "slot_ekmek"},
+        {"id": "makarna","assetPath": "assets/images/distractors/makarna.png","audioLabelPath": "assets/audio/labels/makarna.wav","labelTr": "makarna","distractor": true, "distractorCategory": "near"},
+        {"id": "corba",  "assetPath": "assets/images/distractors/corba.png",  "audioLabelPath": "assets/audio/labels/corba.wav",  "labelTr": "çorba",  "distractor": true, "distractorCategory": "near"}
+      ]
+    },
+    {
+      "level": 3,
+      "distractorMode": "near",
+      "sequenceRequired": true,
+      "items": [
+        {"id": "peynir", "assetPath": "assets/images/scenes/sabah/peynir.png", "audioLabelPath": "assets/audio/labels/peynir.wav", "labelTr": "peynir", "acceptedSlotId": "slot_peynir", "sequenceOrder": 1},
+        {"id": "ekmek",  "assetPath": "assets/images/scenes/sabah/ekmek.png",  "audioLabelPath": "assets/audio/labels/ekmek.wav",  "labelTr": "ekmek",  "acceptedSlotId": "slot_ekmek",  "sequenceOrder": 2},
+        {"id": "zeytin", "assetPath": "assets/images/scenes/sabah/zeytin.png", "audioLabelPath": "assets/audio/labels/zeytin.wav", "labelTr": "zeytin", "acceptedSlotId": "slot_zeytin", "sequenceOrder": 3},
+        {"id": "cay",    "assetPath": "assets/images/scenes/sabah/cay.png",    "audioLabelPath": "assets/audio/labels/cay.wav",    "labelTr": "çay",    "acceptedSlotId": "slot_cay",    "sequenceOrder": 4},
+        {"id": "makarna","assetPath": "assets/images/distractors/makarna.png","audioLabelPath": "assets/audio/labels/makarna.wav","labelTr": "makarna","distractor": true, "distractorCategory": "near"},
+        {"id": "pilav",  "assetPath": "assets/images/distractors/pilav.png",  "audioLabelPath": "assets/audio/labels/pilav.wav",  "labelTr": "pilav",  "distractor": true, "distractorCategory": "near"}
+      ]
+    },
+    {
+      "level": 4,
+      "distractorMode": "functional",
+      "sequenceRequired": true,
+      "items": [
+        {"id": "peynir", "assetPath": "assets/images/scenes/sabah/peynir.png", "audioLabelPath": "assets/audio/labels/peynir.wav", "labelTr": "peynir", "acceptedSlotId": "slot_peynir", "sequenceOrder": 1},
+        {"id": "ekmek",  "assetPath": "assets/images/scenes/sabah/ekmek.png",  "audioLabelPath": "assets/audio/labels/ekmek.wav",  "labelTr": "ekmek",  "acceptedSlotId": "slot_ekmek",  "sequenceOrder": 2},
+        {"id": "zeytin", "assetPath": "assets/images/scenes/sabah/zeytin.png", "audioLabelPath": "assets/audio/labels/zeytin.wav", "labelTr": "zeytin", "acceptedSlotId": "slot_zeytin", "sequenceOrder": 3},
+        {"id": "cay",    "assetPath": "assets/images/scenes/sabah/cay.png",    "audioLabelPath": "assets/audio/labels/cay.wav",    "labelTr": "çay",    "acceptedSlotId": "slot_cay",    "sequenceOrder": 4},
+        {"id": "kahve_fincani","assetPath": "assets/images/distractors/kahve_fincani.png","audioLabelPath": "assets/audio/labels/kahve_fincani.wav","labelTr": "kahve fincanı","distractor": true, "distractorCategory": "functional"},
+        {"id": "margarin",     "assetPath": "assets/images/distractors/margarin.png",     "audioLabelPath": "assets/audio/labels/margarin.wav",     "labelTr": "margarin",    "distractor": true, "distractorCategory": "functional"}
+      ]
+    }
+  ]
+}
