@@ -1,0 +1,44 @@
+# Supabase local config. See https://supabase.com/docs/guides/cli/config
+# The linked cloud project should be created in the Frankfurt region
+# (eu-central-1) so patient data stays in the EU under GDPR/KVKK.
+project_id = "ergoterapi"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+# Anonymous sign-ins give the device a stable auth.uid() without
+# asking the patient or caregiver for credentials.
+enable_anonymous_sign_ins = true
+enable_signup = true
+site_url = "http://localhost:3000"
+
+[auth.email]
+enable_signup = false
+enable_confirmations = false
+
+[functions]
+enabled = true
+verify_jwt = false
+
+[edge_runtime]
+policy = "per_worker"
+
+[storage]
+enabled = false
+
+[inbucket]
+enabled = true
+port = 54324
