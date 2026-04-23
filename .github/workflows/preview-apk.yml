@@ -42,6 +42,28 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
+      - name: Patch isar_flutter_libs for AGP 8 namespace requirement
+        run: |
+          set -e
+          # isar_flutter_libs 3.x is no longer maintained and ships
+          # without a `namespace` declaration, which AGP 8+ (bundled
+          # with Flutter 3.24+) rejects. We inject it into the cached
+          # copy before the Gradle build reads it.
+          ISAR_DIR=$(find "$HOME/.pub-cache/hosted/pub.dev" \
+            -maxdepth 1 -type d -name "isar_flutter_libs-*" | head -1)
+          if [ -z "$ISAR_DIR" ]; then
+            echo "::error::isar_flutter_libs not found in pub cache"
+            exit 1
+          fi
+          BG="$ISAR_DIR/android/build.gradle"
+          if grep -q 'namespace' "$BG"; then
+            echo "Already patched: $BG"
+          else
+            sed -i '/^android {/a\    namespace "dev.isar.isar_flutter_libs"' "$BG"
+            echo "Patched $BG"
+            grep -n 'namespace\|^android' "$BG" | head -5
+          fi
+
       - name: Generate Isar code
         run: dart run build_runner build --delete-conflicting-outputs
 
