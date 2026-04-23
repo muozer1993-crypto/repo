@@ -110,7 +110,19 @@ cd ergoterapi
 git checkout claude/therapeutic-game-design-BAr6E
 ```
 
-## 9. Bağımlılıkları yükle
+## 9. Android platform dosyalarını üret (tek seferlik)
+
+`android/` klasörü repo'da yok — her ortam kendi Flutter versiyonuna göre
+üretir. Tek seferlik bu komutu çalıştır:
+
+```powershell
+flutter create . --platforms=android --org tr.ergoterapi --project-name ergoterapi
+```
+
+Bu komut `lib/` ve `pubspec.yaml`'a dokunmaz, sadece eksik `android/`
+scaffold'unu üretir.
+
+## 10. Bağımlılıkları yükle
 
 ```powershell
 flutter pub get
@@ -211,6 +223,9 @@ ve temiz üretir. Her zaman bu flag'i kullanabilirsin.
 ## Kısa referans (sık kullanılan komutlar)
 
 ```powershell
+# Tek seferlik (android/ klasörü yoksa)
+flutter create . --platforms=android --org tr.ergoterapi --project-name ergoterapi
+
 # Her pull'dan sonra
 flutter pub get
 powershell -ExecutionPolicy Bypass -File scripts\fix_isar_namespace.ps1
