@@ -3,37 +3,41 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/audio/audio_service.dart';
 import '../../../../core/haptics/haptics_service.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../application/scene_controller.dart';
 import '../../domain/scene.dart';
 import 'flying_item_overlay.dart';
 import 'scene_item_tile.dart';
 import 'scene_slot.dart';
 
-/// Renders the scene's background, the slot layer, the tray, and
-/// manages the mid-flight animations for correct taps.
+/// Grid-based scene layout.
+///
+/// The JSON-positioned scene board required a photographic background
+/// for the slot coordinates to make sense. While illustration assets
+/// are still being produced we render slots and tray tiles as two
+/// equal-width rows — a visual model that reads as
+/// "match the bottom items to the top boxes" without needing any
+/// image assets.
+///
+/// When background + item images land later the grid stays; the
+/// slot/tile contents switch from text-fallback to imagery.
 class SceneBoard extends ConsumerStatefulWidget {
-  const SceneBoard({super.key});
+  const SceneBoard({required this.instructionText, super.key});
+
+  final String instructionText;
 
   @override
   ConsumerState<SceneBoard> createState() => _SceneBoardState();
 }
 
 class _SceneBoardState extends ConsumerState<SceneBoard> {
-  /// Keys for each tray tile so we can grab their global rect when a
-  /// fly-to animation kicks off.
   final Map<String, GlobalKey> _itemKeys = {};
-
-  /// Keys for each slot so we can target fly-to animations.
   final Map<String, GlobalKey> _slotKeys = {};
-
   final Map<String, GlobalKey<SceneItemTileState>> _tileStateKeys = {};
-
-  /// In-flight fly-to animations. Keyed by itemId.
   final Map<String, _InFlight> _inFlight = {};
 
   @override
   Widget build(BuildContext context) {
-    // React to new outcomes from the controller.
     ref.listen<SceneState>(sceneControllerProvider, (prev, next) {
       final outcome = next.lastOutcome;
       final itemId = next.lastOutcomeItemId;
@@ -47,133 +51,133 @@ class _SceneBoardState extends ConsumerState<SceneBoard> {
     });
 
     final state = ref.watch(sceneControllerProvider);
+    return Stack(
+      children: [
+        const Positioned.fill(
+          child: ColoredBox(color: AppColors.background),
+        ),
+        Positioned.fill(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 92, 12, 12),
+            child: LayoutBuilder(
+              builder: (context, cons) {
+                return Column(
+                  children: [
+                    _InstructionCard(text: widget.instructionText),
+                    const SizedBox(height: 10),
+                    _SectionHeader(
+                      text: 'Eşyaları doğru yerlere koy',
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      flex: 5,
+                      child: _slotRow(state),
+                    ),
+                    const SizedBox(height: 10),
+                    _SectionHeader(
+                      text: 'Eşyalar — dokunduğun yukarı uçar',
+                      color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      flex: 5,
+                      child: _trayRow(state),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+        ..._inFlightOverlays(),
+      ],
+    );
+  }
+
+  Widget _slotRow(SceneState state) {
     return LayoutBuilder(
-      builder: (context, constraints) {
-        return Stack(
-          children: [
-            _background(state.scene),
-            ..._buildSlots(state),
-            _buildTray(state, constraints),
-            ..._inFlightOverlays(),
-          ],
+      builder: (context, cons) {
+        return Row(
+          children: state.scene.slots.map((slot) {
+            _slotKeys.putIfAbsent(slot.id, GlobalKey.new);
+            final filledItem = _itemForSlot(state, slot.id);
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: KeyedSubtree(
+                  key: _slotKeys[slot.id],
+                  child: SceneSlotWidget(
+                    slot: slot,
+                    filled: filledItem != null,
+                    filledAssetPath: filledItem?.assetPath,
+                    filledLabel: filledItem?.labelTr,
+                  ),
+                ),
+              ),
+            );
+          }).toList(growable: false),
         );
       },
     );
   }
 
-  Widget _background(Scene scene) {
-    return Positioned.fill(
-      child: Image.asset(
-        scene.backgroundAsset,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFFEFE4CF)),
-      ),
-    );
-  }
-
-  List<Widget> _buildSlots(SceneState state) {
-    return state.scene.slots.map((slot) {
-      _slotKeys.putIfAbsent(slot.id, GlobalKey.new);
-      final filledItem = _itemForSlot(state, slot.id);
-      return LayoutBuilder(
-        builder: (context, c) {
-          final rect = slot.relativeRect;
-          final totalW = MediaQuery.of(context).size.width;
-          final totalH = MediaQuery.of(context).size.height;
-          return Positioned(
-            left: rect.left * totalW,
-            top: rect.top * totalH,
-            width: rect.width * totalW,
-            height: rect.height * totalH,
-            child: KeyedSubtree(
-              key: _slotKeys[slot.id],
-              child: SceneSlotWidget(
-                slot: slot,
-                filled: filledItem != null,
-                filledAssetPath: filledItem?.assetPath,
-                filledLabel: filledItem?.labelTr,
-              ),
-            ),
-          );
-        },
-      );
-    }).toList(growable: false);
-  }
-
-  Widget _buildTray(SceneState state, BoxConstraints cons) {
-    // Fit items to available width when ≤ 4 items (happy path for
-    // level-0 variants with no distractors). When there are more
-    // items (distractors + correct), fall back to horizontal scroll
-    // with fixed-width tiles so the tray stays legible.
+  Widget _trayRow(SceneState state) {
     final items = state.variant.items;
-    final useScroll = items.length > 4;
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: 150,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.92),
-          border: const Border(
-            top: BorderSide(width: 1, color: Color(0x22000000)),
-          ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: useScroll
-            ? _scrollingTray(state)
-            : _fittingTray(state, cons.maxWidth - 24),
-      ),
+    // ≤5 items fit in a single equal-width row. More items split
+    // into two rows so nothing shrinks below a legible tile width.
+    final twoRows = items.length > 5;
+    if (!twoRows) {
+      return Row(
+        children: items
+            .map((item) => Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: _trayTile(state, item),
+                  ),
+                ))
+            .toList(growable: false),
+      );
+    }
+    final half = (items.length / 2).ceil();
+    final top = items.sublist(0, half);
+    final bottom = items.sublist(half);
+    return Column(
+      children: [
+        Expanded(child: _trayRowRaw(state, top)),
+        const SizedBox(height: 8),
+        Expanded(child: _trayRowRaw(state, bottom)),
+      ],
     );
   }
 
-  Widget _scrollingTray(SceneState state) {
-    return Center(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: state.variant.items
-              .map((item) => _trayTile(state, item, width: 110))
-              .toList(growable: false),
-        ),
-      ),
-    );
-  }
-
-  Widget _fittingTray(SceneState state, double availableWidth) {
-    final n = state.variant.items.length;
-    final perTile = (availableWidth / n) - 12; // account for padding
-    final tileWidth = perTile.clamp(68.0, 120.0);
+  Widget _trayRowRaw(SceneState state, List<SceneItem> row) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: state.variant.items
-          .map((item) => _trayTile(state, item, width: tileWidth))
+      children: row
+          .map((item) => Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: _trayTile(state, item),
+                ),
+              ))
           .toList(growable: false),
     );
   }
 
-  Widget _trayTile(SceneState state, SceneItem item, {required double width}) {
+  Widget _trayTile(SceneState state, SceneItem item) {
     _itemKeys.putIfAbsent(item.id, GlobalKey.new);
     _tileStateKeys.putIfAbsent(
       item.id,
       GlobalKey<SceneItemTileState>.new,
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: SizedBox(
-        width: width,
-        height: 128,
-        child: KeyedSubtree(
-          key: _itemKeys[item.id],
-          child: SceneItemTile(
-            key: _tileStateKeys[item.id],
-            item: item,
-            placed: state.placedItemIds.contains(item.id),
-            hinted: state.hintTargetItemId == item.id,
-            onTap: () => _onTap(item),
-          ),
-        ),
+    return KeyedSubtree(
+      key: _itemKeys[item.id],
+      child: SceneItemTile(
+        key: _tileStateKeys[item.id],
+        item: item,
+        placed: state.placedItemIds.contains(item.id),
+        hinted: state.hintTargetItemId == item.id,
+        onTap: () => _onTap(item),
       ),
     );
   }
@@ -196,11 +200,9 @@ class _SceneBoardState extends ConsumerState<SceneBoard> {
   void _onTap(SceneItem item) {
     final outcome = ref.read(sceneControllerProvider.notifier).onTap(item);
     if (outcome == TapOutcome.correct) {
-      // Play SFX + haptic; fly-to animation kicks off via ref.listen.
       ref.read(audioServiceProvider).playCorrectSoft();
       ref.read(hapticsServiceProvider).light();
     }
-    // Wobble for incorrect outcomes is triggered in ref.listen as well.
   }
 
   void _startFlyTo(String itemId) {
@@ -232,10 +234,6 @@ class _SceneBoardState extends ConsumerState<SceneBoard> {
   }
 
   SceneItem? _itemForSlot(SceneState state, String slotId) {
-    if (!state.placedItemIds
-        .any((id) => _itemAcceptedBy(state, id) == slotId)) {
-      return null;
-    }
     for (final it in state.variant.items) {
       if (state.placedItemIds.contains(it.id) &&
           it.acceptedSlotId == slotId) {
@@ -244,12 +242,67 @@ class _SceneBoardState extends ConsumerState<SceneBoard> {
     }
     return null;
   }
+}
 
-  String? _itemAcceptedBy(SceneState state, String itemId) {
-    for (final it in state.variant.items) {
-      if (it.id == itemId) return it.acceptedSlotId;
-    }
-    return null;
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.text, required this.color});
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 16,
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Scene objective banner. Lives at the top of the board so the
+/// caregiver-authored instructionTr (e.g. "Masayı kahvaltıya
+/// hazırlayalım") is always visible. FittedBox + maxLines:3 means it
+/// won't truncate on narrow phones.
+class _InstructionCard extends StatelessWidget {
+  const _InstructionCard({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.25),
+          width: 1,
+        ),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        maxLines: 3,
+        style: const TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary,
+          height: 1.25,
+        ),
+      ),
+    );
   }
 }
 

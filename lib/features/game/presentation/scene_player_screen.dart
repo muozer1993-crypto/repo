@@ -1,5 +1,8 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -20,9 +23,9 @@ import 'widgets/time_orientation_card.dart';
 ///   2. SceneBoard — tap-to-select mechanic with errorless feedback.
 ///   3. CompletionOverlay — shown once all targets are placed.
 ///
-/// Exit button lives in the top-left and is always reachable, even
-/// during the orientation phase. On exit the controller flushes a
-/// partial SessionLog with completed=false.
+/// Exit button ("Çık") closes the app per the caregiver's explicit
+/// request that elderly users can close out from the game screen.
+/// Completion ("Ana ekrana dön") returns to /home.
 class ScenePlayerScreen extends ConsumerStatefulWidget {
   const ScenePlayerScreen({super.key});
 
@@ -36,7 +39,6 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
   @override
   void initState() {
     super.initState();
-    // Auto-play the scene instruction once on mount.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ref.read(sceneArgsProvider);
       if (args == null) return;
@@ -79,13 +81,13 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
                 },
               )
             else
-              const SceneBoard(),
+              SceneBoard(instructionText: args.scene.instructionTr),
             Positioned(
               top: 8,
               left: 8,
-              child: ExitButton(onConfirmed: _onExit),
+              child: ExitButton(onConfirmed: _onExitApp),
             ),
-            if (_orientationPassed) ...[
+            if (_orientationPassed)
               Positioned(
                 top: 8,
                 right: 8,
@@ -94,19 +96,9 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
                   instructionText: args.scene.instructionTr,
                 ),
               ),
-              // Visible instruction banner so the patient (and the
-              // caregiver) can see the objective at a glance, even when
-              // audio assets are not yet bundled.
-              Positioned(
-                top: 12,
-                left: 80,
-                right: 80,
-                child: _InstructionBanner(text: args.scene.instructionTr),
-              ),
-            ],
             if (state.isComplete)
               Positioned.fill(
-                child: CompletionOverlay(onDone: _onComplete),
+                child: CompletionOverlay(onDone: _onCompleteToHome),
               ),
           ],
         ),
@@ -114,49 +106,40 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
     );
   }
 
-  Future<void> _onExit() => _leave(completed: false);
-  Future<void> _onComplete() => _leave(completed: true);
+  /// Scene "Çık" — flush the partial session and then close the app
+  /// outright. Caregivers asked that the in-scene exit actually quit
+  /// the app rather than return to the home menu.
+  Future<void> _onExitApp() async {
+    await _flushSafely(completed: false);
+    if (!mounted) return;
+    _closeApp();
+  }
 
-  /// Always returns to /home, even if persisting the session log
-  /// throws. The session-write failure is surfaced via debugPrint so
-  /// it shows up in `flutter run` logs but never traps the patient
-  /// inside the scene.
-  Future<void> _leave({required bool completed}) async {
+  /// Completion overlay "Ana ekrana dön" — persist the session and
+  /// navigate to the home screen so the patient can play another one.
+  Future<void> _onCompleteToHome() async {
+    await _flushSafely(completed: true);
+    if (!mounted) return;
+    context.go('/home');
+  }
+
+  Future<void> _flushSafely({required bool completed}) async {
     try {
       await ref
           .read(sceneControllerProvider.notifier)
           .flushSession(completed: completed);
     } catch (e, st) {
-      debugPrint('flushSession failed (continuing to home): $e\n$st');
+      debugPrint('flushSession failed (continuing): $e\n$st');
     }
-    if (!mounted) return;
-    // go_router routes do not respond to Navigator.pop reliably from
-    // a dialog/overlay context; use the declarative router API.
-    context.go('/home');
   }
-}
 
-class _InstructionBanner extends StatelessWidget {
-  const _InstructionBanner({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      elevation: 2,
-      borderRadius: BorderRadius.circular(14),
-      color: Colors.white.withValues(alpha: 0.92),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-        ),
-      ),
-    );
+  void _closeApp() {
+    if (Platform.isAndroid) {
+      SystemNavigator.pop();
+    } else {
+      // iOS: Apple HIG discourages programmatic quit. Fall back to
+      // routing home so we don't ship a button that does nothing.
+      context.go('/home');
+    }
   }
 }

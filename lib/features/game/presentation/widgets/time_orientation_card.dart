@@ -423,11 +423,13 @@ class _OrientationButtonState extends State<_OrientationButton>
           child: ElevatedButton(
             onPressed: widget.onTap,
             style: ElevatedButton.styleFrom(
-              minimumSize: const Size(160, 72),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+              minimumSize: const Size(140, 56),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 12,
+              ),
             ),
-            child: Text(widget.label, style: const TextStyle(fontSize: 24)),
+            child: Text(widget.label, style: const TextStyle(fontSize: 22)),
           ),
         );
       },

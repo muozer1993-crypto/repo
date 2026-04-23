@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../l10n/strings_tr.dart';
+import '../../../../shared/widgets/labeled_icon_button.dart';
 
-/// Always-visible exit affordance (top-left of every scene).
+/// Top-left "Çık" affordance on every scene.
 ///
-/// Shows a confirmation dialog rather than exiting immediately so
-/// accidental taps don't erase an in-progress session. On confirm,
-/// the parent is expected to flush the partial [SessionLog] with
-/// `completed=false` before popping.
+/// Shows an icon + a visible label below it so elderly users don't
+/// have to guess what an X-in-a-circle means. Confirmation dialog
+/// protects against accidental mid-session taps.
 class ExitButton extends StatelessWidget {
   const ExitButton({required this.onConfirmed, super.key});
 
@@ -16,26 +16,11 @@ class ExitButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: StringsTr.exitButton,
-      child: Material(
-        color: Colors.white.withValues(alpha: 0.9),
-        shape: const CircleBorder(),
-        elevation: 2,
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: () => _confirm(context),
-          child: const Padding(
-            padding: EdgeInsets.all(18),
-            child: Icon(
-              Icons.close_rounded,
-              size: 36,
-              color: AppColors.primary,
-              semanticLabel: StringsTr.exitButton,
-            ),
-          ),
-        ),
-      ),
+    return LabeledIconButton(
+      label: 'Çık',
+      icon: Icons.close_rounded,
+      tooltip: StringsTr.exitButton,
+      onTap: () => _confirm(context),
     );
   }
 
@@ -45,7 +30,7 @@ class ExitButton extends StatelessWidget {
       builder: (_) => AlertDialog(
         title: const Text(StringsTr.exitConfirmTitle),
         titleTextStyle: const TextStyle(
-          fontSize: 28,
+          fontSize: 26,
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
         ),

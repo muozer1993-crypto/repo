@@ -1,4 +1,7 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,6 +10,7 @@ import '../../../core/time/clock_provider.dart';
 import '../../../core/time/time_window.dart';
 import '../../../l10n/strings_tr.dart';
 import '../../../shared/widgets/big_button.dart';
+import '../../../shared/widgets/labeled_icon_button.dart';
 import '../../game/application/scene_controller.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../progress/application/scheduler_controller.dart';
@@ -30,17 +34,27 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  onPressed: () => _openSettings(context),
-                  icon: const Icon(Icons.settings_outlined, size: 32),
-                  tooltip: StringsTr.settingsTitle,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LabeledIconButton(
+                    label: 'Ayarlar',
+                    icon: Icons.settings_outlined,
+                    tooltip: StringsTr.settingsTitle,
+                    onTap: () => _openSettings(context),
+                  ),
+                  LabeledIconButton(
+                    label: 'Kapat',
+                    icon: Icons.close_rounded,
+                    tooltip: 'Uygulamayı kapat',
+                    onTap: () => _confirmClose(context),
+                  ),
+                ],
               ),
               const Spacer(),
               Text(
@@ -63,6 +77,37 @@ class HomeScreen extends ConsumerWidget {
 
   void _openSettings(BuildContext context) {
     context.push('/home/settings');
+  }
+
+  Future<void> _confirmClose(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text(
+          'Uygulamayı kapatmak istiyor musunuz?',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Vazgeç', style: TextStyle(fontSize: 20)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Evet, kapat'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    if (Platform.isAndroid) {
+      SystemNavigator.pop();
+    }
+    // iOS intentionally not supported — Apple HIG forbids
+    // programmatic quit; caregivers can swipe the app away.
   }
 
   String _greetingFor(TimeWindow window, String? name) {
