@@ -34,8 +34,11 @@ dependencies:
   # UUID for profile_id
   uuid: ^4.4.0
 
-  # Date formatting (Turkish)
-  intl: ^0.19.0
+  # Date formatting (Turkish). Widened range because flutter_localizations
+  # pins intl differently per Flutter version: 3.27 bundles 0.19.x, 3.29+
+  # bundles 0.20.2. The pub resolver picks whichever is needed for the
+  # installed SDK, so we just need to allow both.
+  intl: '>=0.19.0 <0.22.0'
 
 dev_dependencies:
   flutter_test:
