@@ -10,11 +10,13 @@ permissions:
   contents: write
 
 env:
-  # Pinned to 3.24.3 — isar_generator 3.1.0+1 is no longer maintained
-  # and the analyzer ships with Flutter 3.26+ breaks its element-model
-  # assumptions. 3.24.3 is the last Flutter release verified to work
-  # with Isar 3 end-to-end.
-  FLUTTER_VERSION: '3.24.3'
+  # Flutter 3.27.1 — the code is written against 3.27+ APIs (Color.withValues,
+  # modern Gradle plugin format). Earlier attempts to downgrade to 3.24.3 to
+  # sidestep isar_generator broke the app_links 6.x Gradle plugin and the
+  # color API. On 3.27.1, the only Isar compat friction is naive pluralization
+  # (ScheduleEntry → scheduleEntrys), which we've already overridden at the
+  # @Collection annotation site.
+  FLUTTER_VERSION: '3.27.1'
 
 jobs:
   build-apk:

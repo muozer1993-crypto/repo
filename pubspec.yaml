@@ -45,17 +45,6 @@ dev_dependencies:
   build_runner: ^2.4.11
   isar_generator: ^3.1.0+1
 
-# Pin `app_links` to 5.x. supabase_flutter 2.5.x transitively pulls
-# in app_links 6.x, whose Android plugin uses Flutter's modern Gradle
-# extension that only ships with Flutter 3.27+. We're pinned to 3.24.3
-# (isar_generator 3.x is incompatible with Flutter 3.26+'s analyzer),
-# so 6.x fails to configure. 5.x uses the traditional plugin style and
-# works with 3.24. app_links is not exercised at runtime in the
-# preview build (no Supabase auth flow, no deeplinks) — the override
-# is purely a compile-time compatibility shim.
-dependency_overrides:
-  app_links: ^5.0.0
-
 flutter:
   uses-material-design: true
 
