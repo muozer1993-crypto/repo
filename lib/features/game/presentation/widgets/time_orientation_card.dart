@@ -82,9 +82,78 @@ class _TimeOrientationCardState
             // Scale the analog clock to fit narrow screens (phone
             // landscape gives only ~412dp height). Cap at 220 for
             // tablets so the clock does not look bloated.
-            final clockSize =
-                constraints.maxHeight.clamp(0.0, 600.0) * 0.32;
-            final clampedClockSize = clockSize.clamp(120.0, 220.0);
+            final isLandscape =
+                constraints.maxWidth > constraints.maxHeight * 1.3;
+
+            // In landscape the clock goes on the left and the
+            // orientation buttons stack on the right so both fit
+            // without scrolling. In portrait we keep the original
+            // top-down layout.
+            final clockSize = (isLandscape
+                    ? constraints.maxHeight * 0.55
+                    : constraints.maxHeight * 0.32)
+                .clamp(120.0, 220.0);
+
+            final promptText = showPrompt
+                ? (showDigital
+                    ? 'Saat ${_formatHour(widget.now)}. '
+                        '${StringsTr.orientationQuestion}'
+                    : StringsTr.orientationQuestion)
+                : null;
+
+            if (isLandscape) {
+              return Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (showSceneIcon)
+                            SizedBox(
+                              height: 64,
+                              child: Image.asset(
+                                widget.sceneIconAsset,
+                                errorBuilder: (_, __, ___) =>
+                                    const SizedBox.shrink(),
+                              ),
+                            ),
+                          _Clock(
+                            now: widget.now,
+                            showDigital: showDigital,
+                            size: clockSize,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (promptText != null) ...[
+                            Text(
+                              promptText,
+                              style: t.titleLarge,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          _OrientationButtonColumn(
+                            options: _options,
+                            keys: _keys,
+                            onTap: _onTap,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
             return SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
@@ -109,15 +178,12 @@ class _TimeOrientationCardState
                     _Clock(
                       now: widget.now,
                       showDigital: showDigital,
-                      size: clampedClockSize,
+                      size: clockSize,
                     ),
                     const SizedBox(height: 16),
-                    if (showPrompt)
+                    if (promptText != null)
                       Text(
-                        showDigital
-                            ? 'Saat ${_formatHour(widget.now)}. '
-                                '${StringsTr.orientationQuestion}'
-                            : StringsTr.orientationQuestion,
+                        promptText,
                         style: t.titleLarge,
                         textAlign: TextAlign.center,
                       ),
@@ -274,6 +340,38 @@ class _AnalogClockPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _AnalogClockPainter old) => old.now != now;
+}
+
+/// Landscape-only stacked variant. Same buttons as the Wrap version
+/// but arranged vertically so both the clock and the 4 options fit
+/// side-by-side without scrolling on phone landscape.
+class _OrientationButtonColumn extends StatelessWidget {
+  const _OrientationButtonColumn({
+    required this.options,
+    required this.keys,
+    required this.onTap,
+  });
+
+  final List<(TimeWindow, String)> options;
+  final Map<TimeWindow, GlobalKey<_OrientationButtonState>> keys;
+  final void Function(TimeWindow) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final opt in options) ...[
+          _OrientationButton(
+            key: keys[opt.$1],
+            label: opt.$2,
+            onTap: () => onTap(opt.$1),
+          ),
+          if (opt != options.last) const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
 }
 
 class _OrientationButton extends StatefulWidget {

@@ -14,6 +14,7 @@ class SceneSlotWidget extends StatelessWidget {
     required this.slot,
     required this.filled,
     required this.filledAssetPath,
+    required this.filledLabel,
     this.glowing = false,
     super.key,
   });
@@ -24,6 +25,10 @@ class SceneSlotWidget extends StatelessWidget {
   /// Image asset to render once the slot is [filled]. Null until an
   /// item has been placed.
   final String? filledAssetPath;
+
+  /// Item's Turkish label for the text fallback rendered when the
+  /// image asset is missing (dev / early-preview builds).
+  final String? filledLabel;
 
   /// Whether the slot currently carries the accept-glow from a fresh
   /// correct placement. The parent clears this shortly after the
@@ -37,13 +42,15 @@ class SceneSlotWidget extends StatelessWidget {
       curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
         color: filled
-            ? Colors.transparent
-            : Colors.white.withValues(alpha: 0.20),
+            ? AppColors.acceptGlow.withValues(alpha: 0.15)
+            : Colors.white.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: glowing
               ? AppColors.acceptGlow
-              : AppColors.slotOutline.withValues(alpha: filled ? 0.4 : 0.7),
+              : (filled
+                  ? AppColors.acceptGlow
+                  : AppColors.slotOutline.withValues(alpha: 0.7)),
           width: glowing ? 4 : 2,
         ),
         boxShadow: glowing
@@ -56,24 +63,101 @@ class SceneSlotWidget extends StatelessWidget {
               ]
             : null,
       ),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(6),
       child: Center(
-        child: filled && filledAssetPath != null
-            ? Image.asset(
-                filledAssetPath!,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+        child: filled
+            ? _FilledContent(
+                assetPath: filledAssetPath,
+                label: filledLabel,
               )
-            : Text(
-                slot.labelTr,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: AppColors.textMuted,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
+            : _EmptySlotLabel(text: slot.labelTr),
       ),
+    );
+  }
+}
+
+/// Empty-slot hint. FittedBox prevents the label from overflowing into
+/// neighboring slots when the container is narrow (e.g. 65dp wide on
+/// phone portrait).
+class _EmptySlotLabel extends StatelessWidget {
+  const _EmptySlotLabel({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 14,
+          color: AppColors.textMuted,
+          fontStyle: FontStyle.italic,
+        ),
+      ),
+    );
+  }
+}
+
+/// Filled-slot content. Prefers the image; falls back to a checkmark
+/// + item label when the asset is missing so the patient still gets
+/// a clear "yerleştirildi" signal.
+class _FilledContent extends StatelessWidget {
+  const _FilledContent({required this.assetPath, required this.label});
+
+  final String? assetPath;
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    if (assetPath != null) {
+      return Image.asset(
+        assetPath!,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => _TextualFallback(label: label),
+      );
+    }
+    return _TextualFallback(label: label);
+  }
+}
+
+class _TextualFallback extends StatelessWidget {
+  const _TextualFallback({required this.label});
+
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(
+          Icons.check_circle_rounded,
+          size: 28,
+          color: AppColors.acceptGlow,
+        ),
+        if (label != null) ...[
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

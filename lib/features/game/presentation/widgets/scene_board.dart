@@ -91,6 +91,7 @@ class _SceneBoardState extends ConsumerState<SceneBoard> {
                 slot: slot,
                 filled: filledItem != null,
                 filledAssetPath: filledItem?.assetPath,
+                filledLabel: filledItem?.labelTr,
               ),
             ),
           );
@@ -100,49 +101,77 @@ class _SceneBoardState extends ConsumerState<SceneBoard> {
   }
 
   Widget _buildTray(SceneState state, BoxConstraints cons) {
+    // Fit items to available width when ≤ 4 items (happy path for
+    // level-0 variants with no distractors). When there are more
+    // items (distractors + correct), fall back to horizontal scroll
+    // with fixed-width tiles so the tray stays legible.
+    final items = state.variant.items;
+    final useScroll = items.length > 4;
     return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
-      height: 160,
+      height: 150,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.85),
+          color: Colors.white.withValues(alpha: 0.92),
           border: const Border(
             top: BorderSide(width: 1, color: Color(0x22000000)),
           ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Center(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: state.variant.items.map((item) {
-                _itemKeys.putIfAbsent(item.id, GlobalKey.new);
-                _tileStateKeys.putIfAbsent(
-                  item.id,
-                  GlobalKey<SceneItemTileState>.new,
-                );
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: SizedBox(
-                    width: 120,
-                    height: 136,
-                    child: KeyedSubtree(
-                      key: _itemKeys[item.id],
-                      child: SceneItemTile(
-                        key: _tileStateKeys[item.id],
-                        item: item,
-                        placed: state.placedItemIds.contains(item.id),
-                        hinted: state.hintTargetItemId == item.id,
-                        onTap: () => _onTap(item),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(growable: false),
-            ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: useScroll
+            ? _scrollingTray(state)
+            : _fittingTray(state, cons.maxWidth - 24),
+      ),
+    );
+  }
+
+  Widget _scrollingTray(SceneState state) {
+    return Center(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: state.variant.items
+              .map((item) => _trayTile(state, item, width: 110))
+              .toList(growable: false),
+        ),
+      ),
+    );
+  }
+
+  Widget _fittingTray(SceneState state, double availableWidth) {
+    final n = state.variant.items.length;
+    final perTile = (availableWidth / n) - 12; // account for padding
+    final tileWidth = perTile.clamp(68.0, 120.0);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: state.variant.items
+          .map((item) => _trayTile(state, item, width: tileWidth))
+          .toList(growable: false),
+    );
+  }
+
+  Widget _trayTile(SceneState state, SceneItem item, {required double width}) {
+    _itemKeys.putIfAbsent(item.id, GlobalKey.new);
+    _tileStateKeys.putIfAbsent(
+      item.id,
+      GlobalKey<SceneItemTileState>.new,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: SizedBox(
+        width: width,
+        height: 128,
+        child: KeyedSubtree(
+          key: _itemKeys[item.id],
+          child: SceneItemTile(
+            key: _tileStateKeys[item.id],
+            item: item,
+            placed: state.placedItemIds.contains(item.id),
+            hinted: state.hintTargetItemId == item.id,
+            onTap: () => _onTap(item),
           ),
         ),
       ),

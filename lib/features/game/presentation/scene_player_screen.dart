@@ -85,7 +85,7 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
               left: 8,
               child: ExitButton(onConfirmed: _onExit),
             ),
-            if (_orientationPassed)
+            if (_orientationPassed) ...[
               Positioned(
                 top: 8,
                 right: 8,
@@ -94,6 +94,16 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
                   instructionText: args.scene.instructionTr,
                 ),
               ),
+              // Visible instruction banner so the patient (and the
+              // caregiver) can see the objective at a glance, even when
+              // audio assets are not yet bundled.
+              Positioned(
+                top: 12,
+                left: 80,
+                right: 80,
+                child: _InstructionBanner(text: args.scene.instructionTr),
+              ),
+            ],
             if (state.isComplete)
               Positioned.fill(
                 child: CompletionOverlay(onDone: _onComplete),
@@ -123,5 +133,30 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
     // go_router routes do not respond to Navigator.pop reliably from
     // a dialog/overlay context; use the declarative router API.
     context.go('/home');
+  }
+}
+
+class _InstructionBanner extends StatelessWidget {
+  const _InstructionBanner({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 2,
+      borderRadius: BorderRadius.circular(14),
+      color: Colors.white.withValues(alpha: 0.92),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+        ),
+      ),
+    );
   }
 }
