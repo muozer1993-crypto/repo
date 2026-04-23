@@ -10,7 +10,11 @@ permissions:
   contents: write
 
 env:
-  FLUTTER_VERSION: '3.27.1'
+  # Pinned to 3.24.3 — isar_generator 3.1.0+1 is no longer maintained
+  # and the analyzer ships with Flutter 3.26+ breaks its element-model
+  # assumptions. 3.24.3 is the last Flutter release verified to work
+  # with Isar 3 end-to-end.
+  FLUTTER_VERSION: '3.24.3'
 
 jobs:
   build-apk:
@@ -67,20 +71,32 @@ jobs:
       - name: Generate Isar code (verbose)
         run: |
           set -e
-          dart run build_runner build --delete-conflicting-outputs --verbose 2>&1 | tail -80
+          # Capture full output so we can grep warnings on failure.
+          dart run build_runner build \
+            --delete-conflicting-outputs --verbose 2>&1 \
+            | tee build_runner.log | tail -120
           echo ""
           echo "=== Generated .g.dart files ==="
           find lib -name "*.g.dart" -printf "%p (%s bytes)\n" | sort
-          echo ""
-          echo "=== schedule_entry.g.dart exists? ==="
-          if [ -f lib/features/progress/domain/schedule_entry.g.dart ]; then
-            echo "YES — grep for scheduleEntries getter:"
-            grep -n 'scheduleEntries\|GetScheduleEntryCollection\|ScheduleEntrySchema' \
-              lib/features/progress/domain/schedule_entry.g.dart | head -10 || \
-              echo "(no matches — generator produced wrong output)"
-          else
-            echo "NO — generator did not emit this file"
+
+      - name: Fail fast if ScheduleEntry generator output is missing
+        run: |
+          set -e
+          F=lib/features/progress/domain/schedule_entry.g.dart
+          if [ ! -f "$F" ]; then
+            echo "::error::$F was NOT generated."
+            echo "--- last 40 lines of build_runner.log ---"
+            tail -40 build_runner.log
+            echo "--- grep for 'schedule_entry' in build_runner.log ---"
+            grep -n 'schedule_entry\|ScheduleEntry' build_runner.log || true
+            exit 1
           fi
+          if ! grep -q 'scheduleEntries' "$F"; then
+            echo "::error::$F exists but does not declare 'scheduleEntries' extension."
+            head -60 "$F"
+            exit 1
+          fi
+          echo "OK — schedule_entry.g.dart is present and has scheduleEntries extension."
 
       - name: Build debug APK (signed with debug key, installable)
         run: |
