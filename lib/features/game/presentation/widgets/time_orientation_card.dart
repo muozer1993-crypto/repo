@@ -77,48 +77,70 @@ class _TimeOrientationCardState
     return Material(
       color: AppColors.background,
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            children: [
-              if (showSceneIcon) ...[
-                SizedBox(
-                  height: 120,
-                  child: Image.asset(
-                    widget.sceneIconAsset,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                  ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Scale the analog clock to fit narrow screens (phone
+            // landscape gives only ~412dp height). Cap at 220 for
+            // tablets so the clock does not look bloated.
+            final clockSize =
+                constraints.maxHeight.clamp(0.0, 600.0) * 0.32;
+            final clampedClockSize = clockSize.clamp(120.0, 220.0);
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 48,
                 ),
-                const SizedBox(height: 24),
-              ],
-              _Clock(now: widget.now, showDigital: showDigital),
-              const SizedBox(height: 24),
-              if (showPrompt)
-                Text(
-                  showDigital
-                      ? 'Saat ${_formatHour(widget.now)}. ${StringsTr.orientationQuestion}'
-                      : StringsTr.orientationQuestion,
-                  style: t.titleLarge,
-                  textAlign: TextAlign.center,
-                ),
-              const Spacer(),
-              Wrap(
-                spacing: 20,
-                runSpacing: 20,
-                alignment: WrapAlignment.center,
-                children: _options
-                    .map(
-                      (opt) => _OrientationButton(
-                        key: _keys[opt.$1],
-                        label: opt.$2,
-                        onTap: () => _onTap(opt.$1),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (showSceneIcon) ...[
+                      SizedBox(
+                        height: 96,
+                        child: Image.asset(
+                          widget.sceneIconAsset,
+                          errorBuilder: (_, __, ___) =>
+                              const SizedBox.shrink(),
+                        ),
                       ),
-                    )
-                    .toList(growable: false),
+                      const SizedBox(height: 16),
+                    ],
+                    _Clock(
+                      now: widget.now,
+                      showDigital: showDigital,
+                      size: clampedClockSize,
+                    ),
+                    const SizedBox(height: 16),
+                    if (showPrompt)
+                      Text(
+                        showDigital
+                            ? 'Saat ${_formatHour(widget.now)}. '
+                                '${StringsTr.orientationQuestion}'
+                            : StringsTr.orientationQuestion,
+                        style: t.titleLarge,
+                        textAlign: TextAlign.center,
+                      ),
+                    const SizedBox(height: 24),
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      alignment: WrapAlignment.center,
+                      children: _options
+                          .map(
+                            (opt) => _OrientationButton(
+                              key: _keys[opt.$1],
+                              label: opt.$2,
+                              onTap: () => _onTap(opt.$1),
+                            ),
+                          )
+                          .toList(growable: false),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -139,27 +161,34 @@ class _TimeOrientationCardState
 }
 
 class _Clock extends StatelessWidget {
-  const _Clock({required this.now, required this.showDigital});
+  const _Clock({
+    required this.now,
+    required this.showDigital,
+    this.size = 220,
+  });
 
   final DateTime now;
   final bool showDigital;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
+    final digitalFontSize = (size * 0.22).clamp(28.0, 48.0);
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          width: 220,
-          height: 220,
+          width: size,
+          height: size,
           child: CustomPaint(painter: _AnalogClockPainter(now: now)),
         ),
         if (showDigital) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Text(
             '${now.hour.toString().padLeft(2, '0')}:'
             '${now.minute.toString().padLeft(2, '0')}',
-            style: const TextStyle(
-              fontSize: 48,
+            style: TextStyle(
+              fontSize: digitalFontSize,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
             ),

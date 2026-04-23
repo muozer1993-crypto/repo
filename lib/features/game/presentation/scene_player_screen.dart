@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/audio/audio_service.dart';
 import '../../../core/time/clock_provider.dart';
@@ -106,7 +107,10 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
         .read(sceneControllerProvider.notifier)
         .flushSession(completed: false);
     if (!mounted) return;
-    Navigator.of(context).pop();
+    // go_router routes do not respond to Navigator.pop reliably when
+    // the dialog above has already popped its own route; use the
+    // declarative router API to return to /home explicitly.
+    context.go('/home');
   }
 
   Future<void> _onComplete() async {
@@ -114,6 +118,6 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
         .read(sceneControllerProvider.notifier)
         .flushSession(completed: true);
     if (!mounted) return;
-    Navigator.of(context).pop();
+    context.go('/home');
   }
 }

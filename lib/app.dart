@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,14 +10,10 @@ class ErgoterapiApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Force landscape on tablets — the scene board is designed for
-    // landscape slot positioning. Phones see an oversized tablet UI,
-    // not ideal but acceptable during development.
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-
+    // Orientation is left to the OS — phones default to portrait (more
+    // vertical room), tablets work in either orientation. Forcing
+    // landscape (the previous behavior) made every screen overflow on
+    // phones because phone landscape height is only ~412dp.
     final router = ref.watch(appRouterProvider);
     return MaterialApp.router(
       title: 'Ergoterapi',

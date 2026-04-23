@@ -18,11 +18,13 @@ class ReducedMotionSwitch extends ConsumerWidget {
       value: isReduced,
       onChanged: (v) => ref.read(reducedMotionProvider.notifier).state = v,
       title: const Text(
-        'Hareketi azalt',
+        'Animasyonları azalt',
         style: TextStyle(fontSize: 24, color: AppColors.textPrimary),
       ),
       subtitle: const Text(
-        'Nabız ve kutlama animasyonlarını kapatır.',
+        'Yanıp sönen ipucu ışıkları ve oyun bittiğindeki kutlama '
+        'efektleri kapatılır. Baş dönmesi veya yorgunluk hisseden '
+        'hastalar için.',
         style: TextStyle(fontSize: 18, color: AppColors.textSecondary),
       ),
       activeColor: AppColors.primary,
