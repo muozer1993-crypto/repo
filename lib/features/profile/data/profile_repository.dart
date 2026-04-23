@@ -51,6 +51,16 @@ class ProfileRepository {
       await _isar.patientProfiles.put(existing);
     });
   }
+
+  /// Wipes the profile. Useful during development when the caregiver
+  /// wants to start fresh without uninstalling the APK. Does NOT touch
+  /// session logs or schedule entries — those remain for therapist
+  /// continuity; but the router will redirect to /setup on next frame.
+  Future<void> clear() async {
+    await _isar.writeTxn(() async {
+      await _isar.patientProfiles.clear();
+    });
+  }
 }
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {

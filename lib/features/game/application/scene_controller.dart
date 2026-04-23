@@ -295,12 +295,14 @@ class SceneController extends StateNotifier<SceneState> {
       ..orientationCorrect = _orientationCorrect
       ..orientationResponseMs = _orientationResponseMs
       ..instructionReplayCount = state.instructionReplayCount
-      ..appOpenCountOnThatDay = 0; // wired in later
+      ..appOpenCountOnThatDay = 0 // wired in later
+      // PlacementEvent is @embedded — rows live inside the parent
+      // SessionLog, not a separate collection. (A previous version
+      // tried `isar.placementEvents.putAll(...)` which threw at
+      // runtime because that collection accessor does not exist,
+      // swallowing exit/completion navigation in the process.)
+      ..placements = List<PlacementEvent>.from(_pendingPlacements);
 
-    // Typed as dynamic because tests stub [isar] — Isar's generated
-    // collection accessors (`isar.sessionLogs`) live on the concrete
-    // type, not on any interface, so this is the simplest seam.
-    // Guarded by the integration test that the real app wires Isar.
     await _writeAll(log, updatedEntry);
   }
 
@@ -309,8 +311,6 @@ class SceneController extends StateNotifier<SceneState> {
     await isar.writeTxn(() async {
       // ignore: avoid_dynamic_calls
       await isar.sessionLogs.put(log);
-      // ignore: avoid_dynamic_calls
-      await isar.placementEvents.putAll(_pendingPlacements);
       // ignore: avoid_dynamic_calls
       await isar.scheduleEntries.put(entry);
     });

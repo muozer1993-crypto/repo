@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/motion.dart';
 import '../../../l10n/strings_tr.dart';
 import '../../../shared/widgets/reduced_motion_switch.dart';
@@ -13,7 +14,6 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Keep the profile's reducedMotion in sync with the provider on open.
     ref.listen(patientProfileProvider, (_, next) {
       final p = next.value;
       if (p == null) return;
@@ -25,11 +25,66 @@ class SettingsScreen extends ConsumerWidget {
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(24),
-          children: const [
-            ReducedMotionSwitch(),
+          children: [
+            const ReducedMotionSwitch(),
+            const Divider(height: 48),
+            _ResetProfileTile(),
           ],
         ),
       ),
     );
+  }
+}
+
+class _ResetProfileTile extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ListTile(
+      leading: const Icon(
+        Icons.restart_alt_rounded,
+        size: 28,
+        color: AppColors.textSecondary,
+      ),
+      title: const Text(
+        'Profili sıfırla',
+        style: TextStyle(fontSize: 24, color: AppColors.textPrimary),
+      ),
+      subtitle: const Text(
+        'Kayıtlı isim ve yaş bilgisini siler, uygulamayı baştan '
+        'kurmuş gibi açar. Oturum ve ilerleme verisi silinmez.',
+        style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
+      ),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      onTap: () => _confirm(context, ref),
+    );
+  }
+
+  Future<void> _confirm(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Profili sıfırla?'),
+        content: const Text(
+          'Kayıtlı isim ve yaş bandı silinecek. Uygulama yeniden '
+          'profil oluşturma ekranıyla açılacak.',
+          style: TextStyle(fontSize: 18),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Vazgeç', style: TextStyle(fontSize: 18)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Evet, sıfırla'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(profileRepositoryProvider).clear();
+    // The router watches patientProfileProvider and redirects to
+    // /setup automatically when the row disappears.
   }
 }

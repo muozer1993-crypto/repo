@@ -10,15 +10,19 @@ import '../../application/scene_controller.dart';
 /// time to hear the scene's instruction again.
 ///
 /// Each tap plays the instruction audio and increments
-/// `SessionLog.instructionReplayCount`. A high replay count flags
-/// working-memory strain to the therapist.
+/// `SessionLog.instructionReplayCount`. When audio assets are not yet
+/// bundled (dev / early preview), a caption-style SnackBar with the
+/// instruction text serves as a visible fallback so the button still
+/// gives meaningful feedback.
 class InstructionSpeakerButton extends ConsumerWidget {
   const InstructionSpeakerButton({
     required this.instructionAudioPath,
+    required this.instructionText,
     super.key,
   });
 
   final String instructionAudioPath;
+  final String instructionText;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,6 +41,19 @@ class InstructionSpeakerButton extends ConsumerWidget {
             ref
                 .read(sceneControllerProvider.notifier)
                 .onInstructionReplayed();
+            final messenger = ScaffoldMessenger.of(context);
+            messenger.clearSnackBars();
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(
+                  instructionText,
+                  style: const TextStyle(fontSize: 22),
+                ),
+                duration: const Duration(seconds: 5),
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: AppColors.primary,
+              ),
+            );
           },
           child: const Padding(
             padding: EdgeInsets.all(16),

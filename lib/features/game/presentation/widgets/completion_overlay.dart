@@ -21,31 +21,33 @@ class CompletionOverlay extends StatelessWidget {
       color: Colors.black.withValues(alpha: 0.55),
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 40),
-          margin: const EdgeInsets.all(40),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          margin: const EdgeInsets.all(20),
+          constraints: const BoxConstraints(maxWidth: 480),
           decoration: BoxDecoration(
             color: AppColors.background,
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(24),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
                 Icons.check_circle_rounded,
-                size: 96,
+                size: 80,
                 color: AppColors.acceptGlow,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               Text(
                 StringsTr.completionTitle,
                 style: Theme.of(context).textTheme.headlineLarge,
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: 28),
               BigButton(
                 label: StringsTr.completionBackHome,
                 onPressed: onDone,
                 icon: Icons.home_rounded,
+                expand: true,
               ),
             ],
           ),

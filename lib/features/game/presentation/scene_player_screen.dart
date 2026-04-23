@@ -90,6 +90,7 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
                 right: 8,
                 child: InstructionSpeakerButton(
                   instructionAudioPath: args.scene.instructionAudioPath,
+                  instructionText: args.scene.instructionTr,
                 ),
               ),
             if (state.isComplete)
