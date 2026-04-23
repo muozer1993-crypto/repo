@@ -17,7 +17,12 @@ part 'schedule_entry.g.dart';
 /// [cleanRunStreak] is the gate for difficulty advancement: difficulty
 /// only moves up after a streak of clean runs, so a single
 /// lucky session doesn't push the patient into a harder variant.
-@collection
+///
+/// `accessor: 'scheduleEntries'` overrides isar_generator's naive
+/// pluralization, which would otherwise emit `scheduleEntrys` (the
+/// generator just appends 's' and does not apply the English
+/// -y → -ies rule).
+@Collection(accessor: 'scheduleEntries')
 class ScheduleEntry {
   Id id = Isar.autoIncrement;
 
