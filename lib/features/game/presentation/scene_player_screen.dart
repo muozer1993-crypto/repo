@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -103,22 +104,24 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
     );
   }
 
-  Future<void> _onExit() async {
-    await ref
-        .read(sceneControllerProvider.notifier)
-        .flushSession(completed: false);
-    if (!mounted) return;
-    // go_router routes do not respond to Navigator.pop reliably when
-    // the dialog above has already popped its own route; use the
-    // declarative router API to return to /home explicitly.
-    context.go('/home');
-  }
+  Future<void> _onExit() => _leave(completed: false);
+  Future<void> _onComplete() => _leave(completed: true);
 
-  Future<void> _onComplete() async {
-    await ref
-        .read(sceneControllerProvider.notifier)
-        .flushSession(completed: true);
+  /// Always returns to /home, even if persisting the session log
+  /// throws. The session-write failure is surfaced via debugPrint so
+  /// it shows up in `flutter run` logs but never traps the patient
+  /// inside the scene.
+  Future<void> _leave({required bool completed}) async {
+    try {
+      await ref
+          .read(sceneControllerProvider.notifier)
+          .flushSession(completed: completed);
+    } catch (e, st) {
+      debugPrint('flushSession failed (continuing to home): $e\n$st');
+    }
     if (!mounted) return;
+    // go_router routes do not respond to Navigator.pop reliably from
+    // a dialog/overlay context; use the declarative router API.
     context.go('/home');
   }
 }
