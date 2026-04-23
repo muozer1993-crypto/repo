@@ -64,8 +64,23 @@ jobs:
             grep -n 'namespace\|^android' "$BG" | head -5
           fi
 
-      - name: Generate Isar code
-        run: dart run build_runner build --delete-conflicting-outputs
+      - name: Generate Isar code (verbose)
+        run: |
+          set -e
+          dart run build_runner build --delete-conflicting-outputs --verbose 2>&1 | tail -80
+          echo ""
+          echo "=== Generated .g.dart files ==="
+          find lib -name "*.g.dart" -printf "%p (%s bytes)\n" | sort
+          echo ""
+          echo "=== schedule_entry.g.dart exists? ==="
+          if [ -f lib/features/progress/domain/schedule_entry.g.dart ]; then
+            echo "YES — grep for scheduleEntries getter:"
+            grep -n 'scheduleEntries\|GetScheduleEntryCollection\|ScheduleEntrySchema' \
+              lib/features/progress/domain/schedule_entry.g.dart | head -10 || \
+              echo "(no matches — generator produced wrong output)"
+          else
+            echo "NO — generator did not emit this file"
+          fi
 
       - name: Build debug APK (signed with debug key, installable)
         run: |
