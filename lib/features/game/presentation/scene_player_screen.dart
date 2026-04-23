@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -101,10 +102,10 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
                 ),
               ),
               Positioned(
-                top: 12,
+                top: 10,
                 left: 96,
                 right: 96,
-                height: 72,
+                height: 80,
                 child: _InstructionBanner(text: args.scene.instructionTr),
               ),
             ],
@@ -157,10 +158,10 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
 }
 
 /// Scene objective banner. Sits between the Çık and Dinle buttons in
-/// the top bar so the objective is always readable without stealing a
-/// row from the slot/tray area. FittedBox(scaleDown) shrinks long
-/// instructions like "Yatmadan önce komodinini düzenle" to fit the
-/// narrow horizontal band before resorting to ellipsis.
+/// the top bar. AutoSizeText wraps to up to 3 lines at the preferred
+/// size (18) and only shrinks to the minimum (14) if the text still
+/// can't fit after wrapping — the elderly-readability policy the
+/// caregiver requested.
 class _InstructionBanner extends StatelessWidget {
   const _InstructionBanner({required this.text});
 
@@ -175,17 +176,16 @@ class _InstructionBanner extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              text,
-              textAlign: TextAlign.center,
-              maxLines: 3,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                height: 1.2,
-              ),
+          child: AutoSizeText(
+            text,
+            textAlign: TextAlign.center,
+            maxLines: 3,
+            minFontSize: 14,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              height: 1.2,
             ),
           ),
         ),

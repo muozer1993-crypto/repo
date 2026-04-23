@@ -1,3 +1,4 @@
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
@@ -96,19 +97,21 @@ class _EmptySlotLabel extends StatelessWidget {
           color: AppColors.slotOutline,
         ),
         const SizedBox(height: 4),
-        // Words like "çay bardağı" must not break mid-word on a
-        // ~72dp-wide phone tile; scale-down + maxLines:1 keeps the
-        // whole label visible, shrinking the font before ellipsing.
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
+        // Wrap first ("peynir" / "tabağı"), then shrink only if still
+        // too tall; this keeps the target label readable at 15sp for
+        // elderly users instead of collapsing to a tiny single line.
+        Flexible(
+          child: AutoSizeText(
             text,
-            maxLines: 1,
+            maxLines: 2,
+            minFontSize: 12,
             overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 15,
               color: AppColors.textMuted,
               fontStyle: FontStyle.italic,
+              height: 1.2,
             ),
           ),
         ),
@@ -157,16 +160,18 @@ class _TextualFallback extends StatelessWidget {
         ),
         if (label != null) ...[
           const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
+          Flexible(
+            child: AutoSizeText(
               label!,
-              maxLines: 1,
+              maxLines: 2,
+              minFontSize: 12,
               overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 14,
+                fontSize: 15,
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
+                height: 1.2,
               ),
             ),
           ),

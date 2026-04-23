@@ -1,3 +1,4 @@
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -148,21 +149,23 @@ class SceneItemTileState extends ConsumerState<SceneItemTile>
             ),
           ),
           const SizedBox(height: 4),
-          // FittedBox(scaleDown) + maxLines:1 keeps long labels like
-          // "çay bardağı" legible on narrow phone tiles (~72dp) where
-          // a raw Text would either overflow or wrap mid-word into
-          // gibberish ("barda" / "k").
+          // AutoSizeText prefers wrapping onto 2 lines at 16sp for
+          // multi-word labels ("okuma gözlüğü" → "okuma" / "gözlüğü")
+          // and only shrinks the font if even 2 lines won't fit. Font
+          // floor 13sp keeps the label readable for elderly eyes.
           SizedBox(
-            height: 22,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
+            height: 40,
+            child: Center(
+              child: AutoSizeText(
                 widget.item.labelTr,
-                maxLines: 1,
+                maxLines: 2,
+                minFontSize: 13,
                 overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 18,
+                  fontSize: 16,
                   color: AppColors.textPrimary,
+                  height: 1.2,
                 ),
               ),
             ),

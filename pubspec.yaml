@@ -40,6 +40,12 @@ dependencies:
   # installed SDK, so we just need to allow both.
   intl: '>=0.19.0 <0.22.0'
 
+  # Elderly-friendly text sizing: wrap over multiple lines first, only
+  # scale the font down if wrapping still doesn't fit. Plain Text +
+  # FittedBox either shrinks immediately (unreadable) or clips; this
+  # package encodes the graceful-degradation policy we want.
+  auto_size_text: ^3.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
