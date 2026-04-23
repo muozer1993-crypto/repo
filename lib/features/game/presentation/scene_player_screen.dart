@@ -81,13 +81,17 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
                 },
               )
             else
-              SceneBoard(instructionText: args.scene.instructionTr),
+              const SceneBoard(),
+            // Top bar: Çık (left), instruction banner (center),
+            // Dinle (right). The banner sits between the two buttons
+            // so it doesn't consume its own row and the slots/tray
+            // get more vertical space.
             Positioned(
               top: 8,
               left: 8,
               child: ExitButton(onConfirmed: _onExitApp),
             ),
-            if (_orientationPassed)
+            if (_orientationPassed) ...[
               Positioned(
                 top: 8,
                 right: 8,
@@ -96,6 +100,14 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
                   instructionText: args.scene.instructionTr,
                 ),
               ),
+              Positioned(
+                top: 12,
+                left: 96,
+                right: 96,
+                height: 72,
+                child: _InstructionBanner(text: args.scene.instructionTr),
+              ),
+            ],
             if (state.isComplete)
               Positioned.fill(
                 child: CompletionOverlay(onDone: _onCompleteToHome),
@@ -141,5 +153,43 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
       // routing home so we don't ship a button that does nothing.
       context.go('/home');
     }
+  }
+}
+
+/// Scene objective banner. Sits between the Çık and Dinle buttons in
+/// the top bar so the objective is always readable without stealing a
+/// row from the slot/tray area. FittedBox(scaleDown) shrinks long
+/// instructions like "Yatmadan önce komodinini düzenle" to fit the
+/// narrow horizontal band before resorting to ellipsis.
+class _InstructionBanner extends StatelessWidget {
+  const _InstructionBanner({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 2,
+      borderRadius: BorderRadius.circular(14),
+      color: Colors.white.withValues(alpha: 0.95),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                height: 1.2,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

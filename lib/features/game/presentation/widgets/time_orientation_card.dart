@@ -102,51 +102,59 @@ class _TimeOrientationCardState
                 : null;
 
             if (isLandscape) {
+              // Both columns wrap in SingleChildScrollView so sub-pixel
+              // height mismatches (the intermittent "overflowed by
+              // 1.3 pixels" warning) degrade to a silent scroll
+              // instead of the yellow/black overflow stripe.
               return Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (showSceneIcon)
-                            SizedBox(
-                              height: 64,
-                              child: Image.asset(
-                                widget.sceneIconAsset,
-                                errorBuilder: (_, __, ___) =>
-                                    const SizedBox.shrink(),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (showSceneIcon)
+                              SizedBox(
+                                height: 56,
+                                child: Image.asset(
+                                  widget.sceneIconAsset,
+                                  errorBuilder: (_, __, ___) =>
+                                      const SizedBox.shrink(),
+                                ),
                               ),
+                            _Clock(
+                              now: widget.now,
+                              showDigital: showDigital,
+                              size: clockSize,
                             ),
-                          _Clock(
-                            now: widget.now,
-                            showDigital: showDigital,
-                            size: clockSize,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (promptText != null) ...[
-                            Text(
-                              promptText,
-                              style: t.titleLarge,
-                              textAlign: TextAlign.center,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (promptText != null) ...[
+                              Text(
+                                promptText,
+                                style: t.titleLarge,
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                            _OrientationButtonColumn(
+                              options: _options,
+                              keys: _keys,
+                              onTap: _onTap,
                             ),
-                            const SizedBox(height: 16),
                           ],
-                          _OrientationButtonColumn(
-                            options: _options,
-                            keys: _keys,
-                            onTap: _onTap,
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ],

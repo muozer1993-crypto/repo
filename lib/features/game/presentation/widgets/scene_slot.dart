@@ -86,19 +86,33 @@ class _EmptySlotLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          fontSize: 14,
-          color: AppColors.textMuted,
-          fontStyle: FontStyle.italic,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(
+          Icons.add_circle_outline_rounded,
+          size: 22,
+          color: AppColors.slotOutline,
         ),
-      ),
+        const SizedBox(height: 4),
+        // Words like "çay bardağı" must not break mid-word on a
+        // ~72dp-wide phone tile; scale-down + maxLines:1 keeps the
+        // whole label visible, shrinking the font before ellipsing.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.textMuted,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

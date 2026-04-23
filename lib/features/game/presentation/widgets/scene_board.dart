@@ -22,9 +22,7 @@ import 'scene_slot.dart';
 /// When background + item images land later the grid stays; the
 /// slot/tile contents switch from text-fallback to imagery.
 class SceneBoard extends ConsumerStatefulWidget {
-  const SceneBoard({required this.instructionText, super.key});
-
-  final String instructionText;
+  const SceneBoard({super.key});
 
   @override
   ConsumerState<SceneBoard> createState() => _SceneBoardState();
@@ -58,13 +56,14 @@ class _SceneBoardState extends ConsumerState<SceneBoard> {
         ),
         Positioned.fill(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 92, 12, 12),
+            // Top 96 leaves room for the labeled Çık/Dinle buttons and
+            // the instruction banner sitting between them (both owned
+            // by ScenePlayerScreen's stack).
+            padding: const EdgeInsets.fromLTRB(12, 96, 12, 12),
             child: LayoutBuilder(
               builder: (context, cons) {
                 return Column(
                   children: [
-                    _InstructionCard(text: widget.instructionText),
-                    const SizedBox(height: 10),
                     _SectionHeader(
                       text: 'Eşyaları doğru yerlere koy',
                       color: AppColors.primary,
@@ -263,43 +262,6 @@ class _SectionHeader extends StatelessWidget {
             color: color,
             fontWeight: FontWeight.w600,
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Scene objective banner. Lives at the top of the board so the
-/// caregiver-authored instructionTr (e.g. "Masayı kahvaltıya
-/// hazırlayalım") is always visible. FittedBox + maxLines:3 means it
-/// won't truncate on narrow phones.
-class _InstructionCard extends StatelessWidget {
-  const _InstructionCard({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.25),
-          width: 1,
-        ),
-      ),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        maxLines: 3,
-        style: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
-          height: 1.25,
         ),
       ),
     );

@@ -131,7 +131,7 @@ class SceneItemTileState extends ConsumerState<SceneItemTile>
           width: widget.hinted ? 3 : 1,
         ),
       ),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -142,17 +142,29 @@ class SceneItemTileState extends ConsumerState<SceneItemTile>
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) => const Icon(
                 Icons.image_outlined,
-                size: 48,
+                size: 40,
                 color: AppColors.textMuted,
               ),
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            widget.item.labelTr,
-            style: const TextStyle(
-              fontSize: 20,
-              color: AppColors.textPrimary,
+          const SizedBox(height: 4),
+          // FittedBox(scaleDown) + maxLines:1 keeps long labels like
+          // "çay bardağı" legible on narrow phone tiles (~72dp) where
+          // a raw Text would either overflow or wrap mid-word into
+          // gibberish ("barda" / "k").
+          SizedBox(
+            height: 22,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                widget.item.labelTr,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 18,
+                  color: AppColors.textPrimary,
+                ),
+              ),
             ),
           ),
         ],
