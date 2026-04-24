@@ -2,12 +2,38 @@ import 'package:isar/isar.dart';
 
 part 'session_log.g.dart';
 
+/// v2 — which game produced this row. Stored as a string in the Isar
+/// schema (`gameType` on [PlacementEvent], `game2Type` on [SessionLog])
+/// so Supabase column values match without extra mapping. This enum is
+/// the canonical Dart-side vocabulary; conversions live in
+/// [gameTypeId] / [gameTypeFromId].
+enum GameType { game1, game2, bonus }
+
+String gameTypeId(GameType g) => switch (g) {
+      GameType.game1 => 'game1',
+      GameType.game2 => 'game2',
+      GameType.bonus => 'bonus',
+    };
+
+GameType? gameTypeFromId(String? id) => switch (id) {
+      'game1' => GameType.game1,
+      'game2' => GameType.game2,
+      'bonus' => GameType.bonus,
+      _ => null,
+    };
+
 /// One row per scene attempt.
 ///
 /// Every field the weekly therapist report will eventually read is
 /// recorded at session end. Orientation-card response and instruction
 /// replay count (clinical revisions #4 and #6) are stored as null-able
 /// so that sessions which skip either path remain valid.
+///
+/// v2 — a single session now covers Game-1 + Game-2 (same scene, same
+/// time window). The [game1*] and [game2*] mirrors record per-game
+/// completion separately; the top-level [errorCount] / [completed]
+/// fields stay as the session-wide total (Game-1 + Game-2) so existing
+/// v1 report code keeps working.
 @collection
 class SessionLog {
   Id id = Isar.autoIncrement;
@@ -30,6 +56,24 @@ class SessionLog {
 
   late int errorCount;
   late bool completed;
+
+  // v2 — per-game split. Both default to 0/false so pre-v2 rows
+  // migrated from the old schema stay queryable.
+  int game1ErrorCount = 0;
+  bool game1Completed = false;
+  int game2ErrorCount = 0;
+  bool game2Completed = false;
+
+  /// v2 — which Game-2 type was served in this session. Null if the
+  /// session was Game-1 only (learning phase bypass) or if the scene
+  /// doesn't declare a game2 config. Stored as its string id for
+  /// forward-compat with the Supabase text column.
+  String? game2Type;
+
+  /// v2 — rotation hash "sceneId:sortedItemIds". The scheduler uses it
+  /// to reject a combo that appeared in the last 3 days so the first-3-
+  /// days learning phase never repeats an item set.
+  String? itemComboHash;
 
   // Clinical revision #2: srInterval and difficultyLevel are orthogonal.
   // We snapshot both at session start and end so regressions are visible
@@ -107,6 +151,15 @@ class PlacementEvent {
 
   late bool sequenceRequired;
   late int difficultyLevel;
+
+  /// v2 — which game produced this tap. 'game1' for v1-compatible
+  /// errorless placements; 'game2' for the second-game variants
+  /// (plate_matching / sequence_ordering / quantity_counting /
+  /// next_step_planning). Bonus plays do not emit PlacementEvent —
+  /// they write [BonusPlayEvent] instead.
+  ///
+  /// Defaults to 'game1' so pre-v2 rows stay valid without migration.
+  String gameType = 'game1';
 
   DateTime? syncedAt;
 }

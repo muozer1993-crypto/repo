@@ -4,6 +4,8 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../features/profile/domain/patient_profile.dart';
 import '../../features/progress/domain/app_open_event.dart';
+import '../../features/progress/domain/bonus_play_event.dart';
+import '../../features/progress/domain/missed_slot_event.dart';
 import '../../features/progress/domain/schedule_entry.dart';
 import '../../features/progress/domain/session_log.dart';
 
@@ -16,6 +18,8 @@ import '../../features/progress/domain/session_log.dart';
 ///   * [ScheduleEntry]
 ///   * [AppOpenEvent]
 ///   * [ReportTriggerState]
+///   * [BonusPlayEvent]   (v2)
+///   * [MissedSlotEvent]  (v2)
 Future<Isar> openIsar() async {
   final dir = await getApplicationDocumentsDirectory();
   return Isar.open(
@@ -26,6 +30,8 @@ Future<Isar> openIsar() async {
       ScheduleEntrySchema,
       AppOpenEventSchema,
       ReportTriggerStateSchema,
+      BonusPlayEventSchema,
+      MissedSlotEventSchema,
     ],
     directory: dir.path,
     name: 'ergoterapi',
