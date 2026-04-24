@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/game/presentation/bonus_player_screen.dart';
 import '../../features/game/presentation/scene_player_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/home/presentation/settings_screen.dart';
@@ -34,6 +35,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'play',
             builder: (_, __) => const ScenePlayerScreen(),
+          ),
+          // v2 — bonus player is reachable from the home screen's
+          // post-session offer tile and from the night-bonus compact
+          // tile during dinlenme.
+          GoRoute(
+            path: 'bonus',
+            builder: (_, __) => const BonusPlayerScreen(),
           ),
           GoRoute(
             path: 'settings',
