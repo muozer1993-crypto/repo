@@ -1,3 +1,4 @@
+import 'package:ergoterapi/features/game/domain/scene.dart';
 import 'package:ergoterapi/features/progress/application/spaced_retrieval.dart';
 import 'package:ergoterapi/features/progress/domain/schedule_entry.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -140,6 +141,85 @@ void main() {
       expect(e.cleanRunStreak, 0);
       expect(e.nextDueAt, now);
       expect(e.lastCompletedAt, isNull);
+    });
+  });
+
+  group('v2: learning phase lock', () {
+    final created = DateTime.utc(2026, 4, 22, 10);
+
+    test('within first 72h, isInLearningPhase returns true', () {
+      expect(
+        isInLearningPhase(
+            profileCreatedAt: created,
+            now: created.add(const Duration(hours: 71, minutes: 59))),
+        isTrue,
+      );
+    });
+
+    test('at 72h boundary exactly, phase is over', () {
+      expect(
+        isInLearningPhase(
+            profileCreatedAt: created,
+            now: created.add(const Duration(hours: 72))),
+        isFalse,
+      );
+    });
+
+    test('onCompletion with lockDifficulty=true pins difficultyLevel', () {
+      final prev = ScheduleEntry()
+        ..id = 1
+        ..sceneId = 'sabah_kahvalti'
+        ..srInterval = 1
+        ..difficultyLevel = 0
+        ..cleanRunStreak = 1
+        ..nextDueAt = created;
+
+      final next = onCompletion(
+        prev,
+        errorCount: 0,
+        now: created.add(const Duration(hours: 1)),
+        lockDifficulty: true,
+      );
+
+      // Interval still advances…
+      expect(next.srInterval, 2);
+      // …but difficulty stays locked at 0.
+      expect(next.difficultyLevel, 0);
+    });
+  });
+
+  group('v2: orthogonality helper', () {
+    test('returns scene native when not yet played today', () {
+      expect(
+        pickOrthogonalGame2Type(
+          sceneNative: Game2Type.plateMatching,
+          playedToday: const {},
+        ),
+        Game2Type.plateMatching,
+      );
+    });
+
+    test('returns null when type already in today set', () {
+      expect(
+        pickOrthogonalGame2Type(
+          sceneNative: Game2Type.plateMatching,
+          playedToday: const {Game2Type.plateMatching},
+        ),
+        isNull,
+      );
+    });
+
+    test('unrelated types in set do not block the native type', () {
+      expect(
+        pickOrthogonalGame2Type(
+          sceneNative: Game2Type.plateMatching,
+          playedToday: const {
+            Game2Type.sequenceOrdering,
+            Game2Type.quantityCounting,
+          },
+        ),
+        Game2Type.plateMatching,
+      );
     });
   });
 }
