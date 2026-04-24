@@ -75,5 +75,25 @@
         {"id": "mum",          "assetPath": "assets/images/distractors/mum.png",          "audioLabelPath": "assets/audio/labels/mum.wav",          "labelTr": "mum",          "distractor": true, "distractorCategory": "functional"}
       ]
     }
-  ]
+  ],
+  "itemPool": [
+    {"id": "okuma_gozlugu", "assetPath": "assets/images/scenes/aksam/okuma_gozlugu.png", "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav", "labelTr": "okuma gözlüğü", "isTarget": true,  "defaultSlotId": "slot_gozluk"},
+    {"id": "lamba",         "assetPath": "assets/images/scenes/aksam/lamba.png",         "audioLabelPath": "assets/audio/labels/lamba.wav",         "labelTr": "lamba",         "isTarget": true,  "defaultSlotId": "slot_lamba"},
+    {"id": "bardak",        "assetPath": "assets/images/scenes/aksam/bardak.png",        "audioLabelPath": "assets/audio/labels/bardak.wav",        "labelTr": "bardak",        "isTarget": true,  "defaultSlotId": "slot_su"},
+    {"id": "kitap",         "assetPath": "assets/images/scenes/aksam/kitap.png",         "audioLabelPath": "assets/audio/labels/kitap.wav",         "labelTr": "kitap",         "isTarget": true,  "defaultSlotId": "slot_kitap"},
+    {"id": "semsiye",       "assetPath": "assets/images/distractors/semsiye.png",        "audioLabelPath": "assets/audio/labels/semsiye.wav",       "labelTr": "şemsiye",       "isTarget": false, "distractorCategory": "far"},
+    {"id": "anahtar",       "assetPath": "assets/images/distractors/anahtar.png",        "audioLabelPath": "assets/audio/labels/anahtar.wav",       "labelTr": "anahtar",       "isTarget": false, "distractorCategory": "far"},
+    {"id": "kalem",         "assetPath": "assets/images/distractors/kalem.png",          "audioLabelPath": "assets/audio/labels/kalem.wav",         "labelTr": "kalem",         "isTarget": false, "distractorCategory": "near"},
+    {"id": "defter",        "assetPath": "assets/images/distractors/defter.png",         "audioLabelPath": "assets/audio/labels/defter.wav",        "labelTr": "defter",        "isTarget": false, "distractorCategory": "near"},
+    {"id": "fotograf",      "assetPath": "assets/images/distractors/fotograf.png",       "audioLabelPath": "assets/audio/labels/fotograf.wav",      "labelTr": "fotoğraf",      "isTarget": false, "distractorCategory": "near"},
+    {"id": "saat",          "assetPath": "assets/images/distractors/saat.png",           "audioLabelPath": "assets/audio/labels/saat.wav",          "labelTr": "saat",          "isTarget": false, "distractorCategory": "near"},
+    {"id": "gunes_gozlugu", "assetPath": "assets/images/distractors/gunes_gozlugu.png",  "audioLabelPath": "assets/audio/labels/gunes_gozlugu.wav", "labelTr": "güneş gözlüğü", "isTarget": false, "distractorCategory": "functional"},
+    {"id": "mum",           "assetPath": "assets/images/distractors/mum.png",            "audioLabelPath": "assets/audio/labels/mum.wav",           "labelTr": "mum",           "isTarget": false, "distractorCategory": "functional"}
+  ],
+  "game2": {
+    "type": "next_step_planning",
+    "instructionTr": "Yatmadan önce ilk ne yaparsın? Doğru sırayı seç.",
+    "instructionAudioPath": "assets/audio/instructions/aksam_yatak_duzeni_game2.wav"
+  },
+  "bonusSceneId": "bonus_aksam_explore"
 }

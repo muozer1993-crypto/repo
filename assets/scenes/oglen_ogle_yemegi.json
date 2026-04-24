@@ -75,5 +75,25 @@
         {"id": "sandvic",     "assetPath": "assets/images/distractors/sandvic.png",     "audioLabelPath": "assets/audio/labels/sandvic.wav",     "labelTr": "sandviç",     "distractor": true, "distractorCategory": "functional"}
       ]
     }
-  ]
+  ],
+  "itemPool": [
+    {"id": "corba",       "assetPath": "assets/images/scenes/oglen/corba.png",       "audioLabelPath": "assets/audio/labels/corba.wav",       "labelTr": "çorba",       "isTarget": true,  "defaultSlotId": "slot_corba"},
+    {"id": "tavuk",       "assetPath": "assets/images/scenes/oglen/tavuk.png",       "audioLabelPath": "assets/audio/labels/tavuk.wav",       "labelTr": "tavuk",       "isTarget": true,  "defaultSlotId": "slot_tavuk"},
+    {"id": "salata",      "assetPath": "assets/images/scenes/oglen/salata.png",      "audioLabelPath": "assets/audio/labels/salata.wav",      "labelTr": "salata",      "isTarget": true,  "defaultSlotId": "slot_salata"},
+    {"id": "su",          "assetPath": "assets/images/scenes/oglen/su.png",          "audioLabelPath": "assets/audio/labels/su.wav",          "labelTr": "su",          "isTarget": true,  "defaultSlotId": "slot_su"},
+    {"id": "ayran",       "assetPath": "assets/images/scenes/oglen/ayran.png",       "audioLabelPath": "assets/audio/labels/ayran.wav",       "labelTr": "ayran",       "isTarget": true,  "defaultSlotId": "slot_su"},
+    {"id": "havlu",       "assetPath": "assets/images/distractors/havlu.png",        "audioLabelPath": "assets/audio/labels/havlu.wav",        "labelTr": "havlu",       "isTarget": false, "distractorCategory": "far"},
+    {"id": "tarak",       "assetPath": "assets/images/distractors/tarak.png",        "audioLabelPath": "assets/audio/labels/tarak.wav",        "labelTr": "tarak",       "isTarget": false, "distractorCategory": "far"},
+    {"id": "kek",         "assetPath": "assets/images/distractors/kek.png",          "audioLabelPath": "assets/audio/labels/kek.wav",          "labelTr": "kek",         "isTarget": false, "distractorCategory": "near"},
+    {"id": "bal",         "assetPath": "assets/images/distractors/bal.png",          "audioLabelPath": "assets/audio/labels/bal.wav",          "labelTr": "bal",         "isTarget": false, "distractorCategory": "near"},
+    {"id": "kurabiye",    "assetPath": "assets/images/distractors/kurabiye.png",     "audioLabelPath": "assets/audio/labels/kurabiye.wav",     "labelTr": "kurabiye",    "isTarget": false, "distractorCategory": "near"},
+    {"id": "cay_bardagi", "assetPath": "assets/images/distractors/cay_bardagi.png",  "audioLabelPath": "assets/audio/labels/cay_bardagi.wav",  "labelTr": "çay bardağı", "isTarget": false, "distractorCategory": "functional"},
+    {"id": "sandvic",     "assetPath": "assets/images/distractors/sandvic.png",      "audioLabelPath": "assets/audio/labels/sandvic.wav",      "labelTr": "sandviç",     "isTarget": false, "distractorCategory": "functional"}
+  ],
+  "game2": {
+    "type": "sequence_ordering",
+    "instructionTr": "Yemek öncesi sırasını düzene koy: önce çorba, sonra ana yemek, sonra salata, en son su.",
+    "instructionAudioPath": "assets/audio/instructions/oglen_ogle_yemegi_game2.wav"
+  },
+  "bonusSceneId": "bonus_oglen_find"
 }
