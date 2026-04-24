@@ -41,4 +41,10 @@ class PatientProfile {
 
   /// Null until the first successful upsert to Supabase `profiles`.
   DateTime? syncedAt;
+
+  /// v2 — true once the caregiver-invite onboarding screen has been
+  /// dismissed (via either "Şimdi başla" or "Eşlik et"). Controls
+  /// whether the router redirects a freshly-setup profile to
+  /// /onboarding or straight to /home.
+  bool onboardingSeen = false;
 }

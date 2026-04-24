@@ -6,6 +6,7 @@ import '../../features/game/presentation/bonus_player_screen.dart';
 import '../../features/game/presentation/scene_player_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/home/presentation/settings_screen.dart';
+import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/profile/data/profile_repository.dart';
 import '../../features/profile/presentation/profile_setup_screen.dart';
 
@@ -16,10 +17,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/home',
     redirect: (context, state) {
-      final hasProfile = profile.value != null;
-      final goingToSetup = state.matchedLocation == '/setup';
-      if (!hasProfile && !goingToSetup) return '/setup';
-      if (hasProfile && goingToSetup) return '/home';
+      final current = profile.value;
+      final hasProfile = current != null;
+      final onboardingSeen = current?.onboardingSeen ?? true;
+      final loc = state.matchedLocation;
+
+      if (!hasProfile && loc != '/setup') return '/setup';
+      if (hasProfile && loc == '/setup') {
+        return onboardingSeen ? '/home' : '/onboarding';
+      }
+      if (hasProfile && !onboardingSeen && loc == '/home') {
+        return '/onboarding';
+      }
+      if (hasProfile && onboardingSeen && loc == '/onboarding') {
+        return '/home';
+      }
       return null;
     },
     refreshListenable: _ProfileListenable(ref),
@@ -27,6 +39,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/setup',
         builder: (_, __) => const ProfileSetupScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding',
+        builder: (_, __) => const OnboardingScreen(),
       ),
       GoRoute(
         path: '/home',
