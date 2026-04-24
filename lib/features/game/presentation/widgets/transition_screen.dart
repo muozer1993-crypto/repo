@@ -1,0 +1,134 @@
+import 'package:auto_size_text/auto_size_text.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../core/audio/audio_service.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../l10n/strings_tr.dart';
+import '../../../../shared/widgets/big_button.dart';
+import '../../application/game_session_controller.dart';
+
+/// v2 — "Aferin! Şimdi ikinci oyuna geçelim" bridge between Game-1 and
+/// Game-2.
+///
+/// Rendered when [GameSessionState.phase] is
+/// [GameSessionPhase.transitionToGame2]. Reads the scene's
+/// [Game2Config.instructionTr] so the patient hears a soft preview of
+/// the next challenge, plays the Game-2 instruction audio once, and
+/// exposes two buttons:
+///   * "Devam" → onTransitionContinue() → game2 phase.
+///   * "Şimdilik yeterli" → onTransitionSkipGame2() → completed phase.
+class TransitionScreen extends ConsumerStatefulWidget {
+  const TransitionScreen({super.key});
+
+  @override
+  ConsumerState<TransitionScreen> createState() => _TransitionScreenState();
+}
+
+class _TransitionScreenState extends ConsumerState<TransitionScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final scene = ref.read(gameSessionControllerProvider).scene;
+      final g2 = scene.game2;
+      if (g2 == null) return;
+      ref.read(audioServiceProvider).playInstruction(g2.instructionAudioPath);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = ref.watch(gameSessionControllerProvider);
+    final game2 = session.scene.game2;
+    if (game2 == null) {
+      return _FallbackContinue();
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 64),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 720),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AutoSizeText(
+                          StringsTr.transitionHeadline,
+                          style: Theme.of(context)
+                              .textTheme
+                              .displaySmall
+                              ?.copyWith(color: AppColors.primary),
+                          maxLines: 2,
+                          minFontSize: 24,
+                        ),
+                        const SizedBox(height: 24),
+                        AutoSizeText(
+                          game2.instructionTr,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                          maxLines: 4,
+                          minFontSize: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => ref
+                          .read(gameSessionControllerProvider.notifier)
+                          .onTransitionSkipGame2(),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 80),
+                        textStyle:
+                            Theme.of(context).textTheme.titleLarge,
+                      ),
+                      child: const Text(StringsTr.transitionSkip),
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                  BigButton(
+                    label: StringsTr.transitionContinue,
+                    icon: Icons.arrow_forward_rounded,
+                    onPressed: () => ref
+                        .read(gameSessionControllerProvider.notifier)
+                        .onTransitionContinue(),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FallbackContinue extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Center(
+        child: BigButton(
+          label: StringsTr.transitionContinue,
+          onPressed: () => ref
+              .read(gameSessionControllerProvider.notifier)
+              .onTransitionContinue(),
+        ),
+      ),
+    );
+  }
+}

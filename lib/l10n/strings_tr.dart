@@ -55,4 +55,35 @@ class StringsTr {
   static const sceneOglen = 'Öğle Sofrasını Kur';
   static const sceneIkindi = 'Çay Saatini Hazırla';
   static const sceneAksam = 'Yatak Başını Düzenle';
+
+  // v2 — geçiş ekranı (Game-1 → Game-2)
+  static const transitionHeadline = 'Aferin! Şimdi ikinci oyuna geçelim.';
+  static const transitionContinue = 'Devam';
+  static const transitionSkip = 'Şimdilik yeterli';
+
+  // v2 — Game-2 tipleri (başlıklar)
+  static const game2PlateMatchingTitle = 'Tabağa Yerleştir';
+  static const game2SequenceOrderingTitle = 'Sırayı Düzene Koy';
+  static const game2QuantityCountingTitle = 'Kaç Tane Var?';
+  static const game2NextStepPlanningTitle = 'Sıradaki Adım';
+
+  // v2 — bonus
+  static const bonusOfferTitle = 'Harika gittin!';
+  static const bonusOfferBody = 'Bir bonus oyun daha keyif almak ister misin?';
+  static const bonusOfferAccept = 'Evet, oynayalım';
+  static const bonusOfferDecline = 'Hayır, teşekkürler';
+  static const bonusFinishedBackHome = 'Ana ekrana dön';
+
+  // v2 — gece ekranı
+  static const nightBonusHeadline = 'Yumuşak bir an';
+  static const nightBonusBody = 'Yıldızlara dokunarak yavaşla.';
+
+  // v2 — onboarding / bakım veren daveti
+  static const onboardingTitle = 'Seni bekliyoruz';
+  static const onboardingBody =
+      'Bu uygulamayı günde dört kez (sabah, öğlen, ikindi, akşam) '
+      'açmaya çalışın. Bakım veren biri yanınızda varsa onu '
+      'eşlik etmeye davet edebilirsiniz.';
+  static const onboardingStart = 'Şimdi başla';
+  static const onboardingInvite = 'Eşlik et';
 }
