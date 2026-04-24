@@ -6,12 +6,12 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/storage/isar_db.dart';
 import '../../../core/time/clock_provider.dart';
-import '../../../core/time/time_window.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../progress/application/spaced_retrieval.dart';
 import '../../progress/domain/schedule_entry.dart';
 import '../../progress/domain/session_log.dart';
 import '../domain/scene.dart';
+import 'game_session_controller.dart';
 
 /// Parameters a scene is launched with. Scheduler controller builds
 /// this and hands it to [SceneController] via [sceneArgsProvider].
@@ -115,10 +115,12 @@ class SceneController extends StateNotifier<SceneState> {
     required this.isar,
     required this.clock,
     required this.profileId,
+    this.sessionId,
+    this.deferWrite = false,
   })  : _scene = args.scene,
         _variant = args.variant,
         _scheduleEntry = args.scheduleEntry,
-        _sessionId = const Uuid().v4(),
+        _sessionId = sessionId ?? const Uuid().v4(),
         _sessionStart = clock(),
         super(
           SceneState(
@@ -140,6 +142,16 @@ class SceneController extends StateNotifier<SceneState> {
   final DateTime Function() clock;
   final String profileId;
 
+  /// v2 — optional session id injected by GameSessionController so
+  /// Game-1 placements share the same sessionId with Game-2 and the
+  /// parent SessionLog row. When null (v1), a fresh uuid is generated.
+  final String? sessionId;
+
+  /// v2 — when true, [flushSession] no longer touches Isar; callers
+  /// read [placements] + the state and persist via the parent
+  /// GameSessionController instead.
+  final bool deferWrite;
+
   final String _sessionId;
   final DateTime _sessionStart;
   final List<PlacementEvent> _pendingPlacements = [];
@@ -151,6 +163,16 @@ class SceneController extends StateNotifier<SceneState> {
   int? _orientationResponseMs;
 
   int get errorCount => state.errorCount;
+
+  /// v2 — read-only access to the placements queued during Game-1.
+  /// GameSessionController reads this on hand-off so the session
+  /// writeTxn can include every tap in one transaction.
+  List<PlacementEvent> get placements =>
+      List.unmodifiable(_pendingPlacements);
+
+  bool? get orientationCorrect => _orientationCorrect;
+  int? get orientationResponseMs => _orientationResponseMs;
+  DateTime get sessionStartedAt => _sessionStart;
 
   /// Handle a tap on [item].
   ///
@@ -272,7 +294,14 @@ class SceneController extends StateNotifier<SceneState> {
   /// Persist the session to Isar + update the [ScheduleEntry] via the
   /// spaced-retrieval algorithm. Called when the scene completes OR
   /// when the scene is exited early (completed=false).
+  ///
+  /// v2 — when [deferWrite] is true this becomes a no-op; the parent
+  /// GameSessionController is expected to call back after reading
+  /// [placements] and state so it can batch Game-1 + Game-2 writes in
+  /// a single transaction.
   Future<void> flushSession({required bool completed}) async {
+    if (deferWrite) return;
+
     final now = clock();
     final updatedEntry = onCompletion(
       _scheduleEntry,
@@ -295,7 +324,9 @@ class SceneController extends StateNotifier<SceneState> {
       ..orientationCorrect = _orientationCorrect
       ..orientationResponseMs = _orientationResponseMs
       ..instructionReplayCount = state.instructionReplayCount
-      ..appOpenCountOnThatDay = 0; // wired in later
+      ..appOpenCountOnThatDay = 0
+      ..game1ErrorCount = state.errorCount
+      ..game1Completed = completed;
 
     await _writeAll(log, updatedEntry);
   }
@@ -325,6 +356,11 @@ final sceneArgsProvider = StateProvider<SceneArgs?>((_) => null);
 
 /// StateNotifier scoped to a single scene attempt. Auto-disposes when
 /// the player screen is popped.
+///
+/// v2 — the player screen creates a [gameSessionControllerProvider]
+/// first, and this provider pulls the shared sessionId from there so
+/// Game-1 placements land on the same SessionLog row as Game-2. It
+/// also flips deferWrite=true so flushes are batched by the parent.
 final sceneControllerProvider =
     StateNotifierProvider.autoDispose<SceneController, SceneState>((ref) {
   final args = ref.watch(sceneArgsProvider);
@@ -336,10 +372,22 @@ final sceneControllerProvider =
   if (profile == null) {
     throw StateError('PatientProfile must exist before a scene starts.');
   }
+  // Peek at the session (if any) without creating a hard dep cycle.
+  // If the session provider has been instantiated by the player
+  // screen, its sessionId is used; otherwise SceneController falls
+  // back to its own uuid (v1 compat path for isolated tests).
+  String? sharedSessionId;
+  try {
+    sharedSessionId = ref.read(gameSessionControllerProvider).sessionId;
+  } catch (_) {
+    sharedSessionId = null;
+  }
   return SceneController(
     args: args,
     isar: ref.watch(isarProvider),
     clock: ref.watch(clockProvider),
     profileId: profile.profileId,
+    sessionId: sharedSessionId,
+    deferWrite: sharedSessionId != null,
   );
 });

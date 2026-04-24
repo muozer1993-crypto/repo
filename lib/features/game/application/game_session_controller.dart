@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/storage/isar_db.dart';
 import '../../../core/time/clock_provider.dart';
+import '../../profile/data/profile_repository.dart';
 import '../../progress/application/spaced_retrieval.dart';
 import '../../progress/domain/schedule_entry.dart';
 import '../../progress/domain/session_log.dart';
@@ -323,12 +324,14 @@ final gameSessionControllerProvider = StateNotifierProvider.autoDispose<
     throw StateError('sceneArgsProvider must be set before the session '
         'screen is mounted.');
   }
+  final profile = ref.watch(patientProfileProvider).value;
+  if (profile == null) {
+    throw StateError('PatientProfile must exist before a session starts.');
+  }
   return GameSessionController(
     args: args,
     isar: ref.watch(isarProvider),
     clock: ref.watch(clockProvider),
-    // profileId resolution stays in scene_player_screen for now (will be
-    // moved here in Faz D when the session screen becomes the root).
-    profileId: '',
+    profileId: profile.profileId,
   );
 });
