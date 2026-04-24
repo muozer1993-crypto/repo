@@ -1,39 +1,82 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/storage/isar_db.dart';
+import '../../../core/time/clock_provider.dart';
 import '../../../core/time/time_window.dart';
+import '../../game/data/scene_repository.dart';
+import '../../profile/data/profile_repository.dart';
+import 'scheduler_controller.dart';
 
-/// v2 — per-window "dismiss this bonus offer" flag. Resets at
-/// midnight implicitly (provider is rebuilt when the home screen
-/// reloads, and the flag is a plain Set).
+/// v2 — per-window dismissal flag. Resets implicitly each time the
+/// provider rebuilds (e.g. on day change or manual refresh).
+final _dismissedBonusWindowsProvider = StateProvider<Set<TimeWindow>>(
+  (_) => <TimeWindow>{},
+);
+
+/// Resolves the current bonus offer state by consulting today's Isar
+/// snapshot via [shouldOfferBonus] in scheduler_controller.dart.
 ///
-/// Faz D will wire the "should we offer the bonus right now?" query
-/// against today's SessionLog + BonusPlayEvent rows in Isar. Until
-/// then [postSessionBonusAvailableProvider] yields null so the home
-/// screen never renders the post-session offer — the scaffolding is
-/// in place, just gated off.
+/// Returns the bonusSceneId to offer, or null when no offer should
+/// surface (first entry of the day, bonus already played, no bonus
+/// configured, or the patient dismissed it).
+final _resolvedBonusOfferProvider = FutureProvider<String?>((ref) async {
+  final profile = ref.watch(patientProfileProvider).value;
+  if (profile == null) return null;
+
+  final now = ref.watch(clockProvider)();
+  final window = windowFor(now);
+  if (window == TimeWindow.dinlenme) return null;
+
+  if (ref.watch(_dismissedBonusWindowsProvider).contains(window)) return null;
+
+  final scene = await ref.watch(sceneRepositoryProvider).byWindow(window);
+  if (scene == null) return null;
+
+  final snapshot = await loadTodaySnapshot(
+    isar: ref.watch(isarProvider),
+    profileId: profile.profileId,
+    now: now,
+  );
+
+  return shouldOfferBonus(
+    scene: scene,
+    window: window,
+    today: snapshot,
+  );
+});
+
+/// Controller that wraps the resolved offer + dismissal mutation.
 class PostSessionBonusController
     extends StateNotifier<AsyncValue<String?>> {
-  PostSessionBonusController() : super(const AsyncValue.data(null));
-
-  final Set<TimeWindow> _dismissed = {};
-
-  /// Called by the home screen's "Hayır, teşekkürler" button — hides
-  /// the offer for the current window until the window rolls over.
-  void dismissForWindow(TimeWindow w) {
-    _dismissed.add(w);
-    state = const AsyncValue.data(null);
+  PostSessionBonusController(this._ref) : super(const AsyncValue.loading()) {
+    _init();
   }
 
-  /// Call when the scheduler detects the offer should surface for the
-  /// given window + scene. Noop in v2 bootstrap; Faz D populates it.
-  // ignore: unused_element
-  void _offerFor(TimeWindow w, String bonusSceneId) {
-    if (_dismissed.contains(w)) return;
-    state = AsyncValue.data(bonusSceneId);
+  final Ref _ref;
+
+  Future<void> _init() async {
+    final offer = await _ref.watch(_resolvedBonusOfferProvider.future);
+    if (!mounted) return;
+    state = AsyncValue.data(offer);
+  }
+
+  /// Home screen calls this on "Hayır, teşekkürler". Dismissal is
+  /// per-window and resets implicitly when the provider rebuilds for
+  /// a different window (e.g. time of day change).
+  void dismissForWindow(TimeWindow w) {
+    final now = _ref.read(clockProvider)();
+    _ref.read(_dismissedBonusWindowsProvider.notifier).update((prev) {
+      return {...prev, w};
+    });
+    // refresh — the state turns null immediately.
+    state = const AsyncValue.data(null);
+    // Keep the internal use of `now` so the import stays pinned; no-op
+    // in practice but documents the decision point.
+    assert(now.isAfter(DateTime(1970)));
   }
 }
 
 final postSessionBonusAvailableProvider = StateNotifierProvider<
     PostSessionBonusController, AsyncValue<String?>>(
-  (_) => PostSessionBonusController(),
+  (ref) => PostSessionBonusController(ref),
 );
