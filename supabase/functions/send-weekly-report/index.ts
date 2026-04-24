@@ -3,7 +3,14 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-import { AppOpen, buildReport, Placement, Session } from "./build_report.ts";
+import {
+  AppOpen,
+  BonusPlay,
+  buildReport,
+  MissedSlot,
+  Placement,
+  Session,
+} from "./build_report.ts";
 import { renderCsvs } from "./render_csv.ts";
 import { renderPdf } from "./render_pdf.ts";
 
@@ -50,7 +57,14 @@ serve(async (req) => {
   const from = new Date(to.getTime() - 7 * 86_400_000);
 
   try {
-    const [profile, sessions, placements, appOpens] = await Promise.all([
+    const [
+      profile,
+      sessions,
+      placements,
+      appOpens,
+      bonusPlays,
+      missedSlots,
+    ] = await Promise.all([
       admin
         .from("profiles")
         .select("*")
@@ -75,6 +89,18 @@ serve(async (req) => {
         .eq("profile_id", profileId)
         .gte("at", from.toISOString())
         .then((r: any) => (r.data ?? []) as AppOpen[]),
+      admin
+        .from("bonus_plays")
+        .select("*")
+        .eq("profile_id", profileId)
+        .gte("started_at", from.toISOString())
+        .then((r: any) => (r.data ?? []) as BonusPlay[]),
+      admin
+        .from("missed_slots")
+        .select("*")
+        .eq("profile_id", profileId)
+        .gte("missed_on", from.toISOString().slice(0, 10))
+        .then((r: any) => (r.data ?? []) as MissedSlot[]),
     ]);
 
     if (!profile) {
@@ -86,12 +112,20 @@ serve(async (req) => {
       sessions,
       placements,
       appOpens,
+      bonusPlays,
+      missedSlots,
       from,
       to,
     });
 
     const pdf = await renderPdf(report);
-    const csvs = renderCsvs({ sessions, placements, appOpens });
+    const csvs = renderCsvs({
+      sessions,
+      placements,
+      appOpens,
+      bonusPlays,
+      missedSlots,
+    });
 
     const today = to.toISOString().slice(0, 10).replaceAll("-", "");
     const subject = `${profile.name} — Haftalik Rapor (${
@@ -125,6 +159,14 @@ serve(async (req) => {
           {
             filename: "app_opens.csv",
             content: btoa(csvs.appOpens),
+          },
+          {
+            filename: "bonus_plays.csv",
+            content: btoa(csvs.bonusPlays),
+          },
+          {
+            filename: "missed_slots.csv",
+            content: btoa(csvs.missedSlots),
           },
         ],
       }),
@@ -164,6 +206,9 @@ function summaryText(report: any): string {
   const s = report.summary;
   const p = report.profile;
   const wd = s.windowDistribution;
+  const g1 = s.game1CompletionRate;
+  const g2 = s.game2CompletionRate;
+  const be = s.bonusEngagementRate;
   return [
     `Hasta: ${p.name} (${p.age_band})`,
     `Tarih araligi: ${report.range.from.slice(0, 10)} — ${
@@ -184,6 +229,16 @@ function summaryText(report: any): string {
         Math.round(s.orientationCorrectRate * 100)
       }%`,
     `Ort. yonerge tekrari / oturum: ${s.avgInstructionReplays.toFixed(1)}`,
+    "",
+    g1 === null
+      ? ""
+      : `Oyun-1 tamamlanma: ${Math.round(g1 * 100)}%`,
+    g2 === null
+      ? ""
+      : `Oyun-2 tamamlanma: ${Math.round(g2 * 100)}%`,
+    `Kacirilan dilim: ${s.missedSlotCount}`,
+    `Bonus oyun sayisi: ${s.bonusPlayCount}` +
+    (be === null ? "" : ` (katılım ${Math.round(be * 100)}%)`),
     "",
     "Ayrintilar icin PDF ve CSV eklerini inceleyiniz.",
   ].filter(Boolean).join("\n");

@@ -83,6 +83,80 @@ export async function renderPdf(report: Report): Promise<Uint8Array> {
   );
   y += lineHeight;
 
+  // v2 — Oyun-1 / Oyun-2 / Bonus ozet
+  heading("Oyun ayrimi", 14);
+  line(
+    `Oyun-1 tamamlanma: ${
+      s.game1CompletionRate === null
+        ? "yok"
+        : percent(s.game1CompletionRate)
+    }`,
+  );
+  line(
+    `Oyun-2 tamamlanma: ${
+      s.game2CompletionRate === null
+        ? "yok"
+        : percent(s.game2CompletionRate)
+    }`,
+  );
+  line(`Bonus oyun: ${s.bonusPlayCount}`);
+  line(
+    `Bonus katilim: ${
+      s.bonusEngagementRate === null
+        ? "yok"
+        : percent(s.bonusEngagementRate)
+    }`,
+  );
+  line(`Kacirilan dilim: ${s.missedSlotCount}`);
+  y += lineHeight;
+
+  // v2 — Oyun-2 tip dagilimi
+  if (Object.keys(report.game2TypeBreakdown).length > 0) {
+    heading("Oyun-2 tip performansi", 14);
+    for (const g of Object.values(report.game2TypeBreakdown)) {
+      line(
+        `${g.type}: ${g.playCount} oyun, tamamlanma ${
+          percent(g.completionRate)
+        }, ort. hata ${g.avgErrorCount.toFixed(1)}`,
+      );
+    }
+    y += lineHeight;
+  }
+
+  // v2 — Bonus kullanim
+  if (Object.keys(report.bonusBreakdown).length > 0) {
+    heading("Bonus oyun kullanimi", 14);
+    for (const b of Object.values(report.bonusBreakdown)) {
+      line(
+        `${b.type}: ${b.playCount} oyun, ort. ${
+          b.avgTapCount.toFixed(0)
+        } dokunus, gece: ${b.nightCount}`,
+      );
+    }
+    y += lineHeight;
+  }
+
+  // v2 — Dilim kacirma haritasi (sade liste formu; ileride ayri PDF
+  // sayfasinda gorsel heatmap'e donusturulur)
+  if (report.missedSlotHeatmap.length > 0) {
+    heading("Kacirma haritasi", 14);
+    const dayLabels = [
+      "Pzt",
+      "Sal",
+      "Car",
+      "Per",
+      "Cum",
+      "Cmt",
+      "Paz",
+    ];
+    for (const cell of report.missedSlotHeatmap) {
+      line(
+        `${dayLabels[cell.dayIndex]} / ${cell.window}: ${cell.count}`,
+      );
+    }
+    y += lineHeight;
+  }
+
   // Per-scene pages
   for (const sc of report.scenes) {
     newPageIfNeeded(200);

@@ -1,25 +1,38 @@
-import { AppOpen, Placement, Session } from "./build_report.ts";
+import {
+  AppOpen,
+  BonusPlay,
+  MissedSlot,
+  Placement,
+  Session,
+} from "./build_report.ts";
 
 export interface CsvBundle {
   sessions: string;
   placements: string;
   appOpens: string;
+  // v2
+  bonusPlays: string;
+  missedSlots: string;
 }
 
 /**
- * Serialize raw rows to three CSVs. Kept separate from build_report
- * because therapists often want the unaggregated rows in Excel for
- * their own slicing.
+ * Serialize raw rows to CSVs. Kept separate from build_report because
+ * therapists often want the unaggregated rows in Excel for their own
+ * slicing.
  */
 export function renderCsvs(args: {
   sessions: Session[];
   placements: Placement[];
   appOpens: AppOpen[];
+  bonusPlays?: BonusPlay[];
+  missedSlots?: MissedSlot[];
 }): CsvBundle {
   return {
     sessions: sessionsCsv(args.sessions),
     placements: placementsCsv(args.placements),
     appOpens: appOpensCsv(args.appOpens),
+    bonusPlays: bonusPlaysCsv(args.bonusPlays ?? []),
+    missedSlots: missedSlotsCsv(args.missedSlots ?? []),
   };
 }
 
@@ -39,6 +52,13 @@ function sessionsCsv(rows: Session[]): string {
     "orientation_correct",
     "orientation_response_ms",
     "instruction_replay_count",
+    // v2
+    "game1_error_count",
+    "game1_completed",
+    "game2_error_count",
+    "game2_completed",
+    "game2_type",
+    "item_combo_hash",
   ].join(",");
 
   const body = rows.map((r) => {
@@ -63,6 +83,12 @@ function sessionsCsv(rows: Session[]): string {
       r.orientation_correct === null ? "" : r.orientation_correct,
       r.orientation_response_ms ?? "",
       r.instruction_replay_count,
+      r.game1_error_count ?? "",
+      r.game1_completed ?? "",
+      r.game2_error_count ?? "",
+      r.game2_completed ?? "",
+      esc(r.game2_type ?? ""),
+      esc(r.item_combo_hash ?? ""),
     ].join(",");
   });
 
@@ -82,6 +108,8 @@ function placementsCsv(rows: Placement[]): string {
     "distractor_category",
     "sequence_required",
     "difficulty_level",
+    // v2
+    "game_type",
   ].join(",");
 
   const body = rows.map((r) =>
@@ -97,6 +125,7 @@ function placementsCsv(rows: Placement[]): string {
       esc(r.distractor_category),
       r.sequence_required,
       r.difficulty_level,
+      esc(r.game_type ?? "game1"),
     ].join(",")
   );
 
@@ -106,6 +135,50 @@ function placementsCsv(rows: Placement[]): string {
 function appOpensCsv(rows: AppOpen[]): string {
   const header = ["at", "time_window"].join(",");
   const body = rows.map((r) => [esc(r.at), esc(r.time_window)].join(","));
+  return [header, ...body].join("\n");
+}
+
+function bonusPlaysCsv(rows: BonusPlay[]): string {
+  const header = [
+    "bonus_play_id",
+    "bonus_scene_id",
+    "bonus_type",
+    "started_at",
+    "finished_at",
+    "tap_count",
+    "night_bonus",
+    "time_window",
+  ].join(",");
+  const body = rows.map((r) =>
+    [
+      esc(r.id),
+      esc(r.bonus_scene_id),
+      esc(r.bonus_type),
+      esc(r.started_at),
+      esc(r.finished_at ?? ""),
+      r.tap_count,
+      r.night_bonus,
+      esc(r.time_window),
+    ].join(",")
+  );
+  return [header, ...body].join("\n");
+}
+
+function missedSlotsCsv(rows: MissedSlot[]): string {
+  const header = [
+    "time_window",
+    "scene_id",
+    "missed_on",
+    "detected_at",
+  ].join(",");
+  const body = rows.map((r) =>
+    [
+      esc(r.time_window),
+      esc(r.scene_id),
+      esc(r.missed_on),
+      esc(r.detected_at),
+    ].join(",")
+  );
   return [header, ...body].join("\n");
 }
 
