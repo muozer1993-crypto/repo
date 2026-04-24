@@ -10,6 +10,7 @@ import 'core/sync/sync_service.dart';
 import 'core/time/clock_provider.dart';
 import 'core/time/time_window.dart';
 import 'features/profile/data/profile_repository.dart';
+import 'features/progress/application/missed_slot_detector.dart';
 import 'features/progress/domain/app_open_event.dart';
 import 'features/report/application/weekly_trigger_controller.dart';
 
@@ -35,7 +36,12 @@ Future<void> main() async {
   //    profile is not yet set up, we simply skip.
   await _logAppOpen(container);
 
-  // 5) Sync pending rows + fire-and-forget weekly report trigger.
+  // 5) v2 — detect any time windows that closed today without the
+  //    patient playing and emit MissedSlotEvent rows. Idempotent and
+  //    silent on error.
+  unawaited(detectMissedSlotsOnStartup(container));
+
+  // 6) Sync pending rows + fire-and-forget weekly report trigger.
   unawaited(container.read(syncServiceProvider).pushAll());
   unawaited(
     container.read(weeklyTriggerControllerProvider).runOnAppStart(),
