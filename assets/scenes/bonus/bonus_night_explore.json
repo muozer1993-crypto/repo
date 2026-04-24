@@ -1,0 +1,15 @@
+{
+  "id": "bonus_night_explore",
+  "bonusType": "free_explore",
+  "titleTr": "İyi Geceler",
+  "instructionTr": "Yıldızlara dokun, nazik sesler dinle. Yavaşlamak serbest.",
+  "instructionAudioPath": "assets/audio/instructions/bonus_night_explore.wav",
+  "backgroundAsset": "assets/images/scenes/bonus/night_explore_bg.png",
+  "nightVariant": true,
+  "itemPool": [
+    {"id": "yildiz_1", "assetPath": "assets/images/scenes/bonus/yildiz_1.png", "audioLabelPath": "assets/audio/labels/yumusak_ton_1.wav", "labelTr": "yıldız", "isTarget": true, "defaultSlotId": "night_yildiz_1"},
+    {"id": "yildiz_2", "assetPath": "assets/images/scenes/bonus/yildiz_2.png", "audioLabelPath": "assets/audio/labels/yumusak_ton_2.wav", "labelTr": "yıldız", "isTarget": true, "defaultSlotId": "night_yildiz_2"},
+    {"id": "ay",       "assetPath": "assets/images/scenes/bonus/ay.png",       "audioLabelPath": "assets/audio/labels/yumusak_ton_3.wav", "labelTr": "ay",     "isTarget": true, "defaultSlotId": "night_ay"},
+    {"id": "bulut",    "assetPath": "assets/images/scenes/bonus/bulut.png",    "audioLabelPath": "assets/audio/labels/yumusak_ton_4.wav", "labelTr": "bulut",  "isTarget": true, "defaultSlotId": "night_bulut"}
+  ]
+}

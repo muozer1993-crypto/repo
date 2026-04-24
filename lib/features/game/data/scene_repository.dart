@@ -7,12 +7,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/time/time_window.dart';
 import '../domain/scene.dart';
 
-/// Four scene JSONs we ship in the asset bundle. One per time window.
+/// Four dilim scene JSONs we ship in the asset bundle. One per time
+/// window.
 const _sceneAssets = <String>[
   'assets/scenes/sabah_kahvalti.json',
   'assets/scenes/oglen_ogle_yemegi.json',
   'assets/scenes/ikindi_cay_saati.json',
   'assets/scenes/aksam_yatak_duzeni.json',
+];
+
+/// v2 — bonus scene JSONs. Kept in a parallel list so that the dilim
+/// scene loader path (hot on app start) does not have to sift bonuses
+/// out.
+const _bonusAssets = <String>[
+  'assets/scenes/bonus/bonus_sabah_pair.json',
+  'assets/scenes/bonus/bonus_oglen_find.json',
+  'assets/scenes/bonus/bonus_ikindi_tap.json',
+  'assets/scenes/bonus/bonus_aksam_explore.json',
+  'assets/scenes/bonus/bonus_night_explore.json',
 ];
 
 /// Loads + caches all bundled scenes.
@@ -26,6 +38,7 @@ class SceneRepository {
   final Future<String> Function(String assetPath) _loader;
 
   List<Scene>? _cache;
+  List<BonusScene>? _bonusCache;
 
   Future<List<Scene>> loadAll() async {
     if (_cache != null) return _cache!;
@@ -46,6 +59,31 @@ class SceneRepository {
     final all = await loadAll();
     for (final s in all) {
       if (s.window == window) return s;
+    }
+    return null;
+  }
+
+  /// v2 — load every bonus scene in the bundle. Missing assets are
+  /// skipped silently so a partial bonus roll-out does not break the
+  /// app.
+  Future<List<BonusScene>> loadAllBonus() async {
+    if (_bonusCache != null) return _bonusCache!;
+    final raws = <String>[];
+    for (final path in _bonusAssets) {
+      try {
+        raws.add(await _loader(path));
+      } catch (_) {
+        // Bonus asset not shipped yet — skip.
+      }
+    }
+    _bonusCache = raws.map(_parseBonusScene).toList(growable: false);
+    return _bonusCache!;
+  }
+
+  Future<BonusScene?> bonusById(String id) async {
+    final all = await loadAllBonus();
+    for (final b in all) {
+      if (b.id == id) return b;
     }
     return null;
   }
@@ -72,6 +110,8 @@ Scene _parseScene(String raw) {
     throw FormatException('Scene "${j['id']}" has unknown window id '
         '"$windowId"');
   }
+  final poolJson = j['itemPool'] as List?;
+  final game2Json = j['game2'] as Map<String, dynamic>?;
   return Scene(
     id: j['id'] as String,
     titleTr: j['titleTr'] as String,
@@ -85,6 +125,65 @@ Scene _parseScene(String raw) {
         .cast<Map<String, dynamic>>()
         .map(_parseVariant)
         .toList(growable: false),
+    itemPool: poolJson == null
+        ? const []
+        : poolJson
+            .cast<Map<String, dynamic>>()
+            .map(_parsePoolEntry)
+            .toList(growable: false),
+    game2: game2Json == null ? null : _parseGame2(game2Json),
+    bonusSceneId: j['bonusSceneId'] as String?,
+  );
+}
+
+ItemPoolEntry _parsePoolEntry(Map<String, dynamic> j) {
+  final isTarget = j['isTarget'] as bool? ?? false;
+  return ItemPoolEntry(
+    id: j['id'] as String,
+    assetPath: j['assetPath'] as String,
+    audioLabelPath: j['audioLabelPath'] as String,
+    labelTr: j['labelTr'] as String,
+    isTarget: isTarget,
+    defaultSlotId: isTarget ? j['defaultSlotId'] as String? : null,
+    distractorCategory: isTarget
+        ? null
+        : distractorCategoryFromId(j['distractorCategory'] as String?),
+  );
+}
+
+Game2Config _parseGame2(Map<String, dynamic> j) {
+  final type = game2TypeFromId(j['type'] as String?);
+  if (type == null) {
+    throw FormatException('Unknown game2.type "${j['type']}"');
+  }
+  return Game2Config(
+    type: type,
+    instructionTr: j['instructionTr'] as String,
+    instructionAudioPath: j['instructionAudioPath'] as String,
+  );
+}
+
+BonusScene _parseBonusScene(String raw) {
+  final j = json.decode(raw) as Map<String, dynamic>;
+  final typeId = j['bonusType'] as String?;
+  final type = bonusTypeFromId(typeId);
+  if (type == null) {
+    throw FormatException('Unknown bonusType "$typeId" in bonus scene '
+        '"${j['id']}"');
+  }
+  final poolJson = j['itemPool'] as List? ?? const [];
+  return BonusScene(
+    id: j['id'] as String,
+    bonusType: type,
+    titleTr: j['titleTr'] as String,
+    instructionTr: j['instructionTr'] as String,
+    instructionAudioPath: j['instructionAudioPath'] as String,
+    backgroundAsset: j['backgroundAsset'] as String,
+    itemPool: poolJson
+        .cast<Map<String, dynamic>>()
+        .map(_parsePoolEntry)
+        .toList(growable: false),
+    nightVariant: j['nightVariant'] as bool? ?? false,
   );
 }
 

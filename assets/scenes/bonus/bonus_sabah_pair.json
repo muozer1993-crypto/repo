@@ -1,0 +1,17 @@
+{
+  "id": "bonus_sabah_pair",
+  "bonusType": "pair_match",
+  "titleTr": "Eşini Bul",
+  "instructionTr": "Her kahvaltı eşyasını eşiyle birleştir. Acele yok, keyfine bak.",
+  "instructionAudioPath": "assets/audio/instructions/bonus_sabah_pair.wav",
+  "backgroundAsset": "assets/images/scenes/bonus/sabah_pair_bg.png",
+  "nightVariant": false,
+  "itemPool": [
+    {"id": "peynir",  "assetPath": "assets/images/scenes/sabah/peynir.png",  "audioLabelPath": "assets/audio/labels/peynir.wav",  "labelTr": "peynir",  "isTarget": true, "defaultSlotId": "pair_peynir"},
+    {"id": "zeytin",  "assetPath": "assets/images/scenes/sabah/zeytin.png",  "audioLabelPath": "assets/audio/labels/zeytin.wav",  "labelTr": "zeytin",  "isTarget": true, "defaultSlotId": "pair_zeytin"},
+    {"id": "cay",     "assetPath": "assets/images/scenes/sabah/cay.png",     "audioLabelPath": "assets/audio/labels/cay.wav",     "labelTr": "çay",     "isTarget": true, "defaultSlotId": "pair_cay"},
+    {"id": "ekmek",   "assetPath": "assets/images/scenes/sabah/ekmek.png",   "audioLabelPath": "assets/audio/labels/ekmek.wav",   "labelTr": "ekmek",   "isTarget": true, "defaultSlotId": "pair_ekmek"},
+    {"id": "bal",     "assetPath": "assets/images/scenes/sabah/bal.png",     "audioLabelPath": "assets/audio/labels/bal.wav",     "labelTr": "bal",     "isTarget": true, "defaultSlotId": "pair_bal"},
+    {"id": "tereyagi","assetPath": "assets/images/scenes/sabah/tereyagi.png","audioLabelPath": "assets/audio/labels/tereyagi.wav","labelTr": "tereyağı","isTarget": true, "defaultSlotId": "pair_tereyagi"}
+  ]
+}

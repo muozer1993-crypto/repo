@@ -59,10 +59,12 @@ flutter:
 
   assets:
     - assets/scenes/
+    - assets/scenes/bonus/
     - assets/images/scenes/sabah/
     - assets/images/scenes/oglen/
     - assets/images/scenes/ikindi/
     - assets/images/scenes/aksam/
+    - assets/images/scenes/bonus/
     - assets/images/distractors/
     - assets/audio/
     - assets/audio/labels/

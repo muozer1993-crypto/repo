@@ -1,0 +1,15 @@
+{
+  "id": "bonus_ikindi_tap",
+  "bonusType": "tap_sequence",
+  "titleTr": "Müzikli Dokunmalar",
+  "instructionTr": "Işığa dokun, yanan sırayı takip et. Sadece eğlence, hata yok.",
+  "instructionAudioPath": "assets/audio/instructions/bonus_ikindi_tap.wav",
+  "backgroundAsset": "assets/images/scenes/bonus/ikindi_tap_bg.png",
+  "nightVariant": false,
+  "itemPool": [
+    {"id": "isik_1", "assetPath": "assets/images/scenes/bonus/isik_kirmizi.png", "audioLabelPath": "assets/audio/labels/ton_1.wav", "labelTr": "bir",  "isTarget": true, "defaultSlotId": "tap_1"},
+    {"id": "isik_2", "assetPath": "assets/images/scenes/bonus/isik_sari.png",    "audioLabelPath": "assets/audio/labels/ton_2.wav", "labelTr": "iki",  "isTarget": true, "defaultSlotId": "tap_2"},
+    {"id": "isik_3", "assetPath": "assets/images/scenes/bonus/isik_yesil.png",   "audioLabelPath": "assets/audio/labels/ton_3.wav", "labelTr": "üç",   "isTarget": true, "defaultSlotId": "tap_3"},
+    {"id": "isik_4", "assetPath": "assets/images/scenes/bonus/isik_mavi.png",    "audioLabelPath": "assets/audio/labels/ton_4.wav", "labelTr": "dört", "isTarget": true, "defaultSlotId": "tap_4"}
+  ]
+}
