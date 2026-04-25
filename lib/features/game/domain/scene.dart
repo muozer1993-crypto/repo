@@ -37,6 +37,7 @@ class SceneSlot {
     required this.relativeRect,
     required this.acceptedItemId,
     required this.labelTr,
+    this.emptyAssetPath,
   });
 
   final String id;
@@ -49,6 +50,15 @@ class SceneSlot {
   /// Accessible label, read by screen readers and also serves as the
   /// tooltip when the hint timer fires.
   final String labelTr;
+
+  /// v2 — "boş" (empty) version of the item shown ON the table while
+  /// the slot is still empty. Patient sees the silhouette where the
+  /// real item belongs; tapping the matching tray tile flies the
+  /// "dolu" (filled) version into this slot, replacing the silhouette.
+  /// Path convention: assets/images/scenes/<window>/bos_<itemId>.png.
+  /// Optional — when null the slot falls back to the v1 dashed
+  /// outline + label-only placeholder.
+  final String? emptyAssetPath;
 }
 
 /// A tappable item in the tray.

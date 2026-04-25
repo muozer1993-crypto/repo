@@ -4,12 +4,56 @@
   "instructionTr": "Öğle yemeği için sofra hazırla.",
   "instructionAudioPath": "assets/audio/instructions/oglen_ogle_yemegi.wav",
   "window": "oglen",
-  "backgroundAsset": "assets/images/scenes/oglen/sofra_bg.png",
+  "backgroundAsset": "assets/images/scenes/oglen/bos_sofra.png",
   "slots": [
-    {"id": "slot_corba",  "rect": [0.12, 0.55, 0.20, 0.25], "acceptedItemId": "corba",  "labelTr": "çorba kasesi"},
-    {"id": "slot_tavuk",  "rect": [0.35, 0.55, 0.20, 0.25], "acceptedItemId": "tavuk",  "labelTr": "ana tabak"},
-    {"id": "slot_salata", "rect": [0.58, 0.55, 0.20, 0.25], "acceptedItemId": "salata", "labelTr": "salata tabağı"},
-    {"id": "slot_su",     "rect": [0.81, 0.55, 0.15, 0.25], "acceptedItemId": "su",     "labelTr": "su bardağı"}
+    {
+      "id": "slot_corba",
+      "rect": [
+        0.12,
+        0.55,
+        0.2,
+        0.25
+      ],
+      "acceptedItemId": "corba",
+      "labelTr": "çorba kasesi",
+      "emptyAssetPath": "assets/images/scenes/oglen/bos_corba.png"
+    },
+    {
+      "id": "slot_tavuk",
+      "rect": [
+        0.35,
+        0.55,
+        0.2,
+        0.25
+      ],
+      "acceptedItemId": "tavuk",
+      "labelTr": "ana tabak",
+      "emptyAssetPath": "assets/images/scenes/oglen/bos_tavuk.png"
+    },
+    {
+      "id": "slot_salata",
+      "rect": [
+        0.58,
+        0.55,
+        0.2,
+        0.25
+      ],
+      "acceptedItemId": "salata",
+      "labelTr": "salata tabağı",
+      "emptyAssetPath": "assets/images/scenes/oglen/bos_salata.png"
+    },
+    {
+      "id": "slot_su",
+      "rect": [
+        0.81,
+        0.55,
+        0.15,
+        0.25
+      ],
+      "acceptedItemId": "su",
+      "labelTr": "su bardağı",
+      "emptyAssetPath": "assets/images/scenes/oglen/bos_su.png"
+    }
   ],
   "variants": [
     {
@@ -17,10 +61,34 @@
       "distractorMode": "absent",
       "sequenceRequired": false,
       "items": [
-        {"id": "corba",  "assetPath": "assets/images/scenes/oglen/corba.png",  "audioLabelPath": "assets/audio/labels/corba.wav",  "labelTr": "çorba",  "acceptedSlotId": "slot_corba"},
-        {"id": "tavuk",  "assetPath": "assets/images/scenes/oglen/tavuk.png",  "audioLabelPath": "assets/audio/labels/tavuk.wav",  "labelTr": "tavuk",  "acceptedSlotId": "slot_tavuk"},
-        {"id": "salata", "assetPath": "assets/images/scenes/oglen/salata.png", "audioLabelPath": "assets/audio/labels/salata.wav", "labelTr": "salata", "acceptedSlotId": "slot_salata"},
-        {"id": "su",     "assetPath": "assets/images/scenes/oglen/su.png",     "audioLabelPath": "assets/audio/labels/su.wav",     "labelTr": "su",     "acceptedSlotId": "slot_su"}
+        {
+          "id": "corba",
+          "assetPath": "assets/images/scenes/oglen/dolu_corba.png",
+          "audioLabelPath": "assets/audio/labels/corba.wav",
+          "labelTr": "çorba",
+          "acceptedSlotId": "slot_corba"
+        },
+        {
+          "id": "tavuk",
+          "assetPath": "assets/images/scenes/oglen/dolu_tavuk.png",
+          "audioLabelPath": "assets/audio/labels/tavuk.wav",
+          "labelTr": "tavuk",
+          "acceptedSlotId": "slot_tavuk"
+        },
+        {
+          "id": "salata",
+          "assetPath": "assets/images/scenes/oglen/dolu_salata.png",
+          "audioLabelPath": "assets/audio/labels/salata.wav",
+          "labelTr": "salata",
+          "acceptedSlotId": "slot_salata"
+        },
+        {
+          "id": "su",
+          "assetPath": "assets/images/scenes/oglen/dolu_su.png",
+          "audioLabelPath": "assets/audio/labels/su.wav",
+          "labelTr": "su",
+          "acceptedSlotId": "slot_su"
+        }
       ]
     },
     {
@@ -28,12 +96,50 @@
       "distractorMode": "far",
       "sequenceRequired": false,
       "items": [
-        {"id": "corba",  "assetPath": "assets/images/scenes/oglen/corba.png",  "audioLabelPath": "assets/audio/labels/corba.wav",  "labelTr": "çorba",  "acceptedSlotId": "slot_corba"},
-        {"id": "tavuk",  "assetPath": "assets/images/scenes/oglen/tavuk.png",  "audioLabelPath": "assets/audio/labels/tavuk.wav",  "labelTr": "tavuk",  "acceptedSlotId": "slot_tavuk"},
-        {"id": "salata", "assetPath": "assets/images/scenes/oglen/salata.png", "audioLabelPath": "assets/audio/labels/salata.wav", "labelTr": "salata", "acceptedSlotId": "slot_salata"},
-        {"id": "su",     "assetPath": "assets/images/scenes/oglen/su.png",     "audioLabelPath": "assets/audio/labels/su.wav",     "labelTr": "su",     "acceptedSlotId": "slot_su"},
-        {"id": "havlu",  "assetPath": "assets/images/distractors/havlu.png",  "audioLabelPath": "assets/audio/labels/havlu.wav",  "labelTr": "havlu",  "distractor": true, "distractorCategory": "far"},
-        {"id": "tarak",  "assetPath": "assets/images/distractors/tarak.png",  "audioLabelPath": "assets/audio/labels/tarak.wav",  "labelTr": "tarak",  "distractor": true, "distractorCategory": "far"}
+        {
+          "id": "corba",
+          "assetPath": "assets/images/scenes/oglen/dolu_corba.png",
+          "audioLabelPath": "assets/audio/labels/corba.wav",
+          "labelTr": "çorba",
+          "acceptedSlotId": "slot_corba"
+        },
+        {
+          "id": "tavuk",
+          "assetPath": "assets/images/scenes/oglen/dolu_tavuk.png",
+          "audioLabelPath": "assets/audio/labels/tavuk.wav",
+          "labelTr": "tavuk",
+          "acceptedSlotId": "slot_tavuk"
+        },
+        {
+          "id": "salata",
+          "assetPath": "assets/images/scenes/oglen/dolu_salata.png",
+          "audioLabelPath": "assets/audio/labels/salata.wav",
+          "labelTr": "salata",
+          "acceptedSlotId": "slot_salata"
+        },
+        {
+          "id": "su",
+          "assetPath": "assets/images/scenes/oglen/dolu_su.png",
+          "audioLabelPath": "assets/audio/labels/su.wav",
+          "labelTr": "su",
+          "acceptedSlotId": "slot_su"
+        },
+        {
+          "id": "havlu",
+          "assetPath": "assets/images/distractors/havlu.png",
+          "audioLabelPath": "assets/audio/labels/havlu.wav",
+          "labelTr": "havlu",
+          "distractor": true,
+          "distractorCategory": "far"
+        },
+        {
+          "id": "tarak",
+          "assetPath": "assets/images/distractors/tarak.png",
+          "audioLabelPath": "assets/audio/labels/tarak.wav",
+          "labelTr": "tarak",
+          "distractor": true,
+          "distractorCategory": "far"
+        }
       ]
     },
     {
@@ -41,12 +147,50 @@
       "distractorMode": "near",
       "sequenceRequired": false,
       "items": [
-        {"id": "corba",  "assetPath": "assets/images/scenes/oglen/corba.png",  "audioLabelPath": "assets/audio/labels/corba.wav",  "labelTr": "çorba",  "acceptedSlotId": "slot_corba"},
-        {"id": "tavuk",  "assetPath": "assets/images/scenes/oglen/tavuk.png",  "audioLabelPath": "assets/audio/labels/tavuk.wav",  "labelTr": "tavuk",  "acceptedSlotId": "slot_tavuk"},
-        {"id": "salata", "assetPath": "assets/images/scenes/oglen/salata.png", "audioLabelPath": "assets/audio/labels/salata.wav", "labelTr": "salata", "acceptedSlotId": "slot_salata"},
-        {"id": "su",     "assetPath": "assets/images/scenes/oglen/su.png",     "audioLabelPath": "assets/audio/labels/su.wav",     "labelTr": "su",     "acceptedSlotId": "slot_su"},
-        {"id": "kek",    "assetPath": "assets/images/distractors/kek.png",    "audioLabelPath": "assets/audio/labels/kek.wav",    "labelTr": "kek",    "distractor": true, "distractorCategory": "near"},
-        {"id": "bal",    "assetPath": "assets/images/distractors/bal.png",    "audioLabelPath": "assets/audio/labels/bal.wav",    "labelTr": "bal",    "distractor": true, "distractorCategory": "near"}
+        {
+          "id": "corba",
+          "assetPath": "assets/images/scenes/oglen/dolu_corba.png",
+          "audioLabelPath": "assets/audio/labels/corba.wav",
+          "labelTr": "çorba",
+          "acceptedSlotId": "slot_corba"
+        },
+        {
+          "id": "tavuk",
+          "assetPath": "assets/images/scenes/oglen/dolu_tavuk.png",
+          "audioLabelPath": "assets/audio/labels/tavuk.wav",
+          "labelTr": "tavuk",
+          "acceptedSlotId": "slot_tavuk"
+        },
+        {
+          "id": "salata",
+          "assetPath": "assets/images/scenes/oglen/dolu_salata.png",
+          "audioLabelPath": "assets/audio/labels/salata.wav",
+          "labelTr": "salata",
+          "acceptedSlotId": "slot_salata"
+        },
+        {
+          "id": "su",
+          "assetPath": "assets/images/scenes/oglen/dolu_su.png",
+          "audioLabelPath": "assets/audio/labels/su.wav",
+          "labelTr": "su",
+          "acceptedSlotId": "slot_su"
+        },
+        {
+          "id": "kek",
+          "assetPath": "assets/images/distractors/kek.png",
+          "audioLabelPath": "assets/audio/labels/kek.wav",
+          "labelTr": "kek",
+          "distractor": true,
+          "distractorCategory": "near"
+        },
+        {
+          "id": "bal",
+          "assetPath": "assets/images/distractors/bal.png",
+          "audioLabelPath": "assets/audio/labels/bal.wav",
+          "labelTr": "bal",
+          "distractor": true,
+          "distractorCategory": "near"
+        }
       ]
     },
     {
@@ -54,12 +198,54 @@
       "distractorMode": "near",
       "sequenceRequired": true,
       "items": [
-        {"id": "corba",  "assetPath": "assets/images/scenes/oglen/corba.png",  "audioLabelPath": "assets/audio/labels/corba.wav",  "labelTr": "çorba",  "acceptedSlotId": "slot_corba",  "sequenceOrder": 1},
-        {"id": "tavuk",  "assetPath": "assets/images/scenes/oglen/tavuk.png",  "audioLabelPath": "assets/audio/labels/tavuk.wav",  "labelTr": "tavuk",  "acceptedSlotId": "slot_tavuk",  "sequenceOrder": 2},
-        {"id": "salata", "assetPath": "assets/images/scenes/oglen/salata.png", "audioLabelPath": "assets/audio/labels/salata.wav", "labelTr": "salata", "acceptedSlotId": "slot_salata", "sequenceOrder": 3},
-        {"id": "su",     "assetPath": "assets/images/scenes/oglen/su.png",     "audioLabelPath": "assets/audio/labels/su.wav",     "labelTr": "su",     "acceptedSlotId": "slot_su",     "sequenceOrder": 4},
-        {"id": "kek",    "assetPath": "assets/images/distractors/kek.png",    "audioLabelPath": "assets/audio/labels/kek.wav",    "labelTr": "kek",    "distractor": true, "distractorCategory": "near"},
-        {"id": "kurabiye","assetPath": "assets/images/distractors/kurabiye.png","audioLabelPath": "assets/audio/labels/kurabiye.wav","labelTr": "kurabiye","distractor": true, "distractorCategory": "near"}
+        {
+          "id": "corba",
+          "assetPath": "assets/images/scenes/oglen/dolu_corba.png",
+          "audioLabelPath": "assets/audio/labels/corba.wav",
+          "labelTr": "çorba",
+          "acceptedSlotId": "slot_corba",
+          "sequenceOrder": 1
+        },
+        {
+          "id": "tavuk",
+          "assetPath": "assets/images/scenes/oglen/dolu_tavuk.png",
+          "audioLabelPath": "assets/audio/labels/tavuk.wav",
+          "labelTr": "tavuk",
+          "acceptedSlotId": "slot_tavuk",
+          "sequenceOrder": 2
+        },
+        {
+          "id": "salata",
+          "assetPath": "assets/images/scenes/oglen/dolu_salata.png",
+          "audioLabelPath": "assets/audio/labels/salata.wav",
+          "labelTr": "salata",
+          "acceptedSlotId": "slot_salata",
+          "sequenceOrder": 3
+        },
+        {
+          "id": "su",
+          "assetPath": "assets/images/scenes/oglen/dolu_su.png",
+          "audioLabelPath": "assets/audio/labels/su.wav",
+          "labelTr": "su",
+          "acceptedSlotId": "slot_su",
+          "sequenceOrder": 4
+        },
+        {
+          "id": "kek",
+          "assetPath": "assets/images/distractors/kek.png",
+          "audioLabelPath": "assets/audio/labels/kek.wav",
+          "labelTr": "kek",
+          "distractor": true,
+          "distractorCategory": "near"
+        },
+        {
+          "id": "kurabiye",
+          "assetPath": "assets/images/distractors/kurabiye.png",
+          "audioLabelPath": "assets/audio/labels/kurabiye.wav",
+          "labelTr": "kurabiye",
+          "distractor": true,
+          "distractorCategory": "near"
+        }
       ]
     },
     {
@@ -67,28 +253,154 @@
       "distractorMode": "functional",
       "sequenceRequired": true,
       "items": [
-        {"id": "corba",  "assetPath": "assets/images/scenes/oglen/corba.png",  "audioLabelPath": "assets/audio/labels/corba.wav",  "labelTr": "çorba",  "acceptedSlotId": "slot_corba",  "sequenceOrder": 1},
-        {"id": "tavuk",  "assetPath": "assets/images/scenes/oglen/tavuk.png",  "audioLabelPath": "assets/audio/labels/tavuk.wav",  "labelTr": "tavuk",  "acceptedSlotId": "slot_tavuk",  "sequenceOrder": 2},
-        {"id": "salata", "assetPath": "assets/images/scenes/oglen/salata.png", "audioLabelPath": "assets/audio/labels/salata.wav", "labelTr": "salata", "acceptedSlotId": "slot_salata", "sequenceOrder": 3},
-        {"id": "su",     "assetPath": "assets/images/scenes/oglen/su.png",     "audioLabelPath": "assets/audio/labels/su.wav",     "labelTr": "su",     "acceptedSlotId": "slot_su",     "sequenceOrder": 4},
-        {"id": "cay_bardagi", "assetPath": "assets/images/distractors/cay_bardagi.png", "audioLabelPath": "assets/audio/labels/cay_bardagi.wav", "labelTr": "çay bardağı", "distractor": true, "distractorCategory": "functional"},
-        {"id": "sandvic",     "assetPath": "assets/images/distractors/sandvic.png",     "audioLabelPath": "assets/audio/labels/sandvic.wav",     "labelTr": "sandviç",     "distractor": true, "distractorCategory": "functional"}
+        {
+          "id": "corba",
+          "assetPath": "assets/images/scenes/oglen/dolu_corba.png",
+          "audioLabelPath": "assets/audio/labels/corba.wav",
+          "labelTr": "çorba",
+          "acceptedSlotId": "slot_corba",
+          "sequenceOrder": 1
+        },
+        {
+          "id": "tavuk",
+          "assetPath": "assets/images/scenes/oglen/dolu_tavuk.png",
+          "audioLabelPath": "assets/audio/labels/tavuk.wav",
+          "labelTr": "tavuk",
+          "acceptedSlotId": "slot_tavuk",
+          "sequenceOrder": 2
+        },
+        {
+          "id": "salata",
+          "assetPath": "assets/images/scenes/oglen/dolu_salata.png",
+          "audioLabelPath": "assets/audio/labels/salata.wav",
+          "labelTr": "salata",
+          "acceptedSlotId": "slot_salata",
+          "sequenceOrder": 3
+        },
+        {
+          "id": "su",
+          "assetPath": "assets/images/scenes/oglen/dolu_su.png",
+          "audioLabelPath": "assets/audio/labels/su.wav",
+          "labelTr": "su",
+          "acceptedSlotId": "slot_su",
+          "sequenceOrder": 4
+        },
+        {
+          "id": "cay_bardagi",
+          "assetPath": "assets/images/distractors/cay_bardagi.png",
+          "audioLabelPath": "assets/audio/labels/cay_bardagi.wav",
+          "labelTr": "çay bardağı",
+          "distractor": true,
+          "distractorCategory": "functional"
+        },
+        {
+          "id": "sandvic",
+          "assetPath": "assets/images/distractors/sandvic.png",
+          "audioLabelPath": "assets/audio/labels/sandvic.wav",
+          "labelTr": "sandviç",
+          "distractor": true,
+          "distractorCategory": "functional"
+        }
       ]
     }
   ],
   "itemPool": [
-    {"id": "corba",       "assetPath": "assets/images/scenes/oglen/corba.png",       "audioLabelPath": "assets/audio/labels/corba.wav",       "labelTr": "çorba",       "isTarget": true,  "defaultSlotId": "slot_corba"},
-    {"id": "tavuk",       "assetPath": "assets/images/scenes/oglen/tavuk.png",       "audioLabelPath": "assets/audio/labels/tavuk.wav",       "labelTr": "tavuk",       "isTarget": true,  "defaultSlotId": "slot_tavuk"},
-    {"id": "salata",      "assetPath": "assets/images/scenes/oglen/salata.png",      "audioLabelPath": "assets/audio/labels/salata.wav",      "labelTr": "salata",      "isTarget": true,  "defaultSlotId": "slot_salata"},
-    {"id": "su",          "assetPath": "assets/images/scenes/oglen/su.png",          "audioLabelPath": "assets/audio/labels/su.wav",          "labelTr": "su",          "isTarget": true,  "defaultSlotId": "slot_su"},
-    {"id": "ayran",       "assetPath": "assets/images/scenes/oglen/ayran.png",       "audioLabelPath": "assets/audio/labels/ayran.wav",       "labelTr": "ayran",       "isTarget": true,  "defaultSlotId": "slot_su"},
-    {"id": "havlu",       "assetPath": "assets/images/distractors/havlu.png",        "audioLabelPath": "assets/audio/labels/havlu.wav",        "labelTr": "havlu",       "isTarget": false, "distractorCategory": "far"},
-    {"id": "tarak",       "assetPath": "assets/images/distractors/tarak.png",        "audioLabelPath": "assets/audio/labels/tarak.wav",        "labelTr": "tarak",       "isTarget": false, "distractorCategory": "far"},
-    {"id": "kek",         "assetPath": "assets/images/distractors/kek.png",          "audioLabelPath": "assets/audio/labels/kek.wav",          "labelTr": "kek",         "isTarget": false, "distractorCategory": "near"},
-    {"id": "bal",         "assetPath": "assets/images/distractors/bal.png",          "audioLabelPath": "assets/audio/labels/bal.wav",          "labelTr": "bal",         "isTarget": false, "distractorCategory": "near"},
-    {"id": "kurabiye",    "assetPath": "assets/images/distractors/kurabiye.png",     "audioLabelPath": "assets/audio/labels/kurabiye.wav",     "labelTr": "kurabiye",    "isTarget": false, "distractorCategory": "near"},
-    {"id": "cay_bardagi", "assetPath": "assets/images/distractors/cay_bardagi.png",  "audioLabelPath": "assets/audio/labels/cay_bardagi.wav",  "labelTr": "çay bardağı", "isTarget": false, "distractorCategory": "functional"},
-    {"id": "sandvic",     "assetPath": "assets/images/distractors/sandvic.png",      "audioLabelPath": "assets/audio/labels/sandvic.wav",      "labelTr": "sandviç",     "isTarget": false, "distractorCategory": "functional"}
+    {
+      "id": "corba",
+      "assetPath": "assets/images/scenes/oglen/dolu_corba.png",
+      "audioLabelPath": "assets/audio/labels/corba.wav",
+      "labelTr": "çorba",
+      "isTarget": true,
+      "defaultSlotId": "slot_corba"
+    },
+    {
+      "id": "tavuk",
+      "assetPath": "assets/images/scenes/oglen/dolu_tavuk.png",
+      "audioLabelPath": "assets/audio/labels/tavuk.wav",
+      "labelTr": "tavuk",
+      "isTarget": true,
+      "defaultSlotId": "slot_tavuk"
+    },
+    {
+      "id": "salata",
+      "assetPath": "assets/images/scenes/oglen/dolu_salata.png",
+      "audioLabelPath": "assets/audio/labels/salata.wav",
+      "labelTr": "salata",
+      "isTarget": true,
+      "defaultSlotId": "slot_salata"
+    },
+    {
+      "id": "su",
+      "assetPath": "assets/images/scenes/oglen/dolu_su.png",
+      "audioLabelPath": "assets/audio/labels/su.wav",
+      "labelTr": "su",
+      "isTarget": true,
+      "defaultSlotId": "slot_su"
+    },
+    {
+      "id": "ayran",
+      "assetPath": "assets/images/scenes/oglen/dolu_ayran.png",
+      "audioLabelPath": "assets/audio/labels/ayran.wav",
+      "labelTr": "ayran",
+      "isTarget": true,
+      "defaultSlotId": "slot_su"
+    },
+    {
+      "id": "havlu",
+      "assetPath": "assets/images/distractors/havlu.png",
+      "audioLabelPath": "assets/audio/labels/havlu.wav",
+      "labelTr": "havlu",
+      "isTarget": false,
+      "distractorCategory": "far"
+    },
+    {
+      "id": "tarak",
+      "assetPath": "assets/images/distractors/tarak.png",
+      "audioLabelPath": "assets/audio/labels/tarak.wav",
+      "labelTr": "tarak",
+      "isTarget": false,
+      "distractorCategory": "far"
+    },
+    {
+      "id": "kek",
+      "assetPath": "assets/images/distractors/kek.png",
+      "audioLabelPath": "assets/audio/labels/kek.wav",
+      "labelTr": "kek",
+      "isTarget": false,
+      "distractorCategory": "near"
+    },
+    {
+      "id": "bal",
+      "assetPath": "assets/images/distractors/bal.png",
+      "audioLabelPath": "assets/audio/labels/bal.wav",
+      "labelTr": "bal",
+      "isTarget": false,
+      "distractorCategory": "near"
+    },
+    {
+      "id": "kurabiye",
+      "assetPath": "assets/images/distractors/kurabiye.png",
+      "audioLabelPath": "assets/audio/labels/kurabiye.wav",
+      "labelTr": "kurabiye",
+      "isTarget": false,
+      "distractorCategory": "near"
+    },
+    {
+      "id": "cay_bardagi",
+      "assetPath": "assets/images/distractors/cay_bardagi.png",
+      "audioLabelPath": "assets/audio/labels/cay_bardagi.wav",
+      "labelTr": "çay bardağı",
+      "isTarget": false,
+      "distractorCategory": "functional"
+    },
+    {
+      "id": "sandvic",
+      "assetPath": "assets/images/distractors/sandvic.png",
+      "audioLabelPath": "assets/audio/labels/sandvic.wav",
+      "labelTr": "sandviç",
+      "isTarget": false,
+      "distractorCategory": "functional"
+    }
   ],
   "game2": {
     "type": "sequence_ordering",

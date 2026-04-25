@@ -4,12 +4,56 @@
   "instructionTr": "Çay saati için sofra hazırla.",
   "instructionAudioPath": "assets/audio/instructions/ikindi_cay_saati.wav",
   "window": "ikindi",
-  "backgroundAsset": "assets/images/scenes/ikindi/masa_bg.png",
+  "backgroundAsset": "assets/images/scenes/ikindi/bos_masa.png",
   "slots": [
-    {"id": "slot_demlik",  "rect": [0.12, 0.55, 0.20, 0.25], "acceptedItemId": "demlik",  "labelTr": "demlik yeri"},
-    {"id": "slot_bardak",  "rect": [0.35, 0.55, 0.20, 0.25], "acceptedItemId": "cay_bardagi", "labelTr": "bardak tabağı"},
-    {"id": "slot_sekerlik","rect": [0.58, 0.55, 0.20, 0.25], "acceptedItemId": "sekerlik","labelTr": "şekerlik yeri"},
-    {"id": "slot_pasta",   "rect": [0.81, 0.55, 0.15, 0.25], "acceptedItemId": "pasta",   "labelTr": "pasta tabağı"}
+    {
+      "id": "slot_demlik",
+      "rect": [
+        0.12,
+        0.55,
+        0.2,
+        0.25
+      ],
+      "acceptedItemId": "demlik",
+      "labelTr": "demlik yeri",
+      "emptyAssetPath": "assets/images/scenes/ikindi/bos_demlik.png"
+    },
+    {
+      "id": "slot_bardak",
+      "rect": [
+        0.35,
+        0.55,
+        0.2,
+        0.25
+      ],
+      "acceptedItemId": "cay_bardagi",
+      "labelTr": "bardak tabağı",
+      "emptyAssetPath": "assets/images/scenes/ikindi/bos_cay_bardagi.png"
+    },
+    {
+      "id": "slot_sekerlik",
+      "rect": [
+        0.58,
+        0.55,
+        0.2,
+        0.25
+      ],
+      "acceptedItemId": "sekerlik",
+      "labelTr": "şekerlik yeri",
+      "emptyAssetPath": "assets/images/scenes/ikindi/bos_sekerlik.png"
+    },
+    {
+      "id": "slot_pasta",
+      "rect": [
+        0.81,
+        0.55,
+        0.15,
+        0.25
+      ],
+      "acceptedItemId": "pasta",
+      "labelTr": "pasta tabağı",
+      "emptyAssetPath": "assets/images/scenes/ikindi/bos_pasta.png"
+    }
   ],
   "variants": [
     {
@@ -17,10 +61,34 @@
       "distractorMode": "absent",
       "sequenceRequired": false,
       "items": [
-        {"id": "demlik",      "assetPath": "assets/images/scenes/ikindi/demlik.png",      "audioLabelPath": "assets/audio/labels/demlik.wav",      "labelTr": "demlik",     "acceptedSlotId": "slot_demlik"},
-        {"id": "cay_bardagi", "assetPath": "assets/images/scenes/ikindi/cay_bardagi.png", "audioLabelPath": "assets/audio/labels/cay_bardagi.wav", "labelTr": "çay bardağı","acceptedSlotId": "slot_bardak"},
-        {"id": "sekerlik",    "assetPath": "assets/images/scenes/ikindi/sekerlik.png",    "audioLabelPath": "assets/audio/labels/sekerlik.wav",    "labelTr": "şekerlik",   "acceptedSlotId": "slot_sekerlik"},
-        {"id": "pasta",       "assetPath": "assets/images/scenes/ikindi/pasta.png",       "audioLabelPath": "assets/audio/labels/pasta.wav",       "labelTr": "pasta",      "acceptedSlotId": "slot_pasta"}
+        {
+          "id": "demlik",
+          "assetPath": "assets/images/scenes/ikindi/dolu_demlik.png",
+          "audioLabelPath": "assets/audio/labels/demlik.wav",
+          "labelTr": "demlik",
+          "acceptedSlotId": "slot_demlik"
+        },
+        {
+          "id": "cay_bardagi",
+          "assetPath": "assets/images/scenes/ikindi/dolu_cay_bardagi.png",
+          "audioLabelPath": "assets/audio/labels/cay_bardagi.wav",
+          "labelTr": "çay bardağı",
+          "acceptedSlotId": "slot_bardak"
+        },
+        {
+          "id": "sekerlik",
+          "assetPath": "assets/images/scenes/ikindi/dolu_sekerlik.png",
+          "audioLabelPath": "assets/audio/labels/sekerlik.wav",
+          "labelTr": "şekerlik",
+          "acceptedSlotId": "slot_sekerlik"
+        },
+        {
+          "id": "pasta",
+          "assetPath": "assets/images/scenes/ikindi/dolu_pasta.png",
+          "audioLabelPath": "assets/audio/labels/pasta.wav",
+          "labelTr": "pasta",
+          "acceptedSlotId": "slot_pasta"
+        }
       ]
     },
     {
@@ -28,12 +96,50 @@
       "distractorMode": "far",
       "sequenceRequired": false,
       "items": [
-        {"id": "demlik",      "assetPath": "assets/images/scenes/ikindi/demlik.png",      "audioLabelPath": "assets/audio/labels/demlik.wav",      "labelTr": "demlik",     "acceptedSlotId": "slot_demlik"},
-        {"id": "cay_bardagi", "assetPath": "assets/images/scenes/ikindi/cay_bardagi.png", "audioLabelPath": "assets/audio/labels/cay_bardagi.wav", "labelTr": "çay bardağı","acceptedSlotId": "slot_bardak"},
-        {"id": "sekerlik",    "assetPath": "assets/images/scenes/ikindi/sekerlik.png",    "audioLabelPath": "assets/audio/labels/sekerlik.wav",    "labelTr": "şekerlik",   "acceptedSlotId": "slot_sekerlik"},
-        {"id": "pasta",       "assetPath": "assets/images/scenes/ikindi/pasta.png",       "audioLabelPath": "assets/audio/labels/pasta.wav",       "labelTr": "pasta",      "acceptedSlotId": "slot_pasta"},
-        {"id": "gozluk", "assetPath": "assets/images/distractors/gozluk.png", "audioLabelPath": "assets/audio/labels/gozluk.wav", "labelTr": "gözlük", "distractor": true, "distractorCategory": "far"},
-        {"id": "mendil", "assetPath": "assets/images/distractors/mendil.png", "audioLabelPath": "assets/audio/labels/mendil.wav", "labelTr": "mendil", "distractor": true, "distractorCategory": "far"}
+        {
+          "id": "demlik",
+          "assetPath": "assets/images/scenes/ikindi/dolu_demlik.png",
+          "audioLabelPath": "assets/audio/labels/demlik.wav",
+          "labelTr": "demlik",
+          "acceptedSlotId": "slot_demlik"
+        },
+        {
+          "id": "cay_bardagi",
+          "assetPath": "assets/images/scenes/ikindi/dolu_cay_bardagi.png",
+          "audioLabelPath": "assets/audio/labels/cay_bardagi.wav",
+          "labelTr": "çay bardağı",
+          "acceptedSlotId": "slot_bardak"
+        },
+        {
+          "id": "sekerlik",
+          "assetPath": "assets/images/scenes/ikindi/dolu_sekerlik.png",
+          "audioLabelPath": "assets/audio/labels/sekerlik.wav",
+          "labelTr": "şekerlik",
+          "acceptedSlotId": "slot_sekerlik"
+        },
+        {
+          "id": "pasta",
+          "assetPath": "assets/images/scenes/ikindi/dolu_pasta.png",
+          "audioLabelPath": "assets/audio/labels/pasta.wav",
+          "labelTr": "pasta",
+          "acceptedSlotId": "slot_pasta"
+        },
+        {
+          "id": "gozluk",
+          "assetPath": "assets/images/distractors/gozluk.png",
+          "audioLabelPath": "assets/audio/labels/gozluk.wav",
+          "labelTr": "gözlük",
+          "distractor": true,
+          "distractorCategory": "far"
+        },
+        {
+          "id": "mendil",
+          "assetPath": "assets/images/distractors/mendil.png",
+          "audioLabelPath": "assets/audio/labels/mendil.wav",
+          "labelTr": "mendil",
+          "distractor": true,
+          "distractorCategory": "far"
+        }
       ]
     },
     {
@@ -41,12 +147,50 @@
       "distractorMode": "near",
       "sequenceRequired": false,
       "items": [
-        {"id": "demlik",      "assetPath": "assets/images/scenes/ikindi/demlik.png",      "audioLabelPath": "assets/audio/labels/demlik.wav",      "labelTr": "demlik",     "acceptedSlotId": "slot_demlik"},
-        {"id": "cay_bardagi", "assetPath": "assets/images/scenes/ikindi/cay_bardagi.png", "audioLabelPath": "assets/audio/labels/cay_bardagi.wav", "labelTr": "çay bardağı","acceptedSlotId": "slot_bardak"},
-        {"id": "sekerlik",    "assetPath": "assets/images/scenes/ikindi/sekerlik.png",    "audioLabelPath": "assets/audio/labels/sekerlik.wav",    "labelTr": "şekerlik",   "acceptedSlotId": "slot_sekerlik"},
-        {"id": "pasta",       "assetPath": "assets/images/scenes/ikindi/pasta.png",       "audioLabelPath": "assets/audio/labels/pasta.wav",       "labelTr": "pasta",      "acceptedSlotId": "slot_pasta"},
-        {"id": "limonata", "assetPath": "assets/images/distractors/limonata.png", "audioLabelPath": "assets/audio/labels/limonata.wav", "labelTr": "limonata", "distractor": true, "distractorCategory": "near"},
-        {"id": "ayran",    "assetPath": "assets/images/distractors/ayran.png",    "audioLabelPath": "assets/audio/labels/ayran.wav",    "labelTr": "ayran",    "distractor": true, "distractorCategory": "near"}
+        {
+          "id": "demlik",
+          "assetPath": "assets/images/scenes/ikindi/dolu_demlik.png",
+          "audioLabelPath": "assets/audio/labels/demlik.wav",
+          "labelTr": "demlik",
+          "acceptedSlotId": "slot_demlik"
+        },
+        {
+          "id": "cay_bardagi",
+          "assetPath": "assets/images/scenes/ikindi/dolu_cay_bardagi.png",
+          "audioLabelPath": "assets/audio/labels/cay_bardagi.wav",
+          "labelTr": "çay bardağı",
+          "acceptedSlotId": "slot_bardak"
+        },
+        {
+          "id": "sekerlik",
+          "assetPath": "assets/images/scenes/ikindi/dolu_sekerlik.png",
+          "audioLabelPath": "assets/audio/labels/sekerlik.wav",
+          "labelTr": "şekerlik",
+          "acceptedSlotId": "slot_sekerlik"
+        },
+        {
+          "id": "pasta",
+          "assetPath": "assets/images/scenes/ikindi/dolu_pasta.png",
+          "audioLabelPath": "assets/audio/labels/pasta.wav",
+          "labelTr": "pasta",
+          "acceptedSlotId": "slot_pasta"
+        },
+        {
+          "id": "limonata",
+          "assetPath": "assets/images/distractors/limonata.png",
+          "audioLabelPath": "assets/audio/labels/limonata.wav",
+          "labelTr": "limonata",
+          "distractor": true,
+          "distractorCategory": "near"
+        },
+        {
+          "id": "ayran",
+          "assetPath": "assets/images/distractors/ayran.png",
+          "audioLabelPath": "assets/audio/labels/ayran.wav",
+          "labelTr": "ayran",
+          "distractor": true,
+          "distractorCategory": "near"
+        }
       ]
     },
     {
@@ -54,12 +198,54 @@
       "distractorMode": "near",
       "sequenceRequired": true,
       "items": [
-        {"id": "demlik",      "assetPath": "assets/images/scenes/ikindi/demlik.png",      "audioLabelPath": "assets/audio/labels/demlik.wav",      "labelTr": "demlik",     "acceptedSlotId": "slot_demlik",   "sequenceOrder": 1},
-        {"id": "cay_bardagi", "assetPath": "assets/images/scenes/ikindi/cay_bardagi.png", "audioLabelPath": "assets/audio/labels/cay_bardagi.wav", "labelTr": "çay bardağı","acceptedSlotId": "slot_bardak",   "sequenceOrder": 2},
-        {"id": "sekerlik",    "assetPath": "assets/images/scenes/ikindi/sekerlik.png",    "audioLabelPath": "assets/audio/labels/sekerlik.wav",    "labelTr": "şekerlik",   "acceptedSlotId": "slot_sekerlik", "sequenceOrder": 3},
-        {"id": "pasta",       "assetPath": "assets/images/scenes/ikindi/pasta.png",       "audioLabelPath": "assets/audio/labels/pasta.wav",       "labelTr": "pasta",      "acceptedSlotId": "slot_pasta",    "sequenceOrder": 4},
-        {"id": "sut",     "assetPath": "assets/images/distractors/sut.png",     "audioLabelPath": "assets/audio/labels/sut.wav",     "labelTr": "süt",     "distractor": true, "distractorCategory": "near"},
-        {"id": "meyve",   "assetPath": "assets/images/distractors/meyve.png",   "audioLabelPath": "assets/audio/labels/meyve.wav",   "labelTr": "meyve",   "distractor": true, "distractorCategory": "near"}
+        {
+          "id": "demlik",
+          "assetPath": "assets/images/scenes/ikindi/dolu_demlik.png",
+          "audioLabelPath": "assets/audio/labels/demlik.wav",
+          "labelTr": "demlik",
+          "acceptedSlotId": "slot_demlik",
+          "sequenceOrder": 1
+        },
+        {
+          "id": "cay_bardagi",
+          "assetPath": "assets/images/scenes/ikindi/dolu_cay_bardagi.png",
+          "audioLabelPath": "assets/audio/labels/cay_bardagi.wav",
+          "labelTr": "çay bardağı",
+          "acceptedSlotId": "slot_bardak",
+          "sequenceOrder": 2
+        },
+        {
+          "id": "sekerlik",
+          "assetPath": "assets/images/scenes/ikindi/dolu_sekerlik.png",
+          "audioLabelPath": "assets/audio/labels/sekerlik.wav",
+          "labelTr": "şekerlik",
+          "acceptedSlotId": "slot_sekerlik",
+          "sequenceOrder": 3
+        },
+        {
+          "id": "pasta",
+          "assetPath": "assets/images/scenes/ikindi/dolu_pasta.png",
+          "audioLabelPath": "assets/audio/labels/pasta.wav",
+          "labelTr": "pasta",
+          "acceptedSlotId": "slot_pasta",
+          "sequenceOrder": 4
+        },
+        {
+          "id": "sut",
+          "assetPath": "assets/images/distractors/sut.png",
+          "audioLabelPath": "assets/audio/labels/sut.wav",
+          "labelTr": "süt",
+          "distractor": true,
+          "distractorCategory": "near"
+        },
+        {
+          "id": "meyve",
+          "assetPath": "assets/images/distractors/meyve.png",
+          "audioLabelPath": "assets/audio/labels/meyve.wav",
+          "labelTr": "meyve",
+          "distractor": true,
+          "distractorCategory": "near"
+        }
       ]
     },
     {
@@ -67,28 +253,154 @@
       "distractorMode": "functional",
       "sequenceRequired": true,
       "items": [
-        {"id": "demlik",      "assetPath": "assets/images/scenes/ikindi/demlik.png",      "audioLabelPath": "assets/audio/labels/demlik.wav",      "labelTr": "demlik",     "acceptedSlotId": "slot_demlik",   "sequenceOrder": 1},
-        {"id": "cay_bardagi", "assetPath": "assets/images/scenes/ikindi/cay_bardagi.png", "audioLabelPath": "assets/audio/labels/cay_bardagi.wav", "labelTr": "çay bardağı","acceptedSlotId": "slot_bardak",   "sequenceOrder": 2},
-        {"id": "sekerlik",    "assetPath": "assets/images/scenes/ikindi/sekerlik.png",    "audioLabelPath": "assets/audio/labels/sekerlik.wav",    "labelTr": "şekerlik",   "acceptedSlotId": "slot_sekerlik", "sequenceOrder": 3},
-        {"id": "pasta",       "assetPath": "assets/images/scenes/ikindi/pasta.png",       "audioLabelPath": "assets/audio/labels/pasta.wav",       "labelTr": "pasta",      "acceptedSlotId": "slot_pasta",    "sequenceOrder": 4},
-        {"id": "cezve",   "assetPath": "assets/images/distractors/cezve.png",   "audioLabelPath": "assets/audio/labels/cezve.wav",   "labelTr": "cezve",   "distractor": true, "distractorCategory": "functional"},
-        {"id": "tuzluk",  "assetPath": "assets/images/distractors/tuzluk.png",  "audioLabelPath": "assets/audio/labels/tuzluk.wav",  "labelTr": "tuzluk",  "distractor": true, "distractorCategory": "functional"}
+        {
+          "id": "demlik",
+          "assetPath": "assets/images/scenes/ikindi/dolu_demlik.png",
+          "audioLabelPath": "assets/audio/labels/demlik.wav",
+          "labelTr": "demlik",
+          "acceptedSlotId": "slot_demlik",
+          "sequenceOrder": 1
+        },
+        {
+          "id": "cay_bardagi",
+          "assetPath": "assets/images/scenes/ikindi/dolu_cay_bardagi.png",
+          "audioLabelPath": "assets/audio/labels/cay_bardagi.wav",
+          "labelTr": "çay bardağı",
+          "acceptedSlotId": "slot_bardak",
+          "sequenceOrder": 2
+        },
+        {
+          "id": "sekerlik",
+          "assetPath": "assets/images/scenes/ikindi/dolu_sekerlik.png",
+          "audioLabelPath": "assets/audio/labels/sekerlik.wav",
+          "labelTr": "şekerlik",
+          "acceptedSlotId": "slot_sekerlik",
+          "sequenceOrder": 3
+        },
+        {
+          "id": "pasta",
+          "assetPath": "assets/images/scenes/ikindi/dolu_pasta.png",
+          "audioLabelPath": "assets/audio/labels/pasta.wav",
+          "labelTr": "pasta",
+          "acceptedSlotId": "slot_pasta",
+          "sequenceOrder": 4
+        },
+        {
+          "id": "cezve",
+          "assetPath": "assets/images/distractors/cezve.png",
+          "audioLabelPath": "assets/audio/labels/cezve.wav",
+          "labelTr": "cezve",
+          "distractor": true,
+          "distractorCategory": "functional"
+        },
+        {
+          "id": "tuzluk",
+          "assetPath": "assets/images/distractors/tuzluk.png",
+          "audioLabelPath": "assets/audio/labels/tuzluk.wav",
+          "labelTr": "tuzluk",
+          "distractor": true,
+          "distractorCategory": "functional"
+        }
       ]
     }
   ],
   "itemPool": [
-    {"id": "demlik",      "assetPath": "assets/images/scenes/ikindi/demlik.png",      "audioLabelPath": "assets/audio/labels/demlik.wav",      "labelTr": "demlik",      "isTarget": true,  "defaultSlotId": "slot_demlik"},
-    {"id": "cay_bardagi", "assetPath": "assets/images/scenes/ikindi/cay_bardagi.png", "audioLabelPath": "assets/audio/labels/cay_bardagi.wav", "labelTr": "çay bardağı", "isTarget": true,  "defaultSlotId": "slot_bardak"},
-    {"id": "sekerlik",    "assetPath": "assets/images/scenes/ikindi/sekerlik.png",    "audioLabelPath": "assets/audio/labels/sekerlik.wav",    "labelTr": "şekerlik",    "isTarget": true,  "defaultSlotId": "slot_sekerlik"},
-    {"id": "pasta",       "assetPath": "assets/images/scenes/ikindi/pasta.png",       "audioLabelPath": "assets/audio/labels/pasta.wav",       "labelTr": "pasta",       "isTarget": true,  "defaultSlotId": "slot_pasta"},
-    {"id": "gozluk",      "assetPath": "assets/images/distractors/gozluk.png",        "audioLabelPath": "assets/audio/labels/gozluk.wav",      "labelTr": "gözlük",      "isTarget": false, "distractorCategory": "far"},
-    {"id": "mendil",      "assetPath": "assets/images/distractors/mendil.png",        "audioLabelPath": "assets/audio/labels/mendil.wav",      "labelTr": "mendil",      "isTarget": false, "distractorCategory": "far"},
-    {"id": "limonata",    "assetPath": "assets/images/distractors/limonata.png",      "audioLabelPath": "assets/audio/labels/limonata.wav",    "labelTr": "limonata",    "isTarget": false, "distractorCategory": "near"},
-    {"id": "ayran",       "assetPath": "assets/images/distractors/ayran.png",         "audioLabelPath": "assets/audio/labels/ayran.wav",       "labelTr": "ayran",       "isTarget": false, "distractorCategory": "near"},
-    {"id": "sut",         "assetPath": "assets/images/distractors/sut.png",           "audioLabelPath": "assets/audio/labels/sut.wav",         "labelTr": "süt",         "isTarget": false, "distractorCategory": "near"},
-    {"id": "meyve",       "assetPath": "assets/images/distractors/meyve.png",         "audioLabelPath": "assets/audio/labels/meyve.wav",       "labelTr": "meyve",       "isTarget": false, "distractorCategory": "near"},
-    {"id": "cezve",       "assetPath": "assets/images/distractors/cezve.png",         "audioLabelPath": "assets/audio/labels/cezve.wav",       "labelTr": "cezve",       "isTarget": false, "distractorCategory": "functional"},
-    {"id": "tuzluk",      "assetPath": "assets/images/distractors/tuzluk.png",        "audioLabelPath": "assets/audio/labels/tuzluk.wav",      "labelTr": "tuzluk",      "isTarget": false, "distractorCategory": "functional"}
+    {
+      "id": "demlik",
+      "assetPath": "assets/images/scenes/ikindi/dolu_demlik.png",
+      "audioLabelPath": "assets/audio/labels/demlik.wav",
+      "labelTr": "demlik",
+      "isTarget": true,
+      "defaultSlotId": "slot_demlik"
+    },
+    {
+      "id": "cay_bardagi",
+      "assetPath": "assets/images/scenes/ikindi/dolu_cay_bardagi.png",
+      "audioLabelPath": "assets/audio/labels/cay_bardagi.wav",
+      "labelTr": "çay bardağı",
+      "isTarget": true,
+      "defaultSlotId": "slot_bardak"
+    },
+    {
+      "id": "sekerlik",
+      "assetPath": "assets/images/scenes/ikindi/dolu_sekerlik.png",
+      "audioLabelPath": "assets/audio/labels/sekerlik.wav",
+      "labelTr": "şekerlik",
+      "isTarget": true,
+      "defaultSlotId": "slot_sekerlik"
+    },
+    {
+      "id": "pasta",
+      "assetPath": "assets/images/scenes/ikindi/dolu_pasta.png",
+      "audioLabelPath": "assets/audio/labels/pasta.wav",
+      "labelTr": "pasta",
+      "isTarget": true,
+      "defaultSlotId": "slot_pasta"
+    },
+    {
+      "id": "gozluk",
+      "assetPath": "assets/images/distractors/gozluk.png",
+      "audioLabelPath": "assets/audio/labels/gozluk.wav",
+      "labelTr": "gözlük",
+      "isTarget": false,
+      "distractorCategory": "far"
+    },
+    {
+      "id": "mendil",
+      "assetPath": "assets/images/distractors/mendil.png",
+      "audioLabelPath": "assets/audio/labels/mendil.wav",
+      "labelTr": "mendil",
+      "isTarget": false,
+      "distractorCategory": "far"
+    },
+    {
+      "id": "limonata",
+      "assetPath": "assets/images/distractors/limonata.png",
+      "audioLabelPath": "assets/audio/labels/limonata.wav",
+      "labelTr": "limonata",
+      "isTarget": false,
+      "distractorCategory": "near"
+    },
+    {
+      "id": "ayran",
+      "assetPath": "assets/images/distractors/ayran.png",
+      "audioLabelPath": "assets/audio/labels/ayran.wav",
+      "labelTr": "ayran",
+      "isTarget": false,
+      "distractorCategory": "near"
+    },
+    {
+      "id": "sut",
+      "assetPath": "assets/images/distractors/sut.png",
+      "audioLabelPath": "assets/audio/labels/sut.wav",
+      "labelTr": "süt",
+      "isTarget": false,
+      "distractorCategory": "near"
+    },
+    {
+      "id": "meyve",
+      "assetPath": "assets/images/distractors/meyve.png",
+      "audioLabelPath": "assets/audio/labels/meyve.wav",
+      "labelTr": "meyve",
+      "isTarget": false,
+      "distractorCategory": "near"
+    },
+    {
+      "id": "cezve",
+      "assetPath": "assets/images/distractors/cezve.png",
+      "audioLabelPath": "assets/audio/labels/cezve.wav",
+      "labelTr": "cezve",
+      "isTarget": false,
+      "distractorCategory": "functional"
+    },
+    {
+      "id": "tuzluk",
+      "assetPath": "assets/images/distractors/tuzluk.png",
+      "audioLabelPath": "assets/audio/labels/tuzluk.wav",
+      "labelTr": "tuzluk",
+      "isTarget": false,
+      "distractorCategory": "functional"
+    }
   ],
   "game2": {
     "type": "quantity_counting",

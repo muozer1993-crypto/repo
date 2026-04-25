@@ -38,22 +38,28 @@ class SceneSlotWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // v2 — when filled, render the dolu_ image. When empty AND the
+    // slot has a bos_ asset, render that as the in-place silhouette.
+    // Otherwise fall back to the v1 dashed-outline + label.
+    final hasBg = !filled && slot.emptyAssetPath != null;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 350),
       curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
         color: filled
             ? AppColors.acceptGlow.withValues(alpha: 0.15)
-            : Colors.white.withValues(alpha: 0.65),
+            : (hasBg ? Colors.transparent : Colors.white.withValues(alpha: 0.65)),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: glowing
-              ? AppColors.acceptGlow
-              : (filled
-                  ? AppColors.acceptGlow
-                  : AppColors.slotOutline.withValues(alpha: 0.7)),
-          width: glowing ? 4 : 2,
-        ),
+        border: hasBg
+            ? null
+            : Border.all(
+                color: glowing
+                    ? AppColors.acceptGlow
+                    : (filled
+                        ? AppColors.acceptGlow
+                        : AppColors.slotOutline.withValues(alpha: 0.7)),
+                width: glowing ? 4 : 2,
+              ),
         boxShadow: glowing
             ? [
                 const BoxShadow(
@@ -64,14 +70,22 @@ class SceneSlotWidget extends StatelessWidget {
               ]
             : null,
       ),
-      padding: const EdgeInsets.all(6),
+      padding: hasBg ? EdgeInsets.zero : const EdgeInsets.all(6),
+      clipBehavior: Clip.antiAlias,
       child: Center(
         child: filled
             ? _FilledContent(
                 assetPath: filledAssetPath,
                 label: filledLabel,
               )
-            : _EmptySlotLabel(text: slot.labelTr),
+            : (slot.emptyAssetPath != null
+                ? Image.asset(
+                    slot.emptyAssetPath!,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) =>
+                        _EmptySlotLabel(text: slot.labelTr),
+                  )
+                : _EmptySlotLabel(text: slot.labelTr)),
       ),
     );
   }

@@ -199,6 +199,7 @@ SceneSlot _parseSlot(Map<String, dynamic> j) {
     ),
     acceptedItemId: j['acceptedItemId'] as String,
     labelTr: j['labelTr'] as String,
+    emptyAssetPath: j['emptyAssetPath'] as String?,
   );
 }
 

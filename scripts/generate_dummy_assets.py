@@ -91,20 +91,34 @@ def make_bg_png(scene_id: str, asset_path: Path):
     asset_path.parent.mkdir(parents=True, exist_ok=True)
     img = Image.new("RGBA", (1024, 768), (233, 217, 183, 255))  # warm wood
     draw = ImageDraw.Draw(img)
-    # Faint wood grain stripes.
+    # Faint wood grain stripes — visual texture only, no text.
     for y in range(0, 768, 16):
         draw.line([(0, y), (1024, y)], fill=(220, 200, 165, 80), width=1)
     # Outer rounded edge tone.
     draw.rectangle([0, 0, 1023, 767], outline=(170, 140, 95, 200), width=8)
+    img.save(asset_path, "PNG")
+    print(f"  + {asset_path.relative_to(REPO)}")
+
+
+def make_empty_slot_png(slot_id: str, asset_path: Path):
+    """Lighter silhouette-style placeholder for the bos_<id>.png slot
+    indicators that sit on the table in v2."""
+    if asset_path.exists() and asset_path.stat().st_size > 0:
+        return
+    asset_path.parent.mkdir(parents=True, exist_ok=True)
+    # Soft transparent dashed-circle stub.
+    img = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.ellipse([12, 12, 244, 244], outline=(120, 100, 80, 120), width=6)
     if FONT_PATH:
-        font = ImageFont.truetype(FONT_PATH, 48)
-        text = f"({scene_id})"
-        bbox = draw.textbbox((0, 0), text, font=font)
+        font = ImageFont.truetype(FONT_PATH, 22)
+        bbox = draw.textbbox((0, 0), slot_id, font=font)
         w = bbox[2] - bbox[0]
+        h = bbox[3] - bbox[1]
         draw.text(
-            ((1024 - w) / 2, 700),
-            text,
-            fill=(140, 120, 90, 180),
+            ((256 - w) / 2, (256 - h) / 2 - bbox[1]),
+            slot_id,
+            fill=(120, 100, 80, 180),
             font=font,
         )
     img.save(asset_path, "PNG")
@@ -119,7 +133,7 @@ def collect_scene_files():
 
 
 def gather_items():
-    """Walk every scene/bonus JSON, yield (label, asset_path) tuples."""
+    """Walk every scene/bonus JSON, yield (kind, label, path) tuples."""
     seen_paths = set()
     for jf in collect_scene_files():
         with open(jf, "r", encoding="utf-8") as fh:
@@ -129,7 +143,17 @@ def gather_items():
         if bg and bg not in seen_paths:
             seen_paths.add(bg)
             yield ("__bg__", data.get("id", jf.stem), REPO / bg)
-        # itemPool
+        # v2 — slot empty asset (bos_<itemId>.png).
+        for slot in data.get("slots", []) or []:
+            empty = slot.get("emptyAssetPath")
+            if empty and empty not in seen_paths:
+                seen_paths.add(empty)
+                yield (
+                    "__empty__",
+                    slot.get("acceptedItemId", "?"),
+                    REPO / empty,
+                )
+        # itemPool — assetPath is the dolu_ version.
         for entry in data.get("itemPool", []) or []:
             asset = entry.get("assetPath")
             label = entry.get("labelTr", "")
@@ -147,16 +171,23 @@ def gather_items():
 
 
 def main():
-    scene_count = 0
+    bg_count = 0
     item_count = 0
+    empty_count = 0
     for kind, label, path in gather_items():
         if kind == "__bg__":
             make_bg_png(label, path)
-            scene_count += 1
+            bg_count += 1
+        elif kind == "__empty__":
+            make_empty_slot_png(label, path)
+            empty_count += 1
         else:
             make_item_png(label, path)
             item_count += 1
-    print(f"\n✓ {scene_count} background + {item_count} item placeholders")
+    print(
+        f"\n✓ {bg_count} background + {empty_count} empty-slot + "
+        f"{item_count} item placeholders"
+    )
 
 
 if __name__ == "__main__":

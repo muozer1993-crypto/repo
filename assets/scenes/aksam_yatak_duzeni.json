@@ -4,12 +4,56 @@
   "instructionTr": "Komodini yatış için düzenle.",
   "instructionAudioPath": "assets/audio/instructions/aksam_yatak_duzeni.wav",
   "window": "aksam",
-  "backgroundAsset": "assets/images/scenes/aksam/komodin_bg.png",
+  "backgroundAsset": "assets/images/scenes/aksam/bos_komodin.png",
   "slots": [
-    {"id": "slot_gozluk", "rect": [0.12, 0.55, 0.20, 0.25], "acceptedItemId": "okuma_gozlugu", "labelTr": "gözlük yeri"},
-    {"id": "slot_lamba",  "rect": [0.35, 0.55, 0.20, 0.25], "acceptedItemId": "lamba",         "labelTr": "lamba yeri"},
-    {"id": "slot_su",     "rect": [0.58, 0.55, 0.20, 0.25], "acceptedItemId": "bardak",        "labelTr": "bardak yeri"},
-    {"id": "slot_kitap",  "rect": [0.81, 0.55, 0.15, 0.25], "acceptedItemId": "kitap",         "labelTr": "kitap yeri"}
+    {
+      "id": "slot_gozluk",
+      "rect": [
+        0.12,
+        0.55,
+        0.2,
+        0.25
+      ],
+      "acceptedItemId": "okuma_gozlugu",
+      "labelTr": "gözlük yeri",
+      "emptyAssetPath": "assets/images/scenes/aksam/bos_okuma_gozlugu.png"
+    },
+    {
+      "id": "slot_lamba",
+      "rect": [
+        0.35,
+        0.55,
+        0.2,
+        0.25
+      ],
+      "acceptedItemId": "lamba",
+      "labelTr": "lamba yeri",
+      "emptyAssetPath": "assets/images/scenes/aksam/bos_lamba.png"
+    },
+    {
+      "id": "slot_su",
+      "rect": [
+        0.58,
+        0.55,
+        0.2,
+        0.25
+      ],
+      "acceptedItemId": "bardak",
+      "labelTr": "bardak yeri",
+      "emptyAssetPath": "assets/images/scenes/aksam/bos_bardak.png"
+    },
+    {
+      "id": "slot_kitap",
+      "rect": [
+        0.81,
+        0.55,
+        0.15,
+        0.25
+      ],
+      "acceptedItemId": "kitap",
+      "labelTr": "kitap yeri",
+      "emptyAssetPath": "assets/images/scenes/aksam/bos_kitap.png"
+    }
   ],
   "variants": [
     {
@@ -17,10 +61,34 @@
       "distractorMode": "absent",
       "sequenceRequired": false,
       "items": [
-        {"id": "okuma_gozlugu", "assetPath": "assets/images/scenes/aksam/okuma_gozlugu.png", "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav", "labelTr": "okuma gözlüğü", "acceptedSlotId": "slot_gozluk"},
-        {"id": "lamba",         "assetPath": "assets/images/scenes/aksam/lamba.png",         "audioLabelPath": "assets/audio/labels/lamba.wav",         "labelTr": "lamba",         "acceptedSlotId": "slot_lamba"},
-        {"id": "bardak",        "assetPath": "assets/images/scenes/aksam/bardak.png",        "audioLabelPath": "assets/audio/labels/bardak.wav",        "labelTr": "bardak",        "acceptedSlotId": "slot_su"},
-        {"id": "kitap",         "assetPath": "assets/images/scenes/aksam/kitap.png",         "audioLabelPath": "assets/audio/labels/kitap.wav",         "labelTr": "kitap",         "acceptedSlotId": "slot_kitap"}
+        {
+          "id": "okuma_gozlugu",
+          "assetPath": "assets/images/scenes/aksam/dolu_okuma_gozlugu.png",
+          "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav",
+          "labelTr": "okuma gözlüğü",
+          "acceptedSlotId": "slot_gozluk"
+        },
+        {
+          "id": "lamba",
+          "assetPath": "assets/images/scenes/aksam/dolu_lamba.png",
+          "audioLabelPath": "assets/audio/labels/lamba.wav",
+          "labelTr": "lamba",
+          "acceptedSlotId": "slot_lamba"
+        },
+        {
+          "id": "bardak",
+          "assetPath": "assets/images/scenes/aksam/dolu_bardak.png",
+          "audioLabelPath": "assets/audio/labels/bardak.wav",
+          "labelTr": "bardak",
+          "acceptedSlotId": "slot_su"
+        },
+        {
+          "id": "kitap",
+          "assetPath": "assets/images/scenes/aksam/dolu_kitap.png",
+          "audioLabelPath": "assets/audio/labels/kitap.wav",
+          "labelTr": "kitap",
+          "acceptedSlotId": "slot_kitap"
+        }
       ]
     },
     {
@@ -28,12 +96,50 @@
       "distractorMode": "far",
       "sequenceRequired": false,
       "items": [
-        {"id": "okuma_gozlugu", "assetPath": "assets/images/scenes/aksam/okuma_gozlugu.png", "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav", "labelTr": "okuma gözlüğü", "acceptedSlotId": "slot_gozluk"},
-        {"id": "lamba",         "assetPath": "assets/images/scenes/aksam/lamba.png",         "audioLabelPath": "assets/audio/labels/lamba.wav",         "labelTr": "lamba",         "acceptedSlotId": "slot_lamba"},
-        {"id": "bardak",        "assetPath": "assets/images/scenes/aksam/bardak.png",        "audioLabelPath": "assets/audio/labels/bardak.wav",        "labelTr": "bardak",        "acceptedSlotId": "slot_su"},
-        {"id": "kitap",         "assetPath": "assets/images/scenes/aksam/kitap.png",         "audioLabelPath": "assets/audio/labels/kitap.wav",         "labelTr": "kitap",         "acceptedSlotId": "slot_kitap"},
-        {"id": "semsiye",  "assetPath": "assets/images/distractors/semsiye.png",  "audioLabelPath": "assets/audio/labels/semsiye.wav",  "labelTr": "şemsiye",  "distractor": true, "distractorCategory": "far"},
-        {"id": "anahtar",  "assetPath": "assets/images/distractors/anahtar.png",  "audioLabelPath": "assets/audio/labels/anahtar.wav",  "labelTr": "anahtar",  "distractor": true, "distractorCategory": "far"}
+        {
+          "id": "okuma_gozlugu",
+          "assetPath": "assets/images/scenes/aksam/dolu_okuma_gozlugu.png",
+          "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav",
+          "labelTr": "okuma gözlüğü",
+          "acceptedSlotId": "slot_gozluk"
+        },
+        {
+          "id": "lamba",
+          "assetPath": "assets/images/scenes/aksam/dolu_lamba.png",
+          "audioLabelPath": "assets/audio/labels/lamba.wav",
+          "labelTr": "lamba",
+          "acceptedSlotId": "slot_lamba"
+        },
+        {
+          "id": "bardak",
+          "assetPath": "assets/images/scenes/aksam/dolu_bardak.png",
+          "audioLabelPath": "assets/audio/labels/bardak.wav",
+          "labelTr": "bardak",
+          "acceptedSlotId": "slot_su"
+        },
+        {
+          "id": "kitap",
+          "assetPath": "assets/images/scenes/aksam/dolu_kitap.png",
+          "audioLabelPath": "assets/audio/labels/kitap.wav",
+          "labelTr": "kitap",
+          "acceptedSlotId": "slot_kitap"
+        },
+        {
+          "id": "semsiye",
+          "assetPath": "assets/images/distractors/semsiye.png",
+          "audioLabelPath": "assets/audio/labels/semsiye.wav",
+          "labelTr": "şemsiye",
+          "distractor": true,
+          "distractorCategory": "far"
+        },
+        {
+          "id": "anahtar",
+          "assetPath": "assets/images/distractors/anahtar.png",
+          "audioLabelPath": "assets/audio/labels/anahtar.wav",
+          "labelTr": "anahtar",
+          "distractor": true,
+          "distractorCategory": "far"
+        }
       ]
     },
     {
@@ -41,12 +147,50 @@
       "distractorMode": "near",
       "sequenceRequired": false,
       "items": [
-        {"id": "okuma_gozlugu", "assetPath": "assets/images/scenes/aksam/okuma_gozlugu.png", "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav", "labelTr": "okuma gözlüğü", "acceptedSlotId": "slot_gozluk"},
-        {"id": "lamba",         "assetPath": "assets/images/scenes/aksam/lamba.png",         "audioLabelPath": "assets/audio/labels/lamba.wav",         "labelTr": "lamba",         "acceptedSlotId": "slot_lamba"},
-        {"id": "bardak",        "assetPath": "assets/images/scenes/aksam/bardak.png",        "audioLabelPath": "assets/audio/labels/bardak.wav",        "labelTr": "bardak",        "acceptedSlotId": "slot_su"},
-        {"id": "kitap",         "assetPath": "assets/images/scenes/aksam/kitap.png",         "audioLabelPath": "assets/audio/labels/kitap.wav",         "labelTr": "kitap",         "acceptedSlotId": "slot_kitap"},
-        {"id": "kalem",  "assetPath": "assets/images/distractors/kalem.png",  "audioLabelPath": "assets/audio/labels/kalem.wav",  "labelTr": "kalem",  "distractor": true, "distractorCategory": "near"},
-        {"id": "defter", "assetPath": "assets/images/distractors/defter.png", "audioLabelPath": "assets/audio/labels/defter.wav", "labelTr": "defter", "distractor": true, "distractorCategory": "near"}
+        {
+          "id": "okuma_gozlugu",
+          "assetPath": "assets/images/scenes/aksam/dolu_okuma_gozlugu.png",
+          "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav",
+          "labelTr": "okuma gözlüğü",
+          "acceptedSlotId": "slot_gozluk"
+        },
+        {
+          "id": "lamba",
+          "assetPath": "assets/images/scenes/aksam/dolu_lamba.png",
+          "audioLabelPath": "assets/audio/labels/lamba.wav",
+          "labelTr": "lamba",
+          "acceptedSlotId": "slot_lamba"
+        },
+        {
+          "id": "bardak",
+          "assetPath": "assets/images/scenes/aksam/dolu_bardak.png",
+          "audioLabelPath": "assets/audio/labels/bardak.wav",
+          "labelTr": "bardak",
+          "acceptedSlotId": "slot_su"
+        },
+        {
+          "id": "kitap",
+          "assetPath": "assets/images/scenes/aksam/dolu_kitap.png",
+          "audioLabelPath": "assets/audio/labels/kitap.wav",
+          "labelTr": "kitap",
+          "acceptedSlotId": "slot_kitap"
+        },
+        {
+          "id": "kalem",
+          "assetPath": "assets/images/distractors/kalem.png",
+          "audioLabelPath": "assets/audio/labels/kalem.wav",
+          "labelTr": "kalem",
+          "distractor": true,
+          "distractorCategory": "near"
+        },
+        {
+          "id": "defter",
+          "assetPath": "assets/images/distractors/defter.png",
+          "audioLabelPath": "assets/audio/labels/defter.wav",
+          "labelTr": "defter",
+          "distractor": true,
+          "distractorCategory": "near"
+        }
       ]
     },
     {
@@ -54,12 +198,54 @@
       "distractorMode": "near",
       "sequenceRequired": true,
       "items": [
-        {"id": "lamba",         "assetPath": "assets/images/scenes/aksam/lamba.png",         "audioLabelPath": "assets/audio/labels/lamba.wav",         "labelTr": "lamba",         "acceptedSlotId": "slot_lamba", "sequenceOrder": 1},
-        {"id": "bardak",        "assetPath": "assets/images/scenes/aksam/bardak.png",        "audioLabelPath": "assets/audio/labels/bardak.wav",        "labelTr": "bardak",        "acceptedSlotId": "slot_su",    "sequenceOrder": 2},
-        {"id": "okuma_gozlugu", "assetPath": "assets/images/scenes/aksam/okuma_gozlugu.png", "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav", "labelTr": "okuma gözlüğü", "acceptedSlotId": "slot_gozluk","sequenceOrder": 3},
-        {"id": "kitap",         "assetPath": "assets/images/scenes/aksam/kitap.png",         "audioLabelPath": "assets/audio/labels/kitap.wav",         "labelTr": "kitap",         "acceptedSlotId": "slot_kitap", "sequenceOrder": 4},
-        {"id": "fotograf","assetPath": "assets/images/distractors/fotograf.png","audioLabelPath": "assets/audio/labels/fotograf.wav","labelTr": "fotoğraf","distractor": true, "distractorCategory": "near"},
-        {"id": "saat",    "assetPath": "assets/images/distractors/saat.png",    "audioLabelPath": "assets/audio/labels/saat.wav",    "labelTr": "saat",    "distractor": true, "distractorCategory": "near"}
+        {
+          "id": "lamba",
+          "assetPath": "assets/images/scenes/aksam/dolu_lamba.png",
+          "audioLabelPath": "assets/audio/labels/lamba.wav",
+          "labelTr": "lamba",
+          "acceptedSlotId": "slot_lamba",
+          "sequenceOrder": 1
+        },
+        {
+          "id": "bardak",
+          "assetPath": "assets/images/scenes/aksam/dolu_bardak.png",
+          "audioLabelPath": "assets/audio/labels/bardak.wav",
+          "labelTr": "bardak",
+          "acceptedSlotId": "slot_su",
+          "sequenceOrder": 2
+        },
+        {
+          "id": "okuma_gozlugu",
+          "assetPath": "assets/images/scenes/aksam/dolu_okuma_gozlugu.png",
+          "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav",
+          "labelTr": "okuma gözlüğü",
+          "acceptedSlotId": "slot_gozluk",
+          "sequenceOrder": 3
+        },
+        {
+          "id": "kitap",
+          "assetPath": "assets/images/scenes/aksam/dolu_kitap.png",
+          "audioLabelPath": "assets/audio/labels/kitap.wav",
+          "labelTr": "kitap",
+          "acceptedSlotId": "slot_kitap",
+          "sequenceOrder": 4
+        },
+        {
+          "id": "fotograf",
+          "assetPath": "assets/images/distractors/fotograf.png",
+          "audioLabelPath": "assets/audio/labels/fotograf.wav",
+          "labelTr": "fotoğraf",
+          "distractor": true,
+          "distractorCategory": "near"
+        },
+        {
+          "id": "saat",
+          "assetPath": "assets/images/distractors/saat.png",
+          "audioLabelPath": "assets/audio/labels/saat.wav",
+          "labelTr": "saat",
+          "distractor": true,
+          "distractorCategory": "near"
+        }
       ]
     },
     {
@@ -67,28 +253,154 @@
       "distractorMode": "functional",
       "sequenceRequired": true,
       "items": [
-        {"id": "lamba",         "assetPath": "assets/images/scenes/aksam/lamba.png",         "audioLabelPath": "assets/audio/labels/lamba.wav",         "labelTr": "lamba",         "acceptedSlotId": "slot_lamba", "sequenceOrder": 1},
-        {"id": "bardak",        "assetPath": "assets/images/scenes/aksam/bardak.png",        "audioLabelPath": "assets/audio/labels/bardak.wav",        "labelTr": "bardak",        "acceptedSlotId": "slot_su",    "sequenceOrder": 2},
-        {"id": "okuma_gozlugu", "assetPath": "assets/images/scenes/aksam/okuma_gozlugu.png", "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav", "labelTr": "okuma gözlüğü", "acceptedSlotId": "slot_gozluk","sequenceOrder": 3},
-        {"id": "kitap",         "assetPath": "assets/images/scenes/aksam/kitap.png",         "audioLabelPath": "assets/audio/labels/kitap.wav",         "labelTr": "kitap",         "acceptedSlotId": "slot_kitap", "sequenceOrder": 4},
-        {"id": "gunes_gozlugu","assetPath": "assets/images/distractors/gunes_gozlugu.png","audioLabelPath": "assets/audio/labels/gunes_gozlugu.wav","labelTr": "güneş gözlüğü","distractor": true, "distractorCategory": "functional"},
-        {"id": "mum",          "assetPath": "assets/images/distractors/mum.png",          "audioLabelPath": "assets/audio/labels/mum.wav",          "labelTr": "mum",          "distractor": true, "distractorCategory": "functional"}
+        {
+          "id": "lamba",
+          "assetPath": "assets/images/scenes/aksam/dolu_lamba.png",
+          "audioLabelPath": "assets/audio/labels/lamba.wav",
+          "labelTr": "lamba",
+          "acceptedSlotId": "slot_lamba",
+          "sequenceOrder": 1
+        },
+        {
+          "id": "bardak",
+          "assetPath": "assets/images/scenes/aksam/dolu_bardak.png",
+          "audioLabelPath": "assets/audio/labels/bardak.wav",
+          "labelTr": "bardak",
+          "acceptedSlotId": "slot_su",
+          "sequenceOrder": 2
+        },
+        {
+          "id": "okuma_gozlugu",
+          "assetPath": "assets/images/scenes/aksam/dolu_okuma_gozlugu.png",
+          "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav",
+          "labelTr": "okuma gözlüğü",
+          "acceptedSlotId": "slot_gozluk",
+          "sequenceOrder": 3
+        },
+        {
+          "id": "kitap",
+          "assetPath": "assets/images/scenes/aksam/dolu_kitap.png",
+          "audioLabelPath": "assets/audio/labels/kitap.wav",
+          "labelTr": "kitap",
+          "acceptedSlotId": "slot_kitap",
+          "sequenceOrder": 4
+        },
+        {
+          "id": "gunes_gozlugu",
+          "assetPath": "assets/images/distractors/gunes_gozlugu.png",
+          "audioLabelPath": "assets/audio/labels/gunes_gozlugu.wav",
+          "labelTr": "güneş gözlüğü",
+          "distractor": true,
+          "distractorCategory": "functional"
+        },
+        {
+          "id": "mum",
+          "assetPath": "assets/images/distractors/mum.png",
+          "audioLabelPath": "assets/audio/labels/mum.wav",
+          "labelTr": "mum",
+          "distractor": true,
+          "distractorCategory": "functional"
+        }
       ]
     }
   ],
   "itemPool": [
-    {"id": "okuma_gozlugu", "assetPath": "assets/images/scenes/aksam/okuma_gozlugu.png", "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav", "labelTr": "okuma gözlüğü", "isTarget": true,  "defaultSlotId": "slot_gozluk"},
-    {"id": "lamba",         "assetPath": "assets/images/scenes/aksam/lamba.png",         "audioLabelPath": "assets/audio/labels/lamba.wav",         "labelTr": "lamba",         "isTarget": true,  "defaultSlotId": "slot_lamba"},
-    {"id": "bardak",        "assetPath": "assets/images/scenes/aksam/bardak.png",        "audioLabelPath": "assets/audio/labels/bardak.wav",        "labelTr": "bardak",        "isTarget": true,  "defaultSlotId": "slot_su"},
-    {"id": "kitap",         "assetPath": "assets/images/scenes/aksam/kitap.png",         "audioLabelPath": "assets/audio/labels/kitap.wav",         "labelTr": "kitap",         "isTarget": true,  "defaultSlotId": "slot_kitap"},
-    {"id": "semsiye",       "assetPath": "assets/images/distractors/semsiye.png",        "audioLabelPath": "assets/audio/labels/semsiye.wav",       "labelTr": "şemsiye",       "isTarget": false, "distractorCategory": "far"},
-    {"id": "anahtar",       "assetPath": "assets/images/distractors/anahtar.png",        "audioLabelPath": "assets/audio/labels/anahtar.wav",       "labelTr": "anahtar",       "isTarget": false, "distractorCategory": "far"},
-    {"id": "kalem",         "assetPath": "assets/images/distractors/kalem.png",          "audioLabelPath": "assets/audio/labels/kalem.wav",         "labelTr": "kalem",         "isTarget": false, "distractorCategory": "near"},
-    {"id": "defter",        "assetPath": "assets/images/distractors/defter.png",         "audioLabelPath": "assets/audio/labels/defter.wav",        "labelTr": "defter",        "isTarget": false, "distractorCategory": "near"},
-    {"id": "fotograf",      "assetPath": "assets/images/distractors/fotograf.png",       "audioLabelPath": "assets/audio/labels/fotograf.wav",      "labelTr": "fotoğraf",      "isTarget": false, "distractorCategory": "near"},
-    {"id": "saat",          "assetPath": "assets/images/distractors/saat.png",           "audioLabelPath": "assets/audio/labels/saat.wav",          "labelTr": "saat",          "isTarget": false, "distractorCategory": "near"},
-    {"id": "gunes_gozlugu", "assetPath": "assets/images/distractors/gunes_gozlugu.png",  "audioLabelPath": "assets/audio/labels/gunes_gozlugu.wav", "labelTr": "güneş gözlüğü", "isTarget": false, "distractorCategory": "functional"},
-    {"id": "mum",           "assetPath": "assets/images/distractors/mum.png",            "audioLabelPath": "assets/audio/labels/mum.wav",           "labelTr": "mum",           "isTarget": false, "distractorCategory": "functional"}
+    {
+      "id": "okuma_gozlugu",
+      "assetPath": "assets/images/scenes/aksam/dolu_okuma_gozlugu.png",
+      "audioLabelPath": "assets/audio/labels/okuma_gozlugu.wav",
+      "labelTr": "okuma gözlüğü",
+      "isTarget": true,
+      "defaultSlotId": "slot_gozluk"
+    },
+    {
+      "id": "lamba",
+      "assetPath": "assets/images/scenes/aksam/dolu_lamba.png",
+      "audioLabelPath": "assets/audio/labels/lamba.wav",
+      "labelTr": "lamba",
+      "isTarget": true,
+      "defaultSlotId": "slot_lamba"
+    },
+    {
+      "id": "bardak",
+      "assetPath": "assets/images/scenes/aksam/dolu_bardak.png",
+      "audioLabelPath": "assets/audio/labels/bardak.wav",
+      "labelTr": "bardak",
+      "isTarget": true,
+      "defaultSlotId": "slot_su"
+    },
+    {
+      "id": "kitap",
+      "assetPath": "assets/images/scenes/aksam/dolu_kitap.png",
+      "audioLabelPath": "assets/audio/labels/kitap.wav",
+      "labelTr": "kitap",
+      "isTarget": true,
+      "defaultSlotId": "slot_kitap"
+    },
+    {
+      "id": "semsiye",
+      "assetPath": "assets/images/distractors/semsiye.png",
+      "audioLabelPath": "assets/audio/labels/semsiye.wav",
+      "labelTr": "şemsiye",
+      "isTarget": false,
+      "distractorCategory": "far"
+    },
+    {
+      "id": "anahtar",
+      "assetPath": "assets/images/distractors/anahtar.png",
+      "audioLabelPath": "assets/audio/labels/anahtar.wav",
+      "labelTr": "anahtar",
+      "isTarget": false,
+      "distractorCategory": "far"
+    },
+    {
+      "id": "kalem",
+      "assetPath": "assets/images/distractors/kalem.png",
+      "audioLabelPath": "assets/audio/labels/kalem.wav",
+      "labelTr": "kalem",
+      "isTarget": false,
+      "distractorCategory": "near"
+    },
+    {
+      "id": "defter",
+      "assetPath": "assets/images/distractors/defter.png",
+      "audioLabelPath": "assets/audio/labels/defter.wav",
+      "labelTr": "defter",
+      "isTarget": false,
+      "distractorCategory": "near"
+    },
+    {
+      "id": "fotograf",
+      "assetPath": "assets/images/distractors/fotograf.png",
+      "audioLabelPath": "assets/audio/labels/fotograf.wav",
+      "labelTr": "fotoğraf",
+      "isTarget": false,
+      "distractorCategory": "near"
+    },
+    {
+      "id": "saat",
+      "assetPath": "assets/images/distractors/saat.png",
+      "audioLabelPath": "assets/audio/labels/saat.wav",
+      "labelTr": "saat",
+      "isTarget": false,
+      "distractorCategory": "near"
+    },
+    {
+      "id": "gunes_gozlugu",
+      "assetPath": "assets/images/distractors/gunes_gozlugu.png",
+      "audioLabelPath": "assets/audio/labels/gunes_gozlugu.wav",
+      "labelTr": "güneş gözlüğü",
+      "isTarget": false,
+      "distractorCategory": "functional"
+    },
+    {
+      "id": "mum",
+      "assetPath": "assets/images/distractors/mum.png",
+      "audioLabelPath": "assets/audio/labels/mum.wav",
+      "labelTr": "mum",
+      "isTarget": false,
+      "distractorCategory": "functional"
+    }
   ],
   "game2": {
     "type": "next_step_planning",

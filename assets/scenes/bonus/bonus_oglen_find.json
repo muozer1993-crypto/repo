@@ -7,11 +7,53 @@
   "backgroundAsset": "assets/images/scenes/bonus/oglen_find_bg.png",
   "nightVariant": false,
   "itemPool": [
-    {"id": "corba",  "assetPath": "assets/images/scenes/oglen/corba.png",  "audioLabelPath": "assets/audio/labels/corba.wav",  "labelTr": "çorba",  "isTarget": true, "defaultSlotId": "find_corba"},
-    {"id": "tavuk",  "assetPath": "assets/images/scenes/oglen/tavuk.png",  "audioLabelPath": "assets/audio/labels/tavuk.wav",  "labelTr": "tavuk",  "isTarget": true, "defaultSlotId": "find_tavuk"},
-    {"id": "salata", "assetPath": "assets/images/scenes/oglen/salata.png", "audioLabelPath": "assets/audio/labels/salata.wav", "labelTr": "salata", "isTarget": true, "defaultSlotId": "find_salata"},
-    {"id": "su",     "assetPath": "assets/images/scenes/oglen/su.png",     "audioLabelPath": "assets/audio/labels/su.wav",     "labelTr": "su",     "isTarget": true, "defaultSlotId": "find_su"},
-    {"id": "ayran",  "assetPath": "assets/images/scenes/oglen/ayran.png",  "audioLabelPath": "assets/audio/labels/ayran.wav",  "labelTr": "ayran",  "isTarget": true, "defaultSlotId": "find_ayran"},
-    {"id": "ekmek",  "assetPath": "assets/images/scenes/sabah/ekmek.png",  "audioLabelPath": "assets/audio/labels/ekmek.wav",  "labelTr": "ekmek",  "isTarget": true, "defaultSlotId": "find_ekmek"}
+    {
+      "id": "corba",
+      "assetPath": "assets/images/scenes/oglen/dolu_corba.png",
+      "audioLabelPath": "assets/audio/labels/corba.wav",
+      "labelTr": "çorba",
+      "isTarget": true,
+      "defaultSlotId": "find_corba"
+    },
+    {
+      "id": "tavuk",
+      "assetPath": "assets/images/scenes/oglen/dolu_tavuk.png",
+      "audioLabelPath": "assets/audio/labels/tavuk.wav",
+      "labelTr": "tavuk",
+      "isTarget": true,
+      "defaultSlotId": "find_tavuk"
+    },
+    {
+      "id": "salata",
+      "assetPath": "assets/images/scenes/oglen/dolu_salata.png",
+      "audioLabelPath": "assets/audio/labels/salata.wav",
+      "labelTr": "salata",
+      "isTarget": true,
+      "defaultSlotId": "find_salata"
+    },
+    {
+      "id": "su",
+      "assetPath": "assets/images/scenes/oglen/dolu_su.png",
+      "audioLabelPath": "assets/audio/labels/su.wav",
+      "labelTr": "su",
+      "isTarget": true,
+      "defaultSlotId": "find_su"
+    },
+    {
+      "id": "ayran",
+      "assetPath": "assets/images/scenes/oglen/dolu_ayran.png",
+      "audioLabelPath": "assets/audio/labels/ayran.wav",
+      "labelTr": "ayran",
+      "isTarget": true,
+      "defaultSlotId": "find_ayran"
+    },
+    {
+      "id": "ekmek",
+      "assetPath": "assets/images/scenes/sabah/dolu_ekmek.png",
+      "audioLabelPath": "assets/audio/labels/ekmek.wav",
+      "labelTr": "ekmek",
+      "isTarget": true,
+      "defaultSlotId": "find_ekmek"
+    }
   ]
 }

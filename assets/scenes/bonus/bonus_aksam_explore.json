@@ -7,10 +7,45 @@
   "backgroundAsset": "assets/images/scenes/bonus/aksam_explore_bg.png",
   "nightVariant": false,
   "itemPool": [
-    {"id": "lamba",  "assetPath": "assets/images/scenes/aksam/lamba.png",  "audioLabelPath": "assets/audio/labels/lamba.wav",  "labelTr": "lamba",  "isTarget": true, "defaultSlotId": "explore_lamba"},
-    {"id": "kitap",  "assetPath": "assets/images/scenes/aksam/kitap.png",  "audioLabelPath": "assets/audio/labels/kitap.wav",  "labelTr": "kitap",  "isTarget": true, "defaultSlotId": "explore_kitap"},
-    {"id": "bardak", "assetPath": "assets/images/scenes/aksam/bardak.png", "audioLabelPath": "assets/audio/labels/bardak.wav", "labelTr": "bardak", "isTarget": true, "defaultSlotId": "explore_bardak"},
-    {"id": "fotograf","assetPath": "assets/images/distractors/fotograf.png","audioLabelPath": "assets/audio/labels/fotograf.wav","labelTr": "fotoğraf","isTarget": true, "defaultSlotId": "explore_fotograf"},
-    {"id": "mum",    "assetPath": "assets/images/distractors/mum.png",    "audioLabelPath": "assets/audio/labels/mum.wav",    "labelTr": "mum",    "isTarget": true, "defaultSlotId": "explore_mum"}
+    {
+      "id": "lamba",
+      "assetPath": "assets/images/scenes/aksam/dolu_lamba.png",
+      "audioLabelPath": "assets/audio/labels/lamba.wav",
+      "labelTr": "lamba",
+      "isTarget": true,
+      "defaultSlotId": "explore_lamba"
+    },
+    {
+      "id": "kitap",
+      "assetPath": "assets/images/scenes/aksam/dolu_kitap.png",
+      "audioLabelPath": "assets/audio/labels/kitap.wav",
+      "labelTr": "kitap",
+      "isTarget": true,
+      "defaultSlotId": "explore_kitap"
+    },
+    {
+      "id": "bardak",
+      "assetPath": "assets/images/scenes/aksam/dolu_bardak.png",
+      "audioLabelPath": "assets/audio/labels/bardak.wav",
+      "labelTr": "bardak",
+      "isTarget": true,
+      "defaultSlotId": "explore_bardak"
+    },
+    {
+      "id": "fotograf",
+      "assetPath": "assets/images/distractors/fotograf.png",
+      "audioLabelPath": "assets/audio/labels/fotograf.wav",
+      "labelTr": "fotoğraf",
+      "isTarget": true,
+      "defaultSlotId": "explore_fotograf"
+    },
+    {
+      "id": "mum",
+      "assetPath": "assets/images/distractors/mum.png",
+      "audioLabelPath": "assets/audio/labels/mum.wav",
+      "labelTr": "mum",
+      "isTarget": true,
+      "defaultSlotId": "explore_mum"
+    }
   ]
 }
