@@ -108,20 +108,35 @@ class OnboardingScreen extends ConsumerWidget {
     if (caregiver) {
       await showDialog<void>(
         context: context,
+        barrierDismissible: false,
         builder: (_) => AlertDialog(
-          title: const Text(StringsTr.onboardingInvite),
-          content: const Text(
-            'Hastanın yanında oturun, sahneyi birlikte seyredin ve '
-            'yönergeleri birlikte dinleyin. Hata yapmasına izin verin — '
-            'sistem otomatik hatırlatma verir.',
-            style: TextStyle(fontSize: 18),
+          title: const Text(
+            StringsTr.onboardingInvite,
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Anladım', style: TextStyle(fontSize: 18)),
-            ),
-          ],
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Hastanın yanında oturun, sahneyi birlikte seyredin ve '
+                'yönergeleri birlikte dinleyin. Hata yapmasına izin verin — '
+                'sistem otomatik hatırlatma verir.',
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 20),
+              BigButton(
+                label: 'Anladım',
+                icon: Icons.check_rounded,
+                variant: BigButtonVariant.primary,
+                expand: true,
+                compact: true,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          actionsPadding: EdgeInsets.zero,
+          actions: const [],
         ),
       );
     }

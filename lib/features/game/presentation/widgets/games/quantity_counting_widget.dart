@@ -150,57 +150,58 @@ class _QuantityCountingWidgetState
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, c) {
-            final tight = c.maxHeight < 480;
+            // tight kicks in earlier (<560) so even mid-size landscape
+            // phones use compact tiles + small fonts.
+            final tight = c.maxHeight < 560;
+            final extraTight = c.maxHeight < 420;
             return SingleChildScrollView(
               padding: EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: tight ? 12 : 24,
+                horizontal: 16,
+                vertical: tight ? 8 : 24,
               ),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: c.maxHeight - 24),
-                child: Column(
-                  children: [
-                    AutoSizeText(
-                      StringsTr.game2QuantityCountingTitle,
-                      style: Theme.of(context).textTheme.displaySmall,
-                      maxLines: 1,
-                      minFontSize: 20,
-                      wrapWords: false,
-                    ),
-                    const SizedBox(height: 6),
-                    AutoSizeText(
-                      game2.instructionTr,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                      maxLines: 3,
-                      minFontSize: 14,
-                      wrapWords: false,
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: tight ? 12 : 20),
-                    _CountDisplay(
-                      item: _item,
-                      count: _count,
-                      tight: tight,
-                    ),
-                    SizedBox(height: tight ? 16 : 24),
-                    Wrap(
-                      spacing: tight ? 12 : 24,
-                      runSpacing: 12,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        for (final opt in _options)
-                          _NumberButton(
-                            value: opt,
-                            wobbling: _wobbleOption == opt,
-                            glowing: _glowOption == opt,
-                            onTap: () => _onTap(opt),
-                            tight: tight,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                ),
+              child: Column(
+                children: [
+                  AutoSizeText(
+                    StringsTr.game2QuantityCountingTitle,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    maxLines: 1,
+                    minFontSize: 16,
+                    wrapWords: false,
+                  ),
+                  const SizedBox(height: 4),
+                  AutoSizeText(
+                    game2.instructionTr,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 2,
+                    minFontSize: 12,
+                    wrapWords: false,
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: tight ? 8 : 20),
+                  _CountDisplay(
+                    item: _item,
+                    count: _count,
+                    tight: tight,
+                    extraTight: extraTight,
+                  ),
+                  SizedBox(height: tight ? 12 : 24),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      for (final opt in _options)
+                        _NumberButton(
+                          value: opt,
+                          wobbling: _wobbleOption == opt,
+                          glowing: _glowOption == opt,
+                          onTap: () => _onTap(opt),
+                          tight: tight,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
               ),
             );
           },
@@ -215,18 +216,20 @@ class _CountDisplay extends StatelessWidget {
     required this.item,
     required this.count,
     required this.tight,
+    required this.extraTight,
   });
   final ItemPoolEntry item;
   final int count;
   final bool tight;
+  final bool extraTight;
 
   @override
   Widget build(BuildContext context) {
-    final tile = tight ? 60.0 : 96.0;
+    final tile = extraTight ? 48.0 : (tight ? 64.0 : 96.0);
     return Center(
       child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
+        spacing: 8,
+        runSpacing: 8,
         alignment: WrapAlignment.center,
         children: [
           for (int i = 0; i < count; i++)
@@ -235,21 +238,28 @@ class _CountDisplay extends StatelessWidget {
               height: tile,
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppColors.slotOutline, width: 2),
               ),
               clipBehavior: Clip.hardEdge,
-              alignment: Alignment.center,
-              padding: const EdgeInsets.all(4),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  item.labelTr,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: tight ? 11 : 14,
-                    height: 1.1,
-                    color: AppColors.textPrimary,
+              child: Image.asset(
+                item.assetPath,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        item.labelTr,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: extraTight ? 9 : 11,
+                          height: 1.1,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),

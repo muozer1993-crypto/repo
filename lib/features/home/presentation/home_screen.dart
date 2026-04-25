@@ -124,24 +124,40 @@ class HomeScreen extends ConsumerWidget {
   Future<void> _confirmClose(BuildContext context) async {
     final ok = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => AlertDialog(
         title: const Text(
           'Uygulamayı kapatmak istiyor musunuz?',
           style: TextStyle(
-            fontSize: 24,
+            fontSize: 22,
             fontWeight: FontWeight.w600,
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Vazgeç', style: TextStyle(fontSize: 20)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Evet, kapat'),
-          ),
-        ],
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            BigButton(
+              label: 'Vazgeç',
+              icon: Icons.arrow_back_rounded,
+              variant: BigButtonVariant.primary,
+              expand: true,
+              compact: true,
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            const SizedBox(height: 12),
+            BigButton(
+              label: 'Evet, kapat',
+              icon: Icons.logout_rounded,
+              variant: BigButtonVariant.danger,
+              expand: true,
+              compact: true,
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+        actionsPadding: EdgeInsets.zero,
+        actions: const [],
       ),
     );
     if (ok != true) return;

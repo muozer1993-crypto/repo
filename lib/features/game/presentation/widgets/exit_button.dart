@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../l10n/strings_tr.dart';
+import '../../../../shared/widgets/big_button.dart';
 import '../../../../shared/widgets/labeled_icon_button.dart';
 
 /// Top-left "Çık" affordance on every scene.
@@ -27,26 +28,43 @@ class ExitButton extends StatelessWidget {
   Future<void> _confirm(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => AlertDialog(
         title: const Text(StringsTr.exitConfirmTitle),
         titleTextStyle: const TextStyle(
-          fontSize: 26,
+          fontSize: 24,
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              StringsTr.exitConfirmCancel,
-              style: TextStyle(fontSize: 22),
+        // Stack actions vertically so on phone widths neither button
+        // shrinks. AlertDialog will lay them out per actionsAlignment;
+        // we override with a Column inside `content` and pass empty
+        // actions to suppress the default action row.
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            BigButton(
+              label: StringsTr.exitConfirmCancel,
+              icon: Icons.arrow_back_rounded,
+              variant: BigButtonVariant.primary,
+              expand: true,
+              compact: true,
+              onPressed: () => Navigator.of(context).pop(false),
             ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(StringsTr.exitConfirmOk),
-          ),
-        ],
+            const SizedBox(height: 12),
+            BigButton(
+              label: StringsTr.exitConfirmOk,
+              icon: Icons.logout_rounded,
+              variant: BigButtonVariant.danger,
+              expand: true,
+              compact: true,
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+        actionsPadding: EdgeInsets.zero,
+        actions: const [],
       ),
     );
     if (confirmed == true) onConfirmed();

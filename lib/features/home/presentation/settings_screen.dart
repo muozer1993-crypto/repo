@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/motion.dart';
 import '../../../l10n/strings_tr.dart';
+import '../../../shared/widgets/big_button.dart';
 import '../../../shared/widgets/reduced_motion_switch.dart';
 import '../../profile/data/profile_repository.dart';
 
@@ -63,28 +64,46 @@ class _ResetProfileTile extends ConsumerWidget {
   Future<void> _confirm(BuildContext context, WidgetRef ref) async {
     final ok = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => AlertDialog(
-        title: const Text('Profili sıfırla?'),
-        content: const Text(
-          'Kayıtlı isim ve yaş bandı silinecek. Uygulama yeniden '
-          'profil oluşturma ekranıyla açılacak.',
-          style: TextStyle(fontSize: 18),
+        title: const Text(
+          'Profili sıfırla?',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Vazgeç', style: TextStyle(fontSize: 18)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Evet, sıfırla'),
-          ),
-        ],
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Kayıtlı isim ve yaş bandı silinecek. Uygulama yeniden '
+              'profil oluşturma ekranıyla açılacak.',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 20),
+            BigButton(
+              label: 'Vazgeç',
+              icon: Icons.arrow_back_rounded,
+              variant: BigButtonVariant.primary,
+              expand: true,
+              compact: true,
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            const SizedBox(height: 12),
+            BigButton(
+              label: 'Evet, sıfırla',
+              icon: Icons.restart_alt_rounded,
+              variant: BigButtonVariant.danger,
+              expand: true,
+              compact: true,
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+        actionsPadding: EdgeInsets.zero,
+        actions: const [],
       ),
     );
     if (ok != true) return;
     await ref.read(profileRepositoryProvider).clear();
-    // The router watches patientProfileProvider and redirects to
-    // /setup automatically when the row disappears.
   }
 }
