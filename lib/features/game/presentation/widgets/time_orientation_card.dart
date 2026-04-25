@@ -493,10 +493,10 @@ class _FilledScenePreview extends StatelessWidget {
     final item = variant.items.firstWhere(
       (i) => !i.distractor && i.acceptedSlotId == slot.id,
       orElse: () => const SceneItem(
-        id: ,
-        assetPath: ,
-        audioLabelPath: ,
-        labelTr: ,
+        id: '',
+        assetPath: '',
+        audioLabelPath: '',
+        labelTr: '',
       ),
     );
     if (item.id.isEmpty) return const SizedBox.shrink();
