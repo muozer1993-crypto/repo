@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/audio/audio_service.dart';
 import '../../../core/storage/isar_db.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/time/clock_provider.dart';
 import '../../../core/time/time_window.dart';
 import '../../../l10n/strings_tr.dart';
@@ -476,7 +477,7 @@ class _FarewellPhase extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.waving_hand_rounded,
+              Icon(Icons.waving_hand_rounded,
                   size: 96, color: AppColors.primary),
               const SizedBox(height: 32),
               AutoSizeText(
@@ -491,7 +492,7 @@ class _FarewellPhase extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'İyi günler — sonra görüşmek üzere.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 18, color: AppColors.textSecondary),
