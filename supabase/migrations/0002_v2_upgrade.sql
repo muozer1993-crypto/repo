@@ -87,10 +87,15 @@ create index if not exists missed_slots_profile_missed_idx
 alter table bonus_plays  enable row level security;
 alter table missed_slots enable row level security;
 
-create policy if not exists "device_own_rows" on bonus_plays
+-- Postgres has no `CREATE POLICY IF NOT EXISTS`; mirror the v1
+-- migration's drop-then-create pattern so re-running the migration
+-- on a partially-applied DB stays idempotent.
+drop policy if exists "device_own_bonus_plays" on bonus_plays;
+create policy "device_own_bonus_plays" on bonus_plays
   for all using (profile_id::text = auth.uid()::text)
   with check (profile_id::text = auth.uid()::text);
 
-create policy if not exists "device_own_rows" on missed_slots
+drop policy if exists "device_own_missed_slots" on missed_slots;
+create policy "device_own_missed_slots" on missed_slots
   for all using (profile_id::text = auth.uid()::text)
   with check (profile_id::text = auth.uid()::text);
