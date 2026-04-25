@@ -29,7 +29,7 @@ site_url = "http://localhost:3000"
 enable_signup = false
 enable_confirmations = false
 
-[functions]
+[functions.send-weekly-report]
 enabled = true
 verify_jwt = false
 
