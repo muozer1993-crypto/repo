@@ -10,17 +10,19 @@ import 'flying_item_overlay.dart';
 import 'scene_item_tile.dart';
 import 'scene_slot.dart';
 
-/// Grid-based scene layout.
+/// v2 — Game-1 board.
 ///
-/// The JSON-positioned scene board required a photographic background
-/// for the slot coordinates to make sense. While illustration assets
-/// are still being produced we render slots and tray tiles as two
-/// equal-width rows — a visual model that reads as
-/// "match the bottom items to the top boxes" without needing any
-/// image assets.
+/// Top half is a "scene area" rendering the scene's [Scene.backgroundAsset]
+/// (e.g. assets/images/scenes/sabah/masa_bg.png) with the slots
+/// positioned absolutely on top of it via each [SceneSlot.relativeRect].
+/// When the asset is missing the area falls back to a stylised
+/// container (rounded corners, warm beige) so the layout is still
+/// sensible during dev — patients/caregivers can drop in real PNGs
+/// later without touching code.
 ///
-/// When background + item images land later the grid stays; the
-/// slot/tile contents switch from text-fallback to imagery.
+/// Bottom half is a tray of tappable items. Tap → fly-to-slot
+/// animation (handled by FlyingItemOverlay), errorless feedback for
+/// distractor / wrong-sequence taps (handled by SceneItemTile.wobble).
 class SceneBoard extends ConsumerStatefulWidget {
   const SceneBoard({super.key});
 
@@ -56,36 +58,29 @@ class _SceneBoardState extends ConsumerState<SceneBoard> {
         ),
         Positioned.fill(
           child: Padding(
-            // Top 96 leaves room for the labeled Çık/Dinle buttons and
-            // the instruction banner sitting between them (both owned
-            // by ScenePlayerScreen's stack).
+            // Top 96 leaves room for the labeled Çık/Dinle buttons +
+            // instruction banner that ScenePlayerScreen overlays.
             padding: const EdgeInsets.fromLTRB(12, 96, 12, 12),
-            child: LayoutBuilder(
-              builder: (context, cons) {
-                return Column(
-                  children: [
-                    _SectionHeader(
-                      text: 'Eşyaları doğru yerlere koy',
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(height: 6),
-                    Expanded(
-                      flex: 5,
-                      child: _slotRow(state),
-                    ),
-                    const SizedBox(height: 10),
-                    _SectionHeader(
-                      text: 'Eşyalar — dokunduğun yukarı uçar',
-                      color: AppColors.textSecondary,
-                    ),
-                    const SizedBox(height: 6),
-                    Expanded(
-                      flex: 5,
-                      child: _trayRow(state),
-                    ),
-                  ],
-                );
-              },
+            child: Column(
+              children: [
+                // Top half — table/scene area with positioned slots.
+                Expanded(
+                  flex: 6,
+                  child: _SceneArea(
+                    state: state,
+                    slotKeys: _slotKeys,
+                    itemForSlot: _itemForSlot,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SectionHeader(text: 'Yemeklere dokun'),
+                const SizedBox(height: 6),
+                // Bottom half — tray of items.
+                Expanded(
+                  flex: 4,
+                  child: _trayRow(state),
+                ),
+              ],
             ),
           ),
         ),
@@ -94,37 +89,8 @@ class _SceneBoardState extends ConsumerState<SceneBoard> {
     );
   }
 
-  Widget _slotRow(SceneState state) {
-    return LayoutBuilder(
-      builder: (context, cons) {
-        return Row(
-          children: state.scene.slots.map((slot) {
-            _slotKeys.putIfAbsent(slot.id, GlobalKey.new);
-            final filledItem = _itemForSlot(state, slot.id);
-            return Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: KeyedSubtree(
-                  key: _slotKeys[slot.id],
-                  child: SceneSlotWidget(
-                    slot: slot,
-                    filled: filledItem != null,
-                    filledAssetPath: filledItem?.assetPath,
-                    filledLabel: filledItem?.labelTr,
-                  ),
-                ),
-              ),
-            );
-          }).toList(growable: false),
-        );
-      },
-    );
-  }
-
   Widget _trayRow(SceneState state) {
     final items = state.variant.items;
-    // ≤5 items fit in a single equal-width row. More items split
-    // into two rows so nothing shrinks below a legible tile width.
     final twoRows = items.length > 5;
     if (!twoRows) {
       return Row(
@@ -243,11 +209,100 @@ class _SceneBoardState extends ConsumerState<SceneBoard> {
   }
 }
 
+/// v2 — table/scene area. Renders the scene's backgroundAsset PNG
+/// behind the slots; falls back to a warm rounded "table" container
+/// when the asset is missing. Slots are positioned via their
+/// [SceneSlot.relativeRect] (0..1 unit space) scaled to the actual
+/// area dimensions.
+class _SceneArea extends StatelessWidget {
+  const _SceneArea({
+    required this.state,
+    required this.slotKeys,
+    required this.itemForSlot,
+  });
+
+  final SceneState state;
+  final Map<String, GlobalKey> slotKeys;
+  final SceneItem? Function(SceneState, String) itemForSlot;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        return Stack(
+          children: [
+            // Background — scene-specific PNG with a stylised fallback.
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE9D9B7), // warm wood-table beige
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Image.asset(
+                  state.scene.backgroundAsset,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.expand(),
+                ),
+              ),
+            ),
+            // Slots positioned via relativeRect.
+            for (final slot in state.scene.slots)
+              Positioned(
+                left: slot.relativeRect.left * c.maxWidth,
+                top: slot.relativeRect.top * c.maxHeight,
+                width: slot.relativeRect.width * c.maxWidth,
+                height: slot.relativeRect.height * c.maxHeight,
+                child: KeyedSubtree(
+                  key: slotKeys.putIfAbsent(slot.id, GlobalKey.new),
+                  child: _BuildSlot(
+                    slot: slot,
+                    state: state,
+                    itemForSlot: itemForSlot,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _BuildSlot extends StatelessWidget {
+  const _BuildSlot({
+    required this.slot,
+    required this.state,
+    required this.itemForSlot,
+  });
+
+  final SceneSlot slot;
+  final SceneState state;
+  final SceneItem? Function(SceneState, String) itemForSlot;
+
+  @override
+  Widget build(BuildContext context) {
+    final filledItem = itemForSlot(state, slot.id);
+    return SceneSlotWidget(
+      slot: slot,
+      filled: filledItem != null,
+      filledAssetPath: filledItem?.assetPath,
+      filledLabel: filledItem?.labelTr,
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.text, required this.color});
+  const _SectionHeader({required this.text});
 
   final String text;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -257,9 +312,9 @@ class _SectionHeader extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Text(
           text,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 16,
-            color: color,
+            color: AppColors.textSecondary,
             fontWeight: FontWeight.w600,
           ),
         ),

@@ -148,48 +148,62 @@ class _QuantityCountingWidgetState
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            children: [
-              AutoSizeText(
-                StringsTr.game2QuantityCountingTitle,
-                style: Theme.of(context).textTheme.displaySmall,
-                maxLines: 1,
-                minFontSize: 24,
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final tight = c.maxHeight < 480;
+            return SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: tight ? 12 : 24,
               ),
-              const SizedBox(height: 8),
-              AutoSizeText(
-                game2.instructionTr,
-                style: Theme.of(context).textTheme.bodyLarge,
-                maxLines: 3,
-                minFontSize: 18,
-              ),
-              const SizedBox(height: 24),
-              Expanded(
-                flex: 3,
-                child: _CountDisplay(item: _item, count: _count),
-              ),
-              const SizedBox(height: 24),
-              Expanded(
-                flex: 2,
-                child: Wrap(
-                  spacing: 24,
-                  runSpacing: 16,
-                  alignment: WrapAlignment.center,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: c.maxHeight - 24),
+                child: Column(
                   children: [
-                    for (final opt in _options)
-                      _NumberButton(
-                        value: opt,
-                        wobbling: _wobbleOption == opt,
-                        glowing: _glowOption == opt,
-                        onTap: () => _onTap(opt),
-                      ),
+                    AutoSizeText(
+                      StringsTr.game2QuantityCountingTitle,
+                      style: Theme.of(context).textTheme.displaySmall,
+                      maxLines: 1,
+                      minFontSize: 20,
+                      wrapWords: false,
+                    ),
+                    const SizedBox(height: 6),
+                    AutoSizeText(
+                      game2.instructionTr,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                      maxLines: 3,
+                      minFontSize: 14,
+                      wrapWords: false,
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: tight ? 12 : 20),
+                    _CountDisplay(
+                      item: _item,
+                      count: _count,
+                      tight: tight,
+                    ),
+                    SizedBox(height: tight ? 16 : 24),
+                    Wrap(
+                      spacing: tight ? 12 : 24,
+                      runSpacing: 12,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        for (final opt in _options)
+                          _NumberButton(
+                            value: opt,
+                            wobbling: _wobbleOption == opt,
+                            glowing: _glowOption == opt,
+                            onTap: () => _onTap(opt),
+                            tight: tight,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -197,35 +211,42 @@ class _QuantityCountingWidgetState
 }
 
 class _CountDisplay extends StatelessWidget {
-  const _CountDisplay({required this.item, required this.count});
+  const _CountDisplay({
+    required this.item,
+    required this.count,
+    required this.tight,
+  });
   final ItemPoolEntry item;
   final int count;
+  final bool tight;
 
   @override
   Widget build(BuildContext context) {
+    final tile = tight ? 64.0 : 96.0;
     return Center(
       child: Wrap(
-        spacing: 16,
-        runSpacing: 16,
+        spacing: 12,
+        runSpacing: 12,
         alignment: WrapAlignment.center,
         children: [
           for (int i = 0; i < count; i++)
             Container(
-              width: 96,
-              height: 96,
+              width: tile,
+              height: tile,
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.slotOutline, width: 2),
               ),
               alignment: Alignment.center,
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(6),
               child: AutoSizeText(
                 item.labelTr,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
                 maxLines: 2,
-                minFontSize: 12,
+                minFontSize: 10,
+                wrapWords: false,
               ),
             ),
         ],
@@ -240,12 +261,14 @@ class _NumberButton extends StatefulWidget {
     required this.wobbling,
     required this.glowing,
     required this.onTap,
+    required this.tight,
   });
 
   final int value;
   final bool wobbling;
   final bool glowing;
   final VoidCallback onTap;
+  final bool tight;
 
   @override
   State<_NumberButton> createState() => _NumberButtonState();
@@ -278,6 +301,7 @@ class _NumberButtonState extends State<_NumberButton>
 
   @override
   Widget build(BuildContext context) {
+    final size = widget.tight ? 80.0 : 120.0;
     return GestureDetector(
       onTap: widget.glowing ? null : widget.onTap,
       child: AnimatedBuilder(
@@ -287,8 +311,8 @@ class _NumberButtonState extends State<_NumberButton>
           return Transform.translate(offset: Offset(dx, 0), child: child);
         },
         child: Container(
-          width: 120,
-          height: 120,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             color: widget.glowing
                 ? AppColors.acceptGlow.withOpacity(0.5)
@@ -299,10 +323,19 @@ class _NumberButtonState extends State<_NumberButton>
           alignment: Alignment.center,
           child: Text(
             '${widget.value}',
-            style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
-                ),
+            style: (widget.tight
+                    ? Theme.of(context).textTheme.headlineLarge
+                    : Theme.of(context).textTheme.displayLarge)
+                ?.copyWith(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
           ),
         ),
       ),

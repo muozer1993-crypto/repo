@@ -154,43 +154,56 @@ class _PlateMatchingWidgetState extends ConsumerState<PlateMatchingWidget> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            children: [
-              AutoSizeText(
-                StringsTr.game2PlateMatchingTitle,
-                style: Theme.of(context).textTheme.displaySmall,
-                maxLines: 1,
-                minFontSize: 24,
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final tight = c.maxHeight < 480;
+            return SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: tight ? 12 : 24,
               ),
-              const SizedBox(height: 8),
-              AutoSizeText(
-                game2.instructionTr,
-                style: Theme.of(context).textTheme.bodyLarge,
-                maxLines: 3,
-                minFontSize: 18,
-              ),
-              const SizedBox(height: 32),
-              Expanded(
-                flex: 3,
-                child: _PlateSilhouette(
-                  label: _correctItem.labelTr,
-                  filled: _glowItemId == _correctItem.id,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: c.maxHeight - 24),
+                child: Column(
+                  children: [
+                    AutoSizeText(
+                      StringsTr.game2PlateMatchingTitle,
+                      style: Theme.of(context).textTheme.displaySmall,
+                      maxLines: 1,
+                      minFontSize: 18,
+                      wrapWords: false,
+                    ),
+                    const SizedBox(height: 6),
+                    AutoSizeText(
+                      game2.instructionTr,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                      maxLines: 3,
+                      minFontSize: 14,
+                      wrapWords: false,
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: tight ? 16 : 24),
+                    SizedBox(
+                      height: tight ? 160 : 240,
+                      child: _PlateSilhouette(
+                        label: _correctItem.labelTr,
+                        filled: _glowItemId == _correctItem.id,
+                      ),
+                    ),
+                    SizedBox(height: tight ? 12 : 16),
+                    _Tray(
+                      items: _trayItems,
+                      wobbleId: _wobbleItemId,
+                      glowId: _glowItemId,
+                      onTap: _onTap,
+                      tight: tight,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
-              Expanded(
-                flex: 2,
-                child: _Tray(
-                  items: _trayItems,
-                  wobbleId: _wobbleItemId,
-                  glowId: _glowItemId,
-                  onTap: _onTap,
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -243,19 +256,21 @@ class _Tray extends StatelessWidget {
     required this.wobbleId,
     required this.glowId,
     required this.onTap,
+    this.tight = false,
   });
 
   final List<ItemPoolEntry> items;
   final String? wobbleId;
   final String? glowId;
   final ValueChanged<ItemPoolEntry> onTap;
+  final bool tight;
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Wrap(
-        spacing: 24,
-        runSpacing: 16,
+        spacing: tight ? 12 : 24,
+        runSpacing: 12,
         alignment: WrapAlignment.center,
         children: [
           for (final item in items)
@@ -264,6 +279,7 @@ class _Tray extends StatelessWidget {
               wobbling: wobbleId == item.id,
               glowing: glowId == item.id,
               onTap: () => onTap(item),
+              tight: tight,
             ),
         ],
       ),
@@ -277,12 +293,14 @@ class _TrayTile extends StatefulWidget {
     required this.wobbling,
     required this.glowing,
     required this.onTap,
+    this.tight = false,
   });
 
   final ItemPoolEntry item;
   final bool wobbling;
   final bool glowing;
   final VoidCallback onTap;
+  final bool tight;
 
   @override
   State<_TrayTile> createState() => _TrayTileState();
@@ -329,8 +347,8 @@ class _TrayTileState extends State<_TrayTile>
           );
         },
         child: Container(
-          width: 128,
-          height: 128,
+          width: widget.tight ? 96 : 128,
+          height: widget.tight ? 96 : 128,
           decoration: BoxDecoration(
             color: widget.glowing
                 ? AppColors.acceptGlow.withOpacity(0.4)

@@ -17,15 +17,17 @@ import '../../../domain/scene.dart';
 
 /// v2 Game-2 type 2 — "Sırayı Düzene Koy".
 ///
-/// Four cards (all targets from itemPool) must be tapped in the
-/// correct order — e.g. lunch-sofra = çorba → ana yemek → salata → su.
-/// Out-of-order taps wobble; the card stays in place. Correct taps
-/// advance the sequence counter with a soft glow.
+/// Layout:
+///   * LEFT — shuffled tray of the four target items (mix).
+///   * RIGHT — 4 numbered ordered slots ("1, 2, 3, 4").
+/// Patient taps an item; if it's the next in the canonical sequence
+/// (defined by the order of the first 4 itemPool targets), it flies
+/// from the tray into the corresponding numbered slot. If not in
+/// sequence, the tray tile wobbles silently — errorless.
 ///
-/// Completion: all four cards tapped in order. Since the order is
-/// scene-dependent (itemPool order implies canonical sequence), the
-/// first four targets in the pool drive the expected order. Future
-/// revisions may allow multiple valid orders, but v2 keeps it single.
+/// In landscape both halves stretch to fill height. In portrait the
+/// layout stacks vertically: tray on top, ordered slots below, so the
+/// fly-from-tray-to-slot motion is still visible without overflow.
 class SequenceOrderingWidget extends ConsumerStatefulWidget {
   const SequenceOrderingWidget({super.key});
 
@@ -39,14 +41,20 @@ class _SequenceOrderingWidgetState
   late final DateTime _sessionStart;
   DateTime? _lastTapAt;
   late final List<ItemPoolEntry> _orderedTargets;
-  late final List<ItemPoolEntry> _displayItems;
+  late final List<ItemPoolEntry> _trayItems;
 
   int _errorCount = 0;
   int _sequenceCursor = 0;
   String? _wobbleItemId;
+  String? _flyingItemId;
   final Set<String> _placedIds = {};
   final List<PlacementEvent> _placements = [];
   bool _emitted = false;
+
+  // Keys for fly animation start/end positions.
+  final Map<String, GlobalKey> _trayKeys = {};
+  final Map<int, GlobalKey> _slotKeys = {};
+  final List<_FlyState> _inFlight = [];
 
   @override
   void initState() {
@@ -56,7 +64,8 @@ class _SequenceOrderingWidgetState
     final targets =
         session.scene.itemPool.where((e) => e.isTarget).take(4).toList();
     _orderedTargets = List.unmodifiable(targets);
-    _displayItems = List.of(targets)..shuffle(Random(session.sessionId.hashCode));
+    _trayItems = List.of(targets)
+      ..shuffle(Random(session.sessionId.hashCode));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(audioServiceProvider).playInstruction(
@@ -70,7 +79,8 @@ class _SequenceOrderingWidgetState
     if (_placedIds.contains(entry.id)) return;
 
     final now = ref.read(clockProvider)();
-    final expectedId = _orderedTargets[_sequenceCursor].id;
+    final expectedIndex = _sequenceCursor;
+    final expectedId = _orderedTargets[expectedIndex].id;
     final correct = entry.id == expectedId;
 
     final session = ref.read(gameSessionControllerProvider);
@@ -91,7 +101,7 @@ class _SequenceOrderingWidgetState
         sessionStart: _sessionStart,
         lastTapAt: _lastTapAt,
         now: now,
-        itemCountOnScreen: _displayItems.length,
+        itemCountOnScreen: _trayItems.length,
       ),
     );
     _lastTapAt = now;
@@ -99,13 +109,14 @@ class _SequenceOrderingWidgetState
     if (correct) {
       ref.read(audioServiceProvider).playCorrectSoft();
       ref.read(hapticsServiceProvider).light();
+      _startFlyTo(entry, expectedIndex);
       setState(() {
         _placedIds.add(entry.id);
         _sequenceCursor += 1;
       });
       if (_sequenceCursor >= _orderedTargets.length) {
         _emitted = true;
-        Future.delayed(const Duration(milliseconds: 400), _emitResult);
+        Future.delayed(const Duration(milliseconds: 700), _emitResult);
       }
     } else {
       setState(() {
@@ -122,6 +133,35 @@ class _SequenceOrderingWidgetState
         setState(() => _wobbleItemId = null);
       });
     }
+  }
+
+  void _startFlyTo(ItemPoolEntry entry, int slotIndex) {
+    final trayBox = _trayKeys[entry.id]?.currentContext?.findRenderObject()
+        as RenderBox?;
+    final slotBox = _slotKeys[slotIndex]?.currentContext?.findRenderObject()
+        as RenderBox?;
+    if (trayBox == null || slotBox == null) return;
+    final start = trayBox.localToGlobal(Offset.zero);
+    final end = slotBox.localToGlobal(Offset.zero);
+    final size = trayBox.size;
+    final fly = _FlyState(
+      key: ValueKey('fly_${entry.id}'),
+      entry: entry,
+      start: start,
+      end: end,
+      size: size,
+    );
+    setState(() {
+      _flyingItemId = entry.id;
+      _inFlight.add(fly);
+    });
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (!mounted) return;
+      setState(() {
+        _inFlight.remove(fly);
+        if (_flyingItemId == entry.id) _flyingItemId = null;
+      });
+    });
   }
 
   void _emitResult() {
@@ -142,109 +182,143 @@ class _SequenceOrderingWidgetState
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            children: [
-              AutoSizeText(
-                StringsTr.game2SequenceOrderingTitle,
-                style: Theme.of(context).textTheme.displaySmall,
-                maxLines: 1,
-                minFontSize: 24,
-              ),
-              const SizedBox(height: 8),
-              AutoSizeText(
-                game2.instructionTr,
-                style: Theme.of(context).textTheme.bodyLarge,
-                maxLines: 3,
-                minFontSize: 18,
-              ),
-              const SizedBox(height: 24),
-              _ProgressBar(
-                total: _orderedTargets.length,
-                placed: _sequenceCursor,
-              ),
-              const SizedBox(height: 24),
-              Expanded(
-                child: Center(
-                  child: Wrap(
-                    spacing: 24,
-                    runSpacing: 16,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      for (final item in _displayItems)
-                        _SequenceCard(
-                          item: item,
-                          placed: _placedIds.contains(item.id),
-                          wobbling: _wobbleItemId == item.id,
-                          orderIndex: _orderIndexOf(item),
-                          onTap: () => _onTap(item),
-                        ),
-                    ],
+        child: Stack(
+          children: [
+            LayoutBuilder(
+              builder: (context, c) {
+                final tight = c.maxHeight < 480;
+                return SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: tight ? 8 : 20,
                   ),
-                ),
-              ),
-            ],
-          ),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: c.maxHeight - 16),
+                    child: Column(
+                      children: [
+                        AutoSizeText(
+                          StringsTr.game2SequenceOrderingTitle,
+                          style: Theme.of(context).textTheme.displaySmall,
+                          maxLines: 1,
+                          minFontSize: 18,
+                          wrapWords: false,
+                        ),
+                        const SizedBox(height: 4),
+                        AutoSizeText(
+                          game2.instructionTr,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                          maxLines: 3,
+                          minFontSize: 14,
+                          wrapWords: false,
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: tight ? 12 : 20),
+                        SizedBox(
+                          height: tight ? 220 : 320,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: _TrayColumn(
+                                  items: _trayItems,
+                                  trayKeys: _trayKeys,
+                                  placedIds: _placedIds,
+                                  flyingItemId: _flyingItemId,
+                                  wobbleId: _wobbleItemId,
+                                  onTap: _onTap,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _OrderColumn(
+                                  ordered: _orderedTargets,
+                                  slotKeys: _slotKeys,
+                                  placedIds: _placedIds,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            for (final f in _inFlight)
+              _FlyingItem(state: f),
+          ],
         ),
       ),
     );
   }
-
-  int? _orderIndexOf(ItemPoolEntry item) {
-    if (!_placedIds.contains(item.id)) return null;
-    final idx = _orderedTargets.indexWhere((e) => e.id == item.id);
-    return idx < 0 ? null : idx + 1;
-  }
 }
 
-class _ProgressBar extends StatelessWidget {
-  const _ProgressBar({required this.total, required this.placed});
-  final int total;
-  final int placed;
+// =========================================================================
+// Tray column — shuffled items on the left.
+// =========================================================================
+class _TrayColumn extends StatelessWidget {
+  const _TrayColumn({
+    required this.items,
+    required this.trayKeys,
+    required this.placedIds,
+    required this.flyingItemId,
+    required this.wobbleId,
+    required this.onTap,
+  });
+
+  final List<ItemPoolEntry> items;
+  final Map<String, GlobalKey> trayKeys;
+  final Set<String> placedIds;
+  final String? flyingItemId;
+  final String? wobbleId;
+  final ValueChanged<ItemPoolEntry> onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
       children: [
-        for (int i = 0; i < total; i++)
-          Container(
-            width: 48,
-            height: 12,
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              color: i < placed
-                  ? AppColors.acceptGlow
-                  : AppColors.slotOutline.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(6),
+        for (final item in items) ...[
+          Expanded(
+            child: KeyedSubtree(
+              key: trayKeys.putIfAbsent(item.id, GlobalKey.new),
+              child: _TrayCard(
+                item: item,
+                placed: placedIds.contains(item.id),
+                wobbling: wobbleId == item.id,
+                hidden: flyingItemId == item.id,
+                onTap: () => onTap(item),
+              ),
             ),
           ),
+          const SizedBox(height: 6),
+        ],
       ],
     );
   }
 }
 
-class _SequenceCard extends StatefulWidget {
-  const _SequenceCard({
+class _TrayCard extends StatefulWidget {
+  const _TrayCard({
     required this.item,
     required this.placed,
     required this.wobbling,
-    required this.orderIndex,
+    required this.hidden,
     required this.onTap,
   });
 
   final ItemPoolEntry item;
   final bool placed;
   final bool wobbling;
-  final int? orderIndex;
+  final bool hidden;
   final VoidCallback onTap;
 
   @override
-  State<_SequenceCard> createState() => _SequenceCardState();
+  State<_TrayCard> createState() => _TrayCardState();
 }
 
-class _SequenceCardState extends State<_SequenceCard>
+class _TrayCardState extends State<_TrayCard>
     with SingleTickerProviderStateMixin {
   late final AnimationController _wobble;
 
@@ -258,7 +332,7 @@ class _SequenceCardState extends State<_SequenceCard>
   }
 
   @override
-  void didUpdateWidget(covariant _SequenceCard old) {
+  void didUpdateWidget(covariant _TrayCard old) {
     super.didUpdateWidget(old);
     if (widget.wobbling && !old.wobbling) _wobble.forward(from: 0);
   }
@@ -271,48 +345,230 @@ class _SequenceCardState extends State<_SequenceCard>
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.placed ? null : widget.onTap,
-      child: AnimatedBuilder(
-        animation: _wobble,
-        builder: (context, child) {
-          final dx = sin(_wobble.value * pi * 4) * 6;
-          return Transform.translate(offset: Offset(dx, 0), child: child);
-        },
-        child: Container(
-          width: 160,
-          height: 140,
-          decoration: BoxDecoration(
-            color: widget.placed
-                ? AppColors.acceptGlow.withOpacity(0.4)
-                : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.primary, width: 2),
-          ),
-          alignment: Alignment.center,
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (widget.orderIndex != null)
-                Text(
-                  '${widget.orderIndex}',
-                  style: Theme.of(context)
-                      .textTheme
-                      .displaySmall
-                      ?.copyWith(color: AppColors.primary),
-                ),
-              AutoSizeText(
-                widget.item.labelTr,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium,
-                maxLines: 2,
-                minFontSize: 14,
-              ),
-            ],
+    if (widget.placed) {
+      return const SizedBox.shrink();
+    }
+    return Opacity(
+      opacity: widget.hidden ? 0 : 1,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _wobble,
+          builder: (context, child) {
+            final dx = sin(_wobble.value * pi * 4) * 6;
+            return Transform.translate(offset: Offset(dx, 0), child: child);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.primary, width: 2),
+            ),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.all(8),
+            child: AutoSizeText(
+              widget.item.labelTr,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              minFontSize: 12,
+              wrapWords: false,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+// =========================================================================
+// Order column — numbered slots on the right.
+// =========================================================================
+class _OrderColumn extends StatelessWidget {
+  const _OrderColumn({
+    required this.ordered,
+    required this.slotKeys,
+    required this.placedIds,
+  });
+
+  final List<ItemPoolEntry> ordered;
+  final Map<int, GlobalKey> slotKeys;
+  final Set<String> placedIds;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (int i = 0; i < ordered.length; i++) ...[
+          Expanded(
+            child: KeyedSubtree(
+              key: slotKeys.putIfAbsent(i, GlobalKey.new),
+              child: _OrderSlot(
+                index: i + 1,
+                item: ordered[i],
+                placed: placedIds.contains(ordered[i].id),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+        ],
+      ],
+    );
+  }
+}
+
+class _OrderSlot extends StatelessWidget {
+  const _OrderSlot({
+    required this.index,
+    required this.item,
+    required this.placed,
+  });
+
+  final int index;
+  final ItemPoolEntry item;
+  final bool placed;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      decoration: BoxDecoration(
+        color: placed
+            ? AppColors.acceptGlow.withOpacity(0.3)
+            : Colors.white.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: placed ? AppColors.acceptGlow : AppColors.slotOutline,
+          width: 2,
+        ),
+      ),
+      padding: const EdgeInsets.all(8),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              '$index',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: AutoSizeText(
+              placed ? item.labelTr : '...',
+              maxLines: 2,
+              minFontSize: 12,
+              wrapWords: false,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: placed ? AppColors.primary : AppColors.textMuted,
+                    fontWeight:
+                        placed ? FontWeight.w600 : FontWeight.w400,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// Flying item overlay — animates from tray position to slot position.
+// =========================================================================
+class _FlyState {
+  _FlyState({
+    required this.key,
+    required this.entry,
+    required this.start,
+    required this.end,
+    required this.size,
+  });
+  final Key key;
+  final ItemPoolEntry entry;
+  final Offset start;
+  final Offset end;
+  final Size size;
+}
+
+class _FlyingItem extends StatefulWidget {
+  const _FlyingItem({required this.state}) : super(key: const ValueKey('fly'));
+  final _FlyState state;
+
+  @override
+  State<_FlyingItem> createState() => _FlyingItemState();
+}
+
+class _FlyingItemState extends State<_FlyingItem>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _t;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..forward();
+    _t = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _t,
+      builder: (context, _) {
+        final s = widget.state;
+        final x = s.start.dx + (s.end.dx - s.start.dx) * _t.value;
+        final y = s.start.dy + (s.end.dy - s.start.dy) * _t.value;
+        return Positioned(
+          left: x,
+          top: y,
+          width: s.size.width,
+          height: s.size.height,
+          child: IgnorePointer(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.primary, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.acceptGlow.withOpacity(0.5),
+                    blurRadius: 16,
+                  ),
+                ],
+              ),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.all(8),
+              child: AutoSizeText(
+                s.entry.labelTr,
+                maxLines: 2,
+                minFontSize: 12,
+                wrapWords: false,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

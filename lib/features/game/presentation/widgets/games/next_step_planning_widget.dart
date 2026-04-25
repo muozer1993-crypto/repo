@@ -138,44 +138,56 @@ class _NextStepPlanningWidgetState
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            children: [
-              AutoSizeText(
-                StringsTr.game2NextStepPlanningTitle,
-                style: Theme.of(context).textTheme.displaySmall,
-                maxLines: 1,
-                minFontSize: 24,
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final tight = c.maxHeight < 480;
+            return SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: tight ? 12 : 24,
               ),
-              const SizedBox(height: 8),
-              AutoSizeText(
-                game2.instructionTr,
-                style: Theme.of(context).textTheme.bodyLarge,
-                maxLines: 3,
-                minFontSize: 18,
-              ),
-              const SizedBox(height: 32),
-              Expanded(
-                child: Center(
-                  child: Wrap(
-                    spacing: 24,
-                    runSpacing: 16,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      for (final action in _actions)
-                        _ActionCard(
-                          item: action,
-                          wobbling: _wobbleId == action.id,
-                          glowing: _glowId == action.id,
-                          onTap: () => _onTap(action),
-                        ),
-                    ],
-                  ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: c.maxHeight - 24),
+                child: Column(
+                  children: [
+                    AutoSizeText(
+                      StringsTr.game2NextStepPlanningTitle,
+                      style: Theme.of(context).textTheme.displaySmall,
+                      maxLines: 1,
+                      minFontSize: 18,
+                      wrapWords: false,
+                    ),
+                    const SizedBox(height: 6),
+                    AutoSizeText(
+                      game2.instructionTr,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                      maxLines: 3,
+                      minFontSize: 14,
+                      wrapWords: false,
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: tight ? 16 : 28),
+                    Wrap(
+                      spacing: tight ? 12 : 24,
+                      runSpacing: 12,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        for (final action in _actions)
+                          _ActionCard(
+                            item: action,
+                            wobbling: _wobbleId == action.id,
+                            glowing: _glowId == action.id,
+                            onTap: () => _onTap(action),
+                            tight: tight,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -188,12 +200,14 @@ class _ActionCard extends StatefulWidget {
     required this.wobbling,
     required this.glowing,
     required this.onTap,
+    this.tight = false,
   });
 
   final ItemPoolEntry item;
   final bool wobbling;
   final bool glowing;
   final VoidCallback onTap;
+  final bool tight;
 
   @override
   State<_ActionCard> createState() => _ActionCardState();
@@ -235,8 +249,8 @@ class _ActionCardState extends State<_ActionCard>
           return Transform.translate(offset: Offset(dx, 0), child: child);
         },
         child: Container(
-          width: 180,
-          height: 180,
+          width: widget.tight ? 130 : 180,
+          height: widget.tight ? 130 : 180,
           decoration: BoxDecoration(
             color: widget.glowing
                 ? AppColors.acceptGlow.withOpacity(0.5)
