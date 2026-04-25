@@ -222,7 +222,7 @@ class _CountDisplay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tile = tight ? 64.0 : 96.0;
+    final tile = tight ? 60.0 : 96.0;
     return Center(
       child: Wrap(
         spacing: 12,
@@ -238,15 +238,20 @@ class _CountDisplay extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.slotOutline, width: 2),
               ),
+              clipBehavior: Clip.hardEdge,
               alignment: Alignment.center,
-              padding: const EdgeInsets.all(6),
-              child: AutoSizeText(
-                item.labelTr,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-                maxLines: 2,
-                minFontSize: 10,
-                wrapWords: false,
+              padding: const EdgeInsets.all(4),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  item.labelTr,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: tight ? 11 : 14,
+                    height: 1.1,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
               ),
             ),
         ],
