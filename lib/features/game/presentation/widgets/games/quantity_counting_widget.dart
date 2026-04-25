@@ -336,9 +336,3 @@ class _NumberButtonState extends State<_NumberButton>
     );
   }
 }
-          ),
-        ),
-      ),
-    );
-  }
-}
