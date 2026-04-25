@@ -89,14 +89,17 @@ class BigButton extends StatelessWidget {
           Flexible(
             child: AutoSizeText(
               label,
-              maxLines: 1,
-              minFontSize: 12,
+              // 2 lines + small minFontSize so Turkish copy like
+              // "Şimdilik yeterli" never ellipsizes to "Şi…" — it
+              // wraps to two lines with shrunk font instead.
+              maxLines: 2,
+              minFontSize: 10,
               wrapWords: false,
-              overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: fontSize,
                 fontWeight: FontWeight.w600,
+                height: 1.1,
               ),
             ),
           ),

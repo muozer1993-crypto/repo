@@ -1,3 +1,4 @@
+import 'dart:io' as io show exit;
 import 'dart:io' show Platform;
 
 import 'package:auto_size_text/auto_size_text.dart';
@@ -37,66 +38,82 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: MediaQuery.of(context).size.height -
-                  MediaQuery.of(context).padding.top -
-                  MediaQuery.of(context).padding.bottom -
-                  24,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // v2 — top bar: window strip in the middle, settings/close
-                // pinned to the corners. Strip stays at the top so the
-                // patient orients to "şu an hangi dilim" before reading the
-                // greeting.
-                Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // v2 — landscape phones (width > height) are tight, so put
+            // settings + close in their own top row and the window
+            // strip on a second row underneath. In portrait we have
+            // room to inline them.
+            final isLandscape = constraints.maxWidth > constraints.maxHeight;
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 24,
+                ),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    LabeledIconButton(
-                      label: 'Ayarlar',
-                      icon: Icons.settings_outlined,
-                      tooltip: StringsTr.settingsTitle,
-                      onTap: () => _openSettings(context),
+                    // Top bar
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        LabeledIconButton(
+                          label: 'Ayarlar',
+                          icon: Icons.settings_outlined,
+                          tooltip: StringsTr.settingsTitle,
+                          onTap: () => _openSettings(context),
+                        ),
+                        if (isLandscape)
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              child: _WindowStatusStrip(current: window),
+                            ),
+                          ),
+                        LabeledIconButton(
+                          label: 'Kapat',
+                          icon: Icons.close_rounded,
+                          tooltip: 'Uygulamayı kapat',
+                          onTap: () => _confirmClose(context),
+                        ),
+                      ],
                     ),
-                    Expanded(
-                      child: _WindowStatusStrip(current: window),
+                    if (!isLandscape) ...[
+                      const SizedBox(height: 16),
+                      _WindowStatusStrip(current: window),
+                    ],
+                    SizedBox(height: isLandscape ? 16 : 32),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 640),
+                      child: AutoSizeText(
+                        _greetingFor(window, profile?.name),
+                        style: t.displayLarge,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        minFontSize: 22,
+                        wrapWords: false,
+                      ),
                     ),
-                    LabeledIconButton(
-                      label: 'Kapat',
-                      icon: Icons.close_rounded,
-                      tooltip: 'Uygulamayı kapat',
-                      onTap: () => _confirmClose(context),
-                    ),
+                    SizedBox(height: isLandscape ? 16 : 32),
+                    if (window == TimeWindow.dinlenme)
+                      _RestState()
+                    else ...[
+                      _StartButton(),
+                      const SizedBox(height: 12),
+                      _PostSessionBonusOffer(window: window),
+                    ],
+                    const SizedBox(height: 24),
                   ],
                 ),
-                const SizedBox(height: 32),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 640),
-                  child: AutoSizeText(
-                    _greetingFor(window, profile?.name),
-                    style: t.displayLarge,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    minFontSize: 24,
-                    wrapWords: false,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                if (window == TimeWindow.dinlenme)
-                  _RestState()
-                else ...[
-                  _StartButton(),
-                  const SizedBox(height: 12),
-                  _PostSessionBonusOffer(window: window),
-                ],
-                const SizedBox(height: 24),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -130,11 +147,14 @@ class HomeScreen extends ConsumerWidget {
       ),
     );
     if (ok != true) return;
-    if (Platform.isAndroid) {
-      SystemNavigator.pop();
+    // SystemNavigator.pop() on some Android OEM ROMs (Xiaomi/Redmi
+    // notably) just minimises the app instead of closing it. Patients
+    // tapped Kapat expecting the app to actually close, so we
+    // hard-exit the process. dart:io exit(0) is fine here because the
+    // user explicitly requested it.
+    if (Platform.isAndroid || Platform.isIOS) {
+      io.exit(0);
     }
-    // iOS intentionally not supported — Apple HIG forbids
-    // programmatic quit; caregivers can swipe the app away.
   }
 
   String _greetingFor(TimeWindow window, String? name) {
@@ -348,9 +368,7 @@ class _PostSessionBonusOffer extends ConsumerWidget {
             );
             context.push('/home/bonus');
           },
-          onDecline: () => ref
-              .read(postSessionBonusAvailableProvider.notifier)
-              .dismissForWindow(window),
+          onDecline: () => dismissBonusForWindow(ref, window),
         );
       },
       loading: () => const SizedBox.shrink(),

@@ -48,68 +48,74 @@ class _TransitionScreenState extends ConsumerState<TransitionScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 64),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 720),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        AutoSizeText(
-                          StringsTr.transitionHeadline,
-                          style: Theme.of(context)
-                              .textTheme
-                              .displaySmall
-                              ?.copyWith(color: AppColors.primary),
-                          maxLines: 2,
-                          minFontSize: 24,
-                        ),
-                        const SizedBox(height: 24),
-                        AutoSizeText(
-                          game2.instructionTr,
-                          style: Theme.of(context).textTheme.bodyLarge,
-                          maxLines: 4,
-                          minFontSize: 18,
-                        ),
-                      ],
-                    ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 32),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: MediaQuery.of(context).size.height -
+                  MediaQuery.of(context).padding.vertical -
+                  64,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 24),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: AutoSizeText(
+                    StringsTr.transitionHeadline,
+                    style: Theme.of(context)
+                        .textTheme
+                        .displaySmall
+                        ?.copyWith(color: AppColors.primary),
+                    maxLines: 3,
+                    minFontSize: 20,
+                    wrapWords: false,
+                    textAlign: TextAlign.center,
                   ),
                 ),
-              ),
-              const SizedBox(height: 32),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: BigButton(
-                      label: StringsTr.transitionSkip,
-                      icon: Icons.pause_rounded,
-                      variant: BigButtonVariant.warning,
-                      onPressed: () => ref
-                          .read(gameSessionControllerProvider.notifier)
-                          .onTransitionSkipGame2(),
-                    ),
+                const SizedBox(height: 24),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: AutoSizeText(
+                    game2.instructionTr,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                    maxLines: 5,
+                    minFontSize: 14,
+                    wrapWords: false,
+                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(width: 16),
-                  Flexible(
-                    child: BigButton(
-                      label: StringsTr.transitionContinue,
-                      icon: Icons.arrow_forward_rounded,
-                      variant: BigButtonVariant.primary,
-                      onPressed: () => ref
-                          .read(gameSessionControllerProvider.notifier)
-                          .onTransitionContinue(),
+                ),
+                const SizedBox(height: 40),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: BigButton(
+                        label: StringsTr.transitionSkip,
+                        icon: Icons.pause_rounded,
+                        variant: BigButtonVariant.warning,
+                        onPressed: () => ref
+                            .read(gameSessionControllerProvider.notifier)
+                            .onTransitionSkipGame2(),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: BigButton(
+                        label: StringsTr.transitionContinue,
+                        icon: Icons.arrow_forward_rounded,
+                        variant: BigButtonVariant.primary,
+                        onPressed: () => ref
+                            .read(gameSessionControllerProvider.notifier)
+                            .onTransitionContinue(),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
         ),
       ),

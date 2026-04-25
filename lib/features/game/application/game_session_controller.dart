@@ -20,6 +20,11 @@ import 'scene_controller.dart';
 ///   orientation → game1 → (optional) game2 → (optional) bonus
 /// GameSessionController advances through these and owns the single
 /// [SessionLog] row that will capture g1 + g2 metrics.
+///
+/// [farewell] is the early-stop terminal: rendered when the patient
+/// hits Çık during a phase or "Şimdilik yeterli" on the transition
+/// screen. Shows a "Görüşürüz" message + Çık button (not the celebratory
+/// CompletionOverlay) and exits the app.
 enum GameSessionPhase {
   orientation,
   game1,
@@ -28,6 +33,7 @@ enum GameSessionPhase {
   completed,
   bonusOffer,
   bonus,
+  farewell,
   done,
 }
 
@@ -189,12 +195,24 @@ class GameSessionController extends StateNotifier<GameSessionState> {
 
   /// Called by the patient skipping Game-2 on the TransitionScreen
   /// (e.g. tired, caregiver wants to finish). Marks game2 as not
-  /// completed and proceeds to completion.
-  void onTransitionSkipGame2() {
+  /// completed and routes to the farewell phase, NOT the celebratory
+  /// completion screen — the patient explicitly chose to stop.
+  Future<void> onTransitionSkipGame2() async {
     state = state.copyWith(
-      phase: GameSessionPhase.completed,
       game2Completed: false,
+      phase: GameSessionPhase.farewell,
     );
+    // Persist what we have so far. _writeAll catches its own errors so
+    // the UI advances even if the device is offline.
+    await _flushSessionRow(exitedEarly: true);
+  }
+
+  /// v2 — fired when the patient hits Çık in any active phase. Flushes
+  /// what's been captured so far and routes to the farewell screen so
+  /// the patient sees a goodbye + an actual Çık button before leaving.
+  Future<void> exitToFarewell() async {
+    state = state.copyWith(phase: GameSessionPhase.farewell);
+    await _flushSessionRow(exitedEarly: true);
   }
 
   // ----- Game-2 -----
@@ -216,7 +234,38 @@ class GameSessionController extends StateNotifier<GameSessionState> {
 
   /// Flush the session row + placements + schedule entry in a single
   /// Isar transaction, then decide whether to offer the bonus.
+  ///
+  /// Critical invariant: the state.copyWith at the end ALWAYS runs
+  /// even if the Isar write throws. Earlier code skipped the state
+  /// update on flush failure, which left the UI stuck on the
+  /// completion screen with a non-functional "Ana ekrana dön" button.
   Future<void> finishAndFlush({required bool exitedEarly}) async {
+    await _flushSessionRow(exitedEarly: exitedEarly);
+
+    // v2 policy: in-session bonus offer is OFF by default. The home
+    // screen's _PostSessionBonusOffer is the single surface for the
+    // 2nd-entry-of-the-day bonus invitation, so completion always
+    // routes home and the home screen decides whether to surface
+    // BonusOfferTile based on Today's snapshot. This makes the
+    // CompletionOverlay's "Ana ekrana dön" button do exactly what it
+    // says — go home — instead of pivoting to a bonus offer screen.
+    final shouldOffer = !exitedEarly &&
+        state.scene.bonusSceneId != null &&
+        state.game1Completed &&
+        (offerBonusDecision != null && offerBonusDecision!(state));
+    state = state.copyWith(
+      phase: shouldOffer
+          ? GameSessionPhase.bonusOffer
+          : GameSessionPhase.done,
+      offerBonus: shouldOffer,
+      bonusSceneId: state.scene.bonusSceneId,
+    );
+  }
+
+  /// Build the session row + placements + schedule entry and try to
+  /// persist them in one writeTxn. Returns whether the write
+  /// succeeded — but callers shouldn't gate UI advancement on it.
+  Future<bool> _flushSessionRow({required bool exitedEarly}) async {
     final now = clock();
     final totalErrors = state.totalErrors;
     final updatedEntry = onCompletion(
@@ -250,19 +299,16 @@ class GameSessionController extends StateNotifier<GameSessionState> {
       ..game2Type = _game2Type == null ? null : game2TypeId(_game2Type!)
       ..itemComboHash = _buildItemComboHash();
 
-    await _writeAll(log, updatedEntry);
-
-    final shouldOffer = !exitedEarly &&
-        state.scene.bonusSceneId != null &&
-        state.game1Completed &&
-        (offerBonusDecision == null ? true : offerBonusDecision!(state));
-    state = state.copyWith(
-      phase: shouldOffer
-          ? GameSessionPhase.bonusOffer
-          : GameSessionPhase.done,
-      offerBonus: shouldOffer,
-      bonusSceneId: state.scene.bonusSceneId,
-    );
+    try {
+      await _writeAll(log, updatedEntry);
+      return true;
+    } catch (e, st) {
+      // Don't crash the UI; the row stays in Isar with syncedAt=null
+      // for next launch. Log to console so devs see the cause.
+      // ignore: avoid_print
+      print('finishAndFlush write failed (continuing): $e\n$st');
+      return false;
+    }
   }
 
   /// Hash of the sceneId + sorted item ids seen in Game-1. Used by

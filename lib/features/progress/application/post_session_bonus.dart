@@ -7,19 +7,24 @@ import '../../game/data/scene_repository.dart';
 import '../../profile/data/profile_repository.dart';
 import 'scheduler_controller.dart';
 
-/// v2 — per-window dismissal flag. Resets implicitly each time the
-/// provider rebuilds (e.g. on day change or manual refresh).
+/// v2 — set of windows the patient explicitly tapped "Hayır,
+/// teşekkürler" on this app session. Resets on app restart so the
+/// next day's offers come back even if the patient declined yesterday.
 final _dismissedBonusWindowsProvider = StateProvider<Set<TimeWindow>>(
   (_) => <TimeWindow>{},
 );
 
-/// Resolves the current bonus offer state by consulting today's Isar
-/// snapshot via [shouldOfferBonus] in scheduler_controller.dart.
+/// FutureProvider that resolves to the bonus scene id we should
+/// surface on the home screen *right now*, or null if no offer is
+/// appropriate.
 ///
-/// Returns the bonusSceneId to offer, or null when no offer should
-/// surface (first entry of the day, bonus already played, no bonus
-/// configured, or the patient dismissed it).
-final _resolvedBonusOfferProvider = FutureProvider<String?>((ref) async {
+/// Driven by [shouldOfferBonus] over today's Isar snapshot. Watching
+/// [clockProvider] makes it auto-rebuild when test clocks tick; the
+/// scene_player_screen explicitly invalidates this provider when
+/// returning to home so a freshly-completed session immediately
+/// surfaces its offer.
+final postSessionBonusAvailableProvider =
+    FutureProvider<String?>((ref) async {
   final profile = ref.watch(patientProfileProvider).value;
   if (profile == null) return null;
 
@@ -45,38 +50,12 @@ final _resolvedBonusOfferProvider = FutureProvider<String?>((ref) async {
   );
 });
 
-/// Controller that wraps the resolved offer + dismissal mutation.
-class PostSessionBonusController
-    extends StateNotifier<AsyncValue<String?>> {
-  PostSessionBonusController(this._ref) : super(const AsyncValue.loading()) {
-    _init();
-  }
-
-  final Ref _ref;
-
-  Future<void> _init() async {
-    final offer = await _ref.watch(_resolvedBonusOfferProvider.future);
-    if (!mounted) return;
-    state = AsyncValue.data(offer);
-  }
-
-  /// Home screen calls this on "Hayır, teşekkürler". Dismissal is
-  /// per-window and resets implicitly when the provider rebuilds for
-  /// a different window (e.g. time of day change).
-  void dismissForWindow(TimeWindow w) {
-    final now = _ref.read(clockProvider)();
-    _ref.read(_dismissedBonusWindowsProvider.notifier).update((prev) {
-      return {...prev, w};
-    });
-    // refresh — the state turns null immediately.
-    state = const AsyncValue.data(null);
-    // Keep the internal use of `now` so the import stays pinned; no-op
-    // in practice but documents the decision point.
-    assert(now.isAfter(DateTime(1970)));
-  }
+/// Caregiver-facing "Hayır, teşekkürler" — adds the window to the
+/// dismissal set and invalidates the resolver so the home screen
+/// re-renders without the offer.
+void dismissBonusForWindow(WidgetRef ref, TimeWindow w) {
+  ref.read(_dismissedBonusWindowsProvider.notifier).update((prev) {
+    return {...prev, w};
+  });
+  ref.invalidate(postSessionBonusAvailableProvider);
 }
-
-final postSessionBonusAvailableProvider = StateNotifierProvider<
-    PostSessionBonusController, AsyncValue<String?>>(
-  (ref) => PostSessionBonusController(ref),
-);

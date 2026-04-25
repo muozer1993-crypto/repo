@@ -1,3 +1,4 @@
+import 'dart:io' as io show exit;
 import 'dart:io' show Platform;
 
 import 'package:auto_size_text/auto_size_text.dart';
@@ -14,6 +15,7 @@ import '../../../core/time/time_window.dart';
 import '../../../l10n/strings_tr.dart';
 import '../../../shared/widgets/big_button.dart';
 import '../../profile/data/profile_repository.dart';
+import '../../progress/application/post_session_bonus.dart';
 import '../../progress/domain/bonus_play_event.dart';
 import '../application/game_session_controller.dart';
 import '../application/scene_controller.dart';
@@ -63,11 +65,16 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
       }
     });
 
-    // Navigate home when the session enters its terminal phase.
+    // Navigate home when the session enters its terminal phase. We
+    // invalidate the post-session bonus provider so the home screen's
+    // BonusOfferTile re-evaluates against the freshly-flushed Today
+    // snapshot — without this, the offer would only appear after a
+    // full app restart.
     ref.listen<GameSessionState>(gameSessionControllerProvider,
         (prev, next) async {
       if (next.phase == GameSessionPhase.done && prev?.phase != next.phase) {
         if (!mounted) return;
+        ref.invalidate(postSessionBonusAvailableProvider);
         context.go('/home');
       }
     });
@@ -104,6 +111,8 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
               .read(gameSessionControllerProvider.notifier)
               .onBonusFinished(),
         );
+      case GameSessionPhase.farewell:
+        return _FarewellPhase(window: session.scene.window);
       case GameSessionPhase.done:
         return const Scaffold(
           body: Center(child: CircularProgressIndicator()),
@@ -187,10 +196,8 @@ class _OrientationPhase extends ConsumerWidget {
   }
 
   void _exitApp(BuildContext context) {
-    if (Platform.isAndroid) {
-      SystemNavigator.pop();
-    } else {
-      context.go('/home');
+    if (Platform.isAndroid || Platform.isIOS) {
+      io.exit(0);
     }
   }
 }
@@ -250,27 +257,16 @@ class _Game1PhaseState extends ConsumerState<_Game1Phase> {
   }
 
   Future<void> _onExitApp() async {
-    // Forward whatever Game-1 has captured + mark exitedEarly.
+    // Forward whatever Game-1 has captured then route to the farewell
+    // phase. The session controller flushes from there. We do NOT call
+    // onGame1Completed because that would push the patient onto the
+    // transition-to-game2 screen — the opposite of what Çık means.
     final sceneCtrl = ref.read(sceneControllerProvider.notifier);
     final sessionCtrl = ref.read(gameSessionControllerProvider.notifier);
     for (final p in sceneCtrl.placements) {
       sessionCtrl.recordGame1Placement(p);
     }
-    sessionCtrl.onGame1Completed(
-      errorCount: sceneCtrl.state.errorCount,
-      completed: false,
-    );
-    try {
-      await sessionCtrl.finishAndFlush(exitedEarly: true);
-    } catch (e, st) {
-      debugPrint('finishAndFlush (exit) failed: $e\n$st');
-    }
-    if (!mounted) return;
-    if (Platform.isAndroid) {
-      SystemNavigator.pop();
-    } else {
-      context.go('/home');
-    }
+    await sessionCtrl.exitToFarewell();
   }
 }
 
@@ -453,6 +449,82 @@ class _InlineBonusHostState extends ConsumerState<_InlineBonusHost> {
         return PairMatchWidget(bonusScene: scene, onFinished: _onFinished);
       case BonusType.freeExplore:
         return FreeExploreWidget(bonusScene: scene, onFinished: _onFinished);
+    }
+  }
+}
+
+/// v2 — early-stop terminal screen. Shown after either:
+///   * the patient hits Çık during a game phase, or
+///   * the patient taps "Şimdilik yeterli" on the transition screen.
+///
+/// Renders a context-aware "Görüşürüz" message (Sabah → "Öğle vakti
+/// görüşürüz", Akşam → "Yarın sabah görüşürüz", etc.) and a single
+/// Çık button that *actually* closes the app (force-exits the
+/// process via dart:io exit(0); SystemNavigator.pop() on some Android
+/// OEM builds just minimises).
+class _FarewellPhase extends StatelessWidget {
+  const _FarewellPhase({required this.window});
+  final TimeWindow window;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.waving_hand_rounded,
+                  size: 96, color: AppColors.primary),
+              const SizedBox(height: 32),
+              AutoSizeText(
+                _farewellTitle(window),
+                style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                      color: AppColors.primaryDark,
+                      fontWeight: FontWeight.w600,
+                    ),
+                maxLines: 2,
+                minFontSize: 22,
+                wrapWords: false,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'İyi günler — sonra görüşmek üzere.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 48),
+              BigButton(
+                label: 'Çık',
+                icon: Icons.logout_rounded,
+                variant: BigButtonVariant.danger,
+                expand: true,
+                onPressed: _hardExit,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _farewellTitle(TimeWindow w) => switch (w) {
+        TimeWindow.sabah => 'Öğle vakti görüşürüz',
+        TimeWindow.oglen => 'İkindi vakti görüşürüz',
+        TimeWindow.ikindi => 'Akşam vakti görüşürüz',
+        TimeWindow.aksam => 'Yarın sabah görüşürüz',
+        TimeWindow.dinlenme => 'İyi geceler',
+      };
+
+  static void _hardExit() {
+    // SystemNavigator.pop() on some Android OEM ROMs only minimises;
+    // io.exit(0) terminates the process for sure. Patients explicitly
+    // tapped Çık so a hard exit matches intent.
+    if (Platform.isAndroid || Platform.isIOS) {
+      io.exit(0);
     }
   }
 }
