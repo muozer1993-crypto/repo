@@ -3,6 +3,13 @@ import 'package:isar/isar.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/storage/isar_db.dart';
+// Importing the domain files pulls in their generated `*.g.dart`
+// extension methods (isar.appOpenEvents, isar.sessionLogs, etc.) that
+// alignProfileIdWithAuth() needs.
+import '../../progress/domain/app_open_event.dart';
+import '../../progress/domain/bonus_play_event.dart';
+import '../../progress/domain/missed_slot_event.dart';
+import '../../progress/domain/session_log.dart';
 import '../domain/patient_profile.dart';
 
 /// CRUD wrapper around the single [PatientProfile] row.

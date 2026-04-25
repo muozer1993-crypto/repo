@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,47 +37,65 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  LabeledIconButton(
-                    label: 'Ayarlar',
-                    icon: Icons.settings_outlined,
-                    tooltip: StringsTr.settingsTitle,
-                    onTap: () => _openSettings(context),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: MediaQuery.of(context).size.height -
+                  MediaQuery.of(context).padding.top -
+                  MediaQuery.of(context).padding.bottom -
+                  24,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // v2 — top bar: window strip in the middle, settings/close
+                // pinned to the corners. Strip stays at the top so the
+                // patient orients to "şu an hangi dilim" before reading the
+                // greeting.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    LabeledIconButton(
+                      label: 'Ayarlar',
+                      icon: Icons.settings_outlined,
+                      tooltip: StringsTr.settingsTitle,
+                      onTap: () => _openSettings(context),
+                    ),
+                    Expanded(
+                      child: _WindowStatusStrip(current: window),
+                    ),
+                    LabeledIconButton(
+                      label: 'Kapat',
+                      icon: Icons.close_rounded,
+                      tooltip: 'Uygulamayı kapat',
+                      onTap: () => _confirmClose(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 32),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 640),
+                  child: AutoSizeText(
+                    _greetingFor(window, profile?.name),
+                    style: t.displayLarge,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    minFontSize: 24,
+                    wrapWords: false,
                   ),
-                  LabeledIconButton(
-                    label: 'Kapat',
-                    icon: Icons.close_rounded,
-                    tooltip: 'Uygulamayı kapat',
-                    onTap: () => _confirmClose(context),
-                  ),
+                ),
+                const SizedBox(height: 32),
+                if (window == TimeWindow.dinlenme)
+                  _RestState()
+                else ...[
+                  _StartButton(),
+                  const SizedBox(height: 12),
+                  _PostSessionBonusOffer(window: window),
                 ],
-              ),
-              const SizedBox(height: 16),
-              _WindowStatusStrip(current: window),
-              const Spacer(),
-              Text(
-                _greetingFor(window, profile?.name),
-                style: t.displayLarge,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              if (window == TimeWindow.dinlenme)
-                _RestState()
-              else ...[
-                _StartButton(),
-                const SizedBox(height: 12),
-                _PostSessionBonusOffer(window: window),
+                const SizedBox(height: 24),
               ],
-              const Spacer(),
-            ],
+            ),
           ),
         ),
       ),
@@ -235,13 +254,15 @@ class _WindowStatusStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         for (final (w, label, icon) in _windows)
-          _WindowPill(
-            label: label,
-            icon: icon,
-            active: w == current,
+          Expanded(
+            child: _WindowPill(
+              label: label,
+              icon: icon,
+              active: w == current,
+            ),
           ),
       ],
     );
@@ -262,15 +283,16 @@ class _WindowPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      margin: const EdgeInsets.symmetric(horizontal: 2),
       decoration: BoxDecoration(
         color: active
             ? AppColors.acceptGlow.withOpacity(0.3)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: active ? AppColors.primary : AppColors.slotOutline,
-          width: 2,
+          width: active ? 2 : 1,
         ),
       ),
       child: Column(
@@ -278,12 +300,16 @@ class _WindowPill extends StatelessWidget {
         children: [
           Icon(icon,
               color: active ? AppColors.primary : AppColors.textMuted,
-              size: 28),
-          const SizedBox(height: 4),
-          Text(
+              size: 22),
+          const SizedBox(height: 2),
+          AutoSizeText(
             label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            maxLines: 1,
+            minFontSize: 9,
+            wrapWords: false,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
                   color: active ? AppColors.primary : AppColors.textMuted,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                 ),
           ),
         ],

@@ -84,27 +84,28 @@ class _TransitionScreenState extends ConsumerState<TransitionScreen> {
               ),
               const SizedBox(height: 32),
               Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Expanded(
-                    child: TextButton(
+                  Flexible(
+                    child: BigButton(
+                      label: StringsTr.transitionSkip,
+                      icon: Icons.pause_rounded,
+                      variant: BigButtonVariant.warning,
                       onPressed: () => ref
                           .read(gameSessionControllerProvider.notifier)
                           .onTransitionSkipGame2(),
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(0, 80),
-                        textStyle:
-                            Theme.of(context).textTheme.titleLarge,
-                      ),
-                      child: const Text(StringsTr.transitionSkip),
                     ),
                   ),
-                  const SizedBox(width: 24),
-                  BigButton(
-                    label: StringsTr.transitionContinue,
-                    icon: Icons.arrow_forward_rounded,
-                    onPressed: () => ref
-                        .read(gameSessionControllerProvider.notifier)
-                        .onTransitionContinue(),
+                  const SizedBox(width: 16),
+                  Flexible(
+                    child: BigButton(
+                      label: StringsTr.transitionContinue,
+                      icon: Icons.arrow_forward_rounded,
+                      variant: BigButtonVariant.primary,
+                      onPressed: () => ref
+                          .read(gameSessionControllerProvider.notifier)
+                          .onTransitionContinue(),
+                    ),
                   ),
                 ],
               ),

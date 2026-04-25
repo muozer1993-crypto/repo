@@ -343,23 +343,23 @@ class _BonusOfferPhase extends StatelessWidget {
               ),
               const SizedBox(height: 48),
               Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Expanded(
-                    child: TextButton(
+                  Flexible(
+                    child: BigButton(
+                      label: StringsTr.bonusOfferDecline,
+                      variant: BigButtonVariant.warning,
                       onPressed: onDecline,
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(0, 80),
-                        textStyle:
-                            Theme.of(context).textTheme.titleLarge,
-                      ),
-                      child: const Text(StringsTr.bonusOfferDecline),
                     ),
                   ),
                   const SizedBox(width: 16),
-                  BigButton(
-                    label: StringsTr.bonusOfferAccept,
-                    icon: Icons.favorite_rounded,
-                    onPressed: onAccept,
+                  Flexible(
+                    child: BigButton(
+                      label: StringsTr.bonusOfferAccept,
+                      icon: Icons.favorite_rounded,
+                      variant: BigButtonVariant.accept,
+                      onPressed: onAccept,
+                    ),
                   ),
                 ],
               ),
