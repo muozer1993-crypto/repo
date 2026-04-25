@@ -1,7 +1,7 @@
 {
   "id": "sabah_kahvalti",
   "titleTr": "Kahvaltı Hazırla",
-  "instructionTr": "Masayı kahvaltıya hazırlayalım. Her şeyi kendi tabağına koy.",
+  "instructionTr": "Kahvaltı için sofra hazırla.",
   "instructionAudioPath": "assets/audio/instructions/sabah_kahvalti.wav",
   "window": "sabah",
   "backgroundAsset": "assets/images/scenes/sabah/masa_bg.png",

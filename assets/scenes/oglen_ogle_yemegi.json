@@ -1,7 +1,7 @@
 {
   "id": "oglen_ogle_yemegi",
   "titleTr": "Öğle Sofrasını Kur",
-  "instructionTr": "Öğle yemeğini sofraya hazırla. Her şeyi kendi yerine koy.",
+  "instructionTr": "Öğle yemeği için sofra hazırla.",
   "instructionAudioPath": "assets/audio/instructions/oglen_ogle_yemegi.wav",
   "window": "oglen",
   "backgroundAsset": "assets/images/scenes/oglen/sofra_bg.png",

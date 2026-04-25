@@ -1,12 +1,10 @@
-import 'dart:io' as io show exit;
-import 'dart:io' show Platform;
-
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/platform/app_exit.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/time/clock_provider.dart';
 import '../../../core/time/time_window.dart';
@@ -147,14 +145,7 @@ class HomeScreen extends ConsumerWidget {
       ),
     );
     if (ok != true) return;
-    // SystemNavigator.pop() on some Android OEM ROMs (Xiaomi/Redmi
-    // notably) just minimises the app instead of closing it. Patients
-    // tapped Kapat expecting the app to actually close, so we
-    // hard-exit the process. dart:io exit(0) is fine here because the
-    // user explicitly requested it.
-    if (Platform.isAndroid || Platform.isIOS) {
-      io.exit(0);
-    }
+    await hardExitApp();
   }
 
   String _greetingFor(TimeWindow window, String? name) {

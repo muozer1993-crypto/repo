@@ -1,4 +1,3 @@
-import 'dart:io' as io show exit;
 import 'dart:io' show Platform;
 
 import 'package:auto_size_text/auto_size_text.dart';
@@ -9,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/audio/audio_service.dart';
+import '../../../core/platform/app_exit.dart';
 import '../../../core/storage/isar_db.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/time/clock_provider.dart';
@@ -197,9 +197,7 @@ class _OrientationPhase extends ConsumerWidget {
   }
 
   void _exitApp(BuildContext context) {
-    if (Platform.isAndroid || Platform.isIOS) {
-      io.exit(0);
-    }
+    hardExitApp();
   }
 }
 
@@ -258,16 +256,25 @@ class _Game1PhaseState extends ConsumerState<_Game1Phase> {
   }
 
   Future<void> _onExitApp() async {
-    // Forward whatever Game-1 has captured then route to the farewell
-    // phase. The session controller flushes from there. We do NOT call
-    // onGame1Completed because that would push the patient onto the
-    // transition-to-game2 screen — the opposite of what Çık means.
+    // Çık during a game phase = direct exit. No farewell screen, no
+    // TransitionScreen flash; flush what's captured then close the
+    // app fully (incl. removing from Recents on Android via the
+    // platform channel).
     final sceneCtrl = ref.read(sceneControllerProvider.notifier);
     final sessionCtrl = ref.read(gameSessionControllerProvider.notifier);
     for (final p in sceneCtrl.placements) {
       sessionCtrl.recordGame1Placement(p);
     }
-    await sessionCtrl.exitToFarewell();
+    sessionCtrl.recordGame1StatsNoTransition(
+      errorCount: sceneCtrl.state.errorCount,
+      completed: false,
+    );
+    try {
+      await sessionCtrl.finishAndFlush(exitedEarly: true);
+    } catch (_) {
+      // best-effort, never blocks the exit.
+    }
+    await hardExitApp();
   }
 }
 
@@ -520,14 +527,7 @@ class _FarewellPhase extends StatelessWidget {
         TimeWindow.dinlenme => 'İyi geceler',
       };
 
-  static void _hardExit() {
-    // SystemNavigator.pop() on some Android OEM ROMs only minimises;
-    // io.exit(0) terminates the process for sure. Patients explicitly
-    // tapped Çık so a hard exit matches intent.
-    if (Platform.isAndroid || Platform.isIOS) {
-      io.exit(0);
-    }
-  }
+  static Future<void> _hardExit() => hardExitApp();
 }
 
 // -- shared -----------------------------------------------------------------

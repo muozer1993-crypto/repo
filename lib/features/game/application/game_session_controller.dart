@@ -181,6 +181,20 @@ class GameSessionController extends StateNotifier<GameSessionState> {
     );
   }
 
+  /// v2 — record Game-1 stats WITHOUT transitioning to the next phase.
+  /// Used by the Çık-during-game-1 path which doesn't want a transient
+  /// TransitionScreen rendered between flush and the hard-exit, and by
+  /// the orientation-phase Çık (where game1 hasn't even started).
+  void recordGame1StatsNoTransition({
+    required int errorCount,
+    required bool completed,
+  }) {
+    state = state.copyWith(
+      game1Errors: errorCount,
+      game1Completed: completed,
+    );
+  }
+
   // ----- Transition -----
 
   /// Called by the patient tapping "Devam" on the TransitionScreen.

@@ -87,32 +87,7 @@ class _TransitionScreenState extends ConsumerState<TransitionScreen> {
                   ),
                 ),
                 const SizedBox(height: 40),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: BigButton(
-                        label: StringsTr.transitionSkip,
-                        icon: Icons.pause_rounded,
-                        variant: BigButtonVariant.warning,
-                        onPressed: () => ref
-                            .read(gameSessionControllerProvider.notifier)
-                            .onTransitionSkipGame2(),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: BigButton(
-                        label: StringsTr.transitionContinue,
-                        icon: Icons.arrow_forward_rounded,
-                        variant: BigButtonVariant.primary,
-                        onPressed: () => ref
-                            .read(gameSessionControllerProvider.notifier)
-                            .onTransitionContinue(),
-                      ),
-                    ),
-                  ],
-                ),
+                _TransitionButtons(ref: ref),
                 const SizedBox(height: 16),
               ],
             ),
@@ -136,6 +111,54 @@ class _FallbackContinue extends ConsumerWidget {
               .onTransitionContinue(),
         ),
       ),
+    );
+  }
+}
+
+/// v2 — orientation-aware button row: side-by-side on tablets/landscape
+/// (room for both icons + labels at full size); stacked on portrait
+/// phones so each button gets the full width and text stays large.
+class _TransitionButtons extends StatelessWidget {
+  const _TransitionButtons({required this.ref});
+  final WidgetRef ref;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isWide = width > 600;
+    final controller =
+        ref.read(gameSessionControllerProvider.notifier);
+    final skip = BigButton(
+      label: StringsTr.transitionSkip,
+      icon: Icons.pause_rounded,
+      variant: BigButtonVariant.warning,
+      expand: !isWide,
+      onPressed: () => controller.onTransitionSkipGame2(),
+    );
+    final cont = BigButton(
+      label: StringsTr.transitionContinue,
+      icon: Icons.arrow_forward_rounded,
+      variant: BigButtonVariant.primary,
+      expand: !isWide,
+      onPressed: () => controller.onTransitionContinue(),
+    );
+    if (isWide) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Expanded(child: skip),
+          const SizedBox(width: 16),
+          Expanded(child: cont),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        cont,
+        const SizedBox(height: 12),
+        skip,
+      ],
     );
   }
 }

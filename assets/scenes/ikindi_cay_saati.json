@@ -1,7 +1,7 @@
 {
   "id": "ikindi_cay_saati",
   "titleTr": "Çay Saatini Hazırla",
-  "instructionTr": "Çay saatini hazırla. Demliği, bardağı, şekerliği ve pastayı yerleştir.",
+  "instructionTr": "Çay saati için sofra hazırla.",
   "instructionAudioPath": "assets/audio/instructions/ikindi_cay_saati.wav",
   "window": "ikindi",
   "backgroundAsset": "assets/images/scenes/ikindi/masa_bg.png",

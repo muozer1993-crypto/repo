@@ -1,7 +1,7 @@
 {
   "id": "aksam_yatak_duzeni",
   "titleTr": "Yatak Başını Düzenle",
-  "instructionTr": "Yatmadan önce komodinini düzenle. Her şeyi yerine yerleştir.",
+  "instructionTr": "Komodini yatış için düzenle.",
   "instructionAudioPath": "assets/audio/instructions/aksam_yatak_duzeni.wav",
   "window": "aksam",
   "backgroundAsset": "assets/images/scenes/aksam/komodin_bg.png",
