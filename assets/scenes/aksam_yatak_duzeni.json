@@ -9,10 +9,10 @@
     {
       "id": "slot_gozluk",
       "rect": [
-        0.12,
-        0.55,
-        0.2,
-        0.25
+        0.04,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "okuma_gozlugu",
       "labelTr": "gözlük yeri",
@@ -21,10 +21,10 @@
     {
       "id": "slot_lamba",
       "rect": [
-        0.35,
-        0.55,
-        0.2,
-        0.25
+        0.28,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "lamba",
       "labelTr": "lamba yeri",
@@ -33,10 +33,10 @@
     {
       "id": "slot_su",
       "rect": [
-        0.58,
-        0.55,
-        0.2,
-        0.25
+        0.52,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "bardak",
       "labelTr": "bardak yeri",
@@ -45,10 +45,10 @@
     {
       "id": "slot_kitap",
       "rect": [
-        0.81,
-        0.55,
-        0.15,
-        0.25
+        0.76,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "kitap",
       "labelTr": "kitap yeri",

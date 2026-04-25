@@ -9,10 +9,10 @@
     {
       "id": "slot_corba",
       "rect": [
-        0.12,
-        0.55,
-        0.2,
-        0.25
+        0.04,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "corba",
       "labelTr": "çorba kasesi",
@@ -21,10 +21,10 @@
     {
       "id": "slot_tavuk",
       "rect": [
-        0.35,
-        0.55,
-        0.2,
-        0.25
+        0.28,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "tavuk",
       "labelTr": "ana tabak",
@@ -33,10 +33,10 @@
     {
       "id": "slot_salata",
       "rect": [
-        0.58,
-        0.55,
-        0.2,
-        0.25
+        0.52,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "salata",
       "labelTr": "salata tabağı",
@@ -45,10 +45,10 @@
     {
       "id": "slot_su",
       "rect": [
-        0.81,
-        0.55,
-        0.15,
-        0.25
+        0.76,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "su",
       "labelTr": "su bardağı",

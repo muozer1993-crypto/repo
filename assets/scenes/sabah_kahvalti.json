@@ -9,10 +9,10 @@
     {
       "id": "slot_peynir",
       "rect": [
-        0.12,
-        0.55,
-        0.2,
-        0.25
+        0.04,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "peynir",
       "labelTr": "peynir tabağı",
@@ -21,10 +21,10 @@
     {
       "id": "slot_zeytin",
       "rect": [
-        0.35,
-        0.55,
-        0.2,
-        0.25
+        0.28,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "zeytin",
       "labelTr": "zeytinlik",
@@ -33,10 +33,10 @@
     {
       "id": "slot_cay",
       "rect": [
-        0.58,
-        0.55,
-        0.2,
-        0.25
+        0.52,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "cay",
       "labelTr": "çay bardağı",
@@ -45,10 +45,10 @@
     {
       "id": "slot_ekmek",
       "rect": [
-        0.81,
-        0.55,
-        0.15,
-        0.25
+        0.76,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "ekmek",
       "labelTr": "ekmek sepeti",

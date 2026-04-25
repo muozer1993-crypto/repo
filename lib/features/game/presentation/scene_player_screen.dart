@@ -59,10 +59,18 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
   @override
   Widget build(BuildContext context) {
     // Ref.listen must live inside build.
+    //
+    // v2 — when the patient places the LAST item, hold the scene on
+    // screen for 2.5s before transitioning. The fly animation alone
+    // is ~600ms; after it lands we want a short pause so the patient
+    // sees the completed table before "Aferin harikasın" takes over.
     ref.listen<SceneState>(sceneControllerProvider, (prev, next) {
       if (!_game1Completed && next.isComplete) {
         _game1Completed = true;
-        _handOffGame1();
+        Future.delayed(const Duration(milliseconds: 2500), () {
+          if (!mounted) return;
+          _handOffGame1();
+        });
       }
     });
 
@@ -182,7 +190,8 @@ class _OrientationPhase extends ConsumerWidget {
               now: now,
               expected: args.scene.window,
               difficultyLevel: args.variant.level,
-              sceneIconAsset: args.scene.backgroundAsset,
+              scene: args.scene,
+              variant: args.variant,
               onAnswered: ({required correct, required responseMs}) {
                 ref
                     .read(gameSessionControllerProvider.notifier)

@@ -9,10 +9,10 @@
     {
       "id": "slot_demlik",
       "rect": [
-        0.12,
-        0.55,
-        0.2,
-        0.25
+        0.04,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "demlik",
       "labelTr": "demlik yeri",
@@ -21,10 +21,10 @@
     {
       "id": "slot_bardak",
       "rect": [
-        0.35,
-        0.55,
-        0.2,
-        0.25
+        0.28,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "cay_bardagi",
       "labelTr": "bardak tabağı",
@@ -33,10 +33,10 @@
     {
       "id": "slot_sekerlik",
       "rect": [
-        0.58,
-        0.55,
-        0.2,
-        0.25
+        0.52,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "sekerlik",
       "labelTr": "şekerlik yeri",
@@ -45,10 +45,10 @@
     {
       "id": "slot_pasta",
       "rect": [
-        0.81,
-        0.55,
-        0.15,
-        0.25
+        0.76,
+        0.28,
+        0.22,
+        0.5
       ],
       "acceptedItemId": "pasta",
       "labelTr": "pasta tabağı",

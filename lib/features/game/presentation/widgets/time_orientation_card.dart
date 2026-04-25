@@ -7,6 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/motion.dart';
 import '../../../../core/time/time_window.dart';
 import '../../../../l10n/strings_tr.dart';
+import '../../domain/scene.dart';
 
 /// Clinical revision #4 — shown between the home screen and the scene
 /// board. Asks the patient "what time of day is it?".
@@ -25,7 +26,8 @@ class TimeOrientationCard extends ConsumerStatefulWidget {
     required this.now,
     required this.expected,
     required this.difficultyLevel,
-    required this.sceneIconAsset,
+    required this.scene,
+    required this.variant,
     required this.onAnswered,
     super.key,
   });
@@ -33,7 +35,14 @@ class TimeOrientationCard extends ConsumerStatefulWidget {
   final DateTime now;
   final TimeWindow expected;
   final int difficultyLevel;
-  final String sceneIconAsset;
+
+  /// v2 — full scene + the variant the patient is about to play, so
+  /// the orientation card can render a "dolu masa" preview (bos_
+  /// background + each dolu_ item placed at its slot rect) instead of
+  /// just the empty background.
+  final Scene scene;
+  final DifficultyVariant variant;
+
   final void Function({required bool correct, required int responseMs})
       onAnswered;
 
@@ -118,11 +127,10 @@ class _TimeOrientationCardState
                           children: [
                             if (showSceneIcon)
                               SizedBox(
-                                height: 56,
-                                child: Image.asset(
-                                  widget.sceneIconAsset,
-                                  errorBuilder: (_, __, ___) =>
-                                      const SizedBox.shrink(),
+                                height: 120,
+                                child: _FilledScenePreview(
+                                  scene: widget.scene,
+                                  variant: widget.variant,
                                 ),
                               ),
                             _Clock(
@@ -174,11 +182,10 @@ class _TimeOrientationCardState
                   children: [
                     if (showSceneIcon) ...[
                       SizedBox(
-                        height: 96,
-                        child: Image.asset(
-                          widget.sceneIconAsset,
-                          errorBuilder: (_, __, ___) =>
-                              const SizedBox.shrink(),
+                        height: 180,
+                        child: _FilledScenePreview(
+                          scene: widget.scene,
+                          variant: widget.variant,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -441,6 +448,68 @@ class _OrientationButtonState extends State<_OrientationButton>
           ),
         );
       },
+    );
+  }
+}
+
+
+/// v2 — composite preview for the orientation card: shows the
+/// `bos_<area>.png` table with each `dolu_<itemId>.png` overlaid at
+/// the slot rect the patient is about to fill. Gives the patient a
+/// "destination" image so they know what the goal looks like before
+/// the game starts. Distractors are intentionally omitted — only
+/// targets show, all in their final positions.
+class _FilledScenePreview extends StatelessWidget {
+  const _FilledScenePreview({required this.scene, required this.variant});
+
+  final Scene scene;
+  final DifficultyVariant variant;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                scene.backgroundAsset,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    const ColoredBox(color: Color(0xFFE9D9B7)),
+              ),
+              for (final slot in scene.slots)
+                _previewItemFor(slot, c.maxWidth, c.maxHeight),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _previewItemFor(SceneSlot slot, double w, double h) {
+    final item = variant.items.firstWhere(
+      (i) => !i.distractor && i.acceptedSlotId == slot.id,
+      orElse: () => const SceneItem(
+        id: ,
+        assetPath: ,
+        audioLabelPath: ,
+        labelTr: ,
+      ),
+    );
+    if (item.id.isEmpty) return const SizedBox.shrink();
+    return Positioned(
+      left: slot.relativeRect.left * w,
+      top: slot.relativeRect.top * h,
+      width: slot.relativeRect.width * w,
+      height: slot.relativeRect.height * h,
+      child: Image.asset(
+        item.assetPath,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      ),
     );
   }
 }
