@@ -26,25 +26,26 @@ Future<void> main() async {
   //    otherwise — local-only dev stays functional).
   await initializeSupabase();
 
-  // 3) Anon auth + profile upsert. Best-effort.
-  //    ignore_for_file: unused_result
-  // We run this without awaiting because losing network on launch
-  // must not block the patient from playing.
-  unawaited(ensureAnonSession(container));
-
-  // 4) Log this app-open. Reads profile after Isar is warm; if the
-  //    profile is not yet set up, we simply skip.
+  // 3) Log this app-open first. Reads profile after Isar is warm; if
+  //    the profile is not yet set up, we simply skip. Runs before
+  //    cloud auth so even offline launches log the open.
   await _logAppOpen(container);
 
-  // 5) v2 — detect any time windows that closed today without the
+  // 4) v2 — detect any time windows that closed today without the
   //    patient playing and emit MissedSlotEvent rows. Idempotent and
   //    silent on error.
   unawaited(detectMissedSlotsOnStartup(container));
 
-  // 6) Sync pending rows + fire-and-forget weekly report trigger.
-  unawaited(container.read(syncServiceProvider).pushAll());
+  // 5) Anon auth + profile upsert + sync chain. We chain sync after
+  //    auth so RLS sees the aligned auth.uid()/profile_id pair on
+  //    the very first push attempt; previous design was racing
+  //    pushAll against the anonymous sign-in and getting 42501
+  //    "row violates row-level security policy" rejections.
   unawaited(
-    container.read(weeklyTriggerControllerProvider).runOnAppStart(),
+    ensureAnonSession(container).then((_) async {
+      await container.read(syncServiceProvider).pushAll();
+      await container.read(weeklyTriggerControllerProvider).runOnAppStart();
+    }),
   );
 
   runApp(

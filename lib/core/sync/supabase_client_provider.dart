@@ -42,6 +42,16 @@ Future<void> ensureAnonSession(ProviderContainer container) async {
     final serverUid = client.auth.currentUser?.id;
     if (serverUid == null) return;
 
+    // Align the local profileId with auth.uid() FIRST. RLS policies
+    // check `profile_id::text = auth.uid()::text` on every table, so
+    // any pending unsynced rows must be rewritten before the upsert
+    // tries to push them.
+    if (profile.profileId != serverUid) {
+      await container
+          .read(profileRepositoryProvider)
+          .alignProfileIdWithAuth(serverUid);
+    }
+
     await client.from('profiles').upsert({
       'id': serverUid,
       'name': profile.name,
@@ -49,10 +59,7 @@ Future<void> ensureAnonSession(ProviderContainer container) async {
       'therapist_email': BuildConfig.therapistEmail,
     });
 
-    if (profile.profileId != serverUid || profile.syncedAt == null) {
-      profile
-        ..profileId = serverUid
-        ..syncedAt = DateTime.now();
+    if (profile.syncedAt == null) {
       await container
           .read(profileRepositoryProvider)
           .markSynced(DateTime.now());

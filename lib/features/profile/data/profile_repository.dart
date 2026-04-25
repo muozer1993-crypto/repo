@@ -63,6 +63,52 @@ class ProfileRepository {
     });
   }
 
+  /// v2 — replaces the local profileId with the Supabase-issued
+  /// auth.uid() so every row's profile_id matches what RLS expects.
+  /// Rewrites all not-yet-synced rows (AppOpenEvent, SessionLog,
+  /// PlacementEvent, BonusPlayEvent, MissedSlotEvent) so they don't
+  /// fail their first sync attempt on the old uuid.
+  Future<void> alignProfileIdWithAuth(String newProfileId) async {
+    final existing = await load();
+    if (existing == null) return;
+    if (existing.profileId == newProfileId) return;
+    final oldId = existing.profileId;
+
+    await _isar.writeTxn(() async {
+      existing
+        ..profileId = newProfileId
+        ..syncedAt = DateTime.now();
+      await _isar.patientProfiles.put(existing);
+
+      // Rewrite unsynced rows. We can't reach those collections from
+      // here without their imports, so do it dynamically — keeps this
+      // file dependency-light.
+      Future<void> rewrite(dynamic collection, String accessor) async {
+        final pending = await collection
+            .filter()
+            .syncedAtIsNull()
+            .findAll() as List;
+        for (final row in pending) {
+          if ((row as dynamic).profileId == oldId) {
+            (row as dynamic).profileId = newProfileId;
+            await collection.put(row);
+          }
+        }
+      }
+
+      // ignore: avoid_dynamic_calls
+      await rewrite(_isar.appOpenEvents, 'appOpenEvents');
+      // ignore: avoid_dynamic_calls
+      await rewrite(_isar.sessionLogs, 'sessionLogs');
+      // ignore: avoid_dynamic_calls
+      await rewrite(_isar.placementEvents, 'placementEvents');
+      // ignore: avoid_dynamic_calls
+      await rewrite((_isar as dynamic).bonusPlayEvents, 'bonusPlayEvents');
+      // ignore: avoid_dynamic_calls
+      await rewrite((_isar as dynamic).missedSlotEvents, 'missedSlotEvents');
+    });
+  }
+
   /// Wipes the profile. Useful during development when the caregiver
   /// wants to start fresh without uninstalling the APK. Does NOT touch
   /// session logs or schedule entries — those remain for therapist
