@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:ergoterapi/core/time/time_window.dart';
 import 'package:ergoterapi/features/game/domain/scene.dart';
 import 'package:ergoterapi/features/progress/application/scheduler_controller.dart';
@@ -36,11 +34,6 @@ Scene _sceneWith({
 }
 
 void main() {
-  // Silence Flutter's initial binding requirement for tests that don't
-  // need it.
-  TestWidgetsFlutterBinding.ensureInitialized();
-  PaintingBinding.instance.imageCache.maximumSize = 0;
-
   group('shouldOfferBonus', () {
     test('no bonus configured → never offer', () {
       final result = shouldOfferBonus(
