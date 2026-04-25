@@ -175,10 +175,18 @@ class GameSessionController extends StateNotifier<GameSessionState> {
     state = state.copyWith(
       game1Errors: errorCount,
       game1Completed: completed,
-      phase: state.scene.game2 == null
-          ? GameSessionPhase.completed
-          : GameSessionPhase.transitionToGame2,
     );
+    // v2 — if the scene has a Game-2, advance to the transition; if
+    // not, finish the session immediately and route to farewell. The
+    // intermediate "completed" phase + CompletionOverlay is gone — its
+    // "Ana ekrana dön" button confused patients who'd just been told
+    // "şimdilik yeterli" minutes earlier and saw the same destination.
+    if (state.scene.game2 == null) {
+      // ignore: discarded_futures
+      _completeAndFareWell();
+    } else {
+      state = state.copyWith(phase: GameSessionPhase.transitionToGame2);
+    }
   }
 
   /// v2 — record Game-1 stats WITHOUT transitioning to the next phase.
@@ -201,7 +209,11 @@ class GameSessionController extends StateNotifier<GameSessionState> {
   void onTransitionContinue() {
     if (state.phase != GameSessionPhase.transitionToGame2) return;
     if (state.scene.game2 == null) {
-      state = state.copyWith(phase: GameSessionPhase.completed);
+      // Defensive — TransitionScreen shouldn't have been mounted on a
+      // game2-less scene anyway. Funnel through the same farewell
+      // path the rest of the controller uses.
+      // ignore: discarded_futures
+      _completeAndFareWell();
       return;
     }
     state = state.copyWith(phase: GameSessionPhase.game2);
@@ -240,8 +252,17 @@ class GameSessionController extends StateNotifier<GameSessionState> {
     state = state.copyWith(
       game2Errors: result.errorCount,
       game2Completed: result.completed,
-      phase: GameSessionPhase.completed,
     );
+    // ignore: discarded_futures
+    _completeAndFareWell();
+  }
+
+  /// Internal: flush the session row, mark the celebration flag, and
+  /// transition to farewell. Single funnel for both successful Game-1
+  /// (no-game2 scenes) and Game-2 completion.
+  Future<void> _completeAndFareWell() async {
+    await _flushSessionRow(exitedEarly: false);
+    state = state.copyWith(phase: GameSessionPhase.farewell);
   }
 
   // ----- Completion / bonus offer -----

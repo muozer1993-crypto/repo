@@ -98,7 +98,10 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
       case GameSessionPhase.game2:
         return _Game2PhaseFor(args.scene);
       case GameSessionPhase.completed:
-        return _CompletionPhase(onDone: _onCompletionDone);
+        // v2 — completed phase is unreachable now (game1/game2 result
+        // handlers funnel directly to farewell). Keep a compact
+        // fallback in case any pre-v2 state lands here.
+        return _FarewellPhase(window: args.scene.window, celebrate: true);
       case GameSessionPhase.bonusOffer:
         return _BonusOfferPhase(
           onAccept: _onBonusAccept,
@@ -113,7 +116,11 @@ class _ScenePlayerScreenState extends ConsumerState<ScenePlayerScreen> {
               .onBonusFinished(),
         );
       case GameSessionPhase.farewell:
-        return _FarewellPhase(window: session.scene.window);
+        return _FarewellPhase(
+          window: session.scene.window,
+          celebrate: session.game1Completed &&
+              (session.scene.game2 == null || session.game2Completed),
+        );
       case GameSessionPhase.done:
         return const Scaffold(
           body: Center(child: CircularProgressIndicator()),
@@ -471,49 +478,102 @@ class _InlineBonusHostState extends ConsumerState<_InlineBonusHost> {
 /// process via dart:io exit(0); SystemNavigator.pop() on some Android
 /// OEM builds just minimises).
 class _FarewellPhase extends StatelessWidget {
-  const _FarewellPhase({required this.window});
+  const _FarewellPhase({
+    required this.window,
+    required this.celebrate,
+  });
   final TimeWindow window;
+
+  /// True when the patient finished both games (or game1 only on
+  /// game2-less scenes). Drives the "Aferin harikasın!" mini-header
+  /// and the green check icon. False on early-stop paths (Çık,
+  /// Şimdilik yeterli) so the screen feels neutral, not celebratory.
+  final bool celebrate;
 
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.waving_hand_rounded,
-                  size: 96, color: AppColors.primary),
-              const SizedBox(height: 32),
-              AutoSizeText(
-                _farewellTitle(window),
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                      color: AppColors.primaryDark,
-                      fontWeight: FontWeight.w600,
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final isTight = c.maxHeight < 480;
+            return SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: 32,
+                vertical: isTight ? 16 : 32,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: c.maxHeight - 16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (celebrate) ...[
+                      Icon(
+                        Icons.check_circle_rounded,
+                        size: isTight ? 56 : 88,
+                        color: AppColors.acceptGlow,
+                      ),
+                      const SizedBox(height: 8),
+                      AutoSizeText(
+                        StringsTr.completionTitle,
+                        maxLines: 1,
+                        minFontSize: 18,
+                        wrapWords: false,
+                        textAlign: TextAlign.center,
+                        style: t.headlineSmall?.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      SizedBox(height: isTight ? 12 : 24),
+                    ] else ...[
+                      Icon(
+                        Icons.waving_hand_rounded,
+                        size: isTight ? 56 : 88,
+                        color: AppColors.primary,
+                      ),
+                      SizedBox(height: isTight ? 12 : 24),
+                    ],
+                    AutoSizeText(
+                      _farewellTitle(window),
+                      style: t.displaySmall?.copyWith(
+                        color: AppColors.primaryDark,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      minFontSize: 18,
+                      wrapWords: false,
+                      textAlign: TextAlign.center,
                     ),
-                maxLines: 2,
-                minFontSize: 22,
-                wrapWords: false,
-                textAlign: TextAlign.center,
+                    const SizedBox(height: 12),
+                    Text(
+                      'İyi günler — sonra görüşmek üzere.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    SizedBox(height: isTight ? 20 : 40),
+                    SizedBox(
+                      width: double.infinity,
+                      child: BigButton(
+                        label: 'Çık',
+                        icon: Icons.logout_rounded,
+                        variant: BigButtonVariant.danger,
+                        expand: true,
+                        compact: isTight,
+                        onPressed: _hardExit,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              Text(
-                'İyi günler — sonra görüşmek üzere.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 48),
-              BigButton(
-                label: 'Çık',
-                icon: Icons.logout_rounded,
-                variant: BigButtonVariant.danger,
-                expand: true,
-                onPressed: _hardExit,
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
