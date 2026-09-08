@@ -3,6 +3,7 @@ import {
   CATEGORY_ORDER,
   CHALLENGE_TYPES,
   LIMITS,
+  addDays,
   getChallengeType,
   isValidHHmm,
   t,
@@ -26,19 +27,15 @@ import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Text } from '@/components/Text';
 import { useCreateChallenge, useFriends } from '@/hooks/queries';
+import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
+import { endOfDayInTz, safeDayKey, safeTodayKey, zonedInstant } from '@/utils/datetime';
 import { formatDayKey, formatTime } from '@/utils/format';
+import { byLevel } from '@/utils/levelCopy';
 
 /* ------------------------------------------------------------------ copy */
-
-/** Inline copy that has no MICROCOPY key yet, written for all three levels. */
-function byLevel(level: VulgarityLevel, l1: string, l2: string, l3: string): string {
-  if (level === 1) return l1;
-  if (level === 3) return l3;
-  return l2;
-}
 
 const STEP_LABELS = ['TÜR', 'AYARLAR', 'KANKALAR', 'ÖZET'] as const;
 const DURATION_CHOICES = [1, 3, 7, 14, 30] as const;
@@ -55,28 +52,36 @@ function errorText(error: unknown): string {
   return 'Çelinç açılamadı. Biraz sonra tekrar dene.';
 }
 
-function localDayKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+/** "8 Eylül Salı · 09:00", read in the account's zone like every other screen. */
+function formatMoment(iso: string, tz: string): string {
+  const dayKey = safeDayKey(iso, tz);
+  if (!dayKey) return '';
+  return `${formatDayKey(dayKey, { withWeekday: true })} · ${formatTime(iso, tz)}`;
 }
 
-/** "8 Eylül Salı · 09:00" */
-function formatMoment(iso: string): string {
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return '';
-  return `${formatDayKey(localDayKey(date), { withWeekday: true })} · ${formatTime(iso)}`;
-}
+/**
+ * Start/end as ISO strings; "Hemen" means now (the server allows a 5 dk grace).
+ *
+ * The window is built in the ACCOUNT's zone, because that is the zone the
+ * server slices into day keys — and the end is snapped to the last millisecond
+ * of the final local day, so "3 gün" really covers three day keys instead of
+ * four (which would quietly add a `missingDayPenalty` day to a lower-is-better
+ * çelinç). A window too short to be legal falls back to plain 24 h steps.
+ */
+function computeWindow(startMode: StartMode, days: number, tz: string): { startsAt: string; endsAt: string } {
+  const now = new Date();
+  const todayKeyLocal = safeTodayKey(tz);
+  const start =
+    startMode === 'tomorrow'
+      ? (zonedInstant(addDays(todayKeyLocal, 1), 9, 0, tz) ?? new Date(now.getTime() + DAY_MS))
+      : now;
 
-/** Start/end as ISO strings; "Hemen" means now (the server allows a 5 dk grace). */
-function computeWindow(startMode: StartMode, days: number): { startsAt: string; endsAt: string } {
-  const start = new Date();
-  if (startMode === 'tomorrow') {
-    start.setDate(start.getDate() + 1);
-    start.setHours(9, 0, 0, 0);
-  }
-  const end = new Date(start.getTime() + days * DAY_MS);
+  const startKey = safeDayKey(start, tz) ?? todayKeyLocal;
+  const lastKey = addDays(startKey, Math.max(1, days) - 1);
+  const snapped = endOfDayInTz(lastKey, tz);
+  const fallback = new Date(start.getTime() + days * DAY_MS);
+  const end =
+    snapped && snapped.getTime() - start.getTime() > LIMITS.MIN_DURATION_MS ? snapped : fallback;
   return { startsAt: start.toISOString(), endsAt: end.toISOString() };
 }
 
@@ -255,6 +260,8 @@ function SummaryRow({ label, value, color }: { label: string; value: string; col
 
 export default function NewChallengeScreen() {
   const level = useLevel();
+  // the çelinç window is counted in the account's zone, not the phone's
+  const tz = useTimezone();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const preselected =
@@ -311,7 +318,7 @@ export default function NewChallengeScreen() {
     participantIds.length >= LIMITS.PARTICIPANTS_MIN &&
     participantIds.length <= LIMITS.PARTICIPANTS_MAX;
 
-  const preview = computeWindow(startMode, daysValid ? days : (type?.defaultDurationDays ?? 1));
+  const preview = computeWindow(startMode, daysValid ? days : (type?.defaultDurationDays ?? 1), tz);
   const finalTitle = (title.trim() || type?.nameTr || '').slice(0, LIMITS.CHALLENGE_TITLE_MAX);
 
   const stepValid = step === 0 ? !!type : step === 1 ? settingsValid : step === 2 ? friendsValid : true;
@@ -386,7 +393,7 @@ export default function NewChallengeScreen() {
 
   const submit = async () => {
     if (!type || !settingsValid || !friendsValid) return;
-    const { startsAt, endsAt } = computeWindow(startMode, days);
+    const { startsAt, endsAt } = computeWindow(startMode, days, tz);
     try {
       const challenge = await create.mutateAsync({
         typeKey: type.key,
@@ -597,8 +604,8 @@ export default function NewChallengeScreen() {
             />
 
             <Card style={styles.windowCard}>
-              <SummaryRow label="Başlangıç" value={formatMoment(preview.startsAt)} />
-              <SummaryRow label="Bitiş" value={formatMoment(preview.endsAt)} />
+              <SummaryRow label="Başlangıç" value={formatMoment(preview.startsAt, tz)} />
+              <SummaryRow label="Bitiş" value={formatMoment(preview.endsAt, tz)} />
             </Card>
           </View>
         ) : null}
@@ -685,8 +692,8 @@ export default function NewChallengeScreen() {
               </View>
 
               <View style={styles.summaryBody}>
-                <SummaryRow label="Başlangıç" value={formatMoment(preview.startsAt)} />
-                <SummaryRow label="Bitiş" value={formatMoment(preview.endsAt)} />
+                <SummaryRow label="Başlangıç" value={formatMoment(preview.startsAt, tz)} />
+                <SummaryRow label="Bitiş" value={formatMoment(preview.endsAt, tz)} />
                 <SummaryRow label="Süre" value={`${days} gün`} />
                 {needsDeadline ? (
                   <SummaryRow label="Check-in" value={`${deadlineTime.trim()}'e kadar`} />

@@ -9,7 +9,15 @@
  * a bad zone falls back to `Europe/Istanbul`, a bad date yields null / [].
  */
 
-import { DEFAULT_TIMEZONE, dayKeyInTz, dayKeysBetween, isValidTimeZone, todayKey } from '@koydum/shared';
+import {
+  DEFAULT_TIMEZONE,
+  addDays,
+  dayKeyInTz,
+  dayKeysBetween,
+  isValidTimeZone,
+  localParts,
+  todayKey,
+} from '@koydum/shared';
 
 /** First usable IANA zone out of the candidates, else `Europe/Istanbul`. */
 export function resolveTimezone(...candidates: (string | null | undefined)[]): string {
@@ -56,4 +64,46 @@ export function safeDayKeysBetween(
   } catch {
     return [];
   }
+}
+
+/** Milliseconds `tz` is ahead of UTC at `date` (minute resolution). */
+function offsetMs(date: Date, tz: string): number {
+  const parts = localParts(date, tz);
+  const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0, 0);
+  // `localParts` has no seconds, so compare against the same truncated instant
+  const truncated = Math.floor(date.getTime() / 60_000) * 60_000;
+  return asUtc - truncated;
+}
+
+/**
+ * The instant at which the clock in `tz` reads `dayKey` at `hour:minute`.
+ *
+ * The create wizard builds a challenge window the SERVER will slice into day
+ * keys in the account's zone, so "yarın 09:00" has to mean 09:00 there — not
+ * 09:00 wherever the phone happens to be. Null when the inputs are unusable.
+ */
+export function zonedInstant(
+  dayKey: string,
+  hour: number,
+  minute: number,
+  tz: string
+): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
+  if (!match) return null;
+  const wall = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), hour, minute, 0, 0);
+  const zone = isValidTimeZone(tz) ? tz : DEFAULT_TIMEZONE;
+  try {
+    // one refinement pass so a DST boundary resolves to the right side
+    const first = wall - offsetMs(new Date(wall), zone);
+    const second = wall - offsetMs(new Date(first), zone);
+    return Number.isFinite(second) ? new Date(second) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The last millisecond of `dayKey` in `tz`; null when it cannot be resolved. */
+export function endOfDayInTz(dayKey: string, tz: string): Date | null {
+  const nextMidnight = zonedInstant(addDays(dayKey, 1), 0, 0, tz);
+  return nextMidnight ? new Date(nextMidnight.getTime() - 1) : null;
 }

@@ -30,6 +30,7 @@ import {
   type FocusSession,
 } from '@/services/focus';
 import { useTimezone } from '@/hooks/useTimezone';
+import { USE_NATIVE_DRIVER } from '@/utils/animation';
 import { useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { safeTodayKey } from '@/utils/datetime';
@@ -129,8 +130,8 @@ export default function FocusScreen() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     Animated.sequence([
-      Animated.timing(celebrate, { toValue: 1, duration: 320, useNativeDriver: true }),
-      Animated.timing(celebrate, { toValue: 0.85, duration: 220, useNativeDriver: true }),
+      Animated.timing(celebrate, { toValue: 1, duration: 320, useNativeDriver: USE_NATIVE_DRIVER }),
+      Animated.timing(celebrate, { toValue: 0.85, duration: 220, useNativeDriver: USE_NATIVE_DRIVER }),
     ]).start();
     void submit(session);
     // `submit` closes over fresh state on every render; the guard above makes it run once
