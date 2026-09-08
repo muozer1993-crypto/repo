@@ -158,7 +158,7 @@ export default function InboxScreen() {
   const open = (item: Notification) => {
     if (!item.readAt) markRead.mutate({ ids: [item.id] });
     const target = targetFor(item);
-    if (target) router.push(target as never);
+    if (target) router.push(target);
   };
 
   const markAll = () => {
@@ -255,7 +255,7 @@ export default function InboxScreen() {
             title={EMPTY_TITLE[level]}
             subtitle={EMPTY_BODY[level]}
             actionLabel="Çelinç aç"
-            onAction={() => router.push('/challenge/new' as never)}
+            onAction={() => router.push('/challenge/new')}
           />
         }
         renderSectionHeader={({ section }: { section: SectionListData<Notification, DaySection> }) => (

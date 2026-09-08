@@ -5,10 +5,13 @@ import {
   PUSH_PLATFORMS,
   VULGARITY_LEVELS,
   CHALLENGE_STATUSES,
+  type ChallengeType,
   type VulgarityLevel,
 } from './types';
 import { LIMITS } from './scoring';
 import { DAY_KEY_REGEX, HHMM_REGEX, DEFAULT_TIMEZONE, isValidDayKey, isValidTimeZone } from './time';
+import { countGraphemes, hasVisibleChar, stripInvisible } from './text';
+import { getChallengeType } from './catalog';
 
 export { DAY_KEY_REGEX, HHMM_REGEX };
 
@@ -30,11 +33,38 @@ export const PasswordSchema = z
   .min(LIMITS.PASSWORD_MIN, `Şifre en az ${LIMITS.PASSWORD_MIN} karakter olmalı`)
   .max(LIMITS.PASSWORD_MAX, `Şifre en fazla ${LIMITS.PASSWORD_MAX} karakter olabilir`);
 
+/**
+ * Invisible characters (zero-width space, soft hyphen, BOM...) are removed before the
+ * emptiness check — `String.prototype.trim` does not touch them, and a name made only
+ * of them would render as nothing in standings, feed and taunts.
+ */
 export const DisplayNameSchema = z
   .string()
-  .trim()
-  .min(1, 'Görünen ad boş olamaz')
-  .max(LIMITS.DISPLAY_NAME_MAX, `Görünen ad en fazla ${LIMITS.DISPLAY_NAME_MAX} karakter olabilir`);
+  .transform((s) => stripInvisible(s).trim())
+  .pipe(
+    z
+      .string()
+      .min(1, 'Görünen ad boş olamaz')
+      .max(LIMITS.DISPLAY_NAME_MAX, `Görünen ad en fazla ${LIMITS.DISPLAY_NAME_MAX} karakter olabilir`)
+      .refine(hasVisibleChar, 'Görünen ad boş olamaz'),
+  );
+
+/**
+ * "1..4 chars" counted as user-perceived characters (grapheme clusters), so one ZWJ
+ * family emoji (👨‍👩‍👧, 8 UTF-16 code units) is a single character. The code-unit cap is
+ * only an abuse guard.
+ */
+export const AvatarEmojiSchema = z
+  .string()
+  .transform((s) => stripInvisible(s).trim())
+  .pipe(
+    z
+      .string()
+      .min(1, 'Avatar boş olamaz')
+      .max(LIMITS.AVATAR_EMOJI_MAX_UNITS, 'Avatar çok uzun')
+      .refine(hasVisibleChar, 'Avatar boş olamaz')
+      .refine((s) => countGraphemes(s) <= LIMITS.AVATAR_EMOJI_MAX, `Avatar en fazla ${LIMITS.AVATAR_EMOJI_MAX} karakter`),
+  );
 
 export const TimezoneSchema = z
   .string()
@@ -91,7 +121,7 @@ export type LoginBody = z.infer<typeof LoginBodySchema>;
 
 export const UpdateMeBodySchema = z.object({
   displayName: DisplayNameSchema.optional(),
-  avatarEmoji: z.string().trim().min(1).max(LIMITS.AVATAR_EMOJI_MAX, 'Avatar en fazla 4 karakter').optional(),
+  avatarEmoji: AvatarEmojiSchema.optional(),
   vulgarityMax: VulgarityLevelSchema.optional(),
   timezone: TimezoneSchema.optional(),
   reminderHour: z.number().int().min(0).max(23).nullable().optional(),
@@ -144,15 +174,19 @@ export type FriendRequestBody = z.infer<typeof FriendRequestBodySchema>;
 export interface ChallengeSchemaOptions {
   /** Clock used for the `startsAt >= now - 5min` rule (injectable for tests). */
   now?: () => number;
+  /** Catalog lookup for `typeKey` (injectable for tests). Defaults to the shared catalog. */
+  resolveType?: (typeKey: string) => ChallengeType | undefined;
 }
 
 /**
- * Factory so the server can inject a clock. Rules that need the catalog
- * (`deadlineTime` required for `checkin_deadline`, participant friendship) are the
- * server's job — this schema only knows what the body contains.
+ * Factory so the server can inject a clock and a catalog. Everything SPEC 1.6 states
+ * about the body is enforced here, including "`deadlineTime` required when
+ * metricType === 'checkin_deadline'" and that `typeKey` exists in the catalog. Rules
+ * that need the database (participants are friends, not self) stay on the server.
  */
 export function createChallengeBodySchema(opts: ChallengeSchemaOptions = {}) {
   const now = opts.now ?? (() => Date.now());
+  const resolveType = opts.resolveType ?? getChallengeType;
   return z
     .object({
       typeKey: z.string().trim().min(1).max(40),
@@ -170,6 +204,13 @@ export function createChallengeBodySchema(opts: ChallengeSchemaOptions = {}) {
       proofRequired: z.boolean().optional(),
     })
     .superRefine((v, ctx) => {
+      const type = resolveType(v.typeKey);
+      if (!type) {
+        ctx.addIssue({ code: 'custom', message: 'Böyle bir çelinç tipi yok', path: ['typeKey'] });
+      } else if (type.metricType === 'checkin_deadline' && !v.deadlineTime) {
+        ctx.addIssue({ code: 'custom', message: 'Check-in çelinci için bir saat seçmelisin', path: ['deadlineTime'] });
+      }
+
       const start = Date.parse(v.startsAt);
       const end = Date.parse(v.endsAt);
       if (Number.isNaN(start) || Number.isNaN(end)) return; // already reported by IsoDateTimeSchema
@@ -248,13 +289,18 @@ export const ReportBodySchema = z.object({
 });
 export type ReportBody = z.infer<typeof ReportBodySchema>;
 
+/**
+ * `{ ids }` or `{ all }` (SPEC 1.6 — both optional). At least one key must be present;
+ * `{ ids: [] }` and `{ all: false }` are valid no-ops so a client that has nothing new
+ * to mark does not get a 400.
+ */
 export const InboxReadBodySchema = z
   .object({
     ids: z.array(IdSchema).max(500).optional(),
     all: z.boolean().optional(),
   })
-  .refine((v) => v.all === true || (v.ids !== undefined && v.ids.length > 0), {
-    message: 'ids listesi ya da all: true gerekli',
+  .refine((v) => v.all !== undefined || v.ids !== undefined, {
+    message: 'ids listesi ya da all alanı gerekli',
     path: ['ids'],
   });
 export type InboxReadBody = z.infer<typeof InboxReadBodySchema>;

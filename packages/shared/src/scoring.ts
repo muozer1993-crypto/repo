@@ -10,7 +10,10 @@ export const LIMITS = {
   PASSWORD_MIN: 6,
   PASSWORD_MAX: 72,
   DISPLAY_NAME_MAX: 30,
+  /** Avatar length in user-perceived characters (grapheme clusters), see `countGraphemes`. */
   AVATAR_EMOJI_MAX: 4,
+  /** Abuse guard in UTF-16 code units — a heavy ZWJ family emoji is ~20 units. */
+  AVATAR_EMOJI_MAX_UNITS: 64,
   CHALLENGE_TITLE_MAX: 40,
   REWARD_TEXT_MAX: 80,
   PENALTY_TEXT_MAX: 80,
