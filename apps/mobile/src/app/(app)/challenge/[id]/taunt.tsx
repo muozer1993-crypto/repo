@@ -31,6 +31,7 @@ import { useChallenge, useResults, useTaunt } from '@/hooks/queries';
 import { ApiError } from '@/lib/api';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
+import { errorText } from '@/utils/errors';
 
 /* ------------------------------------------------------------------- copy */
 
@@ -91,10 +92,6 @@ const customTitleFor = (level: VulgarityLevel, name: string): string => {
 };
 
 /* ------------------------------------------------------------------ utils */
-
-function errorText(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
-}
 
 /* ----------------------------------------------------------------- screen */
 

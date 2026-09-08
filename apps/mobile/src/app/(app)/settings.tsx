@@ -24,6 +24,7 @@ import {
 } from '@/services/steps';
 import { deviceTimezone, useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
+import { confirmTr } from '@/utils/confirm';
 
 const PREVIEW_VARS: TauntVars = {
   winner: 'Mustafa',
@@ -69,27 +70,6 @@ const STEP_REASONS: Record<
 
 const PLATFORM: 'ios' | 'android' | 'web' =
   Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
-
-/** Alert on device, window.confirm on web (RN-web's Alert is a no-op). */
-function confirmTr(title: string, message: string, confirmLabel: string): Promise<boolean> {
-  if (Platform.OS === 'web') {
-    if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
-      return Promise.resolve(false);
-    }
-    return Promise.resolve(window.confirm(`${title}\n\n${message}`));
-  }
-  return new Promise((resolve) => {
-    Alert.alert(
-      title,
-      message,
-      [
-        { text: 'Vazgeç', style: 'cancel', onPress: () => resolve(false) },
-        { text: confirmLabel, style: 'destructive', onPress: () => resolve(true) },
-      ],
-      { cancelable: true, onDismiss: () => resolve(false) }
-    );
-  });
-}
 
 const HOURS: (number | null)[] = [null, ...Array.from({ length: 24 }, (_, i) => i)];
 

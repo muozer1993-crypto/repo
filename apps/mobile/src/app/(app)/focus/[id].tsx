@@ -35,6 +35,7 @@ import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { safeTodayKey } from '@/utils/datetime';
+import { errorText } from '@/utils/errors';
 import { formatClock, formatMinutes } from '@/utils/format';
 
 const KEEP_AWAKE_TAG = 'koydum-focus';
@@ -42,10 +43,6 @@ const KEEP_AWAKE_TAG = 'koydum-focus';
 /** Good enough as an idempotency key; Hermes has no crypto.randomUUID. */
 function makeSessionId(): string {
   return `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function errorText(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
 }
 
 export default function FocusScreen() {

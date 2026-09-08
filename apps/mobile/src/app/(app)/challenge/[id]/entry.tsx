@@ -23,6 +23,7 @@ import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
 import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
+import { errorText } from '@/utils/errors';
 import { formatNumber } from '@/utils/format';
 
 /* ------------------------------------------------------------------ utils */
@@ -40,10 +41,6 @@ function quickAdds(maxPerEntry: number): number[] {
   const cap = Math.max(1, Math.floor(maxPerEntry));
   const presets = cap >= 400 ? [10, 25, 50] : cap >= 100 ? [5, 10, 25] : [1, 5, 10];
   return presets.filter((value) => value <= cap);
-}
-
-function errorText(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
 }
 
 function absoluteUrl(url: string, baseUrl: string): string {

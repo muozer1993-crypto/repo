@@ -38,7 +38,9 @@ import { useTimezone } from '@/hooks/useTimezone';
 import { getDailySteps, getStepAvailability, getTodaySteps, type StepAvailability } from '@/services/steps';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
+import { confirmTr } from '@/utils/confirm';
 import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
+import { errorText } from '@/utils/errors';
 import { formatDayKeyFriendly, formatMinutes, formatNumber, formatTime, relativeTime } from '@/utils/format';
 
 /* ------------------------------------------------------------------ utils */
@@ -66,35 +68,10 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   cancelled: { label: 'İPTAL', color: Colors.danger },
 };
 
-/** Alert on device, window.confirm on web (RN-web's Alert is a no-op). */
-function confirmTr(title: string, message: string, confirmLabel: string): Promise<boolean> {
-  if (Platform.OS === 'web') {
-    if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
-      return Promise.resolve(false);
-    }
-    return Promise.resolve(window.confirm(`${title}\n\n${message}`));
-  }
-  return new Promise((resolve) => {
-    Alert.alert(
-      title,
-      message,
-      [
-        { text: 'Vazgeç', style: 'cancel', onPress: () => resolve(false) },
-        { text: confirmLabel, style: 'destructive', onPress: () => resolve(true) },
-      ],
-      { cancelable: true, onDismiss: () => resolve(false) }
-    );
-  });
-}
-
 /** Uploads come back absolute, but a relative path must still resolve. */
 function absoluteUrl(url: string, baseUrl: string): string {
   if (/^(https?:)?\/\//i.test(url) || url.startsWith('data:') || url.startsWith('file:')) return url;
   return `${baseUrl.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`;
-}
-
-function errorText(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
 }
 
 /** +1 / +5 / +10, scaled down for small caps and up for very generous ones. */

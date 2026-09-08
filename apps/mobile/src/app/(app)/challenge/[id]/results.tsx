@@ -22,6 +22,7 @@ import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { safeDayKey } from '@/utils/datetime';
+import { errorText } from '@/utils/errors';
 import { formatDayKey, relativeTime } from '@/utils/format';
 
 /* ------------------------------------------------------------------- copy */
@@ -83,10 +84,6 @@ const WAIT_SUB = (level: VulgarityLevel, winner: string): string => {
 /* ------------------------------------------------------------------ utils */
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
-
-function errorText(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
-}
 
 /** Springs a block up into place once, `delay` ms after mount. */
 function useRise(delay: number): Animated.Value {

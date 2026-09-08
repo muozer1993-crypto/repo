@@ -54,25 +54,51 @@ interface Target {
   raw: string;
 }
 
+/** Text of the argument list starting at the `(` at `open`. */
+function callArguments(source: string, open: number): string {
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    const char = source[i];
+    if (char === '(') depth++;
+    else if (char === ')') {
+      depth--;
+      if (depth === 0) return source.slice(open + 1, i);
+    }
+  }
+  return source.slice(open + 1);
+}
+
+const ROUTE_LITERAL = /['"`](\/[^'"`\n]*)['"`]/g;
+
 function collectTargets(): Target[] {
   const targets: Target[] = [];
-  const patterns = [
-    // router.push('/x') / router.replace(`/x/${id}`) / router.navigate('/x')
-    /router\.(?:push|replace|navigate)\(\s*['"`](\/[^'"`]*)['"`]/g,
-    // { pathname: '/challenge/[id]' }
-    /pathname:\s*['"`](\/[^'"`]*)['"`]/g,
-    // <Link href="/x">
-    /href=\{?['"`](\/[^'"`]*)['"`]/g,
-  ];
+  // every path literal anywhere inside the call, so both arms of a
+  // `router.push(cond ? '/a' : '/b')` get checked
+  const calls = /router\.(?:push|replace|navigate)\s*\(/g;
+  // `{ pathname: '/challenge/[id]' }` and `<Link href="/x">`
+  const inline = [/pathname:\s*['"`](\/[^'"`]*)['"`]/g, /href=\{?['"`](\/[^'"`]*)['"`]/g];
 
   for (const file of walk(SRC_DIR)) {
     if (file.includes(`${path.sep}__tests__${path.sep}`)) continue;
     const source = fs.readFileSync(file, 'utf8');
-    for (const pattern of patterns) {
+    const rel = path.relative(SRC_DIR, file);
+
+    calls.lastIndex = 0;
+    let call: RegExpExecArray | null;
+    while ((call = calls.exec(source)) !== null) {
+      const args = callArguments(source, call.index + call[0].length - 1);
+      ROUTE_LITERAL.lastIndex = 0;
+      let literal: RegExpExecArray | null;
+      while ((literal = ROUTE_LITERAL.exec(args)) !== null) {
+        targets.push({ file: rel, raw: literal[1] });
+      }
+    }
+
+    for (const pattern of inline) {
       pattern.lastIndex = 0;
       let match: RegExpExecArray | null;
       while ((match = pattern.exec(source)) !== null) {
-        targets.push({ file: path.relative(SRC_DIR, file), raw: match[1] });
+        targets.push({ file: rel, raw: match[1] });
       }
     }
   }
