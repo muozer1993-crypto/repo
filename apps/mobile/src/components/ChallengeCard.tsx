@@ -85,7 +85,19 @@ function statusOf(summary: ChallengeSummary): StatusView {
     if (me && challenge.winnerId === me.user.id) return { key: 'won', label: 'KOYDUN', color: Colors.success };
     return { key: 'lost', label: 'YEDİN', color: Colors.danger };
   }
-  if (me && me.rank === 1) return { key: 'leading', label: 'ÖNDESİN', color: Colors.success };
+  if (me && me.rank === 1) {
+    // rank 1 is shared on equal scores, so "ÖNDESİN" would be a lie in a dead heat
+    const leaderScore = me.score;
+    const shared = summary.participants.some(
+      (p) => p.status === 'accepted' && p.user.id !== me.user.id && p.score === leaderScore
+    );
+    if (shared) {
+      return leaderScore === 0
+        ? { key: 'tie', label: 'HENÜZ 0-0', color: Colors.info }
+        : { key: 'tie', label: 'BAŞA BAŞ', color: Colors.info };
+    }
+    return { key: 'leading', label: 'ÖNDESİN', color: Colors.success };
+  }
   return { key: 'losing', label: 'GERİDESİN', color: Colors.accent };
 }
 

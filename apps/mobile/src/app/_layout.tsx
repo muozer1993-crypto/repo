@@ -7,6 +7,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { ToastProvider } from '@/components/Toast';
 import { queryClient } from '@/lib/query';
 import { NotificationBridge } from '@/providers/NotificationBridge';
@@ -38,6 +39,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <ToastProvider>
             <StatusBar style="light" />
+            <OfflineBanner />
             <NotificationBridge />
             <Stack
               screenOptions={{

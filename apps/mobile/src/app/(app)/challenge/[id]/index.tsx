@@ -589,6 +589,16 @@ function CheckinAction({ id, detail, level, today }: ActionProps) {
         source: 'checkin',
         clientTime: nowIso(),
       });
+      if (response.queued || !response.entry) {
+        // offline: the check-in is parked and will be sent when we are back
+        setResult('ok');
+        toast({
+          title: 'Kaydedildi',
+          body: 'Şu an sunucuya ulaşamadım. Bağlantı gelince gönderilecek.',
+          kind: 'info',
+        });
+        return;
+      }
       const late = response.entry.late === true || response.entry.value <= 0;
       setResult(late ? 'late' : 'ok');
       toast({

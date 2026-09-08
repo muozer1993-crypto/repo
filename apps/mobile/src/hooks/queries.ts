@@ -13,7 +13,9 @@ import type {
 } from '@koydum/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
+import { enqueueEntry, flushQueue } from '@/services/offlineQueue';
 import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/store/auth';
 
@@ -158,16 +160,50 @@ export function useChallengeAction(id: string) {
   });
 }
 
+/**
+ * Posting an entry is the one write that must not be lost: it is what the user
+ * walked, drank or read. When the server cannot be reached the entry is parked
+ * in `services/offlineQueue` and replayed later, and the mutation resolves as if
+ * it had worked so the screen can close.
+ */
 export function useAddEntry(id: string) {
   const api = useApi();
   const invalidate = useInvalidator();
-  return useMutation<
-    { entry: Entry; standings: ParticipantView[] },
-    Error,
-    Parameters<typeof api.addEntry>[1]
-  >({
-    mutationFn: (body) => api.addEntry(id, body),
+  return useMutation<AddEntryResult, Error, Parameters<typeof api.addEntry>[1]>({
+    mutationFn: async (body) => {
+      try {
+        const result = await api.addEntry(id, body);
+        // a successful write is a good moment to drain anything parked earlier
+        void flushQueue(api).catch(() => {});
+        return { ...result, queued: false };
+      } catch (error) {
+        if (error instanceof ApiError && (error.isNetwork || error.status >= 500)) {
+          await enqueueEntry(id, body, `${id}:${body.dayKey}:${body.source}:${body.sessionId ?? ''}`);
+          return { entry: null, standings: null, queued: true };
+        }
+        throw error;
+      }
+    },
     onSuccess: () => invalidate.challenge(id),
+  });
+}
+
+export interface AddEntryResult {
+  entry: Entry | null;
+  standings: ParticipantView[] | null;
+  /** true when the phone was offline and the entry was parked for later */
+  queued: boolean;
+}
+
+/** Replays anything the offline queue is holding; safe to call often. */
+export function useFlushQueue() {
+  const api = useApi();
+  const invalidate = useInvalidator();
+  return useMutation<Awaited<ReturnType<typeof flushQueue>>, Error, void>({
+    mutationFn: () => flushQueue(api),
+    onSuccess: (result) => {
+      if (result.sent > 0) void invalidate.challenges();
+    },
   });
 }
 

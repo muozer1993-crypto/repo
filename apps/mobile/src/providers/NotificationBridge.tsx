@@ -17,8 +17,10 @@ import {
   setBadgeCount,
   type NotificationRoute,
 } from '@/services/notifications';
+import { flushQueue } from '@/services/offlineQueue';
+import { syncReminders, type ReminderChallenge } from '@/services/reminders';
 import { getDailySteps, startForegroundStepTracking } from '@/services/steps';
-import { useAuth } from '@/store/auth';
+import { useAuth, useLevel } from '@/store/auth';
 
 /**
  * Glue between the OS and the app:
@@ -33,6 +35,7 @@ export function NotificationBridge() {
   const serverUrl = useAuth((s) => s.serverUrl);
   const makeClient = useAuth((s) => s.client);
   const toast = useToast();
+  const level = useLevel();
   const queryClient = useQueryClient();
   const pushTokenSent = useRef<string | null>(null);
 
@@ -163,9 +166,40 @@ export function NotificationBridge() {
       }
     };
 
+    // anything logged while offline goes out as soon as we can reach the server
+    const drain = async () => {
+      try {
+        await flushQueue(makeClient());
+      } catch {
+        // the queue keeps the entries; we try again on the next foreground
+      }
+    };
+
+    // local reminders: a check-in deadline and the final hour of each challenge
+    const scheduleReminders = async () => {
+      try {
+        const summaries = await makeClient().challenges('active,pending');
+        const todayKeyLocal = new Date().toLocaleDateString('en-CA');
+        const reminders: ReminderChallenge[] = summaries.map((summary) => ({
+          id: summary.challenge.id,
+          title: summary.challenge.title,
+          endsAt: summary.challenge.endsAt,
+          metricType: summary.challenge.metricType,
+          deadlineTime: summary.challenge.deadlineTime,
+          doneToday: (summary.me?.lastEntryAt ?? '').slice(0, 10) === todayKeyLocal,
+        }));
+        await syncReminders(reminders, level);
+      } catch {
+        // reminders are a nicety; never block on them
+      }
+    };
+
     void syncSteps();
+    void drain();
+    void scheduleReminders();
     setBackgroundHandler(async () => {
       await syncSteps();
+      await drain();
       try {
         const unread = await makeClient().unreadCount();
         await setBadgeCount(unread.count);
@@ -176,7 +210,10 @@ export function NotificationBridge() {
     void registerBackgroundSync();
 
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void syncSteps();
+      if (state !== 'active') return;
+      void syncSteps();
+      void drain();
+      void scheduleReminders();
     });
 
     return () => {
@@ -184,7 +221,7 @@ export function NotificationBridge() {
       setBackgroundHandler(null);
       sub.remove();
     };
-  }, [token, serverUrl, makeClient, queryClient]);
+  }, [token, serverUrl, makeClient, queryClient, level]);
 
   return null;
 }

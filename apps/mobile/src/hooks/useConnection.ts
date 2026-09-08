@@ -27,6 +27,7 @@ export interface ConnectionState {
 
 export function useConnection(): ConnectionState {
   const serverUrl = useAuth((s) => s.serverUrl);
+  const token = useAuth((s) => s.token);
   const [online, setOnline] = useState(true);
   const [checked, setChecked] = useState(false);
   const [lastOkAt, setLastOkAt] = useState<number | null>(null);
@@ -34,6 +35,7 @@ export function useConnection(): ConnectionState {
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
+    if (!token) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
 
@@ -75,7 +77,7 @@ export function useConnection(): ConnectionState {
       clearTimeout(timer);
       subscription.remove();
     };
-  }, [serverUrl, nonce]);
+  }, [serverUrl, nonce, token]);
 
   return { online, checked, lastOkAt, retry: () => setNonce((n) => n + 1) };
 }
