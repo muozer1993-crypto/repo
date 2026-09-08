@@ -29,7 +29,7 @@ export function TauntBubble({
   return (
     <View style={[styles.shell, loud ? Shadow.glowAccent : Shadow.card, style]}>
       <LinearGradient
-        colors={loud ? ['#FF3D71', '#B5164A'] : ['#2A1520', '#1B1119']}
+        colors={loud ? [Colors.accent, '#B5164A'] : ['#2A1520', '#1B1119']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.gradient}>

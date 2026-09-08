@@ -373,9 +373,12 @@ export default function NewChallengeScreen() {
     if (step < 3) setStep(step + 1);
   };
 
+  /** A deep link straight into the wizard has no history to pop. */
+  const close = () => (router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)'));
+
   const goBack = () => {
     if (step === 0) {
-      router.back();
+      close();
       return;
     }
     setStep(step - 1);
@@ -396,7 +399,7 @@ export default function NewChallengeScreen() {
         deadlineTime: needsDeadline ? deadlineTime.trim() : undefined,
         proofRequired,
       });
-      router.replace(`/challenge/${challenge.id}`);
+      router.replace({ pathname: '/challenge/[id]', params: { id: challenge.id } });
     } catch {
       // surfaced from create.error below
     }
@@ -416,7 +419,7 @@ export default function NewChallengeScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Kapat"
-          onPress={() => router.back()}
+          onPress={close}
           style={({ pressed }) => [styles.close, pressed && styles.pressed]}>
           <Text variant="lead" muted>
             ✕

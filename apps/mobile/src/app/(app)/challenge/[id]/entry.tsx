@@ -1,5 +1,5 @@
 import type { ChallengeType } from '@koydum/shared';
-import { LIMITS, addDays, dayKeysBetween, getChallengeType, t, todayKey } from '@koydum/shared';
+import { LIMITS, addDays, getChallengeType, t } from '@koydum/shared';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -19,8 +19,10 @@ import { useToast } from '@/components/Toast';
 import { useAddEntry, useChallenge } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { ApiError, type ApiClient } from '@/lib/api';
-import { deviceTimezone, useAuth, useLevel } from '@/store/auth';
+import { useTimezone } from '@/hooks/useTimezone';
+import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
+import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { formatNumber } from '@/utils/format';
 
 /* ------------------------------------------------------------------ utils */
@@ -75,7 +77,7 @@ export default function EntryModalScreen() {
   const id = typeof params.id === 'string' ? params.id : '';
   const level = useLevel();
   const me = useAuth((s) => s.me);
-  const tz = me?.timezone || deviceTimezone();
+  const tz = useTimezone();
   const serverUrl = useAuth((s) => s.serverUrl);
   const api = useApi();
   const toast = useToast();
@@ -84,9 +86,11 @@ export default function EntryModalScreen() {
   const detail = query.data;
   const type: ChallengeType | undefined = detail ? getChallengeType(detail.challenge.typeKey) : undefined;
 
-  const today = todayKey(tz);
+  const today = safeTodayKey(tz);
   const yesterday = addDays(today, -1);
-  const windowKeys = detail ? dayKeysBetween(detail.challenge.startsAt, detail.challenge.endsAt, tz) : [];
+  const windowKeys = detail
+    ? safeDayKeysBetween(detail.challenge.startsAt, detail.challenge.endsAt, tz)
+    : [];
   const yesterdayAllowed = windowKeys.includes(yesterday) && LIMITS.MANUAL_BACKFILL_DAYS >= 1;
 
   const requestedDay = typeof params.day === 'string' ? params.day : '';
@@ -101,6 +105,21 @@ export default function EntryModalScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)'));
+
+  // a link without an id leaves the query disabled, so the spinner would never end
+  if (!id) {
+    return (
+      <Screen scroll contentStyle={styles.content}>
+        <EmptyState
+          emoji="🫥"
+          title="Çelinç bulunamadı"
+          subtitle="Bu bağlantıda çelinç numarası yok. Çelinci açıp oradan giriş yap."
+          actionLabel="Kapat"
+          onAction={close}
+        />
+      </Screen>
+    );
+  }
 
   if (query.isPending) {
     return (

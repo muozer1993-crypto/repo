@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/Text';
 import { useConnection } from '@/hooks/useConnection';
+import { useAuth } from '@/store/auth';
 import { Colors, Spacing } from '@/theme';
 
 /**
@@ -12,13 +13,16 @@ import { Colors, Spacing } from '@/theme';
  */
 export function OfflineBanner() {
   const { online, checked } = useConnection();
+  // (auth) is guarded off once a token exists, so a signed-in user has to go
+  // through Ayarlar to change the address
+  const signedIn = useAuth((state) => !!state.token);
   if (!checked || online) return null;
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Sunucuya ulaşılamıyor, adresi düzenle"
-      onPress={() => router.push('/(auth)/server')}
+      onPress={() => router.push(signedIn ? '/settings' : '/(auth)/server')}
       style={styles.wrap}>
       <View style={styles.dot} />
       <Text variant="micro" color={Colors.white} numberOfLines={1} style={styles.text}>

@@ -1,4 +1,4 @@
-import { LIMITS, getChallengeType, t, todayKey } from '@koydum/shared';
+import { LIMITS, getChallengeType, t } from '@koydum/shared';
 import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -31,8 +31,10 @@ import {
   watchAppState,
   type FocusSession,
 } from '@/services/focus';
-import { deviceTimezone, useAuth, useLevel } from '@/store/auth';
+import { useTimezone } from '@/hooks/useTimezone';
+import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
+import { safeTodayKey } from '@/utils/datetime';
 import { formatClock, formatMinutes } from '@/utils/format';
 
 const KEEP_AWAKE_TAG = 'koydum-focus';
@@ -51,7 +53,7 @@ export default function FocusScreen() {
   const id = typeof params.id === 'string' ? params.id : '';
   const level = useLevel();
   const me = useAuth((s) => s.me);
-  const tz = me?.timezone || deviceTimezone();
+  const tz = useTimezone();
   const toast = useToast();
 
   const query = useChallenge(id);
@@ -152,7 +154,7 @@ export default function FocusScreen() {
     setSaveError(null);
     try {
       await addEntry.mutateAsync({
-        dayKey: todayKey(tz),
+        dayKey: safeTodayKey(tz),
         value: Math.min(earned, LIMITS.FOCUS_MAX_MINUTES),
         source: 'focus',
         sessionId: target.sessionId,
@@ -200,6 +202,21 @@ export default function FocusScreen() {
   };
 
   /* --------------------------------------------------------------- gate */
+
+  // a link without an id leaves the query disabled, so the spinner would never end
+  if (!id) {
+    return (
+      <Screen scroll contentStyle={styles.center}>
+        <EmptyState
+          emoji="🫥"
+          title="Seans açılmadı"
+          subtitle="Bu bağlantıda çelinç numarası yok. Odak seansını çelincin içinden başlat."
+          actionLabel="Geri dön"
+          onAction={leave}
+        />
+      </Screen>
+    );
+  }
 
   if (query.isPending || !restored) {
     return (

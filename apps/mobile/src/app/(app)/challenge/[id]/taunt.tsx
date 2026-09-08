@@ -157,6 +157,22 @@ export default function TauntPickerScreen() {
     );
   }
 
+  // a link without an id leaves the query disabled: guard before the skeleton
+  if (!id) {
+    return (
+      <Screen scroll contentStyle={styles.content}>
+        <Header title="Laf seç" onClose={close} />
+        <EmptyState
+          emoji="🫥"
+          title="Çelinç bulunamadı"
+          subtitle="Bu bağlantıda çelinç numarası yok. Sonuç ekranından laf seç."
+          actionLabel="Kapat"
+          onAction={close}
+        />
+      </Screen>
+    );
+  }
+
   if (query.isPending) {
     return (
       <Screen scroll contentStyle={styles.content}>

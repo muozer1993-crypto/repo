@@ -1,5 +1,5 @@
 import type { ChallengeType, ParticipantView, Taunt, VulgarityLevel } from '@koydum/shared';
-import { dayKeyInTz, getChallengeType, scoreLabel, t } from '@koydum/shared';
+import { getChallengeType, scoreLabel, t } from '@koydum/shared';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef } from 'react';
@@ -18,8 +18,10 @@ import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import { useChallenge, useRematch, useResults } from '@/hooks/queries';
 import { ApiError } from '@/lib/api';
-import { deviceTimezone, useAuth, useLevel } from '@/store/auth';
+import { useTimezone } from '@/hooks/useTimezone';
+import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
+import { safeDayKey } from '@/utils/datetime';
 import { formatDayKey, relativeTime } from '@/utils/format';
 
 /* ------------------------------------------------------------------- copy */
@@ -121,7 +123,7 @@ export default function ResultsScreen() {
   const level = useLevel();
   const me = useAuth((s) => s.me);
   const meId = me?.id ?? null;
-  const tz = me?.timezone || deviceTimezone();
+  const tz = useTimezone();
   const toast = useToast();
 
   const query = useResults(id);
@@ -150,6 +152,22 @@ export default function ResultsScreen() {
       toast({ title: 'Olmadı', body: errorText(error, 'Rövanş açılamadı.'), kind: 'danger' });
     }
   };
+
+  // a link without an id leaves the query disabled: guard before the skeleton
+  if (!id) {
+    return (
+      <Screen scroll contentStyle={styles.content}>
+        <Header onBack={back} title="Sonuç" />
+        <EmptyState
+          emoji="🫥"
+          title="Çelinç bulunamadı"
+          subtitle="Bu bağlantıda çelinç numarası yok. Listeden birine dokun."
+          actionLabel="Listeye dön"
+          onAction={back}
+        />
+      </Screen>
+    );
+  }
 
   if (query.isPending) {
     return (
@@ -736,11 +754,9 @@ function Confetti() {
 
 /** "1 Eylül – 8 Eylül" in the reader's timezone. */
 function dateRange(startsAt: string, endsAt: string, tz: string): string {
-  const start = new Date(startsAt);
-  const end = new Date(endsAt);
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return '';
-  const startKey = dayKeyInTz(start, tz);
-  const endKey = dayKeyInTz(end, tz);
+  const startKey = safeDayKey(startsAt, tz);
+  const endKey = safeDayKey(endsAt, tz);
+  if (!startKey || !endKey) return '';
   if (startKey === endKey) return formatDayKey(startKey);
   return `${formatDayKey(startKey)} – ${formatDayKey(endKey)}`;
 }

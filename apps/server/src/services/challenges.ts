@@ -53,15 +53,24 @@ export interface SchedulerDeps {
 // Reads
 // ---------------------------------------------------------------------------
 
+/**
+ * Line-up order: the creator first, then everybody in the order they were invited.
+ *
+ * The last tiebreak is `rowid` (insertion order) rather than `user_id`, because
+ * user ids are random UUIDs — with an equal timestamp that would shuffle the
+ * line-up on every run, and `computeStandings` sorts on rank alone (a stable
+ * sort), so two tied players would swap places between two reads of the same
+ * finished challenge.
+ */
 export function participantRows(db: Database, challengeId: string): ParticipantRow[] {
   return db
-    .prepare('SELECT * FROM challenge_participants WHERE challenge_id = ? ORDER BY invited_at ASC, user_id ASC')
+    .prepare('SELECT * FROM challenge_participants WHERE challenge_id = ? ORDER BY invited_at ASC, rowid ASC')
     .all(challengeId) as ParticipantRow[];
 }
 
 export function acceptedParticipants(db: Database, challengeId: string): ParticipantRow[] {
   return db
-    .prepare("SELECT * FROM challenge_participants WHERE challenge_id = ? AND status = 'accepted' ORDER BY joined_at ASC, user_id ASC")
+    .prepare("SELECT * FROM challenge_participants WHERE challenge_id = ? AND status = 'accepted' ORDER BY joined_at ASC, rowid ASC")
     .all(challengeId) as ParticipantRow[];
 }
 

@@ -1,11 +1,4 @@
-import {
-  DEFAULT_TIMEZONE,
-  addDays,
-  dayKeyInTz,
-  todayKey,
-  type Notification,
-  type NotificationType,
-} from '@koydum/shared';
+import { addDays, type Notification, type NotificationType } from '@koydum/shared';
 import { router } from 'expo-router';
 import { Pressable, SectionList, type SectionListData, StyleSheet, View } from 'react-native';
 
@@ -19,9 +12,11 @@ import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import { useInbox, useMarkInboxRead } from '@/hooks/queries';
+import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
-import { deviceTimezone, useAuth, useLevel } from '@/store/auth';
+import { useLevel } from '@/store/auth';
 import { Colors, FontSize, Radius, Spacing } from '@/theme';
+import { safeDayKey, safeTodayKey } from '@/utils/datetime';
 import { formatDayKeyFriendly, relativeTime } from '@/utils/format';
 
 const TYPE_EMOJI: Record<NotificationType, string> = {
@@ -97,28 +92,6 @@ function targetFor(item: Notification): string | null {
   }
 }
 
-function safeToday(tz: string): string {
-  try {
-    return todayKey(tz);
-  } catch {
-    return todayKey(DEFAULT_TIMEZONE);
-  }
-}
-
-function safeDayKey(iso: string, tz: string): string | null {
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return null;
-  try {
-    return dayKeyInTz(date, tz);
-  } catch {
-    try {
-      return dayKeyInTz(date, DEFAULT_TIMEZONE);
-    } catch {
-      return null;
-    }
-  }
-}
-
 /** Newest first, split into day buckets (the API already sorts, we stay defensive). */
 function groupByDay(items: Notification[], tz: string, today: string, yesterday: string): DaySection[] {
   const sections: DaySection[] = [];
@@ -143,12 +116,11 @@ function groupByDay(items: Notification[], tz: string, today: string, yesterday:
 export default function InboxScreen() {
   const level = useLevel();
   const toast = useToast();
-  const me = useAuth((s) => s.me);
   const inbox = useInbox();
   const markRead = useMarkInboxRead();
 
-  const tz = me?.timezone ?? deviceTimezone();
-  const today = safeToday(tz);
+  const tz = useTimezone();
+  const today = safeTodayKey(tz);
   const yesterday = addDays(today, -1);
 
   const items = inbox.data ?? [];

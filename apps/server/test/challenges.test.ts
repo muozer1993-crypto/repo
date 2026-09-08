@@ -410,7 +410,9 @@ describe('accept / decline / leave / cancel', () => {
 
     const cancelled = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${id}/cancel` });
     expect(cancelled.statusCode).toBe(200);
-    expect(cancelled.json<Challenge>().status).toBe('cancelled');
+    // accept / decline / leave / cancel all answer with the full detail so the
+    // app can repaint the screen from the response.
+    expect(cancelled.json<ChallengeDetail>().challenge.status).toBe('cancelled');
 
     const inbox = listByType(harness.db, veli.me.id, 'challenge_cancelled');
     expect(inbox).toHaveLength(1);
@@ -651,13 +653,18 @@ describe('POST /challenges/:id/rematch', () => {
 
     const response = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
     expect(response.statusCode).toBe(201);
-    const detail = response.json<ChallengeDetail>();
+    // Like creation, the rematch answers with the bare new Challenge.
+    const rematch = response.json<Challenge>();
 
-    expect(detail.challenge.rematchOfId).toBe(challengeId);
-    expect(detail.challenge.status).toBe('pending');
-    expect(detail.challenge.typeKey).toBe('adim_yarisi');
-    expect(Date.parse(detail.challenge.startsAt)).toBe(harness.now().getTime() + 5 * 60 * 1000);
-    expect(Date.parse(detail.challenge.endsAt) - Date.parse(detail.challenge.startsAt)).toBe(3 * 24 * 60 * 60 * 1000);
+    expect(rematch.rematchOfId).toBe(challengeId);
+    expect(rematch.status).toBe('pending');
+    expect(rematch.typeKey).toBe('adim_yarisi');
+    expect(Date.parse(rematch.startsAt)).toBe(harness.now().getTime() + 5 * 60 * 1000);
+    expect(Date.parse(rematch.endsAt) - Date.parse(rematch.startsAt)).toBe(3 * 24 * 60 * 60 * 1000);
+
+    const detail = (
+      await authed(harness.app, veli.token)({ method: 'GET', url: `/challenges/${rematch.id}` })
+    ).json<ChallengeDetail>();
     expect(detail.me?.status).toBe('accepted');
     expect(detail.participants.find((p) => p.user.id === ali.me.id)?.status).toBe('invited');
 

@@ -50,7 +50,8 @@ interface HeadToHead {
 }
 
 export default function UserProfileScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string }>();
+  const id = typeof params.id === 'string' ? params.id : '';
   const myId = useAuth((s) => s.me?.id ?? null);
   const api = useApi();
   const toast = useToast();
@@ -91,7 +92,7 @@ export default function UserProfileScreen() {
           : `${head.mine}-${head.theirs} başa baş. Biri birine koyacak, kim olacak?`;
 
   const openChallenge = () => {
-    router.push({ pathname: '/(app)/challenge/new', params: { friend: String(id) } });
+    router.push({ pathname: '/(app)/challenge/new', params: { friend: id } });
   };
 
   const removeFriend = async () => {
@@ -102,7 +103,7 @@ export default function UserProfileScreen() {
     );
     if (!ok) return;
     friendAction.mutate(
-      { kind: 'remove', userId: String(id) },
+      { kind: 'remove', userId: id },
       {
         onSuccess: () => {
           toast({ title: 'Listeden çıkarıldı', kind: 'info' });
@@ -127,7 +128,7 @@ export default function UserProfileScreen() {
     if (!ok) return;
     setBusy('block');
     try {
-      await api.blockUser(String(id));
+      await api.blockUser(id);
       toast({ title: 'Engellendi', kind: 'info' });
       await friends.refetch();
       if (router.canGoBack()) router.back();
@@ -150,7 +151,7 @@ export default function UserProfileScreen() {
     }
     setBusy('report');
     try {
-      await api.reportUser(String(id), text);
+      await api.reportUser(id, text);
       setReportOpen(false);
       setReason('');
       toast({ title: 'Şikayet alındı', body: 'Bakacağız.', kind: 'success' });
@@ -166,6 +167,21 @@ export default function UserProfileScreen() {
   };
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)'));
+
+  // a link without an id leaves the query disabled, so the spinner would never end
+  if (!id) {
+    return (
+      <Screen contentStyle={styles.content}>
+        <EmptyState
+          emoji="🫥"
+          title="Profil bulunamadı"
+          subtitle="Bu bağlantıda kullanıcı numarası yok. Kankalar listesinden birine dokun."
+          actionLabel="Geri dön"
+          onAction={back}
+        />
+      </Screen>
+    );
+  }
 
   if (profile.isLoading) {
     return (
