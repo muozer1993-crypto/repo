@@ -498,13 +498,14 @@ function StepsAction({ id, detail, type, today }: ActionProps) {
       ) : null}
 
       <View style={styles.row}>
-        {availability?.available ? (
+        {!unavailable ? (
           <Button
             title="Senkronla"
             icon="🔄"
             size="md"
             style={styles.grow}
             loading={syncing}
+            disabled={availability === null}
             onPress={() => void sync()}
           />
         ) : null}
