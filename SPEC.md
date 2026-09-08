@@ -231,6 +231,8 @@ reminders_sent(user_id TEXT, day_key TEXT, PRIMARY KEY(user_id, day_key))
 ### 2.2 Endpoints (all JSON; errors `{ error: { code, message } }`, message in Turkish)
 
 Auth: `Authorization: Bearer <jwt>`; 401 `unauthorized`. Validation errors → 400 `validation` with zod issues.
+Several endpoints take no request body. A JSON content type with an empty payload is parsed as `{}`
+rather than rejected, so a client that always sets `Content-Type: application/json` still works.
 
 | Method & path | Notes |
 |---|---|
@@ -255,16 +257,16 @@ Auth: `Authorization: Bearer <jwt>`; 401 `unauthorized`. Validation errors → 4
 | DELETE /friends/:userId | remove friendship |
 | GET /catalog | shared catalog dump |
 | GET /challenges?status=active,pending,finished | mine (accepted or invited), `ChallengeSummary[]`, ordered: active by endsAt asc, pending by startsAt, finished by finalizedAt desc |
-| POST /challenges | creator auto `accepted`; others `invited` + `challenge_invite` notification. If startsAt <= now → status `active` immediately |
+| POST /challenges | 201. Returns the bare `Challenge` — the wizard navigates straight to `/challenge/<id>`. Creator auto `accepted`; others `invited` + `challenge_invite` notification. If startsAt <= now → status `active` immediately |
 | GET /challenges/:id | `ChallengeDetail`; participants only (404 otherwise) |
-| POST /challenges/:id/accept, /decline, /leave | accept while status ∈ pending/active and now < endsAt − 1h; leave only while pending/active (marks `left`) |
-| POST /challenges/:id/cancel | creator, only pending; notifies |
+| POST /challenges/:id/accept, /decline, /leave | Returns the refreshed `ChallengeDetail`. Accept while status ∈ pending/active and now is before `endsAt − cutoff`, where `cutoff = min(1h, duration/4)` so a minimum-length challenge stays joinable; leave only while pending/active (marks `left`) |
+| POST /challenges/:id/cancel | creator, only pending; notifies. Returns the refreshed `ChallengeDetail` |
 | POST /challenges/:id/entries | see 2.3; returns `{ entry, standings }` |
 | DELETE /challenges/:id/entries/:entryId | own manual entries only, while active |
 | POST /challenges/:id/entries/:entryId/dispute | not own; one per user per entry; threshold rule → entry `rejected` + `entry_rejected` notification to owner; disputers get `disputesWon` |
 | POST /challenges/:id/poke | active only; target must be participant; rate limit 1 per (from,to,challenge) per 2h → 429 `poke_cooldown`. Template from `poke` context clamped to target's level (or default pick). Notification type `poke` |
 | POST /challenges/:id/taunt | finished only; sender must be winner (`winnerId`), target must be a loser (accepted, not winner); one per target (409 `already_taunted`); template clamped to target's `vulgarity_max` — if requested template level > target max, pick deterministic template same context at target max; `customBody` allowed (level = sender-chosen ≤ target max, checked by `containsBanned` → 400 `banned_content`). Notification type `taunt` with data `{ challengeId, tauntId }` |
-| POST /challenges/:id/rematch | finished only, any accepted participant; clones settings (same type, duration, reward), startsAt = now + 5 min, invites all previous accepted participants, `rematch_of_id`; notification `rematch` |
+| POST /challenges/:id/rematch | 201, returns the new bare `Challenge`. Finished only, any accepted participant; clones settings (same type, duration, reward), startsAt = now + 5 min, invites all previous accepted participants, `rematch_of_id`; notification `rematch` |
 | GET /challenges/:id/results | `{ challenge, standings: ParticipantView[], taunts, tauntTemplatesForWinner?: TauntTemplate[] (rendered previews per loser) }` |
 | GET /leaderboard | friends + me ranked by wins, then tauntsSent |
 | POST /uploads | multipart field `file`; returns `{ url: PUBLIC_URL + '/uploads/<uuid>.<ext>' }` |
