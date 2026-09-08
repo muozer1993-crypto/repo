@@ -142,8 +142,9 @@ export function isValidTimeZone(tz: unknown): tz is string {
   }
 }
 
+/** Throws on malformed AND calendar-impossible keys (2024-02-30) so nothing silently rolls over. */
 function parseDayKey(dayKey: string): [number, number, number] {
-  if (!DAY_KEY_REGEX.test(dayKey)) throw new RangeError(`Invalid day key: ${dayKey}`);
+  if (!isValidDayKey(dayKey)) throw new RangeError(`Invalid day key: ${dayKey}`);
   const [y, m, d] = dayKey.split('-').map(Number) as [number, number, number];
   return [y, m, d];
 }
@@ -160,6 +161,7 @@ function utcDateToDayKey(date: Date): string {
 
 /** Add `n` calendar days to a day key (n may be negative). Pure string arithmetic. */
 export function addDays(dayKey: string, n: number): string {
+  if (typeof n !== 'number' || !Number.isFinite(n)) throw new RangeError(`Invalid day offset: ${String(n)}`);
   const [y, m, d] = parseDayKey(dayKey);
   return utcDateToDayKey(new Date(Date.UTC(y, m - 1, d + Math.trunc(n))));
 }

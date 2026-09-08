@@ -82,7 +82,8 @@ function roundScore(n: number): number {
 }
 
 function isCountedEntry(e: ScoreEntry): boolean {
-  // `ok` counts; `disputed` counts (pending decision); `rejected` never counts.
+  // SPEC 1.3: `ok` and `disputed` (dispute pending) entries count; `rejected` never
+  // counts. Disputing alone must not zero out a rival — only an upheld dispute does.
   return e.status !== 'rejected' && Number.isFinite(e.value);
 }
 
@@ -91,7 +92,10 @@ function isCountedEntry(e: ScoreEntry): boolean {
  *
  * - `dayKeys` is the challenge's day window (see `dayKeysBetween`). It is used only
  *   for the missing-day penalty of `manual_lower_is_better`; entries are NOT filtered
- *   by it — the server validates day keys at write time.
+ *   by it — the server validates day keys at write time. Because the window is
+ *   computed once per challenge while day keys are validated per user timezone, an
+ *   entry may legitimately sit on a boundary day outside `dayKeys`: its value still
+ *   counts, but it never cancels the penalty of an unreported in-window day.
  * - `days` = number of distinct day keys with a counted entry.
  * - Boolean types (`checkin_deadline`, `daily_boolean`) score the number of distinct
  *   days with a positive value, so duplicate rows for one day cannot double count.
@@ -127,7 +131,10 @@ export function computeScore(
       let sum = 0;
       for (const e of counted) sum += e.value;
       const penalty = type.missingDayPenalty ?? type.maxPerDay;
-      const missingDays = Math.max(0, dayKeys.length - days);
+      let missingDays = 0;
+      for (const key of new Set(dayKeys)) {
+        if (!dayValues.has(key)) missingDays += 1;
+      }
       return { score: roundScore(sum + missingDays * penalty), days };
     }
     case 'auto_steps':
@@ -180,18 +187,24 @@ export function rankParticipants(type: ChallengeType, dayKeys: string[], inputs:
 }
 
 /**
- * How decisively the winner won.
+ * How decisively the winner won (SPEC 1.3).
  * - `big`: winner ≥ 2× loser (or loser at 0 while winner > 0).
- * - `close`: difference ≤ 10% of the larger score.
+ * - `close`: difference ≤ 10% of the winner's score.
  * - `normal`: everything else.
- * For `lower` direction the roles of the two magnitudes are swapped (the loser has
- * the larger number), so "winner ≥ 2× loser" reads "loser ≥ 2× winner".
+ *
+ * For `direction === 'lower'` the comparison is mirrored, because there the LOSER holds
+ * the larger number and the literal rule could never produce `big`: big if
+ * loser ≥ 2× winner (or winner 0 and loser > 0); close if the difference ≤ 10% of the
+ * loser's score. Every caller must use this function rather than re-deriving the rule.
+ *
+ * Scores are compared at the same 3-decimal precision `computeScore` produces, so an
+ * exact 10% margin on decimal scores (7 vs 6.3) is `close` and not a float accident.
  */
 export function winMargin(type: Pick<ChallengeType, 'direction'>, winnerScore: number, loserScore: number): WinMargin {
-  const hi = type.direction === 'lower' ? loserScore : winnerScore;
-  const lo = type.direction === 'lower' ? winnerScore : loserScore;
-  if (hi > 0 && (lo <= 0 || hi >= 2 * lo)) return 'big';
-  if (hi <= 0 || hi - lo <= 0.1 * hi) return 'close';
+  const hi = roundScore(type.direction === 'lower' ? loserScore : winnerScore);
+  const lo = roundScore(type.direction === 'lower' ? winnerScore : loserScore);
+  if (hi > 0 && (lo <= 0 || hi >= roundScore(2 * lo))) return 'big';
+  if (hi <= 0 || roundScore(hi - lo) <= roundScore(0.1 * hi)) return 'close';
   return 'normal';
 }
 

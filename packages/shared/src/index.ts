@@ -4,13 +4,10 @@ export * from './types';
 export * from './schemas';
 export * from './scoring';
 export * from './time';
+export * from './text';
 export * from './banned';
+// clampLevel() lives in levels.ts (SPEC 1.4 lists it under taunts.ts; taunts.ts imports it from here).
 export * from './levels';
-
-// `clampLevel` is re-exported explicitly so that a future `export * from './taunts'`
-// defining the same name (SPEC 1.4) cannot produce an ambiguous-export error.
-export { clampLevel } from './levels';
-
 export * from './catalog';
 export * from './taunts';
 export * from './copy';

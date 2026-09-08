@@ -13,7 +13,7 @@
  *
  * ZWJ (U+200D) is deliberately NOT included — it glues emoji sequences (👨‍👩‍👧) together.
  */
-export const INVISIBLE_CHARS_REGEX = /[­؜᠎​‌‎‏⁠-⁤﻿]/g;
+export const INVISIBLE_CHARS_REGEX = /[\u00AD\u061C\u180E\u200B\u200C\u200E\u200F\u2060-\u2064\uFEFF]/g;
 
 /** Remove the characters matched by `INVISIBLE_CHARS_REGEX`. */
 export function stripInvisible(text: string): string {
