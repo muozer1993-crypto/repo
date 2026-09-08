@@ -88,6 +88,21 @@ describe('offline entry queue', () => {
     expect(await readQueue()).toEqual([]);
   });
 
+  it('never sends the same parked entry twice when two flushes overlap', async () => {
+    await enqueueEntry('c1', body('2026-09-08', 3), 'a');
+    await enqueueEntry('c1', body('2026-09-07', 4), 'b');
+    // the flush is fired and forgotten from three places at once (a successful
+    // write, mount, foreground): a second pass must not replay the first one
+    const addEntry = jest.fn().mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({}), 5))
+    );
+    const client = fakeClient(addEntry);
+    const [first, second] = await Promise.all([flushQueue(client), flushQueue(client)]);
+    expect(addEntry).toHaveBeenCalledTimes(2);
+    expect(first).toEqual(second);
+    expect(await readQueue()).toEqual([]);
+  });
+
   it('does nothing on an empty queue', async () => {
     const addEntry = jest.fn();
     expect(await flushQueue(fakeClient(addEntry))).toEqual({ sent: 0, dropped: 0, remaining: 0 });
