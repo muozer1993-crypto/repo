@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { FastifyInstance, HTTPMethods, InjectOptions } from 'fastify';
+import type { FastifyInstance, InjectOptions } from 'fastify';
 import { makeApp, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
@@ -71,8 +71,11 @@ function normalize(routePath: string): string {
     .replace(/([^/])\*$/, '$1/*');
 }
 
+/** The verbs the SPEC uses — narrow enough for both `hasRoute` and `inject`. */
+type SpecMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+
 /** Every endpoint in the SPEC 2.2 table, in the order it is listed there. */
-const SPEC_ENDPOINTS: [HTTPMethods, string][] = [
+const SPEC_ENDPOINTS: [SpecMethod, string][] = [
   ['GET', '/health'],
   ['POST', '/auth/register'],
   ['POST', '/auth/login'],
@@ -119,6 +122,28 @@ const SPEC_ENDPOINTS: [HTTPMethods, string][] = [
 function sampleUrl(specPath: string): string {
   return specPath.replace(/:[A-Za-z0-9_]+/g, 'yok').replace(/\*$/, 'yok.jpg');
 }
+
+describe('route modules', () => {
+  const routeDir = new URL('../src/routes/', import.meta.url);
+
+  it('registers every route file in src/routes, and each one default-exports a plugin', async () => {
+    const appSource = fs.readFileSync(new URL('../src/app.ts', import.meta.url), 'utf8');
+    const imported = [...appSource.matchAll(/from '\.\/routes\/([A-Za-z0-9_.-]+)\.js'/g)].map((m) => m[1]);
+    const onDisk = fs
+      .readdirSync(routeDir)
+      .filter((file) => file.endsWith('.ts'))
+      .map((file) => file.replace(/\.ts$/, ''));
+
+    expect([...imported].sort()).toEqual([...onDisk].sort());
+
+    for (const name of onDisk) {
+      const module = (await import(new URL(`${name}.js`, routeDir).href)) as { default?: unknown };
+      expect(typeof module.default, `src/routes/${name}.ts default export`).toBe('function');
+      // A Fastify plugin takes the instance (and optionally its options).
+      expect((module.default as (...args: unknown[]) => unknown).length).toBeGreaterThanOrEqual(1);
+    }
+  });
+});
 
 describe('SPEC 2.2 route table', () => {
   it('registers every endpoint the SPEC promises', async () => {

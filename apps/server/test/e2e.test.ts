@@ -79,6 +79,7 @@ describe('KOYDUM end to end', () => {
     ]);
 
     // ----------------------------------------------------------------- çelinç
+    h.advance(5 * 60_000); // Ali thinks about it for five minutes
     const created = await asAli({
       method: 'POST',
       url: '/challenges',
@@ -105,6 +106,7 @@ describe('KOYDUM end to end', () => {
     expect(join.json<ChallengeDetail>().me?.status).toBe('accepted');
 
     // ------------------------------------------------------------------ adım
+    h.advance(3 * HOUR); // an afternoon of walking, same local day
     const dayKey = todayKey(DEFAULT_TIMEZONE, h.now());
     const aliWalk = await asAli({
       method: 'POST',
@@ -135,6 +137,7 @@ describe('KOYDUM end to end', () => {
     expect(results.tauntTemplatesForWinner?.length ?? 0).toBeGreaterThan(0);
 
     // ------------------------------------------------------------ KOYDUM MU?
+    h.advance(2 * 60_000); // Ali opens the results screen and picks his words
     // Ali reaches for the filthiest template he has; Veli's ceiling decides.
     const taunt = await asAli({
       method: 'POST',
