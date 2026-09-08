@@ -18,7 +18,7 @@ import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import { useAddEntry, useChallenge } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
-import { ApiError, type ApiClient } from '@/lib/api';
+import type { ApiClient } from '@/lib/api';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
@@ -73,7 +73,6 @@ export default function EntryModalScreen() {
   const params = useLocalSearchParams<{ id: string; day?: string; proof?: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
   const level = useLevel();
-  const me = useAuth((s) => s.me);
   const tz = useTimezone();
   const serverUrl = useAuth((s) => s.serverUrl);
   const api = useApi();

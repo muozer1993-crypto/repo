@@ -14,9 +14,7 @@ import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Sheet } from '@/components/Sheet';
 import { Text } from '@/components/Text';
-import { useToast } from '@/components/Toast';
 import { useAddEntry, useChallenge } from '@/hooks/queries';
-import { ApiError } from '@/lib/api';
 import {
   FOCUS_PRESETS,
   GRACE_MS,
@@ -32,7 +30,7 @@ import {
   type FocusSession,
 } from '@/services/focus';
 import { useTimezone } from '@/hooks/useTimezone';
-import { useAuth, useLevel } from '@/store/auth';
+import { useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
@@ -49,9 +47,7 @@ export default function FocusScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
   const level = useLevel();
-  const me = useAuth((s) => s.me);
   const tz = useTimezone();
-  const toast = useToast();
 
   const query = useChallenge(id);
   const detail = query.data;

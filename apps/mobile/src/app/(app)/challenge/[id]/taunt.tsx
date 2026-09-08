@@ -28,7 +28,6 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { useChallenge, useResults, useTaunt } from '@/hooks/queries';
-import { ApiError } from '@/lib/api';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { errorText } from '@/utils/errors';

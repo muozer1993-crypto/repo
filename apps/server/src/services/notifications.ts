@@ -92,31 +92,38 @@ export function unreadCount(db: Database, userId: string): UnreadCount {
   const row = db
     .prepare(
       `SELECT COUNT(*) AS n,
-              (SELECT id FROM notifications WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1) AS latest_id
+              (SELECT id FROM notifications WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1) AS latest_id
          FROM notifications WHERE user_id = ? AND read_at IS NULL`,
     )
     .get(userId, userId) as { n: number | null; latest_id: string | null } | undefined;
   return { count: Number(row?.n ?? 0), latestId: row?.latest_id ?? null };
 }
 
-/** Newest first, optionally paging backwards from `before`. */
+/**
+ * Newest first, optionally paging backwards from `before`.
+ *
+ * Rows written in the same millisecond (one scheduler pass can finish a challenge,
+ * hand out a badge and land a taunt at the same `created_at`) fall back to `rowid`,
+ * i.e. the order they actually happened — `id` is a random UUID and would shuffle
+ * the top of the inbox on every read.
+ */
 export function listInbox(db: Database, userId: string, options: InboxQueryOptions = {}): NotificationRow[] {
   const limit = Math.min(Math.max(1, Math.trunc(options.limit ?? LIMITS.INBOX_PAGE_DEFAULT)), LIMITS.INBOX_PAGE_MAX);
   if (options.before) {
     return db
       .prepare(
-        'SELECT * FROM notifications WHERE user_id = ? AND created_at < ? ORDER BY created_at DESC, id DESC LIMIT ?',
+        'SELECT * FROM notifications WHERE user_id = ? AND created_at < ? ORDER BY created_at DESC, rowid DESC LIMIT ?',
       )
       .all(userId, options.before, limit) as NotificationRow[];
   }
   return db
-    .prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?')
+    .prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
     .all(userId, limit) as NotificationRow[];
 }
 
 /** All notifications of one type for a user (used by tests and the results route). */
 export function listByType(db: Database, userId: string, type: NotificationType): NotificationRow[] {
   return db
-    .prepare('SELECT * FROM notifications WHERE user_id = ? AND type = ? ORDER BY created_at DESC, id DESC')
+    .prepare('SELECT * FROM notifications WHERE user_id = ? AND type = ? ORDER BY created_at DESC, rowid DESC')
     .all(userId, type) as NotificationRow[];
 }

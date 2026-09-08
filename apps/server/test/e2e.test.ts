@@ -96,8 +96,9 @@ describe('KOYDUM end to end', () => {
     // Starting now means it is live now — no scheduler pass needed.
     expect(challenge.status).toBe('active');
 
+    // Newest first: the invite sits on top of the friend request from a minute ago.
     const invite = (await asVeli({ method: 'GET', url: '/me/inbox' })).json<Notification[]>();
-    expect(invite[0].type).toBe('challenge_invite');
+    expect(invite.map((item) => item.type)).toEqual(['challenge_invite', 'friend_request']);
 
     const join = await asVeli({ method: 'POST', url: `/challenges/${challenge.id}/accept` });
     expect(join.statusCode).toBe(200);

@@ -2,7 +2,7 @@ import { Pedometer } from 'expo-sensors';
 import { Platform } from 'react-native';
 
 import { StorageKeys, getJson, setJson } from '@/lib/storage';
-import type { DailySteps, StepAvailability, StepSource } from '@/services/steps';
+import type { DailySteps, StepAvailability } from '@/services/steps';
 
 /**
  * Step counting on device.

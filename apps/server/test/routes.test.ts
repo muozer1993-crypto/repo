@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { FastifyInstance, HTTPMethods } from 'fastify';
+import type { FastifyInstance, HTTPMethods, InjectOptions } from 'fastify';
 import { makeApp, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
@@ -151,7 +151,8 @@ describe('SPEC 2.2 route table', () => {
 
     for (const [method, specPath] of SPEC_ENDPOINTS) {
       if (specPath === '/uploads/*') continue; // covered below, with a real file
-      const response = await harness.app.inject({ method, url: sampleUrl(specPath) });
+      const options: InjectOptions = { method, url: sampleUrl(specPath) };
+      const response = await harness.app.inject(options);
       expect(response.statusCode, `${method} ${specPath} → ${response.statusCode}`).not.toBe(404);
       // Everything behind `Authorization: Bearer` says so rather than 404-ing.
       if (specPath !== '/health' && specPath !== '/catalog' && !specPath.startsWith('/auth/')) {
