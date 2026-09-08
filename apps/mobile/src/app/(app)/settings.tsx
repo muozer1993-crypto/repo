@@ -83,13 +83,21 @@ export default function SettingsScreen() {
   const toast = useToast();
   const updateMe = useUpdateMe();
 
-  const [pendingLevel, setPendingLevel] = useState<VulgarityLevel>(me?.vulgarityMax ?? 2);
+  /**
+   * The picker shows the account's level, with a short-lived optimistic
+   * override while the PATCH is in flight. Seeding state from `me` once would
+   * freeze a stale level on the screen: `me` starts from the storage cache and
+   * is refreshed right after boot, and it also changes when the level was
+   * edited on another device.
+   */
+  const [levelOverride, setLevelOverride] = useState<VulgarityLevel | null>(null);
   const [push, setPush] = useState<PushRegistration | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
   const [steps, setSteps] = useState<StepAvailability | null>(null);
   const [stepsBusy, setStepsBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const pendingLevel: VulgarityLevel = levelOverride ?? me?.vulgarityMax ?? 2;
   const preview = renderTaunt(pickTaunt('win', pendingLevel, 1), PREVIEW_VARS);
   const deviceTz = deviceTimezone();
   const version = Application.nativeApplicationVersion ?? (Platform.OS === 'web' ? 'web' : '—');
@@ -123,13 +131,6 @@ export default function SettingsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // `me` is seeded from cache on a cold start and refreshed right after, and it
-  // also changes when the level was edited on another device: without this the
-  // picker and its preview would keep showing a level the account no longer has
-  useEffect(() => {
-    if (me) setPendingLevel(me.vulgarityMax);
-  }, [me]);
-
   const save = (body: Parameters<typeof updateMe.mutate>[0], okMessage: string) => {
     updateMe.mutate(body, {
       onSuccess: () => toast({ title: okMessage, kind: 'success' }),
@@ -143,8 +144,21 @@ export default function SettingsScreen() {
   };
 
   const chooseLevel = (next: VulgarityLevel) => {
-    setPendingLevel(next);
-    save({ vulgarityMax: next }, 'Seviye kaydedildi');
+    setLevelOverride(next);
+    updateMe.mutate(
+      { vulgarityMax: next },
+      {
+        onSuccess: () => toast({ title: 'Seviye kaydedildi', kind: 'success' }),
+        onError: (err) =>
+          toast({
+            title: 'Kaydedilemedi',
+            body: err instanceof ApiError ? err.message : undefined,
+            kind: 'danger',
+          }),
+        // whatever happened, the store is now the truth again
+        onSettled: () => setLevelOverride(null),
+      }
+    );
   };
 
   const chooseHour = (hour: number | null) => {
