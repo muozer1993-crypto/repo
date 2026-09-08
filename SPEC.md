@@ -296,9 +296,11 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
 1. `pending` with `starts_at <= now`: if accepted count ≥ 2 → `active` + `challenge_started` notification to accepted;
    else if `ends_at <= now` → `cancelled` (`challenge_cancelled`). (Single-participant challenges wait; others can still accept.)
 2. `active` with `ends_at <= now` → finalize: accepted participants with `rankParticipants`; write final_score/rank,
-   winner_id/is_tie, `finished`, `finalized_at`; notifications: winner → `challenge_finished` with data `{ role: 'winner' }`
-   (title from copy `challenge_finished_won`), losers → `{ role: 'loser', winnerId }`, tie → `{ role: 'tie' }`.
-   Award badges (stats recompute) for all participants.
+   winner_id/is_tie, `finished`, `finalized_at`; notifications: winner → `challenge_finished` with data
+   `{ role: 'winner' }`, losers → `{ role: 'loser', winnerId }`, tie → `{ role: 'tie' }`. The TITLE is a short
+   lock-screen phrase per level ("Kazandın 🏆" / "KOYDUN! 👑" / "KOYDUN! 👑🍆", and "Bu tur bitti" / "Yedin lan" /
+   "YEDİN 🍆"); the `challenge_finished_won` / `_lost` sentence opens the BODY, because a phone truncates a long
+   title to nothing useful. Award badges (stats recompute) for all participants.
 3. Reminders: for each user with `reminder_hour` not null and an active challenge, when `localHour(now, tz) === reminder_hour`
    and no `reminders_sent` row for today → `reminder` notification with copy `notification_daily_reminder`.
 4. Push queue: every notification row with `pushed_at IS NULL AND push_error IS NULL` for users with a token → Expo push
