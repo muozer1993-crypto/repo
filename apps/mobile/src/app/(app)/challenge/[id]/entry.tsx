@@ -149,9 +149,25 @@ export default function EntryModalScreen() {
   const chips = quickAdds(type.maxPerEntry);
   const notActive = challenge.status !== 'active';
   const notPlaying = detail.me?.status !== 'accepted';
+  const dayLabel = selectedDay === today ? 'Bugün' : 'Dün';
+
+  /**
+   * `manual_count` appends, so the server rejects anything that pushes the day's
+   * SUM past `maxPerDay` (400 `daily_cap`). The quick-add chips on the detail
+   * screen already know this; without the same check here a legal single value
+   * round-trips to a server error.
+   */
+  const appends = type.metricType === 'manual_count';
+  const dayTotal = appends
+    ? detail.myEntries
+        .filter((entry) => entry.dayKey === selectedDay && entry.status !== 'rejected')
+        .reduce((sum, entry) => sum + entry.value, 0)
+    : 0;
+  const remaining = appends ? Math.max(0, type.maxPerDay - dayTotal) : type.maxPerEntry;
+  const ceiling = Math.min(type.maxPerEntry, remaining);
 
   const bump = (delta: number) => {
-    const next = Math.min(type.maxPerEntry, (value ?? 0) + delta);
+    const next = Math.min(ceiling, (value ?? 0) + delta);
     setRaw(String(next).replace('.', ','));
     setError(null);
   };
@@ -207,12 +223,20 @@ export default function EntryModalScreen() {
       setError('Sıfır girişin kimseye faydası yok.');
       return;
     }
+    if (appends && value > remaining) {
+      setError(
+        remaining <= 0
+          ? `${dayLabel} için günlük tavan doldu (${formatNumber(type.maxPerDay)} ${type.unitTr}).`
+          : `${dayLabel} için ${formatNumber(remaining)} ${type.unitTr} kaldı — günlük tavan ${formatNumber(type.maxPerDay)} ${type.unitTr}.`
+      );
+      return;
+    }
     if (proofRequired && !proofUrl) {
       setError(t('proof_needed', level));
       return;
     }
     try {
-      await addEntry.mutateAsync({
+      const response = await addEntry.mutateAsync({
         dayKey: selectedDay,
         value,
         source: 'manual',
@@ -220,11 +244,20 @@ export default function EntryModalScreen() {
         proofUrl: proofUrl ?? undefined,
         clientTime: new Date().toISOString(),
       });
-      toast({
-        title: 'Yazıldı',
-        body: `${formatNumber(value)} ${type.unitTr} · ${selectedDay === today ? 'bugün' : 'dün'}`,
-        kind: 'success',
-      });
+      toast(
+        response.queued
+          ? {
+              // parked in the offline queue: the standings do not move yet
+              title: 'Sıraya alındı',
+              body: `${formatNumber(value)} ${type.unitTr} · bağlantı gelince gönderilecek.`,
+              kind: 'info',
+            }
+          : {
+              title: 'Yazıldı',
+              body: `${formatNumber(value)} ${type.unitTr} · ${dayLabel.toLocaleLowerCase('tr-TR')}`,
+              kind: 'success',
+            }
+      );
       close();
     } catch (err) {
       setError(errorText(err, 'Giriş kaydedilemedi.'));
@@ -292,6 +325,16 @@ export default function EntryModalScreen() {
           Tek girişte en fazla {formatNumber(type.maxPerEntry)} {type.unitTr} · günlük tavan{' '}
           {formatNumber(type.maxPerDay)} {type.unitTr}
         </Text>
+        {appends ? (
+          <Text
+            variant="tiny"
+            color={remaining <= 0 ? Colors.danger : Colors.textFaint}
+            style={styles.hint}>
+            {remaining <= 0
+              ? `${dayLabel} için tavan doldu (${formatNumber(dayTotal)} ${type.unitTr} girdin).`
+              : `${dayLabel} için kalan: ${formatNumber(remaining)} ${type.unitTr}.`}
+          </Text>
+        ) : null}
       </Card>
 
       {/* --------------------------------------------------------- day */}
