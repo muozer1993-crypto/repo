@@ -14,6 +14,15 @@ odak seansı, sabah 07:00'den önce kalkma...), herkesin skoru sayılır, süre 
 Uygulama hem **iOS** hem **Android** için tek koddan çalışır (Expo / React Native).
 Arkadaş grubunun kendi sunucusunu çalıştırması yeterli; ortada kayıt olunacak bir şirket yok.
 
+<p align="center">
+  <img src="docs/screens/03-shame.png" width="30%" alt="Rezillik ekranı: gelen KOYDUM" />
+  <img src="docs/screens/04-winner.png" width="30%" alt="Kazananın sonuç ekranı" />
+  <img src="docs/screens/06-inbox.png" width="30%" alt="Gelen kutusu" />
+</p>
+
+<p align="center"><i>Soldan sağa: rezillik ekranı, kazananın laf hakkı, gelen kutusu.
+Bu görüntüler uçtan uca test çalışırken gerçek veriyle çekildi (<code>node e2e/smoke.mjs</code>).</i></p>
+
 ---
 
 ## İçindekiler
@@ -29,6 +38,7 @@ Arkadaş grubunun kendi sunucusunu çalıştırması yeterli; ortada kayıt olun
 9. [Proje yapısı](#proje-yapısı)
 10. [Geliştirme komutları](#geliştirme-komutları)
 11. [Sık karşılaşılan sorunlar](#sık-karşılaşılan-sorunlar)
+12. [Testler](#testler)
 
 ---
 
@@ -314,6 +324,25 @@ açıldığında geçmiş çelinçleri de kapatır.
 **Saat farkı.**
 Günler kullanıcının kendi saat dilimine göre hesaplanır. Yurt dışına çıkarsan Ayarlar
 ekranındaki "cihazdan güncelle" düğmesine bas.
+
+---
+
+## Testler
+
+```bash
+npm run typecheck     # üç paketin tamamı
+npm test              # ortak paket + sunucu
+cd apps/mobile && npx jest
+node e2e/smoke.mjs    # gerçek sunucu + tarayıcı, uçtan uca (playwright-core ister)
+```
+
+`e2e/smoke.mjs` geçici bir veritabanıyla sunucuyu ayağa kaldırır, iki kullanıcı kaydeder,
+aralarında bir adım çelinci oynatır, çelinci kapatır, KOYDUM gönderir; sonra web derlemesini
+Chromium'da açıp giriş, ana sayfa, rezillik ekranı, kazanan ekranı ve gelen kutusunu doğrular ve
+`docs/screens/` altındaki görüntüleri yeniler.
+
+`apps/server/test/contract.test.ts` uygulamanın çağırdığı her ucun **çalışma zamanı şeklini**
+doğrular. Sunucu bir gün diziyi nesneye çevirirse test orada patlar, telefonda değil.
 
 ---
 
