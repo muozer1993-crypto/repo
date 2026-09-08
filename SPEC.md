@@ -94,7 +94,8 @@ export interface ScoreResult { userId: string; score: number; days: number; rank
 export function computeScore(type: ChallengeType, dayKeys: string[], entries: ScoreInput['entries']): { score: number; days: number }
 export function rankParticipants(type: ChallengeType, dayKeys: string[], inputs: ScoreInput[]): { results: ScoreResult[]; winnerId: string | null; isTie: boolean }
 ```
-- Only `status === 'ok'` entries count. `disputed` entries count (pending), `rejected` do not.
+- Entries with `status === 'ok'` and `status === 'disputed'` count; a dispute only removes an entry once it is
+  upheld, at which point the entry becomes `rejected` and stops counting.
 - Ranking: sort by score (desc for higher, asc for lower). Rank 1 shared on equal score.
   `isTie` = top score shared by ≥2 participants → `winnerId = null`.
 - `winMargin(type, winnerScore, loserScore)` returns `'big' | 'close' | 'normal'`:
@@ -117,7 +118,8 @@ Unknown placeholders are left as-is. Numbers are formatted with `tr-TR` locale (
 
 `MICROCOPY: Record<MicrocopyKey, {level1,level2,level3}>`, `t(key, level)`. `BADGES` with machine `rule`
 strings parsed by `evaluateBadges(stats)` → earned badge keys. `stats` shape:
-`{ wins, losses, ties, tauntsSent, tauntsReceived, stepsSingleDayMax, focusTotalMinutes, checkinsStreakMax, disputesWon, challengesPlayed, pokesSent }`.
+`{ wins, losses, ties, tauntsSent, tauntsReceived, stepsSingleDayMax, focusTotalMinutes, checkinsStreakMax, disputesWon, challengesPlayed, pokesSent, revengeWins }`
+(`revengeWins` = finished challenges won that were a rematch of an earlier one; the `revenge_master` badge needs it).
 Rule grammar: `<statKey><op><number>` with op in `>=`, `>`, `==`, `<=`; multiple rules joined by `&&`.
 
 ### 1.6 Zod schemas (`schemas.ts`) — the API contract
