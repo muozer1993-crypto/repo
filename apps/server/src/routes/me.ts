@@ -163,8 +163,9 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
   app.get('/me/inbox', auth, async (request) => {
     const { row } = requireUser(request);
     const query = parseQuery(InboxQuerySchema, request.query);
+    // SPEC 2.2 and the mobile client both expect a bare array, newest first.
     const items: Notification[] = listInbox(db, row.id, { before: query.before, limit: query.limit }).map(toNotification);
-    return { items, nextBefore: items.length === query.limit ? (items[items.length - 1]?.createdAt ?? null) : null };
+    return items;
   });
 
   app.post('/me/inbox/read', auth, async (request) => {

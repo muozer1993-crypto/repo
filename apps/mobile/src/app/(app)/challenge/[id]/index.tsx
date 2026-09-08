@@ -6,15 +6,7 @@ import type {
   ParticipantView,
   VulgarityLevel,
 } from '@koydum/shared';
-import {
-  LIMITS,
-  addDays,
-  dayKeysBetween,
-  getChallengeType,
-  scoreLabel,
-  t,
-  todayKey,
-} from '@koydum/shared';
+import { LIMITS, addDays, getChallengeType, scoreLabel, t } from '@koydum/shared';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -42,9 +34,11 @@ import {
 } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { ApiError } from '@/lib/api';
+import { useTimezone } from '@/hooks/useTimezone';
 import { getDailySteps, getStepAvailability, getTodaySteps, type StepAvailability } from '@/services/steps';
-import { deviceTimezone, useAuth, useLevel } from '@/store/auth';
+import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
+import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { formatDayKeyFriendly, formatMinutes, formatNumber, formatTime, relativeTime } from '@/utils/format';
 
 /* ------------------------------------------------------------------ utils */
@@ -122,7 +116,7 @@ export default function ChallengeDetailScreen() {
   const level = useLevel();
   const me = useAuth((s) => s.me);
   const meId = me?.id ?? null;
-  const tz = me?.timezone || deviceTimezone();
+  const tz = useTimezone();
   const serverUrl = useAuth((s) => s.serverUrl);
 
   const query = useChallenge(id);
@@ -132,6 +126,23 @@ export default function ChallengeDetailScreen() {
   const [proofUrl, setProofUrl] = useState<string | null>(null);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)'));
+
+  // a link without an id leaves the query disabled, which would otherwise
+  // render the skeleton below forever
+  if (!id) {
+    return (
+      <Screen scroll contentStyle={styles.content}>
+        <Header onBack={back} title="Çelinç" />
+        <EmptyState
+          emoji="🫥"
+          title="Çelinç bulunamadı"
+          subtitle="Bu bağlantıda çelinç numarası yok. Listeden birine dokun."
+          actionLabel="Listeye dön"
+          onAction={back}
+        />
+      </Screen>
+    );
+  }
 
   if (query.isPending) {
     return (
@@ -169,8 +180,8 @@ export default function ChallengeDetailScreen() {
   const mine = detail.me;
   const status = STATUS_META[challenge.status] ?? STATUS_META.pending;
   const accepted = participants.filter((p) => p.status === 'accepted');
-  const dayKeys = dayKeysBetween(challenge.startsAt, challenge.endsAt, tz);
-  const today = todayKey(tz);
+  const dayKeys = safeDayKeysBetween(challenge.startsAt, challenge.endsAt, tz);
+  const today = safeTodayKey(tz);
   const yesterday = addDays(today, -1);
   const isPlayer = mine?.status === 'accepted';
   const leading = (mine?.rank ?? 0) === 1;

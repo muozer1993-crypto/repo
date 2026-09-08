@@ -1,3 +1,4 @@
+import type { VulgarityLevel } from '@koydum/shared';
 /**
  * Account lifecycle (social group): creation, invite codes and soft deletion.
  *
@@ -31,6 +32,8 @@ export interface CreateUserInput {
   displayName: string;
   passwordHash: string;
   timezone: string;
+  /** Chosen on the sign-up screen; defaults to 2 ("argo"). */
+  vulgarityMax?: VulgarityLevel;
 }
 
 /** Inserts a fresh user with a unique invite code and returns the stored row. */
@@ -43,7 +46,7 @@ export function createUser(db: Database, input: CreateUserInput, now: Date = new
     display_name: input.displayName,
     password_hash: input.passwordHash,
     avatar_emoji: '🍆',
-    vulgarity_max: 2,
+    vulgarity_max: input.vulgarityMax ?? 2,
     timezone: input.timezone,
     invite_code: uniqueInviteCode(db),
     push_token: null,

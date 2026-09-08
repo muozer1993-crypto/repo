@@ -598,10 +598,13 @@ function PodiumColumn({
   const index = place - 1;
   const color = PLACE_COLOR[index] ?? Colors.textMuted;
   const isMe = participant.user.id === meId;
+  // the pedestal is a visual position, the medal and the number are the real rank
+  // (a tie hands out two rank 1s)
+  const medal = participant.rank <= 3 ? MEDALS[participant.rank - 1] : '🎖️';
 
   return (
     <Animated.View style={[styles.column, riseStyle(rise, 40)]}>
-      {place === 1 ? <Crown animate={!!celebrate} /> : <Text style={styles.medal}>{MEDALS[index]}</Text>}
+      {participant.isWinner ? <Crown animate={!!celebrate} /> : <Text style={styles.medal}>{medal}</Text>}
       <Avatar
         emoji={participant.user.avatarEmoji}
         name={participant.user.displayName}
@@ -622,7 +625,7 @@ function PodiumColumn({
           place === 1 && styles.pedestalFirst,
         ]}>
         <Text variant={place === 1 ? 'huge' : 'big'} color={color}>
-          {place}
+          {participant.rank}
         </Text>
       </View>
     </Animated.View>

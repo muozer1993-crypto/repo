@@ -13,6 +13,7 @@ import {
   LIMITS,
   PokeBodySchema,
   TauntBodySchema,
+  type Challenge,
   type ChallengeDetail,
   type ChallengeResults,
   type LeaderboardEntry,
@@ -25,6 +26,7 @@ import { newId, nowIso, type ChallengeRow, type Database, type UserRow } from '.
 import { toPublicUser, toTaunt } from '../serialize.js';
 import { computeStandings } from '../services/challenges.js';
 import { notify } from '../services/notifications.js';
+import { toChallenge } from '../serialize.js';
 import { computeUserStats } from '../services/stats.js';
 import {
   buildSummary,
@@ -144,7 +146,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
   // -------------------------------------------------------------------------
   // POST /challenges/:id/rematch
   // -------------------------------------------------------------------------
-  app.post('/challenges/:id/rematch', { preHandler: app.authenticate }, async (request, reply): Promise<ChallengeDetail> => {
+  app.post('/challenges/:id/rematch', { preHandler: app.authenticate }, async (request, reply): Promise<Challenge> => {
     const me = request.user;
     const now = app.now();
     const { id } = request.params as IdParams;
@@ -225,7 +227,9 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     run();
 
     void reply.code(201);
-    return freshDetail(db, rematchId, me.id);
+    // SPEC 2.2: the rematch answers with the new Challenge so the caller can
+    // navigate straight to it.
+    return toChallenge(requireChallengeRow(db, rematchId));
   });
 
   // -------------------------------------------------------------------------

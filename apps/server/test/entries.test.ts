@@ -3,7 +3,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_TIMEZONE, addDays, todayKey, type ChallengeDetail, type Entry, type ParticipantView } from '@koydum/shared';
+import { DEFAULT_TIMEZONE, addDays, todayKey, type ChallengeDetail, type Entry, type ParticipantView, type Challenge } from '@koydum/shared';
 import { computeUserStats } from '../src/services/stats.js';
 import { listByType } from '../src/services/notifications.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
@@ -58,7 +58,7 @@ async function liveChallenge(
     },
   });
   expect(created.statusCode).toBe(201);
-  const challengeId = created.json<ChallengeDetail>().challenge.id;
+  const challengeId = created.json<Challenge>().id;
   const accepted = await authed(h.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
   expect(accepted.statusCode).toBe(200);
   return { ali, veli, challengeId };
@@ -93,7 +93,7 @@ describe('entry rules shared by every metric', () => {
         participantIds: [veli.me.id],
       },
     });
-    const id = created.json<ChallengeDetail>().challenge.id;
+    const id = created.json<Challenge>().id;
     const body = { dayKey: today(harness), value: 100, source: 'pedometer', clientTime: iso(harness) };
 
     // Invited but not accepted.
@@ -587,7 +587,7 @@ describe('POST /challenges/:id/entries/:entryId/dispute', () => {
         participantIds: [veli.me.id, ayse.me.id, mert.me.id],
       },
     });
-    const challengeId = created.json<ChallengeDetail>().challenge.id;
+    const challengeId = created.json<Challenge>().id;
     for (const friend of [veli, ayse, mert]) {
       await authed(harness.app, friend.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
     }

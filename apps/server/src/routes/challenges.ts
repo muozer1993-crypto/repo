@@ -15,12 +15,14 @@ import {
   createChallengeBodySchema,
   getChallengeType,
   ChallengeListQuerySchema,
+  type Challenge,
   type ChallengeDetail,
   type ChallengeSummary,
 } from '@koydum/shared';
 import { badRequest, conflict, forbidden, parseBody, parseQuery } from '../errors.js';
 import { newId, nowIso, type ChallengeRow, type Database } from '../db/index.js';
 import { notify } from '../services/notifications.js';
+import { toChallenge } from '../serialize.js';
 import {
   buildDetail,
   buildSummary,
@@ -104,7 +106,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
   // -------------------------------------------------------------------------
   // POST /challenges
   // -------------------------------------------------------------------------
-  app.post('/challenges', { preHandler: app.authenticate }, async (request, reply): Promise<ChallengeDetail> => {
+  app.post('/challenges', { preHandler: app.authenticate }, async (request, reply): Promise<Challenge> => {
     const me = request.user;
     const now = app.now();
     // The clock is injected so `startsAt >= now - 5min` follows the test clock too.
@@ -187,7 +189,9 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     run();
 
     void reply.code(201);
-    return freshDetail(db, challengeId, me.id);
+    // SPEC 2.2: creation answers with the Challenge itself — the wizard navigates
+    // straight to /challenge/<id> and then loads the detail.
+    return toChallenge(requireChallengeRow(db, challengeId));
   });
 
   // -------------------------------------------------------------------------
@@ -215,8 +219,13 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     if (challenge.status !== 'pending' && challenge.status !== 'active') {
       throw badRequest('challenge_closed', 'Bu çelinç kapandı, artık katılamazsın.');
     }
-    // Joining in the last hour would be a free ride, so the door closes early.
-    if (now.getTime() >= Date.parse(challenge.ends_at) - LIMITS.ACCEPT_CUTOFF_MS) {
+    // Joining in the last hour would be a free ride, so the door closes early —
+    // but never earlier than a quarter of the way in, or a challenge of the
+    // minimum length (one hour) could never be accepted at all.
+    const startsAt = Date.parse(challenge.starts_at);
+    const endsAt = Date.parse(challenge.ends_at);
+    const cutoff = Math.min(LIMITS.ACCEPT_CUTOFF_MS, Math.max(0, (endsAt - startsAt) / 4));
+    if (now.getTime() >= endsAt - cutoff) {
       throw badRequest('accept_closed', 'Çelincin bitmesine az kaldı, artık katılamazsın.');
     }
 

@@ -81,6 +81,30 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
   app.setNotFoundHandler(notFoundHandler);
 
   await app.register(cors, { origin: true });
+
+  // Several endpoints take no body at all (accept, decline, leave, rematch...).
+  // Fastify's default JSON parser rejects an empty payload with 400, which
+  // breaks any client that sets Content-Type unconditionally — curl, most HTTP
+  // libraries, and anything generated from an OpenAPI client. Treat an empty
+  // body as `{}` and keep strict parsing for everything else.
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (_request, payload: string, done) => {
+      const text = typeof payload === 'string' ? payload.trim() : '';
+      if (text.length === 0) {
+        done(null, {});
+        return;
+      }
+      try {
+        done(null, JSON.parse(text));
+      } catch (error) {
+        const failure = error as Error & { statusCode?: number };
+        failure.statusCode = 400;
+        done(failure, undefined);
+      }
+    },
+  );
   await app.register(multipart, {
     limits: { fileSize: LIMITS.UPLOAD_MAX_BYTES, files: 1 },
   });

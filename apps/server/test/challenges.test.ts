@@ -5,7 +5,7 @@
  * (`makeApp`), so "now" is exact and no test depends on wall-clock timing.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { addDays, todayKey, DEFAULT_TIMEZONE, type ChallengeDetail, type ChallengeResults, type LeaderboardEntry } from '@koydum/shared';
+import { addDays, todayKey, DEFAULT_TIMEZONE, type ChallengeDetail, type ChallengeResults, type LeaderboardEntry, type Challenge } from '@koydum/shared';
 import { listByType } from '../src/services/notifications.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
@@ -69,9 +69,9 @@ async function twoPlayerChallenge(h: TestApp) {
   befriend(h.app, ali.me.id, veli.me.id);
 
   const created = await createChallenge(h, ali, { participantIds: [veli.me.id] });
-  const detail = created.json<ChallengeDetail>();
-  await authed(h.app, veli.token)({ method: 'POST', url: `/challenges/${detail.challenge.id}/accept` });
-  return { ali, veli, challengeId: detail.challenge.id };
+  const challengeId = created.json<Challenge>().id;
+  await authed(h.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+  return { ali, veli, challengeId };
 }
 
 /** Same, but Ali wins by a mile and the challenge is force-finished. */
@@ -99,15 +99,19 @@ describe('POST /challenges', () => {
     const response = await createChallenge(harness, ali, { participantIds: [veli.me.id], rewardText: 'Döner' });
     expect(response.statusCode).toBe(201);
 
-    const detail = response.json<ChallengeDetail>();
-    expect(detail.challenge.status).toBe('active');
+    // Creation answers with the bare Challenge (mobile `api.createChallenge`).
+    const challenge = response.json<Challenge>();
+    expect(challenge.status).toBe('active');
     // The metric shape is copied from the catalog, not looked up later.
-    expect(detail.challenge.metricType).toBe('auto_steps');
-    expect(detail.challenge.direction).toBe('higher');
-    expect(detail.challenge.unit).toBe('adım');
-    expect(detail.challenge.title).toBe('Adım Yarışı');
-    expect(detail.challenge.rewardText).toBe('Döner');
+    expect(challenge.metricType).toBe('auto_steps');
+    expect(challenge.direction).toBe('higher');
+    expect(challenge.unit).toBe('adım');
+    expect(challenge.title).toBe('Adım Yarışı');
+    expect(challenge.rewardText).toBe('Döner');
 
+    const detail = (
+      await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challenge.id}` })
+    ).json<ChallengeDetail>();
     const me = detail.participants.find((p) => p.user.id === ali.me.id);
     const invited = detail.participants.find((p) => p.user.id === veli.me.id);
     expect(me?.status).toBe('accepted');
@@ -118,7 +122,7 @@ describe('POST /challenges', () => {
     expect(inbox).toHaveLength(1);
     expect(inbox[0].title).toBe('📩 Çelinç daveti');
     expect(inbox[0].body).toContain('Ali');
-    expect(JSON.parse(inbox[0].data)).toMatchObject({ challengeId: detail.challenge.id });
+    expect(JSON.parse(inbox[0].data)).toMatchObject({ challengeId: challenge.id });
   });
 
   it('stays pending when it starts in the future', async () => {
@@ -132,7 +136,7 @@ describe('POST /challenges', () => {
       startsAt: iso(harness, 60 * 60 * 1000),
       endsAt: iso(harness, 3 * 24 * 60 * 60 * 1000),
     });
-    expect(response.json<ChallengeDetail>().challenge.status).toBe('pending');
+    expect(response.json<Challenge>().status).toBe('pending');
   });
 
   it('rejects a non-friend', async () => {
@@ -220,7 +224,7 @@ describe('POST /challenges', () => {
       deadlineTime: '07:00',
     });
     expect(ok.statusCode).toBe(201);
-    expect(ok.json<ChallengeDetail>().challenge.deadlineTime).toBe('07:00');
+    expect(ok.json<Challenge>().deadlineTime).toBe('07:00');
   });
 
   it('rejects an unknown type key', async () => {
@@ -349,7 +353,7 @@ describe('accept / decline / leave / cancel', () => {
     const veli = await registerUser(harness.app, 'veli');
     befriend(harness.app, ali.me.id, veli.me.id);
     const created = await createChallenge(harness, ali, { participantIds: [veli.me.id] });
-    const id = created.json<ChallengeDetail>().challenge.id;
+    const id = created.json<Challenge>().id;
 
     harness.advance(3 * 24 * 60 * 60 * 1000 - 30 * 60 * 1000); // 30 minutes left
     const response = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${id}/accept` });
@@ -363,7 +367,7 @@ describe('accept / decline / leave / cancel', () => {
     const veli = await registerUser(harness.app, 'veli');
     befriend(harness.app, ali.me.id, veli.me.id);
     const created = await createChallenge(harness, ali, { participantIds: [veli.me.id] });
-    const id = created.json<ChallengeDetail>().challenge.id;
+    const id = created.json<Challenge>().id;
 
     const declined = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${id}/decline` });
     expect(declined.statusCode).toBe(200);
@@ -398,7 +402,7 @@ describe('accept / decline / leave / cancel', () => {
       startsAt: iso(harness, 2 * 60 * 60 * 1000),
       endsAt: iso(harness, 48 * 60 * 60 * 1000),
     });
-    const id = created.json<ChallengeDetail>().challenge.id;
+    const id = created.json<Challenge>().id;
 
     const notCreator = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${id}/cancel` });
     expect(notCreator.statusCode).toBe(403);
@@ -406,7 +410,7 @@ describe('accept / decline / leave / cancel', () => {
 
     const cancelled = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${id}/cancel` });
     expect(cancelled.statusCode).toBe(200);
-    expect(cancelled.json<ChallengeDetail>().challenge.status).toBe('cancelled');
+    expect(cancelled.json<Challenge>().status).toBe('cancelled');
 
     const inbox = listByType(harness.db, veli.me.id, 'challenge_cancelled');
     expect(inbox).toHaveLength(1);
@@ -482,7 +486,7 @@ describe('POST /challenges/:id/taunt', () => {
     const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli', vulgarityMax: 1 });
     befriend(harness.app, ali.me.id, veli.me.id);
     const created = await createChallenge(harness, ali, { participantIds: [veli.me.id] });
-    const id = created.json<ChallengeDetail>().challenge.id;
+    const id = created.json<Challenge>().id;
     await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${id}/accept` });
     await postEntry(harness, ali, id, { dayKey: today(harness), value: 9000, source: 'pedometer', clientTime: iso(harness) });
     await harness.app.inject({ method: 'POST', url: `/dev/finalize/${id}` });

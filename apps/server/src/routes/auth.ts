@@ -32,6 +32,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
         displayName: body.displayName,
         passwordHash: await hashPassword(body.password),
         timezone: body.timezone,
+        vulgarityMax: body.vulgarityMax,
       },
       now,
     );

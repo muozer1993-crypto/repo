@@ -448,7 +448,7 @@ describe('/me/inbox', () => {
 
     const inbox = await call({ method: 'GET', url: '/me/inbox' });
     expect(inbox.statusCode).toBe(200);
-    const items = inbox.json<{ items: Notification[] }>().items;
+    const items = inbox.json<Notification[]>();
     expect(items).toHaveLength(2);
     expect(items[0]?.type).toBe('friend_request');
     expect(items[0]?.body).toContain('veli'); // newest first
@@ -465,7 +465,7 @@ describe('/me/inbox', () => {
     expect(readAll.json<{ updated: number; count: number }>()).toMatchObject({ updated: 1, count: 0 });
     expect((await call({ method: 'GET', url: '/me/inbox/unread' })).json<{ count: number }>().count).toBe(0);
 
-    const listed = (await call({ method: 'GET', url: '/me/inbox' })).json<{ items: Notification[] }>().items;
+    const listed = (await call({ method: 'GET', url: '/me/inbox' })).json<Notification[]>();
     expect(listed.every((item) => item.readAt !== null)).toBe(true);
   });
 
@@ -480,15 +480,15 @@ describe('/me/inbox', () => {
     h.advance(60_000);
     await authed(h.app, second.token)({ method: 'POST', url: '/friends/request', payload: { username: 'mustafa' } });
 
-    const all = (await call({ method: 'GET', url: '/me/inbox?limit=1' })).json<{ items: Notification[]; nextBefore: string | null }>();
-    expect(all.items).toHaveLength(1);
-    expect(all.nextBefore).toBe(all.items[0]?.createdAt);
+    // the client pages by asking for everything older than the last item it has
+    const page = (await call({ method: 'GET', url: '/me/inbox?limit=1' })).json<Notification[]>();
+    expect(page).toHaveLength(1);
 
     const older = (
-      await call({ method: 'GET', url: `/me/inbox?before=${encodeURIComponent(all.nextBefore!)}` })
-    ).json<{ items: Notification[] }>();
-    expect(older.items).toHaveLength(1);
-    expect(older.items[0]?.id).not.toBe(all.items[0]?.id);
+      await call({ method: 'GET', url: `/me/inbox?before=${encodeURIComponent(page[0]!.createdAt)}` })
+    ).json<Notification[]>();
+    expect(older).toHaveLength(1);
+    expect(older[0]?.id).not.toBe(page[0]?.id);
 
     const bad = await call({ method: 'POST', url: '/me/inbox/read', payload: {} });
     expect(bad.statusCode).toBe(400);
@@ -537,7 +537,7 @@ describe('friends', () => {
     // The requester hears about it.
     const inbox = (
       await authed(h.app, asker.token)({ method: 'GET', url: '/me/inbox' })
-    ).json<{ items: Notification[] }>().items;
+    ).json<Notification[]>();
     expect(inbox[0]?.type).toBe('friend_accepted');
   });
 
@@ -579,7 +579,7 @@ describe('friends', () => {
 
     const inbox = (
       await authed(h.app, first.token)({ method: 'GET', url: '/me/inbox' })
-    ).json<{ items: Notification[] }>().items;
+    ).json<Notification[]>();
     expect(inbox[0]?.type).toBe('friend_accepted');
   });
 
@@ -697,17 +697,17 @@ describe('GET /users/search', () => {
     const byUsername = await call({ method: 'GET', url: '/users/search?q=mus' });
     expect(byUsername.statusCode).toBe(200);
     // "mustafa" is me and must not show up in my own search.
-    expect(byUsername.json<{ users: { username: string }[] }>().users.map((u) => u.username)).toEqual(['musa']);
+    expect(byUsername.json<{ username: string }[]>().map((u) => u.username)).toEqual(['musa']);
 
     // "İsmail" lowercases to "ismail" only under Turkish rules.
     const turkish = await call({ method: 'GET', url: '/users/search?q=%C4%B0sm' });
-    expect(turkish.json<{ users: { username: string }[] }>().users.map((u) => u.username)).toEqual(['ismail']);
+    expect(turkish.json<{ username: string }[]>().map((u) => u.username)).toEqual(['ismail']);
 
     const byDisplayName = await call({ method: 'GET', url: '/users/search?q=Kem' });
-    expect(byDisplayName.json<{ users: { username: string }[] }>().users.map((u) => u.username)).toEqual(['kemal']);
+    expect(byDisplayName.json<{ username: string }[]>().map((u) => u.username)).toEqual(['kemal']);
 
     const nothing = await call({ method: 'GET', url: '/users/search?q=zzz' });
-    expect(nothing.json<{ users: unknown[] }>().users).toHaveLength(0);
+    expect(nothing.json<unknown[]>()).toHaveLength(0);
 
     const invalid = await call({ method: 'GET', url: '/users/search?q=' });
     expect(invalid.statusCode).toBe(400);
@@ -720,13 +720,13 @@ describe('GET /users/search', () => {
     const leaving = await registerUser(h.app, 'kemal');
 
     expect(
-      (await authed(h.app, me.token)({ method: 'GET', url: '/users/search?q=kem' })).json<{ users: unknown[] }>().users,
+      (await authed(h.app, me.token)({ method: 'GET', url: '/users/search?q=kem' })).json<unknown[]>(),
     ).toHaveLength(1);
 
     await authed(h.app, leaving.token)({ method: 'DELETE', url: '/me' });
 
     expect(
-      (await authed(h.app, me.token)({ method: 'GET', url: '/users/search?q=kem' })).json<{ users: unknown[] }>().users,
+      (await authed(h.app, me.token)({ method: 'GET', url: '/users/search?q=kem' })).json<unknown[]>(),
     ).toHaveLength(0);
   });
 });
@@ -784,8 +784,8 @@ describe('block / unblock / report', () => {
 
     for (const call of [blockerCall, blockedCall]) {
       const search = await call({ method: 'GET', url: '/users/search?q=k' });
-      expect(search.json<{ users: { id: string }[] }>().users.some((u) => u.id === blocked.me.id)).toBe(false);
-      expect(search.json<{ users: { id: string }[] }>().users.some((u) => u.id === blocker.me.id)).toBe(false);
+      expect(search.json<{ id: string }[]>().some((u) => u.id === blocked.me.id)).toBe(false);
+      expect(search.json<{ id: string }[]>().some((u) => u.id === blocker.me.id)).toBe(false);
     }
 
     expect((await blockedCall({ method: 'GET', url: `/users/${blocker.me.id}` })).statusCode).toBe(404);

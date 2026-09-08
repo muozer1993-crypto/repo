@@ -83,7 +83,8 @@ export default async function userRoutes(app: FastifyInstance): Promise<void> {
       .slice(0, SEARCH_LIMIT)
       .map(toPublicUser);
 
-    return { users };
+    // SPEC 2.2 and the mobile client both expect a bare array.
+    return users;
   });
 
   app.get<{ Params: { id: string } }>('/users/:id', auth, async (request) => {
