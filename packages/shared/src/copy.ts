@@ -66,7 +66,7 @@ export const BADGES: readonly BadgeDef[] = [
   { key: "rooster", nameTr: "Horoz", emoji: "🐓", descriptionTr: "7 gün üst üste zamanında check-in. Güneşten önce kalktın, herkes hâlâ uyuyordu.", rule: "checkinsStreakMax>=7" },
   { key: "dawn_guard", nameTr: "Şafak Nöbetçisi", emoji: "🌅", descriptionTr: "30 gün üst üste zamanında check-in. Horoz artık saati senden soruyor.", rule: "checkinsStreakMax>=30" },
   { key: "lie_detector", nameTr: "Yalan Dedektörü", emoji: "🕵️", descriptionTr: "3 itiraz kazandın. Sana kimse palavra sıkamıyor.", rule: "disputesWon>=3" },
-  { key: "revenge_master", nameTr: "Rövanş Ustası", emoji: "🔁", descriptionTr: "En az 3 kez yedikten sonra 3 çelinç kazandın. Yediğini iade etmeyi biliyorsun, hem de faiziyle.", rule: "wins>=3 && losses>=3" },
+  { key: "revenge_master", nameTr: "Rövanş Ustası", emoji: "🔁", descriptionTr: "3 rövanş kazandın. Yediğini iade etmeyi biliyorsun, hem de faiziyle.", rule: "revengeWins>=3" },
 ] as const;
 
 const RULE = /^([a-zA-Z_]+)\s*(>=|<=|==|>|<)\s*(-?\d+(?:\.\d+)?)$/;

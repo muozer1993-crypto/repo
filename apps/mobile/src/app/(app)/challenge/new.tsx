@@ -295,8 +295,6 @@ export default function NewChallengeScreen() {
     durationMs <= LIMITS.MAX_DURATION_MS;
   const deadlineValid = !needsDeadline || isValidHHmm(deadlineTime.trim());
   const settingsValid = !!type && daysValid && deadlineValid;
-  const friendsValid =
-    selectedIds.length >= LIMITS.PARTICIPANTS_MIN && selectedIds.length <= LIMITS.PARTICIPANTS_MAX;
 
   const friends = friendsQuery.data?.friends ?? [];
   const query = normalize(search);
@@ -306,7 +304,12 @@ export default function NewChallengeScreen() {
           normalize(friend.displayName).includes(query) || normalize(friend.username).includes(query)
       )
     : friends;
+  /** A ?friend= id that is no longer a friend must not reach the server. */
   const chosen = friends.filter((friend) => selectedIds.includes(friend.id));
+  const participantIds = friendsQuery.data ? chosen.map((friend) => friend.id) : selectedIds;
+  const friendsValid =
+    participantIds.length >= LIMITS.PARTICIPANTS_MIN &&
+    participantIds.length <= LIMITS.PARTICIPANTS_MAX;
 
   const preview = computeWindow(startMode, daysValid ? days : (type?.defaultDurationDays ?? 1));
   const finalTitle = (title.trim() || type?.nameTr || '').slice(0, LIMITS.CHALLENGE_TITLE_MAX);
@@ -328,7 +331,7 @@ export default function NewChallengeScreen() {
     if (step === 1 && !deadlineValid) {
       return 'Check-in saatini SS:dd yaz (ör. 07:30).';
     }
-    if (step === 2 && selectedIds.length === 0) {
+    if (step === 2 && participantIds.length === 0) {
       return byLevel(
         level,
         'En az bir kanka seçmelisin.',
@@ -336,8 +339,8 @@ export default function NewChallengeScreen() {
         'Kurban seçmeden olmaz. En az bir kanka işaretle 🍆'
       );
     }
-    if (step === 2 && selectedIds.length > LIMITS.PARTICIPANTS_MAX) {
-      return `En fazla ${LIMITS.PARTICIPANTS_MAX} kişi seçebilirsin.`;
+    if (step === 2 && participantIds.length >= LIMITS.PARTICIPANTS_MAX) {
+      return `Kadro doldu: en fazla ${LIMITS.PARTICIPANTS_MAX} kanka.`;
     }
     return null;
   })();
@@ -387,7 +390,7 @@ export default function NewChallengeScreen() {
         title: finalTitle || undefined,
         startsAt,
         endsAt,
-        participantIds: selectedIds,
+        participantIds,
         rewardText: rewardText.trim() || undefined,
         penaltyText: penaltyText.trim() || undefined,
         deadlineTime: needsDeadline ? deadlineTime.trim() : undefined,
@@ -637,7 +640,7 @@ export default function NewChallengeScreen() {
                   autoCorrect={false}
                 />
                 <Text variant="tiny" faint>
-                  {selectedIds.length}/{LIMITS.PARTICIPANTS_MAX} seçildi
+                  {participantIds.length}/{LIMITS.PARTICIPANTS_MAX} seçildi
                 </Text>
                 {visibleFriends.length === 0 ? (
                   <Text variant="small" muted center style={styles.noMatch}>
