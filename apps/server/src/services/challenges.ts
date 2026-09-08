@@ -4,15 +4,19 @@
  * Timezone policy for standings (SPEC: day keys live in the USER's timezone):
  *   - a participant's OWN entries are written with their own local day key, so the
  *     score of a participant is always computed from their own days;
- *   - the day WINDOW handed to `computeScore` is the UNION of every accepted
- *     participant's `dayKeysBetween(startsAt, endsAt, tz)`. The window only affects
- *     the `manual_lower_is_better` missing-day penalty, and using the union means
- *     everybody is measured against the same number of days — otherwise a friend in
- *     a different timezone could face a different denominator for the same challenge.
- *     (Across timezones the window differs by at most one day.)
+ *   - the day WINDOW is per participant: `participantDayKeys` is the very same
+ *     expression `validateAndUpsertEntry` validates that participant's writes
+ *     against. The window only matters for the `manual_lower_is_better` missing-day
+ *     penalty, and a shared (union) window would charge a friend whose local window
+ *     is one day shorter for a day the API refuses to let them log — a perfect
+ *     record could lose the challenge. Scoring and write validation must therefore
+ *     be derived from the same expression;
+ *   - that timezone is the one PINNED on `challenge_participants` when the player
+ *     joined, so editing `users.timezone` mid-challenge cannot move anybody's days.
  */
 import {
   DEFAULT_TIMEZONE,
+  computeScore,
   dayKeysBetween,
   localHour,
   rankParticipants,
@@ -22,6 +26,7 @@ import {
   todayKey,
   type ChallengeType,
   type ParticipantView,
+  type RankingResult,
   type ScoreInput,
   type VulgarityLevel,
 } from '@koydum/shared';
@@ -118,28 +123,75 @@ function userMap(db: Database, ids: string[]): Map<string, UserRow> {
 }
 
 /**
- * Union of every accepted participant's local day window (see the file header).
- * Falls back to the creator's timezone when nobody has accepted yet.
+ * The timezone one participant's days are measured in.
+ *
+ * The value pinned at join time wins; rows written before the column existed (and
+ * users who never had one) fall back to the profile timezone, then to the default.
  */
-export function challengeDayKeys(db: Database, challenge: ChallengeRow): string[] {
-  const accepted = acceptedParticipants(db, challenge.id);
-  const users = userMap(
-    db,
-    accepted.length > 0 ? accepted.map((p) => p.user_id) : [challenge.creator_id],
-  );
-  const timezones = new Set<string>();
-  for (const user of users.values()) timezones.add(user.timezone || DEFAULT_TIMEZONE);
-  if (timezones.size === 0) timezones.add(DEFAULT_TIMEZONE);
+export function participantTimezone(
+  participant: { timezone?: string | null } | undefined,
+  user: { timezone?: string | null } | undefined,
+): string {
+  const pinned = participant?.timezone ?? user?.timezone ?? DEFAULT_TIMEZONE;
+  return typeof pinned === 'string' && pinned.trim() !== '' ? pinned : DEFAULT_TIMEZONE;
+}
 
-  const keys = new Set<string>();
-  for (const tz of timezones) {
-    try {
-      for (const key of dayKeysBetween(challenge.starts_at, challenge.ends_at, tz)) keys.add(key);
-    } catch {
-      for (const key of dayKeysBetween(challenge.starts_at, challenge.ends_at, DEFAULT_TIMEZONE)) keys.add(key);
-    }
+/** Day window of a challenge in one timezone; an unknown zone degrades to the default. */
+export function challengeWindow(challenge: Pick<ChallengeRow, 'starts_at' | 'ends_at'>, tz: string): string[] {
+  try {
+    return dayKeysBetween(challenge.starts_at, challenge.ends_at, tz);
+  } catch {
+    return dayKeysBetween(challenge.starts_at, challenge.ends_at, DEFAULT_TIMEZONE);
   }
-  return [...keys].sort();
+}
+
+/**
+ * The days one participant may write — and is scored against. THE window: every
+ * other caller (entry validation, the steps fan-out, the missing-day penalty) goes
+ * through this function so the two can never drift apart.
+ */
+export function participantDayKeys(db: Database, challenge: ChallengeRow, userId: string): string[] {
+  const participant = db
+    .prepare('SELECT * FROM challenge_participants WHERE challenge_id = ? AND user_id = ?')
+    .get(challenge.id, userId) as ParticipantRow | undefined;
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRow | undefined;
+  return challengeWindow(challenge, participantTimezone(participant, user));
+}
+
+/**
+ * Ranks the accepted participants, each against their OWN day window.
+ *
+ * `rankParticipants` only knows a single shared window, so for
+ * `manual_lower_is_better` — the one metric where the window matters — the score is
+ * computed here per participant (sum + their own missing days × penalty) and handed
+ * over as one pre-summed value. Every other metric ignores the window entirely and
+ * is ranked from its raw entries.
+ */
+function rankAccepted(
+  db: Database,
+  challenge: ChallengeRow,
+  type: ChallengeType,
+  accepted: ParticipantRow[],
+  users: Map<string, UserRow>,
+  entriesByUser: Map<string, ScoreInput['entries']>,
+): { ranking: RankingResult; days: Map<string, number> } {
+  const perUserWindow = type.metricType === 'manual_lower_is_better';
+  const days = new Map<string, number>();
+
+  const inputs: ScoreInput[] = accepted.map((participant) => {
+    const entries = entriesByUser.get(participant.user_id) ?? [];
+    const window = perUserWindow
+      ? challengeWindow(challenge, participantTimezone(participant, users.get(participant.user_id)))
+      : [];
+    const scored = computeScore(type, window, entries);
+    days.set(participant.user_id, scored.days);
+    if (!perUserWindow) return { userId: participant.user_id, entries };
+    // Lower-is-better is a sum metric, so one entry carrying the finished score
+    // reproduces it exactly while keeping the window out of `rankParticipants`.
+    return { userId: participant.user_id, entries: [{ dayKey: 'total', value: scored.score, status: 'ok' }] };
+  });
+
+  return { ranking: rankParticipants(type, [], inputs), days };
 }
 
 /**
@@ -170,12 +222,7 @@ export function computeStandings(db: Database, challenge: ChallengeRow): Partici
   }
 
   const accepted = participants.filter((p) => p.status === 'accepted');
-  const dayKeys = challengeDayKeys(db, challenge);
-  const ranking = rankParticipants(
-    type,
-    dayKeys,
-    accepted.map((p) => ({ userId: p.user_id, entries: byUser.get(p.user_id) ?? [] })),
-  );
+  const { ranking, days } = rankAccepted(db, challenge, type, accepted, users, byUser);
   const byUserResult = new Map(ranking.results.map((r) => [r.userId, r]));
 
   const finished = challenge.status === 'finished';
@@ -190,7 +237,7 @@ export function computeStandings(db: Database, challenge: ChallengeRow): Partici
       user: toPublicUser(user),
       status: 'accepted',
       score: useStored ? Number(participant.final_score ?? 0) : (computed?.score ?? 0),
-      days: computed?.days ?? 0,
+      days: days.get(participant.user_id) ?? 0,
       rank: useStored ? Number(participant.final_rank) : (computed?.rank ?? 0),
       lastEntryAt: lastEntryAt.get(participant.user_id) ?? null,
       isWinner: finished ? challenge.winner_id === participant.user_id : (computed?.isWinner ?? false),
@@ -350,6 +397,31 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
   const accepted = acceptedParticipants(db, challenge.id);
   const users = userMap(db, accepted.map((p) => p.user_id));
 
+  // A race needs two runners. When everybody else left or deleted their account the
+  // challenge ends without a contest: crowning the sole survivor would hand out a
+  // free win (plus badges) for logging nothing, and `winner_id = NULL, is_tie = 0`
+  // would be a fourth results state the app has no screen for.
+  if (accepted.length < 2) {
+    const run = db.transaction(() => {
+      db.prepare(
+        "UPDATE challenges SET status = 'cancelled', finalized_at = ?, winner_id = NULL, is_tie = 0 WHERE id = ?",
+      ).run(iso, challenge.id);
+      for (const user of users.values()) {
+        const copy = cancelledCopy(levelOf(user), challenge.title);
+        notify(db, {
+          userId: user.id,
+          type: 'challenge_cancelled',
+          title: copy.title,
+          body: copy.body,
+          data: { challengeId: challenge.id, reason: 'not_enough_players' },
+          createdAt: iso,
+        });
+      }
+    });
+    run();
+    return computeStandings(db, getChallengeRow(db, challenge.id) ?? challenge);
+  }
+
   const entries = db.prepare('SELECT * FROM entries WHERE challenge_id = ?').all(challenge.id) as EntryRow[];
   const byUser = new Map<string, ScoreInput['entries']>();
   for (const entry of entries) {
@@ -358,12 +430,7 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
     byUser.set(entry.user_id, list);
   }
 
-  const dayKeys = challengeDayKeys(db, challenge);
-  const ranking = rankParticipants(
-    type,
-    dayKeys,
-    accepted.map((p) => ({ userId: p.user_id, entries: byUser.get(p.user_id) ?? [] })),
-  );
+  const { ranking } = rankAccepted(db, challenge, type, accepted, users, byUser);
 
   const winnerId = ranking.winnerId;
   const isTie = ranking.isTie;
@@ -445,9 +512,15 @@ export function finalizeEndedChallenges(db: Database, now: Date = new Date()): n
 }
 
 /**
- * Step 3 — one daily reminder per user, at their own `reminder_hour` in their own
- * timezone, only while they have at least one active challenge, at most once per
- * local day (`reminders_sent`).
+ * Step 3 — one daily reminder per user, at (or after) their own `reminder_hour` in
+ * their own timezone, only while they have at least one active challenge, at most
+ * once per local day (`reminders_sent`).
+ *
+ * The check is `localHour >= reminder_hour`, not equality: on a DST spring-forward
+ * day the target hour never happens locally (02:xx does not exist in New York on
+ * the second Sunday of March), and a scheduler outage spanning that hour would
+ * silently swallow the reminder too. The `reminders_sent` claim row is what keeps
+ * it to one per local day.
  */
 export function sendReminders(db: Database, now: Date = new Date()): number {
   const iso = nowIso(now);
@@ -473,7 +546,7 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
     } catch {
       continue;
     }
-    if (hour !== Number(user.reminder_hour)) continue;
+    if (hour < Number(user.reminder_hour)) continue;
     if (claim.run(user.id, dayKey).changes === 0) continue;
 
     const level = levelOf(user);
