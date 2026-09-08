@@ -61,7 +61,8 @@ export const AvatarEmojiSchema = z
     z
       .string()
       .min(1, { message: 'Avatar boş olamaz', abort: true })
-      .max(LIMITS.AVATAR_EMOJI_MAX_UNITS, { message: 'Avatar çok uzun', abort: true })
+      // Explicit UTF-16 length: zod's own max() does not count code units for emoji.
+      .refine((s) => s.length <= LIMITS.AVATAR_EMOJI_MAX_UNITS, { message: 'Avatar çok uzun', abort: true })
       .refine(hasVisibleChar, 'Avatar boş olamaz')
       .refine((s) => countGraphemes(s) <= LIMITS.AVATAR_EMOJI_MAX, `Avatar en fazla ${LIMITS.AVATAR_EMOJI_MAX} karakter`),
   );

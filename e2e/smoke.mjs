@@ -141,9 +141,11 @@ async function buildStory() {
       password: 'koydum123',
       displayName,
       timezone: 'Europe/Istanbul',
-      ...(vulgarityMax ? { vulgarityMax } : {}),
     });
     api.token = result.token;
+    if (vulgarityMax && result.me.vulgarityMax !== vulgarityMax) {
+      result.me = await api.call('PATCH', '/me', { vulgarityMax });
+    }
     return result;
   };
 

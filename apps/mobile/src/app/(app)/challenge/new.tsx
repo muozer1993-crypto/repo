@@ -136,10 +136,16 @@ interface TypeRowProps {
 function TypeRow({ type, level, selected, infoTab, onSelect, onInfo }: TypeRowProps) {
   return (
     <Card
+      padded={false}
       style={selected ? styles.typeCardOn : styles.typeCard}
-      edgeColor={selected ? Colors.accent : undefined}
-      onPress={() => onSelect(type)}>
-      <View style={styles.typeHead}>
+      edgeColor={selected ? Colors.accent : undefined}>
+      {/* the head is the only pressable part: nesting it inside a pressable Card
+          would fire both handlers on web */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
+        onPress={() => onSelect(type)}
+        style={({ pressed }) => [styles.typeHead, pressed && styles.pressed]}>
         <Text style={styles.typeEmoji}>{type.emoji}</Text>
         <View style={styles.grow}>
           <View style={styles.typeTitleRow}>
@@ -152,13 +158,14 @@ function TypeRow({ type, level, selected, infoTab, onSelect, onInfo }: TypeRowPr
             {describeType(type, level)}
           </Text>
         </View>
-      </View>
+      </Pressable>
 
       {selected ? (
         <View style={styles.typeInfo}>
           <View style={styles.infoTabs}>
             <Pressable
               accessibilityRole="button"
+              accessibilityState={{ expanded: infoTab === 'measure' }}
               onPress={() => onInfo('measure')}
               style={[styles.infoTab, infoTab === 'measure' && styles.infoTabOn]}>
               <Text variant="micro" color={infoTab === 'measure' ? Colors.accent : Colors.textMuted}>
@@ -167,6 +174,7 @@ function TypeRow({ type, level, selected, infoTab, onSelect, onInfo }: TypeRowPr
             </Pressable>
             <Pressable
               accessibilityRole="button"
+              accessibilityState={{ expanded: infoTab === 'cheat' }}
               onPress={() => onInfo('cheat')}
               style={[styles.infoTab, infoTab === 'cheat' && styles.infoTabOn]}>
               <Text variant="micro" color={infoTab === 'cheat' ? Colors.accent : Colors.textMuted}>
@@ -790,13 +798,22 @@ const styles = StyleSheet.create({
   section: { gap: Spacing.lg, paddingTop: Spacing.sm },
   group: { gap: Spacing.sm },
 
-  typeCard: { gap: Spacing.sm },
-  typeCardOn: { gap: Spacing.sm, borderColor: Colors.accent },
-  typeHead: { flexDirection: 'row', gap: Spacing.md, alignItems: 'flex-start' },
+  typeCard: {},
+  typeCardOn: { borderColor: Colors.accent },
+  typeHead: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    alignItems: 'flex-start',
+    padding: Spacing.lg,
+  },
   typeEmoji: { fontSize: 30, lineHeight: 38 },
   typeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   typeDesc: { marginTop: Spacing.xs },
-  typeInfo: { marginTop: Spacing.sm, gap: Spacing.sm },
+  typeInfo: {
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
+  },
   infoTabs: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
   infoTab: {
     paddingVertical: Spacing.xs,
