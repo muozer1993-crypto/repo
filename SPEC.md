@@ -180,7 +180,9 @@ strings in `src/db/migrations.ts` — no filesystem reads for migrations so it w
 ```
 src/index.ts            boot: buildApp() + listen(PORT, HOST 0.0.0.0) + start scheduler
 src/app.ts              buildApp(opts): registers plugins, routes, error handler; exported for tests
-src/config.ts           env: PORT=4000, HOST=0.0.0.0, DATA_DIR=./data, UPLOAD_DIR=./uploads, JWT_SECRET (auto-generated & persisted to DATA_DIR/secret if missing), PUBLIC_URL, LOG_LEVEL
+src/config.ts           env: PORT=4000, HOST=0.0.0.0, DATA_DIR=./data, UPLOAD_DIR=<DATA_DIR>/uploads (so one
+                        volume holds the database and the photos), JWT_SECRET (auto-generated & persisted to
+                        DATA_DIR/secret if missing), PUBLIC_URL, LOG_LEVEL
 src/db/index.ts         openDb(path|':memory:'), migrations, helpers (nowIso, newId = crypto.randomUUID)
 src/db/migrations.ts    SQL strings
 src/auth/jwt.ts         sign/verify HS256 with node:crypto (header.payload.sig, exp 90d)
