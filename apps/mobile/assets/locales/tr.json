@@ -1,0 +1,6 @@
+{
+  "NSMotionUsageDescription": "Adımlarını sayabilmek için hareket verine erişmemiz gerekiyor.",
+  "NSCameraUsageDescription": "Kanıt fotoğrafı çekebilmen için kameraya erişmemiz gerekiyor.",
+  "NSPhotoLibraryUsageDescription": "Kanıt fotoğrafı seçebilmen için galerine erişmemiz gerekiyor.",
+  "CFBundleDisplayName": "KOYDUM"
+}

@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/brand/icon.png",
     "scheme": "koydum",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0B0B0F",
@@ -14,7 +14,14 @@
         "backgroundImage": "./assets/brand/adaptive-background.png",
         "monochromeImage": "./assets/brand/adaptive-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "package": "com.koydum.app",
+      "permissions": [
+        "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.health.READ_STEPS",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE"
+      ]
     },
     "web": {
       "output": "static",
@@ -27,13 +34,70 @@
         {
           "backgroundColor": "#0B0B0F",
           "image": "./assets/brand/splash-icon.png",
-          "imageWidth": 200
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/brand/notification-icon.png",
+          "color": "#FF3D71",
+          "defaultChannel": "koydum"
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Kanıt fotoğrafı seçebilmen için galerine erişmemiz gerekiyor.",
+          "cameraPermission": "Kanıt fotoğrafı çekebilmen için kameraya erişmemiz gerekiyor.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "Adımlarını sayabilmek için hareket verine erişmemiz gerekiyor."
+        }
+      ],
+      "expo-task-manager",
+      "expo-background-task",
+      "expo-localization",
+      "expo-web-browser",
+      "react-native-health-connect",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26,
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
+          }
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "backgroundColor": "#0B0B0F",
+    "primaryColor": "#FF3D71",
+    "description": "Arkadaşlar arası çelinç uygulaması. Kazanan koyar, kaybeden yer.",
+    "ios": {
+      "bundleIdentifier": "com.koydum.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSMotionUsageDescription": "Çelinçlerde adımlarını sayabilmek için hareket verine erişmemiz gerekiyor.",
+        "UIBackgroundModes": [
+          "processing",
+          "remote-notification"
+        ],
+        "CFBundleAllowMixedLocalizations": true
+      }
+    },
+    "locales": {
+      "tr": "./assets/locales/tr.json"
     }
   }
 }

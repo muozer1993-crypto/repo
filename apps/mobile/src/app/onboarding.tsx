@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   pager: { flex: 1 },
-  pagerContent: { alignItems: 'center' },
+  pagerContent: { alignItems: 'stretch' },
   slide: {
     flex: 1,
     justifyContent: 'center',
