@@ -51,7 +51,7 @@ export const ChallengeStatusSchema = z.enum(CHALLENGE_STATUSES);
 
 export const DayKeySchema = z
   .string()
-  .regex(DAY_KEY_REGEX, 'Gün formatı YYYY-MM-DD olmalı')
+  .regex(DAY_KEY_REGEX, { message: 'Gün formatı YYYY-MM-DD olmalı', abort: true })
   .refine(isValidDayKey, 'Geçersiz tarih');
 
 export const HHmmSchema = z.string().regex(HHMM_REGEX, 'Saat formatı HH:mm olmalı');
