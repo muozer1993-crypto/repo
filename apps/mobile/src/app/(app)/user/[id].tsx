@@ -47,6 +47,11 @@ export default function UserProfileScreen() {
 
   const isMe = !!myId && myId === id;
   const isFriend = (friends.data?.friends ?? []).some((friend) => friend.id === id);
+  // the create wizard only accepts friends, so a stranger's profile has to open
+  // the friendship first instead of a çelinç it cannot finish
+  const incomingRequestId =
+    (friends.data?.incoming ?? []).find((request) => request.user.id === id)?.id ?? null;
+  const outgoingPending = (friends.data?.outgoing ?? []).some((request) => request.user.id === id);
 
   // Head-to-head: in every finished challenge we both played, whoever ranked
   // higher took that round. Works for 1v1 and for crowded çelinçs alike.
@@ -73,6 +78,38 @@ export default function UserProfileScreen() {
 
   const openChallenge = () => {
     router.push({ pathname: '/(app)/challenge/new', params: { friend: id } });
+  };
+
+  const failFriendAction = (err: unknown) =>
+    toast({
+      title: 'Olmadı',
+      body: err instanceof ApiError ? err.message : undefined,
+      kind: 'danger',
+    });
+
+  const sendRequest = (username: string) => {
+    friendAction.mutate(
+      { kind: 'request', username },
+      {
+        onSuccess: () =>
+          toast({
+            title: 'İstek gönderildi',
+            body: 'Kabul edince çelinç açabilirsiniz.',
+            kind: 'success',
+          }),
+        onError: failFriendAction,
+      }
+    );
+  };
+
+  const acceptRequest = (friendshipId: string) => {
+    friendAction.mutate(
+      { kind: 'accept', friendshipId },
+      {
+        onSuccess: () => toast({ title: 'Kanka oldunuz', body: 'Artık çelinç açabilirsin.', kind: 'success' }),
+        onError: failFriendAction,
+      }
+    );
   };
 
   const removeFriend = async () => {
@@ -281,16 +318,49 @@ export default function UserProfileScreen() {
 
       {!isMe ? (
         <View style={styles.actions}>
-          <Button title="Çelinç aç" size="lg" icon="🔥" fullWidth onPress={openChallenge} />
           {isFriend ? (
-            <Button
-              title="Arkadaşlıktan çıkar"
-              variant="secondary"
-              fullWidth
-              loading={friendAction.isPending}
-              onPress={() => void removeFriend()}
-            />
-          ) : null}
+            <>
+              <Button title="Çelinç aç" size="lg" icon="🔥" fullWidth onPress={openChallenge} />
+              <Button
+                title="Arkadaşlıktan çıkar"
+                variant="secondary"
+                fullWidth
+                loading={friendAction.isPending}
+                onPress={() => void removeFriend()}
+              />
+            </>
+          ) : incomingRequestId ? (
+            <>
+              <Button
+                title="Kanka isteğini kabul et"
+                size="lg"
+                icon="🫂"
+                fullWidth
+                loading={friendAction.isPending}
+                onPress={() => acceptRequest(incomingRequestId)}
+              />
+              <Text variant="tiny" faint center>
+                Kabul edince çelinç açabilirsin.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Button
+                title={outgoingPending ? 'İstek gönderildi' : 'Kanka isteği gönder'}
+                size="lg"
+                icon={outgoingPending ? '⏳' : '🫂'}
+                fullWidth
+                disabled={outgoingPending}
+                loading={friendAction.isPending}
+                onPress={() => sendRequest(user.username)}
+              />
+              <Text variant="tiny" faint center>
+                {outgoingPending
+                  ? 'İsteği kabul edince birlikte çelinç açabilirsiniz.'
+                  : 'Çelinç açmak için önce kanka olmanız lazım.'}
+              </Text>
+            </>
+          )}
           <View style={styles.dangerRow}>
             <Button
               title="Engelle"

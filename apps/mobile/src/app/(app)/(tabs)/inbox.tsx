@@ -1,4 +1,4 @@
-import { addDays, type Notification, type NotificationType } from '@koydum/shared';
+import { addDays, getChallengeType, type Notification, type NotificationType } from '@koydum/shared';
 import { router } from 'expo-router';
 import { Pressable, SectionList, type SectionListData, StyleSheet, View } from 'react-native';
 
@@ -11,7 +11,7 @@ import { Screen } from '@/components/Screen';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
-import { useInbox, useMarkInboxRead } from '@/hooks/queries';
+import { useChallenges, useInbox, useMarkInboxRead } from '@/hooks/queries';
 import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { useLevel } from '@/store/auth';
@@ -62,6 +62,17 @@ const EMPTY_BODY: Record<1 | 2 | 3, string> = {
   2: 'Ne laf var ne bildirim. Git bir çelinç aç da ortalık hareketlensin.',
   3: 'Kimse sana koymamış, sen de kimseye koymamışsın. Aç bir çelinç, birine sapla.',
 };
+
+/**
+ * What a taunt bubble needs in its header. The server's taunt notification only
+ * carries `{ challengeId, tauntId }`, so the sender is resolved from the
+ * çelinç itself — only its winner is allowed to send one.
+ */
+interface TauntContextInfo {
+  title: string;
+  fromName: string;
+  fromEmoji: string | null;
+}
 
 interface DaySection {
   dayKey: string;
@@ -122,6 +133,21 @@ export default function InboxScreen() {
   const tz = useTimezone();
   const today = safeTodayKey(tz);
   const yesterday = addDays(today, -1);
+
+  const challenges = useChallenges();
+  const tauntContext = new Map<string, TauntContextInfo>();
+  for (const summary of challenges.data ?? []) {
+    const type = getChallengeType(summary.challenge.typeKey);
+    const title = summary.challenge.title || type?.nameTr || 'Çelinç';
+    const winner = summary.challenge.winnerId
+      ? summary.participants.find((p) => p.user.id === summary.challenge.winnerId)?.user
+      : undefined;
+    tauntContext.set(summary.challenge.id, {
+      title,
+      fromName: winner?.displayName ?? title,
+      fromEmoji: winner?.avatarEmoji ?? type?.emoji ?? null,
+    });
+  }
 
   const items = inbox.data ?? [];
   const unreadCount = items.filter((item) => !item.readAt).length;
@@ -236,13 +262,27 @@ export default function InboxScreen() {
             <View style={styles.dayLine} />
           </View>
         )}
-        renderItem={({ item }) => <InboxRow item={item} onPress={open} />}
+        renderItem={({ item }) => (
+          <InboxRow
+            item={item}
+            onPress={open}
+            context={tauntContext.get(dataString(item.data, 'challengeId') ?? '')}
+          />
+        )}
       />
     </Screen>
   );
 }
 
-function InboxRow({ item, onPress }: { item: Notification; onPress: (item: Notification) => void }) {
+function InboxRow({
+  item,
+  onPress,
+  context,
+}: {
+  item: Notification;
+  onPress: (item: Notification) => void;
+  context?: TauntContextInfo;
+}) {
   const unread = !item.readAt;
   const time = relativeTime(item.createdAt);
 
@@ -255,8 +295,8 @@ function InboxRow({ item, onPress }: { item: Notification; onPress: (item: Notif
         <TauntBubble
           title={item.title}
           body={item.body}
-          fromName={dataString(item.data, 'fromName') ?? undefined}
-          fromEmoji={dataString(item.data, 'fromEmoji')}
+          fromName={context?.fromName}
+          fromEmoji={context?.fromEmoji}
           timeLabel={time}
           loud={unread}
         />
