@@ -381,7 +381,7 @@ function StepsHeader({ state }: { state: StepsState }) {
             title={
               availability && !availability.available && availability.reason === 'health-connect-missing'
                 ? 'Health Connect'
-                : 'İzin ver'
+                : 'İZİN VER'
             }
             variant="secondary"
             size="sm"
