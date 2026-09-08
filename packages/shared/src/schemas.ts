@@ -111,6 +111,8 @@ export const RegisterBodySchema = z.object({
   password: PasswordSchema,
   displayName: DisplayNameSchema,
   timezone: TimezoneSchema.default(DEFAULT_TIMEZONE),
+  /** Chosen during sign-up; the server stores it so the first taunt already respects it. */
+  vulgarityMax: VulgarityLevelSchema.optional(),
 });
 export type RegisterBody = z.infer<typeof RegisterBodySchema>;
 

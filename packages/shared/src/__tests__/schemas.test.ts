@@ -293,3 +293,26 @@ describe('query schemas', () => {
     expect(ChallengeListQuerySchema.safeParse({ status: 'active,bogus' }).success).toBe(false);
   });
 });
+
+describe('register accepts an optional vulgarity level', () => {
+  const base = {
+    username: 'mustafa',
+    password: 'koydum123',
+    displayName: 'Mustafa',
+    timezone: 'Europe/Istanbul',
+  };
+
+  it('defaults to undefined when the field is absent', () => {
+    const parsed = RegisterBodySchema.parse(base);
+    expect(parsed.vulgarityMax).toBeUndefined();
+  });
+
+  it('keeps a valid level', () => {
+    expect(RegisterBodySchema.parse({ ...base, vulgarityMax: 3 }).vulgarityMax).toBe(3);
+  });
+
+  it('rejects a level outside 1..3', () => {
+    expect(RegisterBodySchema.safeParse({ ...base, vulgarityMax: 4 }).success).toBe(false);
+    expect(RegisterBodySchema.safeParse({ ...base, vulgarityMax: 0 }).success).toBe(false);
+  });
+});
