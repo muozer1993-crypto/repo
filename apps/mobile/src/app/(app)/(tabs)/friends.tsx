@@ -22,6 +22,7 @@ import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
+import { byLevel } from '@/utils/levelCopy';
 
 const MONO = Platform.select({ ios: 'Courier', android: 'monospace', default: 'monospace' });
 
@@ -156,7 +157,12 @@ export default function FriendsScreen() {
       <View style={styles.header}>
         <Text variant="big">Kankalar</Text>
         <Text variant="tiny" faint>
-          Kurban listen. Kimseye koyamazsan buradan başla.
+          {byLevel(
+            level,
+            'Kanka listen. Yarışacak birini buradan ekle.',
+            'Kurban listen. Kimseye koyamazsan buradan başla.',
+            'Kurban listen 🍆 Kimseye koyamıyorsan buradan başla.'
+          )}
         </Text>
       </View>
 
