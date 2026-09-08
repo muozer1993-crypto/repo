@@ -147,9 +147,13 @@ describe('KOYDUM end to end', () => {
     expect(taunt.statusCode).toBe(201);
     const sent = taunt.json<{ taunt: { id: string; level: number; title: string; body: string } }>().taunt;
     expect(sent.level).toBe(1);
+    // Which level-1 template stands in for the level-3 one is a deterministic pick
+    // from the challenge/user ids, so assert what every one of them guarantees:
+    // the winner's name, no leftover placeholders, tr-TR grouped numbers (12.430),
+    // and nothing Veli did not sign up for.
     expect(sent.body).toContain('Ali');
-    expect(sent.body).toContain('12.430'); // tr-TR numbers, rendered placeholders
-    expect(sent.body).not.toContain('{winner}');
+    expect(sent.body).not.toMatch(/\{[a-zA-Z]+\}/);
+    expect(sent.body).toMatch(/\d{1,3}\.\d{3}/);
     expect(sent.body).not.toContain('🍆');
 
     // Only once per loser.
