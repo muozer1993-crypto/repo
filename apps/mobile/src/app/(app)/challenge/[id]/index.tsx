@@ -1174,16 +1174,17 @@ function PokeSection({
   const toast = useToast();
   const [blocked, setBlocked] = useState<Record<string, number>>({});
   const [pending, setPending] = useState<string | null>(null);
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
 
-  // keep the "x dk sonra" note honest while the screen stays open — but only
-  // while there is a live cooldown to count down; otherwise this card would
-  // re-render every 30 s for nothing
+  // Keep the "x dk sonra" note honest while the screen stays open — but only
+  // while a cooldown is actually running. Re-arming per tick means the chain
+  // stops by itself once the last cooldown expires, instead of re-rendering
+  // this card every 30 s for a value that is almost always absent.
   useEffect(() => {
     if (!Object.values(blocked).some((until) => until > Date.now())) return;
-    const timer = setInterval(() => setTick((n) => n + 1), 30_000);
-    return () => clearInterval(timer);
-  }, [blocked]);
+    const timer = setTimeout(() => setTick((n) => n + 1), 30_000);
+    return () => clearTimeout(timer);
+  }, [blocked, tick]);
 
   if (rivals.length === 0) return null;
 
