@@ -21,9 +21,18 @@ import { ApiError } from '@/lib/api';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
+import { USE_NATIVE_DRIVER } from '@/utils/animation';
 import { safeDayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { formatDayKey, relativeTime } from '@/utils/format';
+import {
+  REMATCH_WINNER,
+  TAUNT_ALL,
+  TAUNT_ALL_DONE,
+  TAUNT_ALL_ICON,
+  TAUNT_CTA,
+  TAUNT_DONE_CHIP,
+} from '@/utils/levelCopy';
 
 /* ------------------------------------------------------------------- copy */
 
@@ -70,18 +79,6 @@ const NO_PENALTY: Record<VulgarityLevel, string> = {
   3: 'Ceza yazmamışlar. Yediğin yeter zaten 🍆',
 };
 
-const TAUNT_CTA: Record<VulgarityLevel, string> = {
-  1: 'Mesaj Gönder',
-  2: 'KOYDUM MU?',
-  3: 'KOYDUM MU? 🍆',
-};
-
-const TAUNT_ALL: Record<VulgarityLevel, string> = {
-  1: 'Hepsine gönder',
-  2: 'HEPSİNE KOY',
-  3: 'HEPSİNE KOY 🍆',
-};
-
 const WAIT_SUB = (level: VulgarityLevel, winner: string): string => {
   if (level === 1) return `${winner} henüz bir şey yazmadı. Belki nazik davranıyor.`;
   if (level === 3) return `${winner} daha saplamadı. Telefonunu yakınında tut 🍆`;
@@ -89,8 +86,6 @@ const WAIT_SUB = (level: VulgarityLevel, winner: string): string => {
 };
 
 /* ------------------------------------------------------------------ utils */
-
-const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 /** Springs a block up into place once, `delay` ms after mount. */
 function useRise(delay: number): Animated.Value {
@@ -374,7 +369,12 @@ export default function ResultsScreen() {
                       </Text>
                     </View>
                     {done ? (
-                      <Chip label="KOYDUN" icon="✅" color={Colors.success} size="sm" />
+                      <Chip
+                        label={TAUNT_DONE_CHIP[level]}
+                        icon="✅"
+                        color={Colors.success}
+                        size="sm"
+                      />
                     ) : (
                       <Button
                         title={TAUNT_CTA[level]}
@@ -394,14 +394,14 @@ export default function ResultsScreen() {
               variant="yellow"
               size="lg"
               fullWidth
-              icon="🍆"
+              icon={TAUNT_ALL_ICON[level]}
               style={styles.gap}
               onPress={() => openTaunt('all')}
             />
           ) : null}
           {losers.length > 0 && pendingLosers.length === 0 ? (
             <Text variant="small" color={Colors.success} bold style={styles.gap}>
-              Hepsine koydun. Sofra kapandı ✅
+              {TAUNT_ALL_DONE[level]}
             </Text>
           ) : null}
         </Card>
@@ -432,15 +432,6 @@ export default function ResultsScreen() {
               </Text>
             </>
           )}
-          <Button
-            title={t('rematch_button', level)}
-            icon="🔁"
-            size="xl"
-            fullWidth
-            style={styles.gap}
-            loading={rematch.isPending}
-            onPress={() => void startRematch()}
-          />
         </Card>
       ) : null}
 
@@ -468,6 +459,17 @@ export default function ResultsScreen() {
             ) : null}
           </View>
         </View>
+        {isPlayer ? (
+          <Button
+            title={iWon || isTie ? REMATCH_WINNER[level] : t('rematch_button', level)}
+            icon="🔁"
+            size="xl"
+            fullWidth
+            style={styles.gap}
+            loading={rematch.isPending}
+            onPress={() => void startRematch()}
+          />
+        ) : null}
         <Button
           title="Çelince dön"
           variant="ghost"

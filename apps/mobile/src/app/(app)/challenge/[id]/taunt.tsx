@@ -31,6 +31,7 @@ import { useChallenge, useResults, useTaunt } from '@/hooks/queries';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { errorText } from '@/utils/errors';
+import { CUSTOM_TAUNT_CEILING_NOTE, byLevel } from '@/utils/levelCopy';
 
 /* ------------------------------------------------------------------- copy */
 
@@ -47,11 +48,15 @@ const CONTEXT_LABEL: Record<string, string> = {
   tie: 'BERABERE',
 };
 
-/** The recipient's ceiling is not in the API, so we explain the clamp instead. */
+/**
+ * The recipient's ceiling is not on the wire, so we explain the clamp instead
+ * of drawing the locked templates. It only covers the ready-made copy: a
+ * sentence the sender types is delivered word for word (see the custom field).
+ */
 const CEILING_NOTE: Record<VulgarityLevel, string> = {
-  1: 'Not: Alıcı daha nazik bir seviye seçtiyse sunucu mesajı ona göre yumuşatır.',
-  2: 'Not: Karşı taraf daha yumuşak seviyedeyse sunucu lafı ona göre kısar — sen ağırını seç, ona kaldırabildiği gider.',
-  3: 'Not: Kaldıramayacaksa sunucu otomatik yumuşatır 🍆 Sen ağırını seç, gerisini sistem ayarlar.',
+  1: 'Not: Alıcı daha nazik bir seviye seçtiyse sunucu bu hazır lafı ona göre yumuşatır, yani birebir bu metin gitmeyebilir.',
+  2: 'Not: Karşı taraf daha yumuşak seviyedeyse sunucu hazır lafı ona göre kısar — birebir bu metin gitmeyebilir.',
+  3: 'Not: Kaldıramayacaksa sunucu hazır lafı otomatik yumuşatır 🍆 Birebir bu metin gitmeyebilir.',
 };
 
 const BANNED_WARNING: Record<VulgarityLevel, string> = {
