@@ -40,6 +40,7 @@ Arkadaş grubunun kendi sunucusunu çalıştırması yeterli; ortada kayıt olun
 | `apps/server` | Sunucu. Fastify + SQLite. Tek dosyalık veritabanı, ORM yok. |
 | `packages/shared` | İki tarafın da kullandığı tipler, doğrulama şemaları, puanlama, çelinç kataloğu, 84 laf sokma metni ve üç seviyelik arayüz metinleri. |
 | `SPEC.md` | Teknik şartname. Veri modeli, API sözleşmesi, ekran listesi. Kod değiştirirken buraya bak. |
+| `docs/ARCHITECTURE.md` | Kodun neden böyle bölündüğü: zaman/gün mantığı, çelincin ömrü, puanlama, laf sokma zinciri. |
 
 Gereksinimler: **Node 20 veya üstü** ve telefonunda **Expo Go** (ya da bir geliştirme derlemesi).
 
