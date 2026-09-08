@@ -2,12 +2,17 @@
  * Friendship graph helpers (social group).
  *
  * One row in `friendships` describes the relationship between an ORDERED pair
- * (`requester_id`, `addressee_id`) and there is at most one row per unordered pair —
- * the routes below never create a second, mirrored row:
+ * (`requester_id`, `addressee_id`):
  *
  *   pending  — `requester_id` asked, `addressee_id` has to answer
  *   accepted — direction no longer matters, both are friends
  *   blocked  — `requester_id` is the BLOCKER, `addressee_id` the blocked one
+ *
+ * A pair normally has exactly one row. The single exception is a MUTUAL block:
+ * a block belongs to the person who placed it, so when both sides block each
+ * other the pair carries two `blocked` rows and either one can only be lifted by
+ * its own owner (`removeBlock`). Anything else would let the blocked user erase
+ * the victim's block by blocking and immediately unblocking them.
  *
  * A declined request is deleted rather than kept, so asking again is possible.
  * Everything here is a pure read except `upsertBlock`, which is the one place a
@@ -15,16 +20,30 @@
  */
 import { newId, nowIso, type Database, type FriendshipRow, type UserRow } from '../db/index.js';
 
-/** The single row describing `a`↔`b`, whichever direction it was created in. */
+/**
+ * The row describing `a`↔`b`, whichever direction it was created in.
+ *
+ * A mutual block is the one case with two rows; a `blocked` row always wins the
+ * pick, so `isBlockedBetween` and every visibility check see the block no matter
+ * which side asks.
+ */
 export function friendshipBetween(db: Database, a: string, b: string): FriendshipRow | undefined {
   return db
     .prepare(
       `SELECT * FROM friendships
         WHERE (requester_id = ? AND addressee_id = ?)
            OR (requester_id = ? AND addressee_id = ?)
+        ORDER BY CASE status WHEN 'blocked' THEN 0 ELSE 1 END ASC, updated_at DESC
         LIMIT 1`,
     )
     .get(a, b, b, a) as FriendshipRow | undefined;
+}
+
+/** The row `blockerId` owns for this pair, if any (never the other side's). */
+function ownRow(db: Database, requesterId: string, addresseeId: string): FriendshipRow | undefined {
+  return db
+    .prepare('SELECT * FROM friendships WHERE requester_id = ? AND addressee_id = ?')
+    .get(requesterId, addresseeId) as FriendshipRow | undefined;
 }
 
 /** True when either side has blocked the other. */
@@ -110,27 +129,33 @@ function joinRequests(db: Database, sql: string, userId: string): PendingRequest
 /**
  * Creates (or replaces) the blocked relationship with `blockerId` as the requester.
  *
- * Any previous relationship between the two — pending request, accepted friendship,
- * or a block in the other direction — is removed first, so a block always wins and
- * the unordered pair keeps exactly one row.
+ * A pending request or an accepted friendship between the two is torn down — the
+ * blocker is entitled to end those. A `blocked` row owned by the OTHER side is
+ * left exactly as it is and a second row is inserted instead: a block is only ever
+ * lifted by the person who placed it, so blocking back (and then unblocking) can
+ * never restore the visibility the other user took away.
  */
 export function upsertBlock(db: Database, blockerId: string, blockedId: string, now: Date = new Date()): FriendshipRow {
   const at = nowIso(now);
-  const existing = friendshipBetween(db, blockerId, blockedId);
+  const mine = ownRow(db, blockerId, blockedId);
 
-  if (existing && existing.requester_id === blockerId) {
-    db.prepare("UPDATE friendships SET status = 'blocked', updated_at = ? WHERE id = ?").run(at, existing.id);
-    return { ...existing, status: 'blocked', updated_at: at };
+  if (mine) {
+    db.prepare("UPDATE friendships SET status = 'blocked', updated_at = ? WHERE id = ?").run(at, mine.id);
+    return { ...mine, status: 'blocked', updated_at: at };
   }
 
+  const theirs = ownRow(db, blockedId, blockerId);
+
   const run = db.transaction(() => {
-    if (existing) db.prepare('DELETE FROM friendships WHERE id = ?').run(existing.id);
+    if (theirs && theirs.status !== 'blocked') {
+      db.prepare('DELETE FROM friendships WHERE id = ?').run(theirs.id);
+    }
     const row: FriendshipRow = {
       id: newId(),
       requester_id: blockerId,
       addressee_id: blockedId,
       status: 'blocked',
-      created_at: existing?.created_at ?? at,
+      created_at: theirs && theirs.status !== 'blocked' ? theirs.created_at : at,
       updated_at: at,
     };
     db.prepare(

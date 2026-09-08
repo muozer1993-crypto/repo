@@ -42,9 +42,6 @@ export function deviceTimezone(): string {
   return 'Europe/Istanbul';
 }
 
-/** Guards the re-entrant logout path (see `logout` below). */
-let loggingOut = false;
-
 export const useAuth = create<AuthState>((set, get) => ({
   hydrated: false,
   token: null,
@@ -95,29 +92,27 @@ export const useAuth = create<AuthState>((set, get) => ({
    * next account does not get local notifications for someone else's history.
    */
   logout: async () => {
-    // `clearPushToken` can itself answer 401, which calls `onUnauthorized` →
-    // `logout` again: without this guard that recurses until the stack blows
-    if (loggingOut) return;
-    loggingOut = true;
-    try {
-      if (get().token) {
-        try {
-          await get().client().clearPushToken();
-        } catch {
-          // best effort: an unreachable server must never trap the user in a session
-        }
-      }
-      set({ token: null, me: null });
-      queryClient.clear();
-      await Promise.all([
-        removeItem(StorageKeys.token),
-        removeItem(StorageKeys.me),
-        removeItem(StorageKeys.pushToken),
-        removeItem(StorageKeys.lastInboxId),
-      ]);
-    } finally {
-      loggingOut = false;
+    const { token, serverUrl } = get();
+    if (token) {
+      // Best effort, and deliberately not awaited: the server has to stop
+      // pushing this account's taunts to the phone, but an unreachable server
+      // must never trap the user in a session. A bare client is used so a 401
+      // answer cannot re-enter `logout` through `onUnauthorized`.
+      void new ApiClient({ baseUrl: serverUrl, token })
+        .clearPushToken()
+        .catch(() => {});
     }
+    set({ token: null, me: null });
+    // the next account must not be served this one's challenges, inbox or badge
+    queryClient.clear();
+    await Promise.all([
+      removeItem(StorageKeys.token),
+      removeItem(StorageKeys.me),
+      removeItem(StorageKeys.pushToken),
+      // otherwise the next account's first poll replays its history as local
+      // notifications
+      removeItem(StorageKeys.lastInboxId),
+    ]);
   },
 
   client: () => {
