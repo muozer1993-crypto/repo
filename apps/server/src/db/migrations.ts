@@ -209,7 +209,21 @@ CREATE INDEX IF NOT EXISTS idx_badges_user               ON badges(user_id);
 CREATE INDEX IF NOT EXISTS idx_reports_reported          ON reports(reported_id);
 `;
 
+/**
+ * The timezone a participant's day keys are measured in, frozen when they join.
+ *
+ * `users.timezone` is editable at any time (PATCH /me), and both the check-in
+ * verdict and the day window are read from it — so without this snapshot a player
+ * could hop to a zone where the deadline has not passed yet and turn a late
+ * check-in into an on-time one. NULL means "not pinned": the code falls back to
+ * `users.timezone` for rows written before this migration.
+ */
+const PARTICIPANT_TIMEZONE = `
+ALTER TABLE challenge_participants ADD COLUMN timezone TEXT;
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
+  { id: '003_participant_timezone', sql: PARTICIPANT_TIMEZONE },
 ];

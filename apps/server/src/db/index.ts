@@ -142,6 +142,8 @@ export interface ParticipantRow {
   joined_at: string | null;
   final_score: number | null;
   final_rank: number | null;
+  /** Timezone pinned when the user joined; NULL for rows predating the column. */
+  timezone: string | null;
 }
 
 export interface EntryRow {
