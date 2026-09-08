@@ -25,6 +25,8 @@ export interface MakeAppOptions {
   now?: Date | string;
   /** Extra config overrides (in-memory db, silent log and test secret are preset). */
   config?: Partial<Config>;
+  /** Runs before `app.ready()` — the place to register extra test-only routes. */
+  beforeReady?: (app: FastifyInstance) => void | Promise<void>;
 }
 
 export interface TestApp {
@@ -59,6 +61,7 @@ export async function makeApp(overrides: MakeAppOptions = {}): Promise<TestApp> 
       ...overrides.config,
     },
   });
+  if (overrides.beforeReady) await overrides.beforeReady(app);
   await app.ready();
 
   return {

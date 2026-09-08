@@ -9,6 +9,7 @@ import { MIGRATIONS } from '../src/db/migrations.js';
 import { loadConfig } from '../src/config.js';
 import { listInbox, markRead, notify, unreadCount } from '../src/services/notifications.js';
 import { computeUserStats, getBadges } from '../src/services/stats.js';
+import { conflict } from '../src/errors.js';
 import { makeApp, registerUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
@@ -235,6 +236,58 @@ describe('stats', () => {
     const stats = computeUserStats(db, user.me.id, app.now());
     expect(stats.stepsToday).toBe(8421);
     expect(stats.stepsSingleDayMax).toBe(15000);
+  });
+});
+
+describe('authenticate + error envelope', () => {
+  it('guards routes, loads the user row and renders HttpErrors', async () => {
+    harness = await makeApp({
+      beforeReady: (app) => {
+        app.get('/__protected', { preHandler: app.authenticate }, async (request) => ({
+          id: request.user.id,
+          username: request.user.row.username,
+        }));
+        app.get('/__boom', async () => {
+          throw conflict('already_taunted', 'Bu kankaya zaten koydun.');
+        });
+      },
+    });
+    const { app, db } = harness;
+    const ali = await registerUser(app, 'ali');
+
+    const anonymous = await app.inject({ method: 'GET', url: '/__protected' });
+    expect(anonymous.statusCode).toBe(401);
+    expect(anonymous.json()).toEqual({ error: { code: 'unauthorized', message: 'Giriş yapman gerekiyor.' } });
+
+    const garbage = await app.inject({
+      method: 'GET',
+      url: '/__protected',
+      headers: { authorization: 'Bearer not.a.token' },
+    });
+    expect(garbage.statusCode).toBe(401);
+    expect(garbage.json().error.code).toBe('invalid_token');
+
+    const ok = await app.inject({ method: 'GET', url: '/__protected', headers: { authorization: `Bearer ${ali.token}` } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toEqual({ id: ali.me.id, username: 'ali' });
+
+    // an expired token is refused
+    const expired = signToken({ sub: ali.me.id }, harness.config.jwtSecret, 60, new Date('2026-01-01T00:00:00.000Z'));
+    const stale = await app.inject({ method: 'GET', url: '/__protected', headers: { authorization: `Bearer ${expired}` } });
+    expect(stale.statusCode).toBe(401);
+
+    // soft-deleted users cannot use their old token
+    db.prepare('UPDATE users SET deleted_at = ? WHERE id = ?').run(app.now().toISOString(), ali.me.id);
+    const deleted = await app.inject({
+      method: 'GET',
+      url: '/__protected',
+      headers: { authorization: `Bearer ${ali.token}` },
+    });
+    expect(deleted.statusCode).toBe(401);
+
+    const boom = await app.inject({ method: 'GET', url: '/__boom' });
+    expect(boom.statusCode).toBe(409);
+    expect(boom.json()).toEqual({ error: { code: 'already_taunted', message: 'Bu kankaya zaten koydun.' } });
   });
 });
 

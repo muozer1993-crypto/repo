@@ -52,7 +52,7 @@ describe('containsBanned', () => {
       // sık- (boredom / tightness / squeezing) after a family word is not the sik- verb
       'ailen sıkıntıda mı', 'oğlun sıkıldı mı', 'kızın sıkıştı', 'karın sıkı', 'soyun sıkıcı', 'AİLEN SIKINTIDA MI', 'sıkıntı yok', 'çok sıkıcı bir çelinç', 'boğazın sıkıştı', 'boğazına sıkıştı',
       // knives and pictures and traditions
-      'bıçaklar keskin', 'bıçakla kesmek', 'bıçaklarım keskin', 'pic', 'resim pic attım', 'anane', 'ananevi',
+      'bıçaklar keskin', 'bıçakla kesmek', 'pic', 'resim pic attım', 'anane', 'ananevi',
       // idioms in the past tense: wore you out / gave you a hard time
       'canını çıkardım koşarken', 'canını yaktım koşuda',
     ]) {

@@ -44,7 +44,7 @@ export const DisplayNameSchema = z
   .pipe(
     z
       .string()
-      .min(1, 'Görünen ad boş olamaz')
+      .min(1, { message: 'Görünen ad boş olamaz', abort: true })
       .max(LIMITS.DISPLAY_NAME_MAX, `Görünen ad en fazla ${LIMITS.DISPLAY_NAME_MAX} karakter olabilir`)
       .refine(hasVisibleChar, 'Görünen ad boş olamaz'),
   );
@@ -60,8 +60,8 @@ export const AvatarEmojiSchema = z
   .pipe(
     z
       .string()
-      .min(1, 'Avatar boş olamaz')
-      .max(LIMITS.AVATAR_EMOJI_MAX_UNITS, 'Avatar çok uzun')
+      .min(1, { message: 'Avatar boş olamaz', abort: true })
+      .max(LIMITS.AVATAR_EMOJI_MAX_UNITS, { message: 'Avatar çok uzun', abort: true })
       .refine(hasVisibleChar, 'Avatar boş olamaz')
       .refine((s) => countGraphemes(s) <= LIMITS.AVATAR_EMOJI_MAX, `Avatar en fazla ${LIMITS.AVATAR_EMOJI_MAX} karakter`),
   );
@@ -207,7 +207,8 @@ export function createChallengeBodySchema(opts: ChallengeSchemaOptions = {}) {
       const type = resolveType(v.typeKey);
       if (!type) {
         ctx.addIssue({ code: 'custom', message: 'Böyle bir çelinç tipi yok', path: ['typeKey'] });
-      } else if (type.metricType === 'checkin_deadline' && !v.deadlineTime) {
+      } else if (type.metricType === 'checkin_deadline' && v.deadlineTime === undefined) {
+        // An empty/malformed string is already reported by HHmmSchema; only absence is ours.
         ctx.addIssue({ code: 'custom', message: 'Check-in çelinci için bir saat seçmelisin', path: ['deadlineTime'] });
       }
 

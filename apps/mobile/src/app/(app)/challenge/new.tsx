@@ -291,7 +291,7 @@ export default function NewChallengeScreen() {
     : friends;
   const chosen = friends.filter((friend) => selectedIds.includes(friend.id));
 
-  const window = computeWindow(startMode, daysValid ? days : (type?.defaultDurationDays ?? 1));
+  const preview = computeWindow(startMode, daysValid ? days : (type?.defaultDurationDays ?? 1));
   const finalTitle = (title.trim() || type?.nameTr || '').slice(0, LIMITS.CHALLENGE_TITLE_MAX);
 
   const stepValid = step === 0 ? !!type : step === 1 ? settingsValid : step === 2 ? friendsValid : true;
@@ -574,8 +574,8 @@ export default function NewChallengeScreen() {
             />
 
             <Card style={styles.windowCard}>
-              <SummaryRow label="Başlangıç" value={formatMoment(window.startsAt)} />
-              <SummaryRow label="Bitiş" value={formatMoment(window.endsAt)} />
+              <SummaryRow label="Başlangıç" value={formatMoment(preview.startsAt)} />
+              <SummaryRow label="Bitiş" value={formatMoment(preview.endsAt)} />
             </Card>
           </View>
         ) : null}
@@ -662,8 +662,8 @@ export default function NewChallengeScreen() {
               </View>
 
               <View style={styles.summaryBody}>
-                <SummaryRow label="Başlangıç" value={formatMoment(window.startsAt)} />
-                <SummaryRow label="Bitiş" value={formatMoment(window.endsAt)} />
+                <SummaryRow label="Başlangıç" value={formatMoment(preview.startsAt)} />
+                <SummaryRow label="Bitiş" value={formatMoment(preview.endsAt)} />
                 <SummaryRow label="Süre" value={`${days} gün`} />
                 {needsDeadline ? (
                   <SummaryRow label="Check-in" value={`${deadlineTime.trim()}'e kadar`} />

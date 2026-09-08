@@ -45,9 +45,14 @@ export function normalizeServerUrl(input: string): string | null {
   try {
     const url = new URL(withScheme);
     if (!url.hostname) return null;
-    if (!url.port && url.protocol === 'http:' && !/^(localhost|127\.0\.0\.1)$/.test(url.hostname)) {
-      // bare LAN IPs almost always mean the default port
-      if (/^\d+\.\d+\.\d+\.\d+$/.test(url.hostname)) url.port = String(DEFAULT_PORT);
+    // "192.168.1.20" or "localhost" almost always means the default port;
+    // a real hostname like "koydum.example.com" is left alone.
+    const looksLocal =
+      /^\d{1,3}(\.\d{1,3}){3}$/.test(url.hostname) ||
+      url.hostname === 'localhost' ||
+      url.hostname.endsWith('.local');
+    if (!url.port && url.protocol === 'http:' && looksLocal) {
+      url.port = String(DEFAULT_PORT);
     }
     return stripTrailingSlash(url.toString());
   } catch {
