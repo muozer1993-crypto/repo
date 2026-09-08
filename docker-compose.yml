@@ -1,0 +1,14 @@
+services:
+  koydum-server:
+    build: .
+    ports:
+      - "4000:4000"
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:4000}
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+      LOG_LEVEL: info
+    volumes:
+      - koydum-data:/data
+    restart: unless-stopped
+volumes:
+  koydum-data:
