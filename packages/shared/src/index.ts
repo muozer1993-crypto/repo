@@ -11,7 +11,6 @@ export * from './levels';
 // defining the same name (SPEC 1.4) cannot produce an ambiguous-export error.
 export { clampLevel } from './levels';
 
-// Data modules produced by the catalog/taunts/copy task — add when they exist:
-// export * from './catalog';
-// export * from './taunts';
-// export * from './copy';
+export * from './catalog';
+export * from './taunts';
+export * from './copy';

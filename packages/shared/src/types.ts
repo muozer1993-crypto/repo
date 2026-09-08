@@ -199,6 +199,8 @@ export interface BadgeStats {
   disputesWon: number;
   challengesPlayed: number;
   pokesSent: number;
+  /** Challenges won that were a rematch of an earlier one. */
+  revengeWins: number;
 }
 export type BadgeStatKey = keyof BadgeStats;
 
