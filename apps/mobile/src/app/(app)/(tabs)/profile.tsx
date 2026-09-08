@@ -512,7 +512,9 @@ function Leaderboard({
             {gap ? <Text style={styles.boardGap}>⋯</Text> : null}
             <Pressable
               accessibilityRole="button"
-              onPress={() => (isMe ? undefined : router.push(`/user/${row.user.id}`))}
+              onPress={() =>
+                isMe ? undefined : router.push({ pathname: '/user/[id]', params: { id: row.user.id } })
+              }
               style={({ pressed }) => [
                 styles.boardRow,
                 isMe && styles.boardRowMe,

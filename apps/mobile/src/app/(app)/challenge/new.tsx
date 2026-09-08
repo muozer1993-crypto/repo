@@ -630,7 +630,7 @@ export default function NewChallengeScreen() {
                 emoji="👻"
                 title="Kanka yok"
                 subtitle={t('add_friend_empty', level)}
-                actionLabel="Kanka ekle"
+                actionLabel={t('invite_friends_cta', level)}
                 onAction={() => router.replace('/(app)/(tabs)/friends')}
               />
             ) : (

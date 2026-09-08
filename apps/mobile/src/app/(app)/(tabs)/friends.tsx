@@ -332,6 +332,8 @@ export default function FriendsScreen() {
           emoji="🫂"
           title={t('add_friend_empty', level)}
           subtitle="Yukarıdan kullanıcı adını ara ya da davet kodunu paylaş."
+          actionLabel={t('invite_friends_cta', level)}
+          onAction={() => void shareCode()}
         />
       ) : null}
 
