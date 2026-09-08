@@ -232,7 +232,10 @@ export default function ResultsScreen() {
   const senderOf = (taunt: Taunt): ParticipantView | undefined =>
     standings.find((p) => p.user.id === taunt.fromUserId);
 
-  const gap = winner && mine ? Math.abs(winner.score - mine.score) : 0;
+  // how far behind the winner I finished / how far ahead of the runner-up I did
+  const runnerUp = losers[0];
+  const loserGap = winner && mine ? Math.abs(winner.score - mine.score) : 0;
+  const winnerGap = mine && runnerUp ? Math.abs(mine.score - runnerUp.score) : 0;
 
   return (
     <Screen
@@ -298,12 +301,12 @@ export default function ResultsScreen() {
         <Standings participants={standings} type={type} meId={meId} finished />
         {isPlayer && !iWon && !isTie && winner ? (
           <Text variant="small" bold color={Colors.accent} style={styles.gapLine}>
-            {winner.user.displayName} ile aran: {scoreText(gap)}
+            {winner.user.displayName} ile aranda {scoreText(loserGap)} fark var.
           </Text>
         ) : null}
-        {isPlayer && iWon && losers.length > 0 ? (
+        {isPlayer && iWon && runnerUp ? (
           <Text variant="small" bold color={Colors.success} style={styles.gapLine}>
-            En yakın takipçin {losers[0]?.user.displayName} — arada {scoreText(gap || Math.abs((mine?.score ?? 0) - (losers[0]?.score ?? 0)))}
+            En yakın takipçin {runnerUp.user.displayName} — arada {scoreText(winnerGap)} var.
           </Text>
         ) : null}
       </Card>
