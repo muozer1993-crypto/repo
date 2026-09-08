@@ -165,6 +165,16 @@ export default function ChallengeDetailScreen() {
   const yesterday = addDays(today, -1);
   const isPlayer = mine?.status === 'accepted';
   const leading = (mine?.rank ?? 0) === 1;
+  /**
+   * A pending çelinç whose start time has passed is not starting: the server
+   * only activates it once at least two people have accepted, and otherwise
+   * cancels it at the end date. Saying "Başlıyor" for days would be a lie.
+   */
+  const startPassed = Number.isFinite(Date.parse(challenge.startsAt))
+    ? Date.parse(challenge.startsAt) <= Date.now()
+    : false;
+  const waitingForAccepts = challenge.status === 'pending' && startPassed;
+  const isCreator = challenge.creatorId === meId;
 
   return (
     <Screen
@@ -192,10 +202,25 @@ export default function ChallengeDetailScreen() {
         </View>
 
         <View style={styles.heroClock}>
-          {challenge.status === 'pending' ? (
+          {waitingForAccepts ? (
+            <>
+              <Text variant="label">Kabul bekleniyor</Text>
+              <Text variant="big">{accepted.length}/2 kişi</Text>
+              <Text variant="tiny" faint>
+                Başlaması için en az 2 kişinin kabul etmesi lazım; o zamana kadar süre işlemiyor.
+                Kimse kabul etmezse bitiş tarihinde kendiliğinden iptal olur.
+                {isCreator ? ' İstersen aşağıdan şimdi iptal edebilirsin.' : ''}
+              </Text>
+            </>
+          ) : challenge.status === 'pending' ? (
             <>
               <Text variant="label">Başlamasına</Text>
-              <Countdown target={challenge.startsAt} variant="big" finishedLabel="Başlıyor" />
+              <Countdown
+                target={challenge.startsAt}
+                variant="big"
+                finishedLabel="Başlıyor"
+                onFinish={() => void query.refetch()}
+              />
             </>
           ) : challenge.status === 'active' ? (
             <>
@@ -911,10 +936,37 @@ function Feed({
   onProof: (url: string) => void;
 }) {
   const dispute = useDispute(challengeId);
+  const removeEntry = useDeleteEntry(challengeId);
   const toast = useToast();
   const [target, setTarget] = useState<FeedItem | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  // Only a friend's itiraz could undo a mistyped value before this: the server
+  // lets you delete your own manual rows while the çelinç is running.
+  const active = detail.challenge.status === 'active';
+  const canDelete = (item: FeedItem) =>
+    active && item.userId === meId && item.source === 'manual' && item.status !== 'rejected';
+
+  const remove = async (item: FeedItem) => {
+    const label = type ? scoreLabel(type, item.value) : formatNumber(item.value);
+    const ok = await confirmTr(
+      'Girişi sil',
+      `${formatDayKeyFriendly(item.dayKey, today, yesterday)} · ${label} silinecek. Skorundan düşer.`,
+      'Sil'
+    );
+    if (!ok) return;
+    setRemovingId(item.id);
+    try {
+      await removeEntry.mutateAsync(item.id);
+      toast({ title: 'Silindi', body: 'Giriş skorundan düştü.', kind: 'info' });
+    } catch (err) {
+      toast({ title: 'Silinemedi', body: errorText(err, 'Giriş silinemedi.'), kind: 'danger' });
+    } finally {
+      setRemovingId(null);
+    }
+  };
 
   const myDisputes = new Set(
     detail.disputes.filter((d) => d.byUserId === meId).map((d) => d.entryId)
@@ -962,6 +1014,9 @@ function Feed({
               level={level}
               baseUrl={baseUrl}
               onProof={onProof}
+              canDelete={canDelete(item)}
+              deleting={removingId === item.id}
+              onDelete={() => void remove(item)}
               onDispute={() => {
                 setTarget(item);
                 setReason('');
@@ -1013,6 +1068,9 @@ function FeedRow({
   baseUrl,
   onProof,
   onDispute,
+  canDelete,
+  deleting,
+  onDelete,
 }: {
   item: FeedItem;
   type: ChallengeType | undefined;
@@ -1024,6 +1082,9 @@ function FeedRow({
   baseUrl: string;
   onProof: (url: string) => void;
   onDispute: () => void;
+  canDelete: boolean;
+  deleting: boolean;
+  onDelete: () => void;
 }) {
   const rejected = item.status === 'rejected';
   const disputed = item.status === 'disputed';
@@ -1084,6 +1145,14 @@ function FeedRow({
           color={alreadyDisputed ? Colors.textFaint : Colors.danger}
           size="sm"
           onPress={alreadyDisputed ? undefined : onDispute}
+        />
+      ) : canDelete ? (
+        <Chip
+          label={deleting ? 'Siliniyor…' : 'Sil'}
+          icon="🗑️"
+          color={Colors.textMuted}
+          size="sm"
+          onPress={deleting ? undefined : onDelete}
         />
       ) : null}
     </View>
