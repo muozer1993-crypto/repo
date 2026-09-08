@@ -36,7 +36,12 @@ export function Sheet({ visible, onClose, title, children, scroll = true }: Shee
       onRequestClose={onClose}
       statusBarTranslucent>
       <View style={styles.root}>
-        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Kapat" />
+        <Pressable
+          style={styles.backdrop}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Kapat"
+        />
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, Spacing.lg) }]}>
           <View style={styles.grabber} />
           {scroll ? (

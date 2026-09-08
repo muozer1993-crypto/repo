@@ -86,46 +86,70 @@ export interface FlushResult {
  * Replays the queue oldest first. A validation error from the server is final
  * (the day has passed, the cap was hit): the item is dropped with its reason so
  * the user can be told. A network error stops the flush and leaves the rest.
+ *
+ * The flush is fired and forgotten from three places (every successful entry
+ * write, mount, and every foreground), so it has to be re-entrant-safe:
+ * concurrent callers share one run, and an item is removed from storage the
+ * moment its POST lands rather than in one rewrite at the end — otherwise an
+ * overlapping pass would send the same entry twice and double the score.
  */
-export async function flushQueue(client: ApiClient): Promise<FlushResult> {
+let inFlight: Promise<FlushResult> | null = null;
+
+export function flushQueue(client: ApiClient): Promise<FlushResult> {
+  if (inFlight) return inFlight;
+  const run = runFlush(client).finally(() => {
+    if (inFlight === run) inFlight = null;
+  });
+  inFlight = run;
+  return run;
+}
+
+async function runFlush(client: ApiClient): Promise<FlushResult> {
   const queue = await readQueue();
   if (queue.length === 0) return { sent: 0, dropped: 0, remaining: 0 };
 
   let sent = 0;
   let dropped = 0;
-  const keep: PendingEntry[] = [];
   let offline = false;
+  const delivered = new Set<string>();
+  const touched = new Map<string, PendingEntry>();
 
   for (const item of queue) {
-    if (offline || item.failedReason) {
-      keep.push(item);
-      continue;
-    }
+    if (offline || item.failedReason) continue;
     try {
       await client.addEntry(item.challengeId, item.body);
       sent += 1;
+      delivered.add(item.id);
+      // persisted immediately: a crash or a second pass must not re-send it
+      await removeFromQueue(item.id);
     } catch (error) {
       if (error instanceof ApiError && error.isNetwork) {
         offline = true;
-        keep.push({ ...item, attempts: item.attempts + 1 });
+        touched.set(item.id, { ...item, attempts: item.attempts + 1 });
         continue;
       }
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
         // the server will never accept this one
         dropped += 1;
-        keep.push({ ...item, attempts: item.attempts + 1, failedReason: error.message });
+        touched.set(item.id, { ...item, attempts: item.attempts + 1, failedReason: error.message });
         continue;
       }
       const attempts = item.attempts + 1;
       if (attempts >= MAX_ATTEMPTS) {
         dropped += 1;
-        keep.push({ ...item, attempts, failedReason: 'Gönderilemedi, çok denedim.' });
+        touched.set(item.id, { ...item, attempts, failedReason: 'Gönderilemedi, çok denedim.' });
       } else {
-        keep.push({ ...item, attempts });
+        touched.set(item.id, { ...item, attempts });
       }
     }
   }
 
+  // re-read so anything queued while we were sending survives, then write back
+  // the attempt counters and failure reasons this pass produced
+  const current = await readQueue();
+  const keep = current
+    .filter((item) => !delivered.has(item.id))
+    .map((item) => touched.get(item.id) ?? item);
   await writeQueue(keep);
   return { sent, dropped, remaining: keep.filter((item) => !item.failedReason).length };
 }

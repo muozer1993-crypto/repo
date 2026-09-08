@@ -17,10 +17,13 @@ import {
   setBadgeCount,
   type NotificationRoute,
 } from '@/services/notifications';
-import { flushQueue } from '@/services/offlineQueue';
+import { clearFailed, flushQueue, readQueue } from '@/services/offlineQueue';
 import { syncReminders, type ReminderChallenge } from '@/services/reminders';
-import { getDailySteps, startForegroundStepTracking } from '@/services/steps';
+import { startForegroundStepTracking } from '@/services/steps';
+import { syncStepsNow } from '@/services/stepSync';
+import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
+import { safeDayKey, safeTodayKey } from '@/utils/datetime';
 
 /**
  * Glue between the OS and the app:
@@ -34,14 +37,20 @@ export function NotificationBridge() {
   const token = useAuth((s) => s.token);
   const serverUrl = useAuth((s) => s.serverUrl);
   const makeClient = useAuth((s) => s.client);
+  const refreshMe = useAuth((s) => s.refreshMe);
   const toast = useToast();
   const level = useLevel();
+  const tz = useTimezone();
   const queryClient = useQueryClient();
   const pushTokenSent = useRef<string | null>(null);
 
   // --- push registration -------------------------------------------------
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      // the next account has to register the same device token again
+      pushTokenSent.current = null;
+      return;
+    }
     let cancelled = false;
     installNotificationHandler();
     (async () => {
@@ -81,6 +90,13 @@ export function NotificationBridge() {
       void queryClient.invalidateQueries({ queryKey: qk.unread });
       void queryClient.invalidateQueries({ queryKey: qk.inbox });
       const payload = (data ?? {}) as { type?: string; challengeId?: string };
+      // a taunt lands on an open results screen, which has no refetch interval:
+      // without this the loser keeps reading "henüz konuşmadı, bekle"
+      if (payload.challengeId) {
+        void queryClient.invalidateQueries({ queryKey: qk.challenge(payload.challengeId) });
+        void queryClient.invalidateQueries({ queryKey: qk.results(payload.challengeId) });
+        void queryClient.invalidateQueries({ queryKey: ['challenges'] });
+      }
       toast({
         title: title || 'KOYDUM',
         body,
@@ -157,10 +173,7 @@ export function NotificationBridge() {
 
     const syncSteps = async () => {
       try {
-        const days = await getDailySteps(7);
-        if (days.length === 0) return;
-        await makeClient().syncSteps(days);
-        void queryClient.invalidateQueries({ queryKey: ['challenges'] });
+        await syncStepsNow({ client: makeClient(), queryClient, refreshMe });
       } catch {
         // ignore: the user can always sync by hand from the home screen
       }
@@ -169,7 +182,25 @@ export function NotificationBridge() {
     // anything logged while offline goes out as soon as we can reach the server
     const drain = async () => {
       try {
-        await flushQueue(makeClient());
+        const result = await flushQueue(makeClient());
+        if (result.sent > 0) {
+          void queryClient.invalidateQueries({ queryKey: ['challenges'] });
+          void queryClient.invalidateQueries({ queryKey: ['challenge'] });
+        }
+        if (result.dropped > 0) {
+          // the server refused these for good; say so once, then stop holding them
+          const failed = (await readQueue()).filter((item) => item.failedReason);
+          const reason = failed[0]?.failedReason ?? 'Sunucu kabul etmedi.';
+          await clearFailed();
+          toast({
+            title:
+              failed.length > 1
+                ? `${failed.length} giriş gönderilemedi`
+                : 'Bir giriş gönderilemedi',
+            body: reason,
+            kind: 'danger',
+          });
+        }
       } catch {
         // the queue keeps the entries; we try again on the next foreground
       }
@@ -179,14 +210,15 @@ export function NotificationBridge() {
     const scheduleReminders = async () => {
       try {
         const summaries = await makeClient().challenges('active,pending');
-        const todayKeyLocal = new Date().toLocaleDateString('en-CA');
+        // day keys are counted in the ACCOUNT's zone, both here and on the server
+        const todayKeyLocal = safeTodayKey(tz);
         const reminders: ReminderChallenge[] = summaries.map((summary) => ({
           id: summary.challenge.id,
           title: summary.challenge.title,
           endsAt: summary.challenge.endsAt,
           metricType: summary.challenge.metricType,
           deadlineTime: summary.challenge.deadlineTime,
-          doneToday: (summary.me?.lastEntryAt ?? '').slice(0, 10) === todayKeyLocal,
+          doneToday: safeDayKey(summary.me?.lastEntryAt, tz) === todayKeyLocal,
         }));
         await syncReminders(reminders, level);
       } catch {
@@ -221,7 +253,7 @@ export function NotificationBridge() {
       setBackgroundHandler(null);
       sub.remove();
     };
-  }, [token, serverUrl, makeClient, queryClient, level]);
+  }, [token, serverUrl, makeClient, queryClient, level, tz, refreshMe, toast]);
 
   return null;
 }

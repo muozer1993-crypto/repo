@@ -6,6 +6,7 @@ import { Avatar } from '@/components/Avatar';
 import { ProgressBar } from '@/components/ProgressBar';
 import { Text } from '@/components/Text';
 import { Colors, Radius, Spacing } from '@/theme';
+import { formatNumber } from '@/utils/format';
 
 export interface StandingsProps {
   participants: ParticipantView[];
@@ -26,8 +27,17 @@ export function Standings({ participants, type, meId, limit, finished, style }: 
   const ranked = [...playing].sort((a, b) => a.rank - b.rank);
   const shown = limit ? takeWithMe(ranked, limit, meId) : ranked;
 
-  const scores = ranked.map((p) => p.score);
-  const best = scores.length ? Math.max(...scores) : 0;
+  // In a lower-is-better çelinç rank 1 holds the SMALLEST number, so a raw
+  // score/max ratio would hand the last-placed player the fullest bar.
+  const lower = type?.direction === 'lower';
+  const scores = ranked.filter((p) => p.status !== 'invited').map((p) => p.score);
+  const worst = scores.length ? Math.max(...scores) : 0;
+  const fillFor = (score: number): number => {
+    if (!lower) return worst > 0 ? score / worst : 0;
+    if (worst <= 0) return 1; // everyone is at zero, which is a perfect score here
+    // keep a sliver of colour on the last row so the bar never reads as "missing"
+    return Math.max(0.05, (worst - score) / worst);
+  };
 
   return (
     <View style={[styles.wrap, style]}>
@@ -35,7 +45,7 @@ export function Standings({ participants, type, meId, limit, finished, style }: 
         const isMe = participant.user.id === meId;
         const pending = participant.status === 'invited';
         const leading = participant.rank === 1 && !pending;
-        const fill = best > 0 ? participant.score / best : 0;
+        const fill = fillFor(participant.score);
         const barColor = leading ? Colors.yellow : isMe ? Colors.accent : Colors.surfaceHigh;
 
         return (
@@ -60,7 +70,11 @@ export function Standings({ participants, type, meId, limit, finished, style }: 
                   bold
                   color={leading ? Colors.yellow : Colors.text}
                   numberOfLines={1}>
-                  {pending ? 'bekliyor' : type ? scoreLabel(type, participant.score) : String(participant.score)}
+                  {pending
+                    ? 'bekliyor'
+                    : type
+                      ? scoreLabel(type, participant.score)
+                      : formatNumber(participant.score)}
                 </Text>
               </View>
               <ProgressBar value={pending ? 0 : fill} color={barColor} height={6} />

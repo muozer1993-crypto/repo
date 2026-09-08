@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
 import { Colors, Layout, Radius, Shadow, Spacing } from '@/theme';
+import { USE_NATIVE_DRIVER } from '@/utils/animation';
 
 export type ToastKind = 'info' | 'success' | 'danger' | 'taunt';
 
@@ -41,9 +42,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const nextId = useRef(0);
 
   const hide = useCallback(() => {
-    Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => {
-      setToast(null);
-    });
+    Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: USE_NATIVE_DRIVER }).start(
+      ({ finished }) => {
+        // `show` interrupts this fade with `opacity.setValue(0)`, which fires
+        // this callback with finished=false; clearing then would wipe the toast
+        // that was just raised
+        if (finished) setToast(null);
+      }
+    );
   }, [opacity]);
 
   const show = useCallback(
@@ -51,7 +57,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       nextId.current += 1;
       setToast({ ...options, id: nextId.current });
       opacity.setValue(0);
-      Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+      Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: USE_NATIVE_DRIVER }).start();
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(hide, options.durationMs ?? 4200);
     },

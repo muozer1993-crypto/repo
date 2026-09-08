@@ -37,9 +37,13 @@ export function useConnection(): ConnectionState {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
+    // A foreground event that lands while a probe is awaiting `fetch` has no
+    // pending timeout to clear, so without this generation stamp the old chain
+    // would keep rescheduling itself next to the new one and double the rate.
+    let generation = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    const probe = async () => {
+    const probe = async (gen: number) => {
       let ok = false;
       try {
         const controller = new AbortController();
@@ -50,7 +54,7 @@ export function useConnection(): ConnectionState {
       } catch {
         ok = false;
       }
-      if (cancelled) return;
+      if (cancelled || gen !== generation) return;
 
       if (ok) {
         failures.current = 0;
@@ -61,20 +65,23 @@ export function useConnection(): ConnectionState {
         if (failures.current >= FAILURES_BEFORE_OFFLINE) setOnline(false);
       }
       setChecked(true);
-      timer = setTimeout(probe, ok ? HEALTHY_INTERVAL_MS : UNHEALTHY_INTERVAL_MS);
+      timer = setTimeout(() => void probe(gen), ok ? HEALTHY_INTERVAL_MS : UNHEALTHY_INTERVAL_MS);
     };
 
-    void probe();
+    const restart = () => {
+      generation += 1;
+      if (timer) clearTimeout(timer);
+      void probe(generation);
+    };
+
+    restart();
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        clearTimeout(timer);
-        void probe();
-      }
+      if (state === 'active') restart();
     });
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       subscription.remove();
     };
   }, [serverUrl, nonce, token]);

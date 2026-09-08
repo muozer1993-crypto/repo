@@ -71,11 +71,24 @@ export function formatDayKeyFriendly(dayKey: string, todayKey: string, yesterday
   return formatDayKey(dayKey);
 }
 
-/** "14:30" from an ISO timestamp, in the device timezone */
-export function formatTime(iso: string): string {
+/**
+ * "14:30" from an ISO timestamp. Pass the account's IANA zone whenever the time
+ * is read against something the server decided in that zone (a check-in
+ * deadline, a challenge window); without it the device zone is used, which can
+ * show "07:15" next to a 07:30 deadline the server already counted as late.
+ */
+export function formatTime(iso: string, tz?: string): string {
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) return '';
-  return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  const options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
+  if (tz) {
+    try {
+      return date.toLocaleTimeString('tr-TR', { ...options, timeZone: tz });
+    } catch {
+      // an unusable zone from the wire: fall back to the device
+    }
+  }
+  return date.toLocaleTimeString('tr-TR', options);
 }
 
 /** Turkish plural-free unit joining: 12.430 adım */

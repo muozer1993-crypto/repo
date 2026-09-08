@@ -8,7 +8,6 @@ import {
   type UserStats,
   type VulgarityLevel,
 } from '@koydum/shared';
-import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -115,7 +114,6 @@ export default function ProfileScreen() {
   const logout = useAuth((s) => s.logout);
   const level = useLevel();
   const toast = useToast();
-  const queryClient = useQueryClient();
 
   const friends = useFriends();
   const leaderboard = useLeaderboard();
@@ -212,8 +210,9 @@ export default function ProfileScreen() {
 
   const doLogout = async () => {
     setLogoutOpen(false);
+    // `logout` drops the react-query cache itself, so every exit path (here,
+    // Ayarlar, a 401) leaves the same clean slate for the next account
     await logout();
-    queryClient.clear();
   };
 
   return (

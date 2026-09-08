@@ -134,10 +134,13 @@ async function readCache(): Promise<StepCache> {
   return cached;
 }
 
-async function addToCache(dayKey: string, delta: number): Promise<void> {
-  if (delta <= 0) return;
+async function addToCache(deltas: Record<string, number>): Promise<void> {
   const cache = await readCache();
-  const next = { ...cache.days, [dayKey]: (cache.days[dayKey] ?? 0) + delta };
+  const next = { ...cache.days };
+  for (const [dayKey, delta] of Object.entries(deltas)) {
+    if (delta <= 0) continue;
+    next[dayKey] = (next[dayKey] ?? 0) + delta;
+  }
   // keep a fortnight at most
   const keys = Object.keys(next).sort().slice(-14);
   const trimmed: Record<string, number> = {};
@@ -145,7 +148,46 @@ async function addToCache(dayKey: string, delta: number): Promise<void> {
   await setJson(StorageKeys.stepCache, { days: trimmed });
 }
 
+/**
+ * The Android step sensor fires roughly once per step — far faster than an
+ * AsyncStorage round trip — so the deltas are accumulated in memory and written
+ * behind a single chained promise. Two concurrent read-modify-writes would
+ * otherwise read the same base value and silently drop most of the steps.
+ */
+const pendingSteps: Record<string, number> = {};
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let cacheWrites: Promise<void> = Promise.resolve();
+const STEP_FLUSH_MS = 2000;
+
+function recordSteps(dayKey: string, delta: number): void {
+  if (delta <= 0) return;
+  pendingSteps[dayKey] = (pendingSteps[dayKey] ?? 0) + delta;
+  if (flushTimer) return;
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    void flushPendingSteps();
+  }, STEP_FLUSH_MS);
+}
+
+/** Writes whatever the sensor reported since the last flush. */
+function flushPendingSteps(): Promise<void> {
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  const batch: Record<string, number> = {};
+  for (const [dayKey, delta] of Object.entries(pendingSteps)) {
+    if (delta > 0) batch[dayKey] = delta;
+    delete pendingSteps[dayKey];
+  }
+  if (Object.keys(batch).length === 0) return cacheWrites;
+  cacheWrites = cacheWrites.then(() => addToCache(batch)).catch(() => {});
+  return cacheWrites;
+}
+
 async function cachedDailySteps(days: number): Promise<DailySteps[]> {
+  // whatever the sensor reported in the last couple of seconds counts too
+  await flushPendingSteps();
   const cache = await readCache();
   const now = new Date();
   const out: DailySteps[] = [];
@@ -172,7 +214,7 @@ export function startForegroundStepTracking(): () => void {
       const total = Math.max(0, Math.round(result.steps));
       const delta = total - last;
       last = total;
-      if (delta > 0) void addToCache(localDayKey(new Date()), delta);
+      recordSteps(localDayKey(new Date()), delta);
     });
   } catch {
     subscription = null;
@@ -183,6 +225,7 @@ export function startForegroundStepTracking(): () => void {
     } catch {
       // ignore
     }
+    void flushPendingSteps();
   };
 }
 

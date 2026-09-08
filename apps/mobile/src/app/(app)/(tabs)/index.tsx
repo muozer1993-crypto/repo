@@ -14,20 +14,21 @@ import { Skeleton } from '@/components/Loading';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
-import { useChallengeAction, useChallenges } from '@/hooks/queries';
+import { useChallengeAction, useChallenges, useFriends } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { ApiError } from '@/lib/api';
 import {
-  getDailySteps,
   getStepAvailability,
   getTodaySteps,
   openHealthConnectSettingsIfPossible,
   requestStepPermission,
   type StepAvailability,
 } from '@/services/steps';
+import { syncStepsNow } from '@/services/stepSync';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Shadow, Spacing } from '@/theme';
 import { formatNumber } from '@/utils/format';
+import { TAUNT_CTA, TAUNT_CTA_ICON, byLevel } from '@/utils/levelCopy';
 
 const LEVEL_LABEL: Record<VulgarityLevel, string> = {
   1: 'NAZİK',
@@ -46,7 +47,12 @@ export default function HomeScreen() {
   const me = useAuth((s) => s.me);
   const refreshMe = useAuth((s) => s.refreshMe);
   const challenges = useChallenges();
+  const friends = useFriends();
   const steps = useStepsHeader();
+
+  // a brand-new user cannot finish the create wizard without a kanka, so the
+  // first screen sends them to the invite flow instead of into a dead end
+  const noFriends = friends.data ? friends.data.friends.length === 0 : false;
 
   const list = challenges.data ?? [];
   const invited = list
@@ -194,8 +200,8 @@ export default function HomeScreen() {
                   />
                   {won ? (
                     <Button
-                      title="KOYDUM MU?"
-                      icon="🍆"
+                      title={TAUNT_CTA[level]}
+                      icon={TAUNT_CTA_ICON[level]}
                       size="md"
                       fullWidth
                       onPress={() =>
@@ -213,22 +219,45 @@ export default function HomeScreen() {
         ) : null}
 
         {nothingAtAll ? (
-          <EmptyState
-            emoji="🫥"
-            title={t('home_empty', level)}
-            subtitle="Bir çelinç aç, kankaları davet et, skorlar kendiliğinden işlesin."
-            actionLabel="Çelinç aç"
-            onAction={() => router.push('/challenge/new')}
-          />
+          <View style={styles.emptyWrap}>
+            <EmptyState
+              emoji={noFriends ? '🫂' : '🫥'}
+              title={t('home_empty', level)}
+              subtitle={
+                noFriends
+                  ? byLevel(
+                      level,
+                      'Çelinç için en az bir arkadaş lazım. Önce birini davet et.',
+                      'Tek başına çelinç olmaz lan. Önce bir kanka bul.',
+                      'Kurban olmadan çelinç olmaz 🍆 Önce birini getir.'
+                    )
+                  : 'Bir çelinç aç, kankaları davet et, skorlar kendiliğinden işlesin.'
+              }
+              actionLabel={
+                noFriends ? t('invite_friends_cta', level) : t('create_challenge_cta', level)
+              }
+              onAction={() =>
+                router.push(noFriends ? '/(app)/(tabs)/friends' : '/challenge/new')
+              }
+            />
+            {noFriends ? (
+              <Button
+                title={t('create_challenge_cta', level)}
+                variant="ghost"
+                size="md"
+                onPress={() => router.push('/challenge/new')}
+              />
+            ) : null}
+          </View>
         ) : null}
       </Screen>
 
       <Button
-        title="Çelinç Aç"
-        icon="🍆"
+        title={noFriends ? t('invite_friends_cta', level) : t('create_challenge_cta', level)}
+        icon={noFriends ? '🫂' : level === 1 ? undefined : '🍆'}
         size="lg"
         style={styles.fab}
-        onPress={() => router.push('/challenge/new')}
+        onPress={() => router.push(noFriends ? '/(app)/(tabs)/friends' : '/challenge/new')}
       />
     </View>
   );
@@ -281,8 +310,8 @@ function useStepsHeader(): StepsState {
   const sync = async () => {
     setSyncing(true);
     try {
-      const days = await getDailySteps(7);
-      if (days.length === 0) {
+      const result = await syncStepsNow({ client: api, queryClient: qc, refreshMe });
+      if (result.days === 0) {
         toast({
           title: 'Sayacak adım yok',
           body: 'Telefon henüz adım vermedi. Biraz yürü, sonra tekrar dene.',
@@ -290,11 +319,6 @@ function useStepsHeader(): StepsState {
         });
         return;
       }
-      const result = await api.syncSteps(days);
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['challenges'] }),
-        refreshMe(),
-      ]);
       await reload();
       toast({
         title: 'Adımlar gitti',
@@ -557,6 +581,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   finishedItem: { gap: Spacing.sm },
+  emptyWrap: { alignItems: 'center', gap: Spacing.md },
   skeleton: { borderRadius: Radius.lg },
   errorCard: { marginBottom: Spacing.xl },
   errorBody: { marginTop: Spacing.xs },
