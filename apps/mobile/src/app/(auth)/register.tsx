@@ -175,7 +175,8 @@ export default function RegisterScreen() {
             loud={level === 3}
           />
           <Text variant="micro" faint center>
-            Seviyeyi sonra Ayarlar’dan değiştirebilirsin. Kimse senin seviyenin üstünde laf sokamaz.
+            Seviyeyi sonra Ayarlar’dan değiştirebilirsin. Hazır laflar seviyeni aşamaz; kankanın
+            kendi yazdığı cümle sadece yasaklı kelime filtresinden geçer.
           </Text>
         </View>
       </View>

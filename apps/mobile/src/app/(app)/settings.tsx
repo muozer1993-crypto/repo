@@ -25,6 +25,7 @@ import {
 import { deviceTimezone, useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
+import { CUSTOM_TAUNT_CEILING_NOTE } from '@/utils/levelCopy';
 
 const PREVIEW_VARS: TauntVars = {
   winner: 'Mustafa',
@@ -121,6 +122,13 @@ export default function SettingsScreen() {
     // run once when the screen opens
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // `me` is seeded from cache on a cold start and refreshed right after, and it
+  // also changes when the level was edited on another device: without this the
+  // picker and its preview would keep showing a level the account no longer has
+  useEffect(() => {
+    if (me) setPendingLevel(me.vulgarityMax);
+  }, [me]);
 
   const save = (body: Parameters<typeof updateMe.mutate>[0], okMessage: string) => {
     updateMe.mutate(body, {
@@ -266,8 +274,10 @@ export default function SettingsScreen() {
         <View style={styles.block}>
           <SegmentedControl options={LEVELS} value={pendingLevel} onChange={chooseLevel} />
           <Text variant="tiny" muted>
-            Sana gelen bildirimler bu seviyeyi aşamaz. Ağır abi bir kankan bile sana ancak bu kadar
-            koyabilir.
+            Hazır laflar bu seviyeyi aşamaz: ağır abi bir kankan bile sana ancak bu kadar koyabilir.
+          </Text>
+          <Text variant="tiny" faint>
+            {CUSTOM_TAUNT_CEILING_NOTE}
           </Text>
           <TauntBubble
             title={preview.title}
