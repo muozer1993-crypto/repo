@@ -27,6 +27,13 @@ import { formatDayKey, relativeTime } from '@/utils/format';
 
 /* ------------------------------------------------------------------- copy */
 
+/** Instruction under the "laf hakkı senin" header — the headline already carries the gloat. */
+const TAUNT_PROMPT: Record<VulgarityLevel, string> = {
+  1: 'Kime mesaj göndereceğini seç.',
+  2: 'Kime koyacağını seç, gerisini biz yazarız.',
+  3: 'Kime saplayacağını seç 🍆 Metni biz hazırladık.',
+};
+
 const WIN_TITLE: Record<VulgarityLevel, string> = {
   1: 'KAZANDIN',
   2: 'KOYDUN LAN',
@@ -333,7 +340,7 @@ export default function ResultsScreen() {
             Laf hakkı senin
           </Text>
           <Text variant="small" muted>
-            {t('challenge_finished_won', level)}
+            {TAUNT_PROMPT[level]}
           </Text>
 
           <View style={styles.prize}>
