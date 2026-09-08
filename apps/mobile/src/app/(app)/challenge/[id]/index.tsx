@@ -29,13 +29,16 @@ import {
   useAddEntry,
   useChallenge,
   useChallengeAction,
+  useDeleteEntry,
   useDispute,
   usePoke,
 } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
+import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { useTimezone } from '@/hooks/useTimezone';
-import { getDailySteps, getStepAvailability, getTodaySteps, type StepAvailability } from '@/services/steps';
+import { getStepAvailability, getTodaySteps, type StepAvailability } from '@/services/steps';
+import { syncStepsNow } from '@/services/stepSync';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
@@ -272,6 +275,7 @@ export default function ChallengeDetailScreen() {
           today={today}
           yesterday={yesterday}
           dayKeys={dayKeys}
+          tz={tz}
         />
       ) : null}
 
@@ -384,6 +388,8 @@ interface ActionProps {
   today: string;
   yesterday: string;
   dayKeys: string[];
+  /** the account's IANA zone — the one the server counts days and deadlines in */
+  tz: string;
 }
 
 function ActionArea(props: ActionProps) {
@@ -415,7 +421,8 @@ function openEntryModal(id: string, dayKey: string, proof?: boolean) {
 function StepsAction({ id, detail, type, today }: ActionProps) {
   const api = useApi();
   const toast = useToast();
-  const query = useChallenge(id);
+  const queryClient = useQueryClient();
+  const refreshMe = useAuth((s) => s.refreshMe);
   const [availability, setAvailability] = useState<StepAvailability | null>(null);
   const [deviceSteps, setDeviceSteps] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -445,8 +452,10 @@ function StepsAction({ id, detail, type, today }: ActionProps) {
   const sync = async () => {
     setSyncing(true);
     try {
-      const days = await getDailySteps(LIMITS.STEPS_BACKFILL_DAYS);
-      if (days.length === 0) {
+      // one sync fans out to every auto_steps çelinç, so it refreshes the list
+      // and me.stats too — not just this screen
+      const result = await syncStepsNow({ client: api, queryClient, refreshMe });
+      if (result.days === 0) {
         toast({
           title: 'Sayacak adım yok',
           body: 'Telefon henüz adım vermedi. Biraz yürü, sonra tekrar dene.',
@@ -454,8 +463,6 @@ function StepsAction({ id, detail, type, today }: ActionProps) {
         });
         return;
       }
-      const result = await api.syncSteps(days);
-      await query.refetch();
       toast({
         title: 'Adımlar gitti',
         body: `${formatNumber(result.updated)} gün güncellendi.`,
@@ -572,7 +579,7 @@ function FocusAction({ id, detail, level, today }: ActionProps) {
 
 /* checkin_deadline ------------------------------------------------------- */
 
-function CheckinAction({ id, detail, level, today }: ActionProps) {
+function CheckinAction({ id, detail, level, today, tz }: ActionProps) {
   const addEntry = useAddEntry(id);
   const toast = useToast();
   const [result, setResult] = useState<'ok' | 'late' | null>(null);
@@ -640,7 +647,7 @@ function CheckinAction({ id, detail, level, today }: ActionProps) {
       )}
       {entry ? (
         <Text variant="tiny" faint>
-          Kayıt saati: {formatTime(entry.createdAt)}
+          Kayıt saati: {formatTime(entry.createdAt, tz)}
         </Text>
       ) : null}
     </View>
@@ -662,7 +669,21 @@ function BooleanAction({ id, detail, today, yesterday, dayKeys }: ActionProps) {
   const send = async (dayKey: string, value: 0 | 1) => {
     setBusyDay(dayKey);
     try {
-      await addEntry.mutateAsync({ dayKey, value, source: 'manual', clientTime: nowIso() });
+      const response = await addEntry.mutateAsync({
+        dayKey,
+        value,
+        source: 'manual',
+        clientTime: nowIso(),
+      });
+      if (response.queued) {
+        // parked offline: the standings do not move until the queue drains
+        toast({
+          title: 'Sıraya alındı',
+          body: 'Şu an sunucuya ulaşamadım. Bağlantı gelince gönderilecek.',
+          kind: 'info',
+        });
+        return;
+      }
       toast({
         title: value === 1 ? 'Yaptın' : 'Yapmadın',
         body: value === 1 ? 'Gün senin lehine yazıldı.' : 'Dürüstlük de bir erdem, hadi yarın.',
@@ -762,8 +783,21 @@ function CountAction({ id, detail, type, today }: ActionProps) {
   const add = async (value: number) => {
     setBusy(value);
     try {
-      await addEntry.mutateAsync({ dayKey: today, value, source: 'manual', clientTime: nowIso() });
-      toast({ title: `+${formatNumber(value)} ${type.unitTr}`, body: 'Yazıldı.', kind: 'success' });
+      const response = await addEntry.mutateAsync({
+        dayKey: today,
+        value,
+        source: 'manual',
+        clientTime: nowIso(),
+      });
+      toast(
+        response.queued
+          ? {
+              title: 'Sıraya alındı',
+              body: `+${formatNumber(value)} ${type.unitTr} · bağlantı gelince gönderilecek.`,
+              kind: 'info',
+            }
+          : { title: `+${formatNumber(value)} ${type.unitTr}`, body: 'Yazıldı.', kind: 'success' }
+      );
     } catch (error) {
       toast({ title: 'Giriş gitmedi', body: errorText(error, 'Kaydedilemedi.'), kind: 'danger' });
     } finally {
@@ -1073,11 +1107,14 @@ function PokeSection({
   const [pending, setPending] = useState<string | null>(null);
   const [, setTick] = useState(0);
 
-  // keep the "x dk sonra" note honest while the screen stays open
+  // keep the "x dk sonra" note honest while the screen stays open — but only
+  // while there is a live cooldown to count down; otherwise this card would
+  // re-render every 30 s for nothing
   useEffect(() => {
+    if (!Object.values(blocked).some((until) => until > Date.now())) return;
     const timer = setInterval(() => setTick((n) => n + 1), 30_000);
     return () => clearInterval(timer);
-  }, []);
+  }, [blocked]);
 
   if (rivals.length === 0) return null;
 

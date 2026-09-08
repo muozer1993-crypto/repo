@@ -153,6 +153,9 @@ export default function TauntPickerScreen() {
             ? `${sentNames.length} kişiye gitti: ${sentNames.join(', ')}`
             : `${sentNames[0] ?? 'Kanka'} bildirimi aldı.`}
         </Text>
+        <Text variant="tiny" faint center>
+          Hazır laf seçtiysen, alıcının seviyesi daha düşükse metin ona göre yumuşatılmış olabilir.
+        </Text>
         <Button title="Kapat" variant="ghost" size="md" style={styles.sentBtn} onPress={close} />
       </Screen>
     );
@@ -252,11 +255,25 @@ export default function TauntPickerScreen() {
         <Header title="Laf seç" onClose={close} />
         <EmptyState
           emoji={losers.length === 0 ? '🫥' : '✅'}
-          title={losers.length === 0 ? 'Kaybeden yok' : 'Hepsine koydun'}
+          title={
+            losers.length === 0
+              ? 'Kaybeden yok'
+              : byLevel(level, 'Hepsine gönderdin', 'Hepsine koydun', 'Hepsine sapladın 🍆')
+          }
           subtitle={
             losers.length === 0
-              ? 'Bu çelinçte laf sokacak kimse kalmamış.'
-              : 'Herkese bir kere koydun. İkincisi yok, sofra kapandı.'
+              ? byLevel(
+                  level,
+                  'Bu çelinçte mesaj gönderecek kimse kalmamış.',
+                  'Bu çelinçte laf sokacak kimse kalmamış.',
+                  'Bu çelinçte saplayacak kimse kalmamış 🍆'
+                )
+              : byLevel(
+                  level,
+                  'Herkese bir kere gönderdin. İkincisi yok.',
+                  'Herkese bir kere koydun. İkincisi yok, sofra kapandı.',
+                  'Herkese bir kere sapladın. İkincisi yok, sofra kapandı.'
+                )
           }
           actionLabel="Kapat"
           onAction={close}
@@ -265,17 +282,43 @@ export default function TauntPickerScreen() {
     );
   }
 
+  /** In "HEPSİ" mode this is the loser the preview is drawn for. */
   const chosen: ParticipantView | undefined =
     available.find((p) => p.user.id === pickedTarget) ??
     (allMode || available.length === 1 ? available[0] : undefined);
   const recipients = allMode ? available : chosen ? [chosen] : [];
 
+  /** Everybody finished with their own gap, so everybody gets their own context. */
+  const contextFor = (participant: ParticipantView): TauntContext =>
+    challenge.isTie
+      ? 'tie'
+      : tauntContextForMargin(
+          winMargin({ direction: challenge.direction }, myScore, participant.score)
+        );
+
   const theirScore = chosen?.score ?? 0;
-  const margin = winMargin({ direction: challenge.direction }, myScore, theirScore);
-  const context: TauntContext = challenge.isTie ? 'tie' : tauntContextForMargin(margin);
+  const context: TauntContext = chosen ? contextFor(chosen) : challenge.isTie ? 'tie' : 'win';
   const templates = tauntsAtLevel(context, tauntLevel);
   const active: TauntTemplate | undefined =
     templates.find((tpl) => tpl.id === templateId) ?? templates[0];
+
+  /**
+   * The template picked for the previewed loser is written for THEIR gap. Send
+   * the same one to somebody who finished a mile behind and the "kıl payı" copy
+   * lands on a player who scored nothing, so each recipient gets the same
+   * position in the pool of their own context instead.
+   */
+  const templateForRecipient = (target: ParticipantView): string | undefined => {
+    if (!active) return undefined;
+    const targetContext = contextFor(target);
+    if (targetContext === context) return active.id;
+    const pool = tauntsAtLevel(targetContext, tauntLevel);
+    if (pool.length === 0) return undefined; // no match: let the server pick
+    const index = Math.max(0, templates.findIndex((tpl) => tpl.id === active.id));
+    return pool[index % pool.length].id;
+  };
+  /** true when at least one other recipient will get a different template */
+  const mixedContexts = recipients.some((target) => contextFor(target) !== context);
 
   const vars: TauntVars = {
     winner: myName,
@@ -302,12 +345,14 @@ export default function TauntPickerScreen() {
   const submit = async () => {
     if (!canSend) return;
     setFailed(null);
-    const payload = useCustom ? { customBody: customText } : { templateId: active?.id };
-    if (!useCustom && !payload.templateId) return;
+    if (!useCustom && !active) return;
 
     const delivered: string[] = [];
     const errors: string[] = [];
     for (const target of recipients) {
+      const payload = useCustom
+        ? { customBody: customText }
+        : { templateId: templateForRecipient(target) };
       try {
         await send.mutateAsync({ toUserId: target.user.id, ...payload });
         delivered.push(target.user.displayName);
@@ -384,7 +429,8 @@ export default function TauntPickerScreen() {
                   : chosen.user.displayName}
               </Text>
               <Text variant="tiny" muted numberOfLines={1}>
-                Sen {scoreText(myScore)} · {allMode ? 'onlar' : 'o'} {scoreText(theirScore)}
+                Sen {scoreText(myScore)} · {allMode ? `${chosen.user.displayName}` : 'o'}{' '}
+                {scoreText(theirScore)}
               </Text>
             </View>
             <Chip
@@ -401,7 +447,9 @@ export default function TauntPickerScreen() {
 
         {allMode ? (
           <Text variant="tiny" faint style={styles.gap}>
-            Aynı laf hepsine ayrı ayrı gider. Skorlar herkesin kendi skoruyla yazılır.
+            {mixedContexts
+              ? `Herkese ayrı ayrı gider ve laf herkesin kendi farkına göre seçilir. Aşağıdaki önizleme ${chosen?.user.displayName ?? 'ilk kişi'} için.`
+              : `Aynı laf hepsine ayrı ayrı gider, skorlar herkesin kendi skoruyla yazılır. Önizleme ${chosen?.user.displayName ?? 'ilk kişi'} için.`}
           </Text>
         ) : null}
       </Card>
@@ -490,6 +538,9 @@ export default function TauntPickerScreen() {
               error={banned ? BANNED_WARNING[level] : null}
               hint={`${custom.length}/${LIMITS.CUSTOM_TAUNT_MAX} · yazarsan hazır laf yerine bu gider`}
             />
+            <Text variant="tiny" color={Colors.yellow} style={styles.gapSm}>
+              ⚠️ {CUSTOM_TAUNT_CEILING_NOTE}
+            </Text>
             {useCustom && !banned ? (
               <Button
                 title="Vazgeç, hazır laf kullan"
@@ -506,7 +557,9 @@ export default function TauntPickerScreen() {
 
           {/* -------------------------------------------------------- preview */}
           <View style={styles.previewWrap}>
-            <Text variant="label">Önizleme</Text>
+            <Text variant="label">
+              {allMode && chosen ? `Önizleme · ${chosen.user.displayName}` : 'Önizleme'}
+            </Text>
             {preview && (preview.body.length > 0 || !useCustom) ? (
               <TauntBubble
                 loud
@@ -519,7 +572,8 @@ export default function TauntPickerScreen() {
             ) : (
               <Card>
                 <Text variant="small" muted>
-                  Bir laf seç ya da kendi cümleni yaz — burada aynen göreceksin.
+                  Bir laf seç ya da kendi cümleni yaz — burada göreceksin. Hazır lafları sunucu
+                  alıcının seviyesine göre yumuşatabilir; kendi yazdığın cümle aynen gider.
                 </Text>
               </Card>
             )}
