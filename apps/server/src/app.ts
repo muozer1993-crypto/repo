@@ -80,7 +80,16 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
   app.setErrorHandler(errorHandler);
   app.setNotFoundHandler(notFoundHandler);
 
-  await app.register(cors, { origin: true });
+  // `methods` is spelled out because the browser preflights PATCH (the whole
+  // settings screen) and DELETE (leaving a challenge, deleting an account); the
+  // web build of the app is a first-class client, not just a test target.
+  await app.register(cors, {
+    origin: true,
+    credentials: false,
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Authorization', 'Content-Type'],
+    maxAge: 86_400,
+  });
 
   // Several endpoints take no body at all (accept, decline, leave, rematch...).
   // Fastify's default JSON parser rejects an empty payload with 400, which

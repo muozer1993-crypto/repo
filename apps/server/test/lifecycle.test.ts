@@ -133,8 +133,9 @@ describe('challenge lifecycle', () => {
 
     const loserNotifications = listByType(db, veli.me.id, 'challenge_finished');
     expect(JSON.parse(loserNotifications[0]!.data)).toEqual({ challengeId, role: 'loser', winnerId: ali.me.id });
-    // recipient level 3 copy
-    expect(loserNotifications[0]!.title).toContain('Yedin');
+    // recipient level 3 copy: a short lock-screen title, the sentence in the body
+    expect(loserNotifications[0]!.title).toBe('YEDİN 🍆');
+    expect(loserNotifications[0]!.body.toLocaleLowerCase('tr')).toContain('yedin');
 
     expect(computeUserStats(db, ali.me.id, app.now()).wins).toBe(1);
     expect(computeUserStats(db, veli.me.id, app.now()).losses).toBe(1);

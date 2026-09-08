@@ -231,6 +231,22 @@ function startedCopy(level: VulgarityLevel, title: string): { title: string; bod
   return { title: '🔥 Çelinç başladı', body: `${title} başladı lan. Koymaya bak, gevşeme.` };
 }
 
+/**
+ * Short, punchy titles for the finish notification. `challenge_finished_won` /
+ * `_lost` are full sentences meant for a screen; a lock screen truncates them to
+ * nothing useful, so they go in the body instead.
+ */
+function finishedTitle(level: VulgarityLevel, role: 'winner' | 'loser'): string {
+  if (role === 'winner') {
+    if (level === 1) return 'Kazandın 🏆';
+    if (level === 3) return 'KOYDUN! 👑🍆';
+    return 'KOYDUN! 👑';
+  }
+  if (level === 1) return 'Bu tur bitti';
+  if (level === 3) return 'YEDİN 🍆';
+  return 'Yedin lan';
+}
+
 function cancelledCopy(level: VulgarityLevel, title: string): { title: string; body: string } {
   if (level === 1) return { title: 'Çelinç iptal edildi', body: `${title} yeterli katılımcı olmadığı için iptal edildi.` };
   if (level === 3) return { title: 'Çelinç iptal 🍆', body: `${title} iptal. Kimse cesaret edemedi, boşuna beklettin.` };
@@ -388,8 +404,8 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
         notify(db, {
           userId: user.id,
           type: 'challenge_finished',
-          title: t('challenge_finished_won', level),
-          body: `${challenge.title} bitti. Skorun: ${myScore}. Kaybedenlere "KOYDUM MU?" deme sırası sende.`,
+          title: finishedTitle(level, 'winner'),
+          body: `${t('challenge_finished_won', level)} ${challenge.title} bitti, skorun ${myScore}. Kaybedenlere "KOYDUM MU?" deme sırası sende.`,
           data: { challengeId: challenge.id, role: 'winner' },
           createdAt: iso,
         });
@@ -400,10 +416,10 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
       notify(db, {
         userId: user.id,
         type: 'challenge_finished',
-        title: t('challenge_finished_lost', level),
+        title: finishedTitle(level, 'loser'),
         body: winnerUser
-          ? `${challenge.title} bitti. Kazanan ${winnerUser.display_name} (${winnerScore}). Senin skorun: ${myScore}.`
-          : `${challenge.title} bitti. Senin skorun: ${myScore}.`,
+          ? `${t('challenge_finished_lost', level)} ${challenge.title} bitti. Kazanan ${winnerUser.display_name} (${winnerScore}), senin skorun ${myScore}.`
+          : `${t('challenge_finished_lost', level)} ${challenge.title} bitti, senin skorun ${myScore}.`,
         data: { challengeId: challenge.id, role: 'loser', winnerId },
         createdAt: iso,
       });
