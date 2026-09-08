@@ -9,10 +9,8 @@
  * in different zones each log against their own calendar day.
  */
 import {
-  DEFAULT_TIMEZONE,
   LIMITS,
   compareDayKeys,
-  dayKeysBetween,
   diffDayKeys,
   formatNumberTr,
   isBeforeOrEqualHHmm,
@@ -33,8 +31,8 @@ import {
   type EntryRow,
   type UserRow,
 } from '../db/index.js';
-import { badRequest, conflict, forbidden } from '../errors.js';
-import { typeForChallenge } from './challenges.js';
+import { badRequest, conflict, forbidden, type HttpError } from '../errors.js';
+import { challengeWindow, participantTimezone, typeForChallenge } from './challenges.js';
 import { getParticipant } from './challengeViews.js';
 
 export interface EntryWriteInput {
@@ -62,10 +60,6 @@ const ALLOWED_SOURCES: Record<MetricType, readonly EntrySource[]> = {
   manual_lower_is_better: ['manual'],
 };
 
-function timezoneOf(user: UserRow): string {
-  return user.timezone || DEFAULT_TIMEZONE;
-}
-
 function unitLabel(type: ChallengeType, value: number): string {
   const unit = type.unitTr.trim();
   return unit ? `${formatNumberTr(value)} ${unit}` : formatNumberTr(value);
@@ -88,6 +82,8 @@ function insertEntry(
   input: EntryWriteInput,
   value: number,
   late: boolean,
+  /** Only `focus_minutes` stores one — see `validateAndUpsertEntry`. */
+  sessionId: string | null = null,
 ): EntryRow {
   const { challenge, user, body, now } = input;
   const iso = nowIso(now);
@@ -102,7 +98,7 @@ function insertEntry(
     proof_url: body.proofUrl ?? null,
     status: 'ok',
     client_time: body.clientTime,
-    session_id: body.sessionId ?? null,
+    session_id: sessionId,
     late: late ? 1 : 0,
     created_at: iso,
     updated_at: iso,
@@ -136,6 +132,43 @@ function upsertDayEntry(db: Database, input: EntryWriteInput, value: number, lat
   return { entry: { ...existing, value, source: body.source, note: body.note ?? null, proof_url: body.proofUrl ?? null, client_time: body.clientTime, late: late ? 1 : 0, updated_at: iso }, created: false };
 }
 
+/** How many days back this metric may be backfilled (SPEC 2.3). */
+export function backfillDaysFor(metricType: MetricType): number {
+  return metricType === 'auto_steps' ? LIMITS.STEPS_BACKFILL_DAYS : LIMITS.MANUAL_BACKFILL_DAYS;
+}
+
+export type DayWindowIssue = 'day_out_of_range' | 'day_in_future' | 'day_too_old';
+
+/**
+ * THE day rules of SPEC 2.3, in one place: the day must sit in the challenge window
+ * (computed in the writer's pinned timezone), must not be in the future and must not
+ * be older than the metric's backfill limit.
+ *
+ * `POST /challenges/:id/entries` turns the answer into a 400; `POST /me/steps` uses
+ * the same function to skip a day instead of writing it — otherwise the fan-out
+ * would happily bank days the entry endpoint refuses.
+ */
+export function dayWindowIssue(
+  window: readonly string[],
+  metricType: MetricType,
+  tz: string,
+  dayKey: string,
+  now: Date,
+): DayWindowIssue | null {
+  if (!window.includes(dayKey)) return 'day_out_of_range';
+  const today = todayKey(tz, now);
+  if (compareDayKeys(dayKey, today) > 0) return 'day_in_future';
+  if (diffDayKeys(dayKey, today) > backfillDaysFor(metricType)) return 'day_too_old';
+  return null;
+}
+
+/** The Turkish 400 for a day the rules above rejected. */
+export function dayWindowError(issue: DayWindowIssue, metricType: MetricType): HttpError {
+  if (issue === 'day_out_of_range') return badRequest('day_out_of_range', 'Bu gün çelincin tarih aralığında değil.');
+  if (issue === 'day_in_future') return badRequest('day_in_future', 'Gelecek bir gün için giriş yapamazsın.');
+  return badRequest('day_too_old', `En fazla ${backfillDaysFor(metricType)} gün geriye giriş yapabilirsin.`);
+}
+
 /**
  * Validates one entry against SPEC 2.3 and writes it (insert or upsert, per metric).
  * Throws `HttpError`s carrying the documented codes; never returns an invalid write.
@@ -143,16 +176,6 @@ function upsertDayEntry(db: Database, input: EntryWriteInput, value: number, lat
 export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): EntryWriteResult {
   const { challenge, user, body, now } = input;
   const type = typeForChallenge(challenge);
-  const tz = timezoneOf(user);
-
-  // Focus sessions are idempotent on `sessionId`: a retried request (flaky network,
-  // app relaunch) returns the row that was already written instead of double counting.
-  if (body.sessionId) {
-    const replay = db
-      .prepare('SELECT * FROM entries WHERE challenge_id = ? AND user_id = ? AND session_id = ?')
-      .get(challenge.id, user.id, body.sessionId) as EntryRow | undefined;
-    if (replay) return { entry: replay, created: false };
-  }
 
   // --- common rules --------------------------------------------------------
   const membership = getParticipant(db, challenge.id, user.id);
@@ -163,20 +186,26 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
     throw badRequest('challenge_not_active', 'Bu çelinç şu an aktif değil.');
   }
 
-  const window = dayKeysBetween(challenge.starts_at, challenge.ends_at, tz);
-  if (!window.includes(body.dayKey)) {
-    throw badRequest('day_out_of_range', 'Bu gün çelincin tarih aralığında değil.');
+  // Day keys and the check-in deadline are read in the timezone PINNED when this
+  // user joined, never in the one their profile currently says: `PATCH /me` must not
+  // be able to turn a late check-in into an on-time one.
+  const tz = participantTimezone(membership, user);
+
+  // Focus sessions are idempotent on `sessionId`: a retried request (flaky network,
+  // app relaunch) returns the row that was already written instead of double counting.
+  // Only focus does this — for any other metric a repeated id must not swallow a
+  // legitimate new entry, so the field is ignored (and never stored) there.
+  const sessionId = type.metricType === 'focus_minutes' ? (body.sessionId ?? null) : null;
+  if (sessionId) {
+    const replay = db
+      .prepare('SELECT * FROM entries WHERE challenge_id = ? AND user_id = ? AND session_id = ?')
+      .get(challenge.id, user.id, sessionId) as EntryRow | undefined;
+    if (replay) return { entry: replay, created: false };
   }
 
-  const today = todayKey(tz, now);
-  if (compareDayKeys(body.dayKey, today) > 0) {
-    throw badRequest('day_in_future', 'Gelecek bir gün için giriş yapamazsın.');
-  }
-
-  const backfillDays = type.metricType === 'auto_steps' ? LIMITS.STEPS_BACKFILL_DAYS : LIMITS.MANUAL_BACKFILL_DAYS;
-  if (diffDayKeys(body.dayKey, today) > backfillDays) {
-    throw badRequest('day_too_old', `En fazla ${backfillDays} gün geriye giriş yapabilirsin.`);
-  }
+  const window = challengeWindow(challenge, tz);
+  const issue = dayWindowIssue(window, type.metricType, tz, body.dayKey, now);
+  if (issue) throw dayWindowError(issue, type.metricType);
 
   const allowed = ALLOWED_SOURCES[type.metricType];
   if (!allowed.includes(body.source)) {
@@ -201,7 +230,7 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
     }
 
     case 'focus_minutes': {
-      if (!body.sessionId) {
+      if (!sessionId) {
         throw badRequest('session_required', 'Odak seansı için oturum kimliği gerekli.');
       }
       if (body.value < LIMITS.FOCUS_MIN_MINUTES || body.value > LIMITS.FOCUS_MAX_MINUTES) {
@@ -210,18 +239,19 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
           `Odak seansı ${LIMITS.FOCUS_MIN_MINUTES}-${LIMITS.FOCUS_MAX_MINUTES} dakika arası olmalı.`,
         );
       }
-      return { entry: insertEntry(db, input, body.value, false), created: true };
+      return { entry: insertEntry(db, input, body.value, false, sessionId), created: true };
     }
 
     case 'checkin_deadline': {
-      if (body.dayKey !== today) {
+      if (body.dayKey !== todayKey(tz, now)) {
         throw badRequest('checkin_today_only', 'Check-in sadece bugün için yapılır.');
       }
       if (selectDayEntry(db, challenge.id, user.id, body.dayKey)) {
         throw conflict('already_checked_in', 'Bugün zaten check-in yaptın.');
       }
-      // The verdict is the SERVER's wall-clock time in the user's zone: a phone with
-      // its clock rolled back cannot buy an extra hour.
+      // The verdict is the SERVER's wall-clock time in the zone pinned at join time:
+      // neither a phone with its clock rolled back nor a profile timezone edited
+      // mid-challenge can buy an extra hour.
       const deadline = challenge.deadline_time ?? type.defaultDeadlineTime ?? '23:59';
       const onTime = isBeforeOrEqualHHmm(localTimeHHmm(now, tz), deadline);
       return { entry: insertEntry(db, input, onTime ? 1 : 0, !onTime), created: true };

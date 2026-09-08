@@ -32,9 +32,11 @@ export function Standings({ participants, type, meId, limit, finished, style }: 
   const lower = type?.direction === 'lower';
   const scores = ranked.filter((p) => p.status !== 'invited').map((p) => p.score);
   const worst = scores.length ? Math.max(...scores) : 0;
+  const bestLow = scores.length ? Math.min(...scores) : 0;
   const fillFor = (score: number): number => {
     if (!lower) return worst > 0 ? score / worst : 0;
-    if (worst <= 0) return 1; // everyone is at zero, which is a perfect score here
+    // everybody at zero, or a dead heat: nobody is behind, so nobody gets a stub
+    if (worst <= 0 || worst === bestLow) return 1;
     // keep a sliver of colour on the last row so the bar never reads as "missing"
     return Math.max(0.05, (worst - score) / worst);
   };
