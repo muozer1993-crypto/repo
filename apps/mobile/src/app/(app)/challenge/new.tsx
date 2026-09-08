@@ -84,6 +84,15 @@ function describeType(type: ChallengeType, level: VulgarityLevel): string {
   return level === 1 ? type.descriptionPoliteTr : type.descriptionTr;
 }
 
+/** The catalog's suggested reward can be longer than the field allows. */
+function clip(value: string, max: number): string {
+  const text = value.trim();
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
 function normalize(value: string): string {
   return value.trim().toLocaleLowerCase('tr-TR');
 }
@@ -345,7 +354,7 @@ export default function NewChallengeScreen() {
     setCustomDays(String(next.defaultDurationDays));
     setDeadlineTime(next.defaultDeadlineTime ?? '');
     setProofRequired(next.proofRequired);
-    setRewardText(next.suggestedRewardTr.slice(0, LIMITS.REWARD_TEXT_MAX));
+    setRewardText(clip(next.suggestedRewardTr, LIMITS.REWARD_TEXT_MAX));
   };
 
   const toggleFriend = (id: string) => {
@@ -559,7 +568,7 @@ export default function NewChallengeScreen() {
 
             <Input
               label="Ödül (kazanan ne alacak?)"
-              placeholder={type.suggestedRewardTr}
+              placeholder={clip(type.suggestedRewardTr, LIMITS.REWARD_TEXT_MAX)}
               value={rewardText}
               onChangeText={setRewardText}
               maxLength={LIMITS.REWARD_TEXT_MAX}
