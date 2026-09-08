@@ -318,14 +318,17 @@ async function main() {
       },
       { what: 'the server to answer /health', timeoutMs: 60_000 }
     );
-    // A server left over from an earlier run would answer too, and its database
-    // already holds these users — fail loudly instead of reporting nonsense.
-    const stale = await fetch(`${API_URL}/auth/login`, {
+    // A server left over from an earlier run answers /health too. The dev routes
+    // only exist when ENABLE_DEV_ROUTES=1, which only this harness sets, so their
+    // absence means we are talking to somebody else's process.
+    const devProbe = await fetch(`${API_URL}/dev/advance`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'mustafa', password: 'koydum123' }),
+      body: '{}',
     });
-    if (stale.ok) fail(`something else is already serving ${API_URL} — kill it or pass --port`);
+    if (devProbe.status === 404) {
+      fail(`another server is already listening on ${API_URL} — kill it or pass --port <n>`);
+    }
     log('server is up');
 
     const story = await buildStory();
