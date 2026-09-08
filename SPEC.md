@@ -100,6 +100,9 @@ export function rankParticipants(type: ChallengeType, dayKeys: string[], inputs:
   `isTie` = top score shared by ≥2 participants → `winnerId = null`.
 - `winMargin(type, winnerScore, loserScore)` returns `'big' | 'close' | 'normal'`:
   big if winner ≥ 2× loser (or loser 0 and winner > 0); close if difference ≤ 10% of winner; else normal.
+  For `direction === 'lower'` the comparison is mirrored, because there the loser holds the larger
+  number: big if loser ≥ 2× winner (or winner 0 and loser > 0); close if the difference is ≤ 10% of
+  the loser's score.
 
 ### 1.4 Taunts (`taunts.ts`)
 
@@ -152,7 +155,7 @@ InboxReadBody { ids?: string[]; all?: boolean }
 ```ts
 PublicUser { id, username, displayName, avatarEmoji, createdAt }
 Me extends PublicUser { vulgarityMax, timezone, reminderHour, inviteCode, hasPushToken, stats: UserStats, badges: string[] }
-UserStats { wins, losses, ties, tauntsSent, tauntsReceived, stepsSingleDayMax, focusTotalMinutes, checkinsStreakMax, disputesWon, challengesPlayed, pokesSent, stepsToday }
+UserStats { wins, losses, ties, tauntsSent, tauntsReceived, stepsSingleDayMax, focusTotalMinutes, checkinsStreakMax, disputesWon, challengesPlayed, pokesSent, revengeWins, stepsToday }
 Challenge { id, creatorId, typeKey, metricType, direction, unit, title, startsAt, endsAt, status, rewardText, penaltyText, deadlineTime, dailyTarget, proofRequired, createdAt, finalizedAt, winnerId, isTie, rematchOfId }
 ParticipantView { user: PublicUser, status, score, days, rank, lastEntryAt, isWinner }
 ChallengeSummary { challenge: Challenge, participants: ParticipantView[], me: ParticipantView | null, unreadTaunts: number }
