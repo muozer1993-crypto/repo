@@ -22,7 +22,6 @@ const emptyStats: BadgeStats = {
   disputesWon: 0,
   challengesPlayed: 0,
   pokesSent: 0,
-  revengeWins: 0,
 };
 
 describe('challenge catalog', () => {
@@ -187,12 +186,27 @@ describe('copy and badges', () => {
       disputesWon: 999,
       challengesPlayed: 999,
       pokesSent: 999,
-      revengeWins: 999,
     };
     for (const badge of BADGES) {
       expect({ key: badge.key, earned: badgeEarned(badge, loaded) }).toEqual({ key: badge.key, earned: true });
     }
     expect(evaluateBadges(loaded).length).toBe(BADGES.length);
+  });
+
+  it('only references stat keys that SPEC 1.5 defines', () => {
+    const known = new Set(Object.keys(emptyStats));
+    for (const badge of BADGES) {
+      for (const clause of badge.rule.split('&&')) {
+        const key = /^[a-zA-Z_]+/.exec(clause.trim())?.[0] ?? '';
+        expect({ badge: badge.key, key, known: known.has(key) }).toEqual({ badge: badge.key, key, known: true });
+      }
+    }
+  });
+
+  it('revenge_master needs wins AND losses (no revengeWins stat exists in SPEC 1.5/1.7)', () => {
+    expect(evaluateBadges({ ...emptyStats, wins: 3 })).not.toContain('revenge_master');
+    expect(evaluateBadges({ ...emptyStats, losses: 3 })).not.toContain('revenge_master');
+    expect(evaluateBadges({ ...emptyStats, wins: 3, losses: 3 })).toContain('revenge_master');
   });
 
   it('awards exactly the badges whose threshold is met', () => {

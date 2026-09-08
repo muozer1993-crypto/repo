@@ -3,6 +3,7 @@ import {
   addDays,
   compareDayKeys,
   dayKeyInTz,
+  dayKeyToUtcDate,
   dayKeysBetween,
   diffDayKeys,
   hhmmToMinutes,
@@ -138,6 +139,17 @@ describe('day key arithmetic', () => {
     expect(addDays('2024-01-01', -2)).toBe('2023-12-30');
     expect(addDays('2024-01-01', 0)).toBe('2024-01-01');
     expect(() => addDays('nope', 1)).toThrow(RangeError);
+  });
+
+  it('day key arithmetic rejects impossible dates and non-finite offsets instead of rolling over', () => {
+    expect(() => addDays('2024-02-30', 1)).toThrow(RangeError);
+    expect(() => addDays('2024-04-31', 0)).toThrow(RangeError);
+    expect(() => addDays('2024-05-01', Number.NaN)).toThrow(RangeError);
+    expect(() => addDays('2024-05-01', Number.POSITIVE_INFINITY)).toThrow(RangeError);
+    expect(() => dayKeyToUtcDate('2024-04-31')).toThrow(RangeError);
+    expect(() => diffDayKeys('2024-02-30', '2024-03-01')).toThrow(RangeError);
+    expect(dayKeyToUtcDate('2024-02-29').toISOString()).toBe('2024-02-29T00:00:00.000Z');
+    expect(addDays('2024-05-01', 1.9)).toBe('2024-05-02'); // fractional offsets truncate
   });
 
   it('compareDayKeys and diffDayKeys', () => {

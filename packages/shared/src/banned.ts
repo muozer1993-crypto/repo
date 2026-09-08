@@ -76,7 +76,7 @@ export function normalizeForBanned(text: string): string {
     .replace(PIC_REGEX, 'pich')
     .replace(/[ışğüöçâîû]/g, (ch) => TURKISH_FOLD[ch] ?? ch)
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '') // strip any remaining diacritics
+    .replace(/[\u0300-\u036f]/g, '') // strip any remaining diacritics
     .replace(/[0-9_]/g, ' ') // not folded by leet → word separators, so \b works
     .replace(/\s+/g, ' ')
     .trim();
@@ -103,7 +103,7 @@ export const BANNED_PATTERNS: RegExp[] = [
   /\boros[bp]u\W*(?:cocu|evlad|dol)\w*/,
   /\borsp?u\W*(?:cocu|evlad)\w*/,
   // Bare ASCII "pic" is not enough (English "pic"); "piç" itself normalizes to "pich".
-  /\bpic(?:h|sin|siniz|in|i|ler|lerin|leri|kurusu|kurusun)\b/,
+  /\bpic(?:(?:h|sin|siniz|in|i|ler|lerin|leri)\b|\W*kurus\w*)/,
   /\bkahpenin\W+(?:evlad|cocu|dol)\w*/,
   /\bdol(?:un|u|lerin|leri)\W+(?:bozuk|bozugu)\w*/,
   /\bveled(?:i)?\W*zina\w*/,

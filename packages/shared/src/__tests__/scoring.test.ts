@@ -82,13 +82,36 @@ describe('computeScore', () => {
     expect(r).toEqual({ score: 72, days: 0 });
   });
 
-  it('never yields a negative missing-day count', () => {
+  it('counts an out-of-window entry in the sum but never as a reported window day', () => {
     const type = makeType({ metricType: 'manual_lower_is_better', direction: 'lower', missingDayPenalty: 8 });
-    const r = computeScore(type, ['2024-05-01'], [
-      { dayKey: '2024-05-01', value: 1, status: 'ok' },
-      { dayKey: '2024-05-02', value: 1, status: 'ok' },
+    // Timezone boundary: the 05-02 entry is outside a 1-day window. Its value counts, but it
+    // must not cancel the penalty for 05-01, which was never reported.
+    expect(computeScore(type, ['2024-05-01'], [{ dayKey: '2024-05-02', value: 1, status: 'ok' }])).toEqual({ score: 1 + 8, days: 1 });
+    // Window day reported + boundary entry: no penalty, and no negative missing-day count.
+    expect(
+      computeScore(type, ['2024-05-01'], [
+        { dayKey: '2024-05-01', value: 1, status: 'ok' },
+        { dayKey: '2024-05-02', value: 1, status: 'ok' },
+      ]),
+    ).toEqual({ score: 2, days: 2 });
+  });
+
+  it('a participant who reported nothing inside the window pays the full penalty', () => {
+    const type = makeType({ metricType: 'manual_lower_is_better', direction: 'lower', missingDayPenalty: 8 });
+    const entry = (dayKey: string) => ({ dayKey, value: 1, status: 'ok' as const });
+    const outsideOnly = ['2024-04-28', '2024-04-29', '2024-04-30'].map(entry);
+    expect(computeScore(type, DAYS, outsideOnly)).toEqual({ score: 3 + 3 * 8, days: 3 });
+    expect(computeScore(type, DAYS, DAYS.map(entry))).toEqual({ score: 3, days: 3 });
+    const r = rankParticipants(type, DAYS, [
+      { userId: 'ghost', entries: outsideOnly },
+      { userId: 'honest', entries: DAYS.map(entry) },
     ]);
-    expect(r).toEqual({ score: 2, days: 2 });
+    expect(r.winnerId).toBe('honest');
+  });
+
+  it('duplicate day keys in the window do not double the penalty', () => {
+    const type = makeType({ metricType: 'manual_lower_is_better', direction: 'lower', missingDayPenalty: 8 });
+    expect(computeScore(type, ['2024-05-01', '2024-05-01'], [])).toEqual({ score: 8, days: 0 });
   });
 
   it('rounds float sums so ties compare equal', () => {
@@ -206,6 +229,15 @@ describe('winMargin', () => {
   it('normal otherwise', () => {
     expect(winMargin(higher, 100, 89)).toBe('normal');
     expect(winMargin(higher, 100, 51)).toBe('normal');
+  });
+
+  it('treats an exact 10% margin on decimal scores as close (no float accidents)', () => {
+    expect(winMargin(higher, 7, 6.3)).toBe('close'); // 7 - 6.3 = 0.7000000000000002 in IEEE-754
+    expect(winMargin(higher, 2.1, 1.89)).toBe('close');
+    expect(winMargin(higher, 0.3, 0.27)).toBe('close');
+    expect(winMargin(higher, 7, 6.29)).toBe('normal');
+    expect(winMargin(lower, 6.3, 7)).toBe('close');
+    expect(winMargin(higher, 0.6, 0.3)).toBe('big');
   });
 
   it('never reports big for 0 vs 0', () => {

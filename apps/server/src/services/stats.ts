@@ -17,6 +17,15 @@ import {
 import { countOf, nowIso, type BadgeRow, type Database, type UserRow } from '../db/index.js';
 import { notify } from './notifications.js';
 
+/**
+ * `UserStats` plus `revengeWins` (SPEC 1.5: the `revenge_master` badge needs it).
+ *
+ * It is written as an intersection on purpose: @koydum/shared is still settling
+ * whether `revengeWins` lives inside `BadgeStats`, and this shape compiles — and
+ * ships the number — either way.
+ */
+export type ServerUserStats = UserStats & { revengeWins: number };
+
 /** Longest run of consecutive day keys (already sorted ascending, de-duplicated). */
 function longestStreak(dayKeys: string[]): number {
   let best = 0;
@@ -35,7 +44,7 @@ function longestStreak(dayKeys: string[]): number {
  * Every `BadgeStats` field plus `stepsToday`, which is computed in the user's own
  * timezone (`users.timezone`), so "today" means the same thing on the phone.
  */
-export function computeUserStats(db: Database, userId: string, now: Date = new Date()): UserStats {
+export function computeUserStats(db: Database, userId: string, now: Date = new Date()): ServerUserStats {
   const user = db.prepare('SELECT timezone FROM users WHERE id = ?').get(userId) as Pick<UserRow, 'timezone'> | undefined;
   const timezone = user?.timezone ?? DEFAULT_TIMEZONE;
 

@@ -19,6 +19,10 @@ import {
   USERNAME_REGEX,
   createChallengeBodySchema,
 } from '../schemas';
+import { getChallengeType } from '../catalog';
+
+const ZWJ = String.fromCharCode(0x200d);
+const ZWSP = String.fromCharCode(0x200b);
 
 function issuePaths(result: { success: boolean; error?: { issues: { path: PropertyKey[] }[] } }): string[] {
   return result.success ? [] : (result.error?.issues ?? []).map((i) => i.path.join('.'));
@@ -44,6 +48,16 @@ describe('RegisterBody', () => {
     expect(issuePaths(RegisterBodySchema.safeParse({ username: 'okname', password: 'a'.repeat(73), displayName: 'x' }))).toEqual(['password']);
     expect(issuePaths(RegisterBodySchema.safeParse({ username: 'okname', password: 'secret1', displayName: '   ' }))).toEqual(['displayName']);
     expect(issuePaths(RegisterBodySchema.safeParse({ username: 'okname', password: 'secret1', displayName: 'x'.repeat(31) }))).toEqual(['displayName']);
+  });
+
+  it('rejects display names made only of invisible characters and strips them elsewhere', () => {
+    const invisible = ZWSP + String.fromCharCode(0x200c, 0xfeff, 0xad);
+    expect(issuePaths(RegisterBodySchema.safeParse({ username: 'okname', password: 'secret1', displayName: invisible }))).toEqual(['displayName']);
+    expect(issuePaths(RegisterBodySchema.safeParse({ username: 'okname', password: 'secret1', displayName: ZWJ + ZWJ }))).toEqual(['displayName']);
+    expect(issuePaths(RegisterBodySchema.safeParse({ username: 'okname', password: 'secret1', displayName: ` ${ZWSP} ` }))).toEqual(['displayName']);
+    expect(RegisterBodySchema.safeParse({ username: 'okname', password: 'secret1', displayName: `${invisible}Ali${invisible}` }).data?.displayName).toBe('Ali');
+    const family = `Ali 👨${ZWJ}👩${ZWJ}👧`;
+    expect(RegisterBodySchema.safeParse({ username: 'okname', password: 'secret1', displayName: family }).data?.displayName).toBe(family);
   });
 
   it('rejects unknown timezones', () => {
@@ -72,6 +86,25 @@ describe('UpdateMeBody', () => {
     expect(UpdateMeBodySchema.safeParse({ reminderHour: 24 }).success).toBe(false);
     expect(UpdateMeBodySchema.safeParse({ reminderHour: 1.5 }).success).toBe(false);
     expect(UpdateMeBodySchema.safeParse({ avatarEmoji: 'toolong' }).success).toBe(false);
+  });
+
+  it('counts the avatar in graphemes (1..4 visible characters), not UTF-16 code units', () => {
+    const family = `👨${ZWJ}👩${ZWJ}👧`; // 8 code units, one character
+    expect(family.length).toBe(8);
+    expect(UpdateMeBodySchema.safeParse({ avatarEmoji: family }).data).toEqual({ avatarEmoji: family });
+    expect(UpdateMeBodySchema.safeParse({ avatarEmoji: '👍🏽' }).success).toBe(true);
+    expect(UpdateMeBodySchema.safeParse({ avatarEmoji: '🇹🇷' }).success).toBe(true);
+    expect(UpdateMeBodySchema.safeParse({ avatarEmoji: '🍆🔥💀👑' }).success).toBe(true);
+    expect(UpdateMeBodySchema.safeParse({ avatarEmoji: 'abcd' }).success).toBe(true);
+    expect(issuePaths(UpdateMeBodySchema.safeParse({ avatarEmoji: '🍆🔥💀👑🍑' }))).toEqual(['avatarEmoji']);
+    expect(issuePaths(UpdateMeBodySchema.safeParse({ avatarEmoji: 'abcde' }))).toEqual(['avatarEmoji']);
+    expect(issuePaths(UpdateMeBodySchema.safeParse({ avatarEmoji: ZWSP }))).toEqual(['avatarEmoji']);
+    expect(issuePaths(UpdateMeBodySchema.safeParse({ avatarEmoji: '   ' }))).toEqual(['avatarEmoji']);
+    expect(UpdateMeBodySchema.safeParse({ avatarEmoji: ` ${ZWSP}🍆 ` }).data).toEqual({ avatarEmoji: '🍆' });
+    // Code-unit abuse guard: four skin-toned families are 4 graphemes but 76 code units.
+    const heavy = `👨🏻${ZWJ}👩🏻${ZWJ}👧🏻${ZWJ}👦🏻`;
+    expect(UpdateMeBodySchema.safeParse({ avatarEmoji: heavy.repeat(3) }).success).toBe(true);
+    expect(UpdateMeBodySchema.safeParse({ avatarEmoji: heavy.repeat(4) }).success).toBe(false);
   });
 });
 
@@ -108,12 +141,12 @@ describe('CreateChallengeBody', () => {
   const iso = (offsetMs: number) => new Date(now + offsetMs).toISOString();
   const H = 3600 * 1000;
   const D = 24 * H;
-  const base = { typeKey: 'steps', startsAt: iso(0), endsAt: iso(7 * D), participantIds: ['u1', 'u2'] };
+  const base = { typeKey: 'adim_yarisi', startsAt: iso(0), endsAt: iso(7 * D), participantIds: ['u1', 'u2'] };
 
   it('accepts a valid body and strips empty optional text', () => {
     const r = schema.safeParse({ ...base, title: '  ', rewardText: ' Bira ', deadlineTime: '07:30', dailyTarget: 10, proofRequired: true });
     expect(r.success).toBe(true);
-    expect(r.data).toMatchObject({ typeKey: 'steps', rewardText: 'Bira', deadlineTime: '07:30', dailyTarget: 10, proofRequired: true });
+    expect(r.data).toMatchObject({ typeKey: 'adim_yarisi', rewardText: 'Bira', deadlineTime: '07:30', dailyTarget: 10, proofRequired: true });
     expect(r.data?.title).toBeUndefined();
   });
 
@@ -146,6 +179,29 @@ describe('CreateChallengeBody', () => {
     expect(issuePaths(schema.safeParse({ ...base, rewardText: 'x'.repeat(81) }))).toEqual(['rewardText']);
     expect(issuePaths(schema.safeParse({ ...base, dailyTarget: 0 }))).toEqual(['dailyTarget']);
     expect(issuePaths(schema.safeParse({ ...base, startsAt: 'yesterday' }))).toEqual(['startsAt']);
+  });
+
+  it('rejects typeKeys that are not in the catalog', () => {
+    expect(issuePaths(schema.safeParse({ ...base, typeKey: 'yok_boyle_bir_sey' }))).toEqual(['typeKey']);
+    expect(issuePaths(schema.safeParse({ ...base, typeKey: 'yok_boyle_bir_sey', startsAt: 'yesterday' }))).toEqual(['startsAt', 'typeKey']);
+  });
+
+  it('requires deadlineTime when the type is a checkin_deadline (SPEC 1.6)', () => {
+    expect(getChallengeType('erken_kus')?.metricType).toBe('checkin_deadline');
+    expect(issuePaths(schema.safeParse({ ...base, typeKey: 'erken_kus' }))).toEqual(['deadlineTime']);
+    expect(issuePaths(schema.safeParse({ ...base, typeKey: 'erken_kus', deadlineTime: '' }))).toEqual(['deadlineTime']);
+    expect(schema.safeParse({ ...base, typeKey: 'erken_kus', deadlineTime: '07:30' }).success).toBe(true);
+    expect(schema.safeParse({ ...base, typeKey: 'su_bardak' }).success).toBe(true);
+  });
+
+  it('accepts an injected catalog lookup', () => {
+    const custom = createChallengeBodySchema({
+      now: () => now,
+      resolveType: (key) => (key === 'custom_checkin' ? { ...getChallengeType('erken_kus')!, key } : undefined),
+    });
+    expect(issuePaths(custom.safeParse({ ...base, typeKey: 'custom_checkin' }))).toEqual(['deadlineTime']);
+    expect(custom.safeParse({ ...base, typeKey: 'custom_checkin', deadlineTime: '06:00' }).success).toBe(true);
+    expect(issuePaths(custom.safeParse({ ...base, typeKey: 'adim_yarisi' }))).toEqual(['typeKey']);
   });
 
   it('the default export uses the real clock', () => {
@@ -213,11 +269,14 @@ describe('small bodies', () => {
   });
 
   it('InboxReadBody', () => {
-    expect(InboxReadBodySchema.safeParse({ ids: ['n1'] }).success).toBe(true);
+    expect(InboxReadBodySchema.safeParse({ ids: ['n1'] }).data).toEqual({ ids: ['n1'] });
     expect(InboxReadBodySchema.safeParse({ all: true }).success).toBe(true);
-    expect(InboxReadBodySchema.safeParse({}).success).toBe(false);
-    expect(InboxReadBodySchema.safeParse({ ids: [] }).success).toBe(false);
-    expect(InboxReadBodySchema.safeParse({ all: false }).success).toBe(false);
+    // SPEC 1.6: both keys optional — an empty list / all:false is a valid no-op, not a 400
+    expect(InboxReadBodySchema.safeParse({ ids: [] }).data).toEqual({ ids: [] });
+    expect(InboxReadBodySchema.safeParse({ all: false }).data).toEqual({ all: false });
+    expect(issuePaths(InboxReadBodySchema.safeParse({}))).toEqual(['ids']);
+    expect(InboxReadBodySchema.safeParse({ ids: 'n1' }).success).toBe(false);
+    expect(InboxReadBodySchema.safeParse({ ids: Array.from({ length: 501 }, (_, i) => `n${i}`) }).success).toBe(false);
   });
 });
 
