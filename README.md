@@ -297,6 +297,7 @@ koydum/
 ```bash
 npm run server        # sunucuyu geliştirme modunda çalıştır (dosya değişince yeniden başlar)
 npm run mobile        # Expo geliştirme sunucusu
+npm run mobile:clear  # aynısı, Metro önbelleğini temizleyerek
 npm run typecheck     # bütün paketlerde TypeScript kontrolü
 npm test              # bütün testler
 
@@ -326,7 +327,7 @@ Health Connect kurulu değilse uygulama yaklaşık sayıma düşer ve bunu ekran
 
 **Uygulama açılmıyor, kırmızı hata ekranı geliyor.**
 Depoyu güncelle (`git pull`) ve Metro önbelleğini temizleyerek başlat:
-`npx expo start --clear`. Eski bir sürümde Expo Go/Android'de `expo-notifications`
+`npm run mobile:clear`. Eski bir sürümde Expo Go/Android'de `expo-notifications`
 yüklenirken patlıyordu ve bütün uygulamayı düşürüyordu; artık bildirim modülü ayrı ayrı
 yükleniyor, gelmezse uygulama onsuz devam ediyor.
 
