@@ -74,12 +74,19 @@ Sunucu ilk çalıştığında `apps/server/data/` altında SQLite veritabanını
 cp apps/server/.env.example apps/server/.env
 ```
 
-Ayrı bir terminalde uygulamayı başlat:
+**Ayrı bir terminalde** uygulamayı başlat:
 
 ```bash
 npm run mobile
 # → QR kod çıkar
 ```
+
+> `npm run server` kapanmaz, çalışmaya devam eder. İki komutu aynı pencereye yapıştırırsan
+> ikincisi hiç çalışmaz. Windows'ta ikinci bir PowerShell penceresi aç, `cd` ile proje
+> klasörüne gir, `npm run mobile`'ı orada çalıştır.
+
+Expo Go ile deneyecekseniz, QR kodun üstünde `Using development build` yazıyorsa terminalde
+**`s`** tuşuna basıp Expo Go moduna geç; QR kodu ondan sonra okut.
 
 Telefonunla QR kodu okut. Uygulama kendiliğinden bilgisayarının IP adresini bulup sunucuya
 bağlanmaya çalışır. Bağlanamazsa giriş ekranındaki **"Sunucu: ... · değiştir"** satırından
@@ -316,6 +323,12 @@ ekranı hangi aşamada takıldığını Türkçe olarak söyler.
 **Adımlar 0 görünüyor.**
 iOS'ta hareket izni verilmemiş olabilir (Ayarlar → Gizlilik → Hareket ve Fitness). Android'de
 Health Connect kurulu değilse uygulama yaklaşık sayıma düşer ve bunu ekranda yazar.
+
+**Uygulama açılmıyor, kırmızı hata ekranı geliyor.**
+Depoyu güncelle (`git pull`) ve Metro önbelleğini temizleyerek başlat:
+`npx expo start --clear`. Eski bir sürümde Expo Go/Android'de `expo-notifications`
+yüklenirken patlıyordu ve bütün uygulamayı düşürüyordu; artık bildirim modülü ayrı ayrı
+yükleniyor, gelmezse uygulama onsuz devam ediyor.
 
 **Çelinç bitti ama sonuç çıkmadı.**
 Sonuçlandırmayı sunucudaki zamanlayıcı yapar ve 30 saniyede bir çalışır. Sunucu kapalıysa

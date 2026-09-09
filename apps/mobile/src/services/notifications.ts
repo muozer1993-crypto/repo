@@ -1,44 +1,60 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import {
+  isExpoGo,
+  localNotifications,
+  pushNotifications,
+} from '@/services/expoNotifications';
 import { Colors } from '@/theme';
 
 /**
  * Push + local notifications.
  *
  * Every function here is defensive: KOYDUM has to keep working in Expo Go (no
- * Android push), on a simulator (no push token) and on the web (no module at
- * all). Failure to register is never fatal — the in-app inbox is the source of
- * truth and the app polls it.
+ * Android push — and the library throws at import time there, which is why
+ * nothing below touches `expo-notifications` directly; see
+ * `services/expoNotifications.ts`), on a simulator (no push token) and on the
+ * web (no module at all). Failure to register is never fatal — the in-app inbox
+ * is the source of truth and the app polls it.
  */
 
 export const ANDROID_CHANNEL_ID = 'koydum';
+
+export { isExpoGo };
 
 let handlerInstalled = false;
 
 export function installNotificationHandler(): void {
   if (handlerInstalled || Platform.OS === 'web') return;
+  const api = localNotifications();
+  if (!api) return;
   handlerInstalled = true;
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+  try {
+    api.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch {
+    // an unusable handler must not take the screen that installed it down
+  }
 }
 
 async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
-  await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+  const api = localNotifications();
+  if (!api) return;
+  await api.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
     name: 'KOYDUM',
-    importance: Notifications.AndroidImportance.MAX,
+    importance: api.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: Colors.accent,
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    lockscreenVisibility: api.AndroidNotificationVisibility.PUBLIC,
   });
 }
 
@@ -46,7 +62,14 @@ export interface PushRegistration {
   token: string | null;
   granted: boolean;
   /** why there is no token, for the settings screen */
-  reason?: 'web' | 'simulator' | 'denied' | 'no-project-id' | 'expo-go-android' | 'error';
+  reason?:
+    | 'web'
+    | 'simulator'
+    | 'denied'
+    | 'no-project-id'
+    | 'expo-go-android'
+    | 'unavailable'
+    | 'error';
   detail?: string;
 }
 
@@ -55,15 +78,13 @@ function projectId(): string | undefined {
   return extra?.eas?.projectId ?? Constants.easConfig?.projectId ?? undefined;
 }
 
-/** True when running inside Expo Go (where Android push is unavailable). */
-export function isExpoGo(): boolean {
-  return Constants.appOwnership === 'expo';
-}
-
 export async function registerForPush(): Promise<PushRegistration> {
   if (Platform.OS === 'web') return { token: null, granted: false, reason: 'web' };
 
   try {
+    const api = localNotifications();
+    if (!api) return { token: null, granted: false, reason: 'unavailable' };
+
     installNotificationHandler();
     await ensureAndroidChannel();
 
@@ -71,19 +92,24 @@ export async function registerForPush(): Promise<PushRegistration> {
       return { token: null, granted: false, reason: 'simulator' };
     }
 
-    const existing = await Notifications.getPermissionsAsync();
+    const existing = await api.getPermissionsAsync();
     let status = existing.status;
     if (status !== 'granted') {
-      const asked = await Notifications.requestPermissionsAsync();
+      const asked = await api.requestPermissionsAsync();
       status = asked.status;
     }
     if (status !== 'granted') {
       return { token: null, granted: false, reason: 'denied' };
     }
 
-    if (Platform.OS === 'android' && isExpoGo()) {
+    const push = pushNotifications();
+    if (!push) {
       // local notifications still work, so we keep permission but have no token
-      return { token: null, granted: true, reason: 'expo-go-android' };
+      return {
+        token: null,
+        granted: true,
+        reason: Platform.OS === 'android' && isExpoGo() ? 'expo-go-android' : 'unavailable',
+      };
     }
 
     const id = projectId();
@@ -91,7 +117,7 @@ export async function registerForPush(): Promise<PushRegistration> {
       return { token: null, granted: true, reason: 'no-project-id' };
     }
 
-    const result = await Notifications.getExpoPushTokenAsync({ projectId: id });
+    const result = await push.getExpoPushTokenAsync({ projectId: id });
     return { token: result.data, granted: true };
   } catch (error) {
     return {
@@ -110,10 +136,12 @@ export async function fireLocal(
   data: Record<string, unknown> = {}
 ): Promise<void> {
   if (Platform.OS === 'web') return;
+  const api = localNotifications();
+  if (!api) return;
   try {
     installNotificationHandler();
     await ensureAndroidChannel();
-    await Notifications.scheduleNotificationAsync({
+    await api.scheduleNotificationAsync({
       content: { title, body, data, sound: true },
       trigger: null,
     });
@@ -124,8 +152,10 @@ export async function fireLocal(
 
 export async function setBadgeCount(count: number): Promise<void> {
   if (Platform.OS === 'web') return;
+  const api = localNotifications();
+  if (!api) return;
   try {
-    await Notifications.setBadgeCountAsync(Math.max(0, count));
+    await api.setBadgeCountAsync(Math.max(0, count));
   } catch {
     // ignore
   }
@@ -151,32 +181,48 @@ export function routeForNotificationData(data: unknown): NotificationRoute {
   return { kind: 'challenge', challengeId };
 }
 
+const NO_SUBSCRIPTION = { remove: () => {} };
+
 export function addResponseListener(
   handler: (route: NotificationRoute) => void
 ): { remove: () => void } {
-  if (Platform.OS === 'web') return { remove: () => {} };
-  const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-    handler(routeForNotificationData(response.notification.request.content.data));
-  });
-  return { remove: () => sub.remove() };
+  if (Platform.OS === 'web') return NO_SUBSCRIPTION;
+  const api = localNotifications();
+  if (!api) return NO_SUBSCRIPTION;
+  try {
+    const sub = api.addNotificationResponseReceivedListener((response) => {
+      handler(routeForNotificationData(response.notification.request.content.data));
+    });
+    return { remove: () => sub.remove() };
+  } catch {
+    return NO_SUBSCRIPTION;
+  }
 }
 
 export function addReceivedListener(
   handler: (title: string, body: string, data: unknown) => void
 ): { remove: () => void } {
-  if (Platform.OS === 'web') return { remove: () => {} };
-  const sub = Notifications.addNotificationReceivedListener((notification) => {
-    const { title, body, data } = notification.request.content;
-    handler(title ?? '', body ?? '', data);
-  });
-  return { remove: () => sub.remove() };
+  if (Platform.OS === 'web') return NO_SUBSCRIPTION;
+  const api = localNotifications();
+  if (!api) return NO_SUBSCRIPTION;
+  try {
+    const sub = api.addNotificationReceivedListener((notification) => {
+      const { title, body, data } = notification.request.content;
+      handler(title ?? '', body ?? '', data);
+    });
+    return { remove: () => sub.remove() };
+  } catch {
+    return NO_SUBSCRIPTION;
+  }
 }
 
 /** The notification that launched the app, if any. */
 export async function getInitialRoute(): Promise<NotificationRoute> {
   if (Platform.OS === 'web') return null;
+  const api = localNotifications();
+  if (!api) return null;
   try {
-    const response = await Notifications.getLastNotificationResponseAsync();
+    const response = await api.getLastNotificationResponseAsync();
     if (!response) return null;
     return routeForNotificationData(response.notification.request.content.data);
   } catch {

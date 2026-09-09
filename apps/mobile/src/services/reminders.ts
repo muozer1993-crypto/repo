@@ -1,6 +1,6 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import { localNotifications, type LocalNotifications } from '@/services/expoNotifications';
 import { ANDROID_CHANNEL_ID, installNotificationHandler } from '@/services/notifications';
 
 /**
@@ -13,9 +13,15 @@ import { ANDROID_CHANNEL_ID, installNotificationHandler } from '@/services/notif
  *
  *  - a check-in challenge whose deadline is at 07:00 needs a poke at 06:30;
  *  - a challenge that ends tonight needs a "son saat" warning.
+ *
+ * `expo-notifications` is reached through `services/expoNotifications` rather
+ * than imported: the barrel throws at import time in Expo Go on Android, and a
+ * reminder is never worth taking the app down for.
  */
 
 export const REMINDER_KIND = 'koydum.reminder' as const;
+
+type NotificationRequest = Parameters<LocalNotifications['scheduleNotificationAsync']>[0];
 
 interface ScheduledReminder {
   identifier: string;
@@ -23,21 +29,24 @@ interface ScheduledReminder {
   kind: 'checkin' | 'last_hour';
 }
 
-async function ready(): Promise<boolean> {
-  if (Platform.OS === 'web') return false;
+/** The notification API, but only once it is usable and permitted. */
+async function ready(): Promise<LocalNotifications | null> {
+  if (Platform.OS === 'web') return null;
+  const api = localNotifications();
+  if (!api) return null;
   try {
     installNotificationHandler();
-    const permission = await Notifications.getPermissionsAsync();
-    return permission.status === 'granted';
+    const permission = await api.getPermissionsAsync();
+    return permission.status === 'granted' ? api : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
 /** Every reminder this app scheduled, so we can replace them wholesale. */
-async function listOurs(): Promise<ScheduledReminder[]> {
+async function listOurs(api: LocalNotifications): Promise<ScheduledReminder[]> {
   try {
-    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const scheduled = await api.getAllScheduledNotificationsAsync();
     return scheduled
       .map((item) => {
         const data = item.content.data as Record<string, unknown> | null;
@@ -56,9 +65,11 @@ async function listOurs(): Promise<ScheduledReminder[]> {
 
 export async function cancelAllReminders(): Promise<void> {
   if (Platform.OS === 'web') return;
-  for (const reminder of await listOurs()) {
+  const api = localNotifications();
+  if (!api) return;
+  for (const reminder of await listOurs(api)) {
     try {
-      await Notifications.cancelScheduledNotificationAsync(reminder.identifier);
+      await api.cancelScheduledNotificationAsync(reminder.identifier);
     } catch {
       // ignore
     }
@@ -87,7 +98,8 @@ export async function syncReminders(
   level: 1 | 2 | 3,
   now: Date = new Date()
 ): Promise<number> {
-  if (!(await ready())) return 0;
+  const api = await ready();
+  if (!api) return 0;
   await cancelAllReminders();
 
   let scheduled = 0;
@@ -95,7 +107,7 @@ export async function syncReminders(
     if (challenge.metricType === 'checkin_deadline' && challenge.deadlineTime && !challenge.doneToday) {
       const at = minusMinutes(challenge.deadlineTime, MINUTES_BEFORE_DEADLINE);
       if (at) {
-        const ok = await schedule({
+        const ok = await schedule(api, {
           content: {
             title:
               level === 1 ? 'Check-in vakti' : level === 2 ? 'Kalk lan, süre doluyor' : 'Kalk yoksa yiyeceksin 🍆',
@@ -107,7 +119,7 @@ export async function syncReminders(
             sound: true,
           },
           trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            type: api.SchedulableTriggerInputTypes.DAILY,
             hour: at.hour,
             minute: at.minute,
             ...(Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : {}),
@@ -121,7 +133,7 @@ export async function syncReminders(
     // one hour before the end, but only if that moment is still in the future
     const secondsUntilLastHour = Math.floor((endsIn - 60 * 60_000) / 1000);
     if (Number.isFinite(secondsUntilLastHour) && secondsUntilLastHour > 60) {
-      const ok = await schedule({
+      const ok = await schedule(api, {
         content: {
           title: level === 1 ? 'Son bir saat' : 'SON 1 SAAT ⏳',
           body:
@@ -132,7 +144,7 @@ export async function syncReminders(
           sound: true,
         },
         trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          type: api.SchedulableTriggerInputTypes.TIME_INTERVAL,
           seconds: secondsUntilLastHour,
           ...(Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : {}),
         },
@@ -143,9 +155,9 @@ export async function syncReminders(
   return scheduled;
 }
 
-async function schedule(request: Notifications.NotificationRequestInput): Promise<boolean> {
+async function schedule(api: LocalNotifications, request: NotificationRequest): Promise<boolean> {
   try {
-    await Notifications.scheduleNotificationAsync(request);
+    await api.scheduleNotificationAsync(request);
     return true;
   } catch {
     return false;

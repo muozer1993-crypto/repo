@@ -54,6 +54,8 @@ const PUSH_REASONS: Record<NonNullable<PushRegistration['reason']>, string> = {
     'Expo Go’da Android push çalışmıyor (Expo’nun kuralı). Uygulama açıkken bildirimleri yine görürsün; gerçek push için development build gerekiyor.',
   'no-project-id':
     'EAS proje kimliği yok. Bilgisayarda “eas init” çalıştırıp uygulamayı yeniden derlemen lazım.',
+  unavailable:
+    'Bu sürümde bildirim modülü yüklenemedi. Uygulama içi bildirimler ve gelen kutusu çalışmaya devam eder.',
   error: 'Bildirim servisi hata verdi.',
 };
 
