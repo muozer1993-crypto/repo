@@ -257,8 +257,13 @@ export default function UserProfileScreen() {
       <View style={styles.statsRow}>
         <Stat label="Koydu" value={user.stats.wins} emoji="🍆" color={Colors.success} compact />
         <Stat label="Yedi" value={user.stats.losses} emoji="🍽️" color={Colors.danger} compact />
-        <Stat label="Laf soktu" value={user.stats.tauntsSent} emoji="🗣️" color={Colors.yellow} compact />
-        <Stat label="Laf yedi" value={user.stats.tauntsReceived} emoji="🛡️" compact />
+        <Stat
+          label="Çelınc"
+          value={user.stats.challengesPlayed}
+          emoji="⚔️"
+          color={Colors.yellow}
+          compact
+        />
       </View>
 
       {!isMe ? (

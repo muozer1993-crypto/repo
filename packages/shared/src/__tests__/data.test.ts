@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
-import { BADGES, CHALLENGE_TYPES, MICROCOPY, MICROCOPY_KEYS, TAGLINE, TAUNTS } from '../index';
-import { badgeEarned, evaluateBadges, t } from '../copy';
+import {
+  BADGE_FAMILIES,
+  BADGES,
+  CHALLENGE_TYPES,
+  MICROCOPY,
+  MICROCOPY_KEYS,
+  TAGLINE,
+  TAUNTS,
+} from '../index';
+import {
+  badgeEarned,
+  badgeLadder,
+  badgeLevel,
+  badgeStatKey,
+  badgeTarget,
+  evaluateBadges,
+  t,
+} from '../copy';
 import { CATEGORY_LABELS_TR, getChallengeType, requireChallengeType } from '../catalog';
 import { containsBanned } from '../banned';
 import { pickTaunt, renderTaunt, resolveTauntForRecipient, tauntsFor } from '../taunts';
@@ -205,18 +221,75 @@ describe('copy and badges', () => {
     }
   });
 
-  it('revenge_master is driven by the revengeWins stat (SPEC 1.5)', () => {
-    expect(evaluateBadges({ ...emptyStats, wins: 10, losses: 10 })).not.toContain('revenge_master');
-    expect(evaluateBadges({ ...emptyStats, revengeWins: 2 })).not.toContain('revenge_master');
-    expect(evaluateBadges({ ...emptyStats, revengeWins: 3 })).toContain('revenge_master');
+  it('the rövanş ladder is driven by the revengeWins stat (SPEC 1.5)', () => {
+    expect(evaluateBadges({ ...emptyStats, wins: 10, losses: 10 })).not.toContain('rovans_1');
+    expect(evaluateBadges({ ...emptyStats, revengeWins: 2 })).not.toContain('rovans_1');
+    expect(evaluateBadges({ ...emptyStats, revengeWins: 3 })).toContain('rovans_1');
+    expect(evaluateBadges({ ...emptyStats, revengeWins: 10 })).toContain('rovans_2');
   });
 
   it('awards exactly the badges whose threshold is met', () => {
-    const stats: BadgeStats = { ...emptyStats, wins: 5, tauntsSent: 10 };
-    const earned = evaluateBadges(stats);
-    expect(earned).toContain('first_blood');
-    expect(earned).toContain('serial_winner');
-    expect(earned).toContain('loudmouth');
-    expect(earned).not.toContain('agir_abi');
+    const earned = evaluateBadges({ ...emptyStats, wins: 5 });
+    expect(earned).toContain('koyus_1');
+    expect(earned).toContain('koyus_2');
+    expect(earned).not.toContain('koyus_3');
+  });
+
+  it('every badge sits on a ladder with unique, consecutive rungs', () => {
+    for (const family of BADGE_FAMILIES) {
+      const tiers = BADGES.filter((badge) => badge.family === family)
+        .map((badge) => badge.tier)
+        .sort((a, b) => a - b);
+      expect({ family, tiers }).toEqual({
+        family,
+        tiers: tiers.map((_, index) => index + 1),
+      });
+    }
+    expect(new Set(BADGES.map((badge) => badge.key)).size).toBe(BADGES.length);
+  });
+
+  it('a higher rung always asks for more than the one below it', () => {
+    for (const family of BADGE_FAMILIES) {
+      const ladder = BADGES.filter((badge) => badge.family === family).sort(
+        (a, b) => a.tier - b.tier
+      );
+      for (let i = 1; i < ladder.length; i += 1) {
+        expect({
+          family,
+          tier: ladder[i].tier,
+          climbs: badgeTarget(ladder[i]) > badgeTarget(ladder[i - 1]),
+        }).toEqual({ family, tier: ladder[i].tier, climbs: true });
+        expect(badgeStatKey(ladder[i])).toBe(badgeStatKey(ladder[i - 1]));
+      }
+    }
+  });
+
+  it('shows earned rungs plus exactly one locked rung per ladder', () => {
+    const fresh = badgeLadder(emptyStats);
+    // nothing earned: one rung per family, all of them the first
+    expect(fresh.every((rung) => !rung.earned && rung.next && rung.badge.tier === 1)).toBe(true);
+    expect(fresh).toHaveLength(BADGE_FAMILIES.length);
+
+    const climbing = badgeLadder({ ...emptyStats, wins: 5 });
+    const koyus = climbing.filter((rung) => rung.badge.family === 'koyus');
+    expect(koyus.map((rung) => rung.badge.key)).toEqual(['koyus_1', 'koyus_2', 'koyus_3']);
+    expect(koyus.map((rung) => rung.earned)).toEqual([true, true, false]);
+    // "Saplama Mühendisi" has not been earned the right to be seen yet
+    expect(climbing.some((rung) => rung.badge.key === 'koyus_4')).toBe(false);
+  });
+
+  it('reports how far along the next rung is', () => {
+    const rung = badgeLadder({ ...emptyStats, wins: 3 }).find(
+      (item) => item.badge.key === 'koyus_2'
+    );
+    expect(rung).toBeDefined();
+    expect({ current: rung?.current, target: rung?.target }).toEqual({ current: 3, target: 5 });
+    expect(rung?.progress).toBeCloseTo(0.6);
+  });
+
+  it('reports how high each ladder has been climbed', () => {
+    const earned = evaluateBadges({ ...emptyStats, wins: 20 });
+    expect(badgeLevel('koyus', earned)).toBe(3);
+    expect(badgeLevel('adim', earned)).toBe(0);
   });
 });

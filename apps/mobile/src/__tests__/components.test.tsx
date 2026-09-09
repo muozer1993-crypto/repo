@@ -92,7 +92,7 @@ describe('Text line height fits the font size', () => {
     act(() => {
       node = create(element);
     });
-    const rendered = node.toJSON() as { props: { style: unknown } };
+    const rendered = node.toJSON() as unknown as { props: { style: unknown } };
     return StyleSheet.flatten(rendered.props.style as never) as {
       fontSize?: number;
       lineHeight?: number;

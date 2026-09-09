@@ -177,13 +177,45 @@ export interface MicrocopyEntry {
   level3: string;
 }
 
+/**
+ * Badges come in ladders, not as one flat wall. A family is a single thing you
+ * can get better at, and its rungs unlock one after another: you only ever see
+ * what you have earned plus the one rung above it, so the profile shows a
+ * climb instead of a grid of grey squares on day one.
+ */
+export const BADGE_FAMILIES = [
+  'koyus',
+  'yiyis',
+  'adim',
+  'odak',
+  'erken',
+  'itiraz',
+  'rovans',
+] as const;
+export type BadgeFamily = (typeof BADGE_FAMILIES)[number];
+
+/** What each ladder is called on the profile. */
+export const BADGE_FAMILY_LABELS_TR: Record<BadgeFamily, string> = {
+  koyus: 'Koyuş',
+  yiyis: 'Yiyiş',
+  adim: 'Adım',
+  odak: 'Odak',
+  erken: 'Erken kalkma',
+  itiraz: 'İtiraz',
+  rovans: 'Rövanş',
+};
+
 export interface BadgeDef {
   key: string;
   nameTr: string;
   emoji: string;
   descriptionTr: string;
-  /** Machine rule, e.g. `wins>=3 && tauntsSent>=1` (see SPEC 1.5). */
+  /** Machine rule, e.g. `wins>=3` (see SPEC 1.5). */
   rule: string;
+  /** The ladder this rung belongs to. */
+  family: BadgeFamily;
+  /** 1-based position on that ladder. */
+  tier: number;
 }
 
 /** Stat keys that badge rules may reference (SPEC 1.5). */
@@ -233,7 +265,7 @@ export interface Me extends PublicUser {
 
 /** `GET /users/:id` — public profile with public stats. */
 export interface PublicProfile extends PublicUser {
-  stats: Pick<UserStats, 'wins' | 'losses' | 'tauntsSent' | 'tauntsReceived'>;
+  stats: Pick<UserStats, 'wins' | 'losses' | 'challengesPlayed'>;
   badges: string[];
 }
 
@@ -375,7 +407,6 @@ export interface LeaderboardEntry {
   user: PublicUser;
   wins: number;
   losses: number;
-  tauntsSent: number;
   rank: number;
 }
 

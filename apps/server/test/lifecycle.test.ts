@@ -139,8 +139,8 @@ describe('challenge lifecycle', () => {
 
     expect(computeUserStats(db, ali.me.id, app.now()).wins).toBe(1);
     expect(computeUserStats(db, veli.me.id, app.now()).losses).toBe(1);
-    expect(getBadges(db, ali.me.id)).toContain('first_blood');
-    expect(getBadges(db, veli.me.id)).toContain('first_bite');
+    expect(getBadges(db, ali.me.id)).toContain('koyus_1');
+    expect(getBadges(db, veli.me.id)).toContain('yiyis_1');
     expect(listByType(db, ali.me.id, 'badge').length).toBeGreaterThan(0);
 
     // finished standings come from the stored final scores

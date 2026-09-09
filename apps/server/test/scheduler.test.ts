@@ -176,8 +176,8 @@ describe('scheduler: finalization', () => {
     expect(lost[0].body).toContain('Ali');
 
     // Badges are recomputed for every participant as part of finalizing.
-    expect(getBadges(harness.db, ali.me.id)).toContain('first_blood');
-    expect(getBadges(harness.db, veli.me.id)).toContain('first_bite');
+    expect(getBadges(harness.db, ali.me.id)).toContain('koyus_1');
+    expect(getBadges(harness.db, veli.me.id)).toContain('yiyis_1');
     expect(listByType(harness.db, ali.me.id, 'badge').length).toBeGreaterThan(0);
 
     // Finished is final: the next pass does not finalize it twice.
@@ -212,8 +212,8 @@ describe('scheduler: finalization', () => {
       expect(dataOf(finished[0])).toMatchObject({ challengeId, role: 'tie' });
     }
     // Nobody earned the right to "KOYDUM MU?" — so nobody won or lost.
-    expect(getBadges(harness.db, ali.me.id)).not.toContain('first_blood');
-    expect(getBadges(harness.db, veli.me.id)).not.toContain('first_bite');
+    expect(getBadges(harness.db, ali.me.id)).not.toContain('koyus_1');
+    expect(getBadges(harness.db, veli.me.id)).not.toContain('yiyis_1');
   });
 });
 

@@ -304,22 +304,24 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     const scored = people.map((user) => {
       const stats = computeUserStats(db, user.id, now);
       const publicUser: PublicUser = toPublicUser(user);
-      return { user: publicUser, wins: stats.wins, losses: stats.losses, tauntsSent: stats.tauntsSent };
+      return { user: publicUser, wins: stats.wins, losses: stats.losses };
     });
 
+    // What counts is whether you put it on someone, not how much you talked
+    // about it: wins first, then whoever has eaten fewer of them.
     scored.sort((a, b) => {
       if (b.wins !== a.wins) return b.wins - a.wins;
-      if (b.tauntsSent !== a.tauntsSent) return b.tauntsSent - a.tauntsSent;
+      if (a.losses !== b.losses) return a.losses - b.losses;
       return a.user.displayName.localeCompare(b.user.displayName, 'tr');
     });
 
-    // Competition ranking: equal (wins, tauntsSent) share a rank (1, 1, 3).
+    // Competition ranking: equal (wins, losses) share a rank (1, 1, 3).
     const entries: LeaderboardEntry[] = [];
     let rank = 1;
     for (let i = 0; i < scored.length; i++) {
       const current = scored[i];
       const previous = i > 0 ? scored[i - 1] : undefined;
-      if (previous && (previous.wins !== current.wins || previous.tauntsSent !== current.tauntsSent)) rank = i + 1;
+      if (previous && (previous.wins !== current.wins || previous.losses !== current.losses)) rank = i + 1;
       entries.push({ ...current, rank });
     }
     return entries;

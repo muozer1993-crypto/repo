@@ -728,7 +728,7 @@ describe('GET /challenges/:id/results', () => {
 });
 
 describe('GET /leaderboard', () => {
-  it('ranks me and my friends by wins, then taunts sent', async () => {
+  it('ranks me and my friends by wins, then by who has eaten fewer', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await finishedChallenge(harness);
     await authed(harness.app, ali.token)({
@@ -742,8 +742,10 @@ describe('GET /leaderboard', () => {
     expect(response.statusCode).toBe(200);
     const board = response.json<LeaderboardEntry[]>();
     expect(board.map((e) => e.user.id)).toEqual([ali.me.id, veli.me.id]);
-    expect(board[0]).toMatchObject({ wins: 1, losses: 0, tauntsSent: 1, rank: 1 });
-    expect(board[1]).toMatchObject({ wins: 0, losses: 1, tauntsSent: 0, rank: 2 });
+    expect(board[0]).toMatchObject({ wins: 1, losses: 0, rank: 1 });
+    expect(board[1]).toMatchObject({ wins: 0, losses: 1, rank: 2 });
+    // talking is not scoring: the taunt count is no longer part of the board
+    expect(board[0]).not.toHaveProperty('tauntsSent');
     expect(board.some((e) => e.user.id === outsider.me.id)).toBe(false);
   });
 });

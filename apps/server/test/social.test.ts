@@ -742,7 +742,7 @@ describe('GET /users/:id', () => {
     expect(response.json<{ username: string; stats: { wins: number }; badges: string[] }>()).toMatchObject({
       username: 'kemal',
       displayName: 'Kemal',
-      stats: { wins: 0, losses: 0, tauntsSent: 0, tauntsReceived: 0 },
+      stats: { wins: 0, losses: 0, challengesPlayed: 0 },
       badges: [],
     });
     // Private fields stay private.

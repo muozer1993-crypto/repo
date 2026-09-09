@@ -123,7 +123,10 @@ Unknown placeholders are left as-is. Numbers are formatted with `tr-TR` locale (
 `MICROCOPY: Record<MicrocopyKey, {level1,level2,level3}>`, `t(key, level)`. `BADGES` with machine `rule`
 strings parsed by `evaluateBadges(stats)` → earned badge keys. `stats` shape:
 `{ wins, losses, ties, tauntsSent, tauntsReceived, stepsSingleDayMax, focusTotalMinutes, checkinsStreakMax, disputesWon, challengesPlayed, pokesSent, revengeWins }`
-(`revengeWins` = finished challenges won that were a rematch of an earlier one; the `revenge_master` badge needs it).
+(`revengeWins` = finished challenges won that were a rematch of an earlier one; the `rovans_*` ladder needs it).
+Badges are LADDERS, not a flat wall: each `BadgeDef` carries a `family` and a 1-based `tier`,
+and `badgeLadder(stats)` returns every earned rung plus exactly one locked rung per family —
+the rungs above that stay hidden until they are reached.
 Rule grammar: `<statKey><op><number>` with op in `>=`, `>`, `==`, `<=`; multiple rules joined by `&&`.
 
 ### 1.6 Zod schemas (`schemas.ts`) — the API contract
@@ -252,7 +255,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | POST /me/inbox/read | `{ ids }` or `{ all: true }` |
 | GET /me/inbox/unread | `{ count, latestId }` |
 | GET /users/search?q= | prefix match on username or display_name, excludes self, blocked; max 20 |
-| GET /users/:id | `PublicUser` + public stats (wins/losses/tauntsSent/tauntsReceived/badges) |
+| GET /users/:id | `PublicUser` + public stats (wins/losses/challengesPlayed) + badges |
 | POST /users/:id/block, /unblock, /report | block sets/creates friendship row status 'blocked' with requester = blocker; blocked users can't see or invite each other |
 | GET /friends | `FriendsView` |
 | POST /friends/request | by username or inviteCode; if the target already requested you → auto accept. 404 `user_not_found`, 409 `already_friends` |

@@ -3,7 +3,13 @@ import {
   LIMITS,
   evaluateBadges,
   t,
+  BADGE_FAMILIES,
+  BADGE_FAMILY_LABELS_TR,
+  badgeLadder,
+  badgeStatKey,
+  badgeTarget,
   type BadgeDef,
+  type BadgeRung,
   type LeaderboardEntry,
   type UserStats,
   type VulgarityLevel,
@@ -53,8 +59,6 @@ const RULE_TEXT: Record<string, (n: number) => string> = {
   wins: (n) => `${formatNumber(n)} çelınc kazan`,
   losses: (n) => `${formatNumber(n)} çelınc kaybet`,
   ties: (n) => `${formatNumber(n)} kez berabere kal`,
-  tauntsSent: (n) => `${formatNumber(n)} laf sok`,
-  tauntsReceived: (n) => `${formatNumber(n)} laf ye`,
   stepsSingleDayMax: (n) => `Tek günde ${formatNumber(n)} adım at`,
   focusTotalMinutes: (n) => `Toplam ${formatMinutes(n)} odaklan`,
   checkinsStreakMax: (n) => `${formatNumber(n)} gün üst üste zamanında kalk`,
@@ -64,30 +68,11 @@ const RULE_TEXT: Record<string, (n: number) => string> = {
   revengeWins: (n) => `${formatNumber(n)} rövanş kazan`,
 };
 
-const CLAUSE = /^([a-zA-Z_]+)\s*(>=|<=|==|>|<)\s*(-?\d+(?:\.\d+)?)$/;
-
-interface RuleClause {
-  key: string;
-  target: number;
-}
-
-function parseRule(rule: string): RuleClause[] {
-  const clauses: RuleClause[] = [];
-  for (const raw of rule.split('&&')) {
-    const match = CLAUSE.exec(raw.trim());
-    if (!match) continue;
-    const key = match[1];
-    if (!RULE_TEXT[key]) continue;
-    clauses.push({ key, target: Number(match[3]) });
-  }
-  return clauses;
-}
-
-/** "wins>=5 && tauntsSent>=1" → "5 çelınc kazan + 1 laf sok" */
+/** What the next rung is asking for, in Turkish. */
 function ruleHint(badge: BadgeDef): string {
-  const clauses = parseRule(badge.rule);
-  if (clauses.length === 0) return badge.descriptionTr;
-  return clauses.map((clause) => RULE_TEXT[clause.key](clause.target)).join(' + ');
+  const key = badgeStatKey(badge);
+  const say = key ? RULE_TEXT[key] : undefined;
+  return say ? say(badgeTarget(badge)) : badge.descriptionTr;
 }
 
 /** Reads a stat the server may or may not report yet. */
@@ -96,16 +81,48 @@ function statValue(stats: UserStats, key: string): number {
   return typeof value === 'number' ? value : 0;
 }
 
-/** 0..1 progress towards the badge (the least-complete clause wins). */
-function ruleProgress(badge: BadgeDef, stats: UserStats): number {
-  const clauses = parseRule(badge.rule);
-  if (clauses.length === 0) return 0;
-  let worst = 1;
-  for (const clause of clauses) {
-    const ratio = clause.target > 0 ? statValue(stats, clause.key) / clause.target : 1;
-    worst = Math.min(worst, ratio);
-  }
-  return Math.max(0, Math.min(1, worst));
+/**
+ * One rung. Earned rungs say what they are; the single locked one says what it
+ * costs and how close you are — the rungs above it are not drawn at all, so
+ * the ladder grows as you climb instead of greeting a new user with a wall of
+ * grey squares.
+ */
+function BadgeTile({ rung }: { rung: BadgeRung }) {
+  const { badge, earned } = rung;
+  return (
+    <View style={[styles.badge, earned ? styles.badgeOn : styles.badgeOff]}>
+      <Text style={[styles.badgeEmoji, !earned && styles.dim]}>{badge.emoji}</Text>
+      <Text
+        variant="tiny"
+        bold
+        center
+        numberOfLines={2}
+        color={earned ? Colors.yellow : Colors.textFaint}>
+        {badge.nameTr}
+      </Text>
+      {earned ? (
+        <Text variant="micro" center muted numberOfLines={3}>
+          {badge.descriptionTr}
+        </Text>
+      ) : (
+        <>
+          <Text variant="micro" center faint numberOfLines={3}>
+            {ruleHint(badge)}
+          </Text>
+          <Text variant="micro" center color={Colors.accent}>
+            {formatNumber(Math.min(rung.current, rung.target))}/{formatNumber(rung.target)}
+          </Text>
+          <ProgressBar
+            value={rung.progress}
+            color={Colors.accentDim}
+            track={Colors.surfaceHigh}
+            height={4}
+            style={styles.badgeBar}
+          />
+        </>
+      )}
+    </View>
+  );
 }
 
 export default function ProfileScreen() {
@@ -138,6 +155,7 @@ export default function ProfileScreen() {
   const stats = (me.stats ?? {}) as UserStats;
   const earned = new Set<string>([...(me.badges ?? []), ...evaluateBadges(stats)]);
   const earnedCount = BADGES.filter((badge) => earned.has(badge.key)).length;
+  const ladder = badgeLadder(stats, [...earned]);
   const friendCount = friends.data?.friends.length ?? 0;
 
   const refresh = () => {
@@ -282,21 +300,21 @@ export default function ProfileScreen() {
         <View style={styles.statRow}>
           <Stat label="Kanka" value={friendCount} emoji="🫂" color={Colors.info} />
           <Stat
-            label="Attığın laf"
-            value={statValue(stats, 'tauntsSent')}
-            emoji="🗣️"
+            label="Çelınc"
+            value={statValue(stats, 'challengesPlayed')}
+            emoji="⚔️"
             color={Colors.accent}
           />
           <Stat
-            label="Yediğin laf"
-            value={statValue(stats, 'tauntsReceived')}
-            emoji="🛡️"
+            label="Rövanş"
+            value={statValue(stats, 'revengeWins')}
+            emoji="🔁"
             color={Colors.yellow}
           />
         </View>
       </View>
 
-      {/* ---------------------------------------------------------- badges */}
+      {/* --------------------------------------------------------- ladders */}
       <View style={styles.section}>
         <View style={styles.sectionHead}>
           <Text variant="label">Rozetler</Text>
@@ -304,42 +322,29 @@ export default function ProfileScreen() {
             {earnedCount}/{BADGES.length}
           </Text>
         </View>
-        <View style={styles.badgeGrid}>
-          {BADGES.map((badge) => {
-            const has = earned.has(badge.key);
-            return (
-              <View key={badge.key} style={[styles.badge, has ? styles.badgeOn : styles.badgeOff]}>
-                <Text style={[styles.badgeEmoji, !has && styles.dim]}>{badge.emoji}</Text>
-                <Text
-                  variant="tiny"
-                  bold
-                  center
-                  numberOfLines={2}
-                  color={has ? Colors.yellow : Colors.textFaint}>
-                  {badge.nameTr}
+        {BADGE_FAMILIES.map((family) => {
+          const rungs = ladder.filter((rung) => rung.badge.family === family);
+          if (rungs.length === 0) return null;
+          const climbed = rungs.filter((rung) => rung.earned).length;
+          const total = BADGES.filter((badge) => badge.family === family).length;
+          return (
+            <View key={family} style={styles.ladder}>
+              <View style={styles.sectionHead}>
+                <Text variant="micro" color={climbed > 0 ? Colors.yellow : Colors.textFaint} bold>
+                  {BADGE_FAMILY_LABELS_TR[family].toLocaleUpperCase('tr-TR')}
                 </Text>
-                {has ? (
-                  <Text variant="micro" center muted numberOfLines={3}>
-                    {badge.descriptionTr}
-                  </Text>
-                ) : (
-                  <>
-                    <Text variant="micro" center faint numberOfLines={3}>
-                      {ruleHint(badge)}
-                    </Text>
-                    <ProgressBar
-                      value={ruleProgress(badge, stats)}
-                      color={Colors.accentDim}
-                      track={Colors.surfaceHigh}
-                      height={4}
-                      style={styles.badgeBar}
-                    />
-                  </>
-                )}
+                <Text variant="micro" faint>
+                  seviye {climbed}/{total}
+                </Text>
               </View>
-            );
-          })}
-        </View>
+              <View style={styles.badgeGrid}>
+                {rungs.map((rung) => (
+                  <BadgeTile key={rung.badge.key} rung={rung} />
+                ))}
+              </View>
+            </View>
+          );
+        })}
       </View>
 
       {/* ----------------------------------------------------- leaderboard */}
@@ -574,6 +579,7 @@ const styles = StyleSheet.create({
   inviteCode: { letterSpacing: 2, color: Colors.yellow },
 
   section: { gap: Spacing.sm, marginBottom: Spacing.xl },
+  ladder: { gap: Spacing.sm, marginTop: Spacing.md },
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   statRow: { flexDirection: 'row', gap: Spacing.sm },
 

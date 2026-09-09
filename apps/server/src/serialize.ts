@@ -98,8 +98,7 @@ export function toPublicProfile(db: Database, row: UserRow, now: Date = new Date
     stats: {
       wins: stats.wins,
       losses: stats.losses,
-      tauntsSent: stats.tauntsSent,
-      tauntsReceived: stats.tauntsReceived,
+      challengesPlayed: stats.challengesPlayed,
     },
     badges: getBadges(db, row.id),
   };

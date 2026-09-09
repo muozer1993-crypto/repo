@@ -208,7 +208,7 @@ describe('KOYDUM end to end', () => {
     // And the scoreboard remembers who koydu.
     const me = (await asAli({ method: 'GET', url: '/me' })).json<Me>();
     expect(me.stats).toMatchObject({ wins: 1, losses: 0, tauntsSent: 1 });
-    expect(me.badges).toContain('first_blood');
+    expect(me.badges).toContain('koyus_1');
 
     const beaten = (await asVeli({ method: 'GET', url: '/me' })).json<Me>();
     expect(beaten.stats).toMatchObject({ wins: 0, losses: 1, tauntsReceived: 1 });
