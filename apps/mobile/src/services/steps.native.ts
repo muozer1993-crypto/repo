@@ -203,30 +203,70 @@ async function cachedDailySteps(days: number): Promise<DailySteps[]> {
 }
 
 /**
+ * Android's step counter needs ACTIVITY_RECOGNITION from API 29 on, and asking
+ * for it is on us: `Pedometer.isAvailableAsync()` only reports whether the
+ * hardware exists (SensorProxy.kt: `getDefaultSensor(TYPE_STEP_COUNTER) != null`),
+ * so an app that never asks subscribes happily and then counts zero forever.
+ *
+ * Returns true when we may read steps. Never throws; on iOS the permission is
+ * handled by CoreMotion at query time.
+ */
+async function ensureAndroidStepPermission(): Promise<boolean> {
+  if (Platform.OS !== 'android') return true;
+  try {
+    const existing = await Pedometer.getPermissionsAsync();
+    if (existing.status === 'granted') return true;
+    if (!existing.canAskAgain) return false;
+    const asked = await Pedometer.requestPermissionsAsync();
+    return asked.status === 'granted';
+  } catch {
+    // an older Android with no runtime permission at all answers here
+    return true;
+  }
+}
+
+/**
  * Counts steps while the app is in the foreground (Android fallback).
  * `watchStepCount` reports steps since the subscription started, so we only
  * ever store the delta.
+ *
+ * The permission check happens first and asynchronously, so the returned
+ * unsubscribe function has to survive being called before the subscription
+ * exists — hence the `stopped` flag rather than a plain null check.
  */
 export function startForegroundStepTracking(): () => void {
   if (Platform.OS !== 'android') return () => {};
   let last = 0;
+  let stopped = false;
   let subscription: { remove: () => void } | null = null;
-  try {
-    subscription = Pedometer.watchStepCount((result) => {
-      const total = Math.max(0, Math.round(result.steps));
-      const delta = total - last;
-      last = total;
-      recordSteps(localDayKey(new Date()), delta);
-    });
-  } catch {
-    subscription = null;
-  }
+
+  void (async () => {
+    if (!(await ensureAndroidStepPermission())) return;
+    if (stopped) return;
+    try {
+      subscription = Pedometer.watchStepCount((result) => {
+        const total = Math.max(0, Math.round(result.steps));
+        const delta = total - last;
+        last = total;
+        recordSteps(localDayKey(new Date()), delta);
+      });
+      if (stopped) {
+        subscription.remove();
+        subscription = null;
+      }
+    } catch {
+      subscription = null;
+    }
+  })();
+
   return () => {
+    stopped = true;
     try {
       subscription?.remove();
     } catch {
       // ignore
     }
+    subscription = null;
     void flushPendingSteps();
   };
 }
@@ -248,6 +288,9 @@ export async function getStepAvailability(): Promise<StepAvailability> {
 
     const available = await Pedometer.isAvailableAsync();
     if (!available) return { available: false, reason: 'no-sensor' };
+    // the sensor existing is not the same as being allowed to read it
+    const permission = await Pedometer.getPermissionsAsync();
+    if (permission.status === 'denied') return { available: false, reason: 'denied' };
     return { available: true, source: 'pedometer', approximate: true };
   } catch (error) {
     return { available: false, reason: 'error', detail: error instanceof Error ? error.message : String(error) };
@@ -271,8 +314,11 @@ export async function requestStepPermission(): Promise<boolean> {
         }
       }
     }
-    const result = await Pedometer.requestPermissionsAsync();
-    return result.status === 'granted';
+    return await ensureAndroidStepPermission().then(async (ok) => {
+      if (Platform.OS === 'android') return ok;
+      const result = await Pedometer.requestPermissionsAsync();
+      return result.status === 'granted';
+    });
   } catch {
     return false;
   }
