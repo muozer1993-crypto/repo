@@ -201,10 +201,10 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       });
 
       const insertParticipant = db.prepare(
-        `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at, final_score, final_rank)
-         VALUES (?, ?, ?, ?, ?, NULL, NULL)`,
+        `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at, final_score, final_rank, timezone)
+         VALUES (?, ?, ?, ?, ?, NULL, NULL, ?)`,
       );
-      insertParticipant.run(rematchId, me.id, 'accepted', createdAt, createdAt);
+      insertParticipant.run(rematchId, me.id, 'accepted', createdAt, createdAt, me.row.timezone);
 
       for (const row of previous) {
         if (row.user_id === me.id) continue;
@@ -212,7 +212,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
           | UserRow
           | undefined;
         if (!user) continue;
-        insertParticipant.run(rematchId, user.id, 'invited', createdAt, null);
+        insertParticipant.run(rematchId, user.id, 'invited', createdAt, null, null);
         const copy = rematchCopy(levelOf(user), me.row.display_name, challenge.title);
         notify(db, {
           userId: user.id,

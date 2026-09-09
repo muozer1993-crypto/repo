@@ -143,9 +143,12 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
                @status, @reward_text, @penalty_text, @deadline_time, @daily_target, @proof_required,
                @created_at, NULL, NULL, 0, NULL)`,
     );
+    // `timezone` is the zone the participant's day keys are measured in, frozen at
+    // join time (invitees get theirs when they accept) so a later PATCH /me cannot
+    // move the check-in deadline or the day window under a running challenge.
     const insertParticipant = db.prepare(
-      `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at, final_score, final_rank)
-       VALUES (?, ?, ?, ?, ?, NULL, NULL)`,
+      `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at, final_score, final_rank, timezone)
+       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?)`,
     );
 
     const run = db.transaction(() => {
@@ -170,10 +173,10 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
         created_at: createdAt,
       });
 
-      insertParticipant.run(challengeId, me.id, 'accepted', createdAt, createdAt);
+      insertParticipant.run(challengeId, me.id, 'accepted', createdAt, createdAt, me.row.timezone);
 
       for (const participantId of body.participantIds) {
-        insertParticipant.run(challengeId, participantId, 'invited', createdAt, null);
+        insertParticipant.run(challengeId, participantId, 'invited', createdAt, null, null);
         const invitee = requireUserRow(db, participantId);
         const copy = inviteCopy(levelOf(invitee), me.row.display_name, body.title ?? type.nameTr);
         notify(db, {
@@ -230,11 +233,9 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     }
 
     const iso = nowIso(now);
-    db.prepare("UPDATE challenge_participants SET status = 'accepted', joined_at = ? WHERE challenge_id = ? AND user_id = ?").run(
-      iso,
-      challenge.id,
-      me.id,
-    );
+    db.prepare(
+      "UPDATE challenge_participants SET status = 'accepted', joined_at = ?, timezone = ? WHERE challenge_id = ? AND user_id = ?",
+    ).run(iso, me.row.timezone, challenge.id, me.id);
 
     return freshDetail(db, challenge.id, me.id);
   });

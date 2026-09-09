@@ -308,12 +308,12 @@ export default function TauntPickerScreen() {
    * lands on a player who scored nothing, so each recipient gets the same
    * position in the pool of their own context instead.
    */
-  const templateForRecipient = (target: ParticipantView): string | undefined => {
-    if (!active) return undefined;
+  const templateForRecipient = (target: ParticipantView): string => {
     const targetContext = contextFor(target);
-    if (targetContext === context) return active.id;
+    if (!active || targetContext === context) return active?.id ?? '';
     const pool = tauntsAtLevel(targetContext, tauntLevel);
-    if (pool.length === 0) return undefined; // no match: let the server pick
+    // the API needs exactly one of templateId/customBody, so never send nothing
+    if (pool.length === 0) return active.id;
     const index = Math.max(0, templates.findIndex((tpl) => tpl.id === active.id));
     return pool[index % pool.length].id;
   };
