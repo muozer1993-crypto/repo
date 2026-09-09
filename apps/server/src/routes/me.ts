@@ -14,7 +14,6 @@ import {
   PushTokenBodySchema,
   StepsSyncBodySchema,
   UpdateMeBodySchema,
-  dayKeysBetween,
   type Notification,
   type StepsSyncDay,
   type UnreadCount,
@@ -24,37 +23,51 @@ import { parseBody, parseQuery } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { toMe, toNotification } from '../serialize.js';
 import { softDeleteUser } from '../services/accounts.js';
-import { typeForChallenge } from '../services/challenges.js';
+import { challengeWindow, participantTimezone, typeForChallenge } from '../services/challenges.js';
+import { dayWindowIssue } from '../services/entries.js';
 import { listInbox, markRead, unreadCount } from '../services/notifications.js';
 
-/** Step challenges the user is currently playing (active, or pending but started). */
-function stepChallengesFor(db: Database, userId: string, nowIsoString: string): ChallengeRow[] {
+/** A step challenge plus the timezone this user's days in it are measured in. */
+type StepChallengeRow = ChallengeRow & { participant_timezone: string | null };
+
+/**
+ * Step challenges the user has accepted and that are still open — `active` or
+ * `pending` (SPEC 2.2). A pending challenge that has not started yet simply has no
+ * day in range yet, so the day rules below keep it out on their own.
+ */
+function stepChallengesFor(db: Database, userId: string): StepChallengeRow[] {
   return db
     .prepare(
-      `SELECT c.* FROM challenges c
+      `SELECT c.*, p.timezone AS participant_timezone FROM challenges c
          JOIN challenge_participants p ON p.challenge_id = c.id AND p.user_id = ? AND p.status = 'accepted'
         WHERE c.metric_type = 'auto_steps'
-          AND (c.status = 'active' OR (c.status = 'pending' AND c.starts_at <= ?))`,
+          AND c.status IN ('active', 'pending')`,
     )
-    .all(userId, nowIsoString) as ChallengeRow[];
+    .all(userId) as StepChallengeRow[];
 }
 
 /**
  * Writes the synced days into `steps_daily` and mirrors them into every matching
  * challenge as an upserted entry. Returns how many entries were touched.
+ *
+ * The fan-out obeys exactly the same day rules as `POST /challenges/:id/entries`
+ * (`dayWindowIssue`): a day outside the challenge window, in the future, or older
+ * than the steps backfill limit is skipped instead of banked — otherwise a phone
+ * could pre-fill a whole 30-day race with the daily maximum on day one. The window
+ * is read in the timezone pinned when the user joined that challenge.
  */
 function syncSteps(db: Database, user: UserRow, days: StepsSyncDay[], now: Date): number {
   const at = nowIso(now);
-  const challenges = stepChallengesFor(db, user.id, at);
+  const challenges = stepChallengesFor(db, user.id);
 
-  // Day window per challenge, computed once in the syncing user's own timezone.
-  const windows = new Map<string, Set<string>>();
+  const windows = new Map<string, { tz: string; window: string[]; maxPerDay: number }>();
   for (const challenge of challenges) {
-    try {
-      windows.set(challenge.id, new Set(dayKeysBetween(challenge.starts_at, challenge.ends_at, user.timezone)));
-    } catch {
-      windows.set(challenge.id, new Set());
-    }
+    const tz = participantTimezone({ timezone: challenge.participant_timezone }, user);
+    windows.set(challenge.id, {
+      tz,
+      window: challengeWindow(challenge, tz),
+      maxPerDay: typeForChallenge(challenge).maxPerDay,
+    });
   }
 
   const upsertSteps = db.prepare(
@@ -76,8 +89,10 @@ function syncSteps(db: Database, user: UserRow, days: StepsSyncDay[], now: Date)
       upsertSteps.run(user.id, day.dayKey, day.steps, day.source, at);
 
       for (const challenge of challenges) {
-        if (!windows.get(challenge.id)?.has(day.dayKey)) continue;
-        const value = Math.min(day.steps, typeForChallenge(challenge).maxPerDay);
+        const rules = windows.get(challenge.id);
+        if (!rules) continue;
+        if (dayWindowIssue(rules.window, 'auto_steps', rules.tz, day.dayKey, now) !== null) continue;
+        const value = Math.min(day.steps, rules.maxPerDay);
         const existing = findEntry.get(challenge.id, user.id, day.dayKey) as { id: string } | undefined;
         if (existing) updateEntry.run(value, day.source, at, existing.id);
         else insertEntry.run(newId(), challenge.id, user.id, day.dayKey, value, day.source, at, at, at);
