@@ -207,12 +207,21 @@ export function createChallengeBodySchema(opts: ChallengeSchemaOptions = {}) {
       proofRequired: z.boolean().optional(),
     })
     .superRefine((v, ctx) => {
+      // A çelınc has stakes of ONE kind: something the winner gets, or something
+      // the loser does. Both at once turns one bet into two arguments.
+      if (v.rewardText && v.penaltyText) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Ya ödül ya ceza: ikisi birden olmaz',
+          path: ['penaltyText'],
+        });
+      }
       const type = resolveType(v.typeKey);
       if (!type) {
-        ctx.addIssue({ code: 'custom', message: 'Böyle bir çelinç tipi yok', path: ['typeKey'] });
+        ctx.addIssue({ code: 'custom', message: 'Böyle bir çelınc tipi yok', path: ['typeKey'] });
       } else if (type.metricType === 'checkin_deadline' && v.deadlineTime === undefined) {
         // An empty/malformed string is already reported by HHmmSchema; only absence is ours.
-        ctx.addIssue({ code: 'custom', message: 'Check-in çelinci için bir saat seçmelisin', path: ['deadlineTime'] });
+        ctx.addIssue({ code: 'custom', message: 'Check-in çelıncı için bir saat seçmelisin', path: ['deadlineTime'] });
       }
 
       const start = Date.parse(v.startsAt);
@@ -223,12 +232,12 @@ export function createChallengeBodySchema(opts: ChallengeSchemaOptions = {}) {
         ctx.addIssue({ code: 'custom', message: 'Başlangıç geçmişte olamaz', path: ['startsAt'] });
       }
       if (end <= start + LIMITS.MIN_DURATION_MS) {
-        ctx.addIssue({ code: 'custom', message: 'Çelinç en az 1 saat sürmeli', path: ['endsAt'] });
+        ctx.addIssue({ code: 'custom', message: 'Çelınc en az 1 saat sürmeli', path: ['endsAt'] });
       }
       if (end > start + LIMITS.MAX_DURATION_MS) {
         ctx.addIssue({
           code: 'custom',
-          message: `Çelinç en fazla ${LIMITS.MAX_DURATION_DAYS} gün sürebilir`,
+          message: `Çelınc en fazla ${LIMITS.MAX_DURATION_DAYS} gün sürebilir`,
           path: ['endsAt'],
         });
       }

@@ -142,7 +142,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
 }));
 
-/** The vulgarity level used for UI copy (defaults to "argo" before login). */
+/** The vulgarity level used for UI copy (defaults to "delikanlı" before login). */
 export function useLevel(): 1 | 2 | 3 {
   return useAuth((state) => state.me?.vulgarityMax ?? 2);
 }

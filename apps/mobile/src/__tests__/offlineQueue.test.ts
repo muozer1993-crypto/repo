@@ -67,11 +67,11 @@ describe('offline entry queue', () => {
     await enqueueEntry('c1', body('2026-08-01', 3), 'a');
     const addEntry = jest
       .fn()
-      .mockRejectedValue(new ApiError('day_out_of_range', 'O gün çelincin dışında.', 400));
+      .mockRejectedValue(new ApiError('day_out_of_range', 'O gün çelıncın dışında.', 400));
     const result = await flushQueue(fakeClient(addEntry));
     expect(result).toMatchObject({ sent: 0, dropped: 1, remaining: 0 });
     const queue = await readQueue();
-    expect(queue[0].failedReason).toBe('O gün çelincin dışında.');
+    expect(queue[0].failedReason).toBe('O gün çelıncın dışında.');
 
     // a failed item is never retried
     const second = await flushQueue(fakeClient(addEntry));

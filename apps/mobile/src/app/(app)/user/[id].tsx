@@ -48,13 +48,13 @@ export default function UserProfileScreen() {
   const isMe = !!myId && myId === id;
   const isFriend = (friends.data?.friends ?? []).some((friend) => friend.id === id);
   // the create wizard only accepts friends, so a stranger's profile has to open
-  // the friendship first instead of a çelinç it cannot finish
+  // the friendship first instead of a çelınc it cannot finish
   const incomingRequestId =
     (friends.data?.incoming ?? []).find((request) => request.user.id === id)?.id ?? null;
   const outgoingPending = (friends.data?.outgoing ?? []).some((request) => request.user.id === id);
 
   // Head-to-head: in every finished challenge we both played, whoever ranked
-  // higher took that round. Works for 1v1 and for crowded çelinçs alike.
+  // higher took that round. Works for 1v1 and for crowded çelınclar alike.
   const head: HeadToHead = { mine: 0, theirs: 0, ties: 0, total: 0 };
   for (const summary of finished.data ?? []) {
     if (summary.challenge.status !== 'finished') continue;
@@ -69,7 +69,7 @@ export default function UserProfileScreen() {
 
   const headLine =
     head.total === 0
-      ? 'Henüz karşı karşıya gelmediniz. Bir çelinç aç da görelim.'
+      ? 'Henüz karşı karşıya gelmediniz. Bir çelınc aç da görelim.'
       : head.mine > head.theirs
         ? `${head.mine}-${head.theirs} öndesin. Koymaya devam.`
         : head.mine < head.theirs
@@ -94,7 +94,7 @@ export default function UserProfileScreen() {
         onSuccess: () =>
           toast({
             title: 'İstek gönderildi',
-            body: 'Kabul edince çelinç açabilirsiniz.',
+            body: 'Kabul edince çelınc açabilirsiniz.',
             kind: 'success',
           }),
         onError: failFriendAction,
@@ -106,7 +106,7 @@ export default function UserProfileScreen() {
     friendAction.mutate(
       { kind: 'accept', friendshipId },
       {
-        onSuccess: () => toast({ title: 'Kanka oldunuz', body: 'Artık çelinç açabilirsin.', kind: 'success' }),
+        onSuccess: () => toast({ title: 'Kanka oldunuz', body: 'Artık çelınc açabilirsin.', kind: 'success' }),
         onError: failFriendAction,
       }
     );
@@ -115,7 +115,7 @@ export default function UserProfileScreen() {
   const removeFriend = async () => {
     const ok = await confirmTr(
       'Arkadaşlıktan çıkar',
-      `${profile.data?.displayName ?? 'Bu kanka'} listenden çıkacak. Ortak çelinçler kalır ama yenisini açamazsınız.`,
+      `${profile.data?.displayName ?? 'Bu kanka'} listenden çıkacak. Ortak çelınclar kalır ama yenisini açamazsınız.`,
       'Çıkar'
     );
     if (!ok) return;
@@ -139,7 +139,7 @@ export default function UserProfileScreen() {
   const block = async () => {
     const ok = await confirmTr(
       'Engelle',
-      'Bu kişi sana çelinç açamaz, laf sokamaz, arkadaşlık isteği gönderemez. Emin misin?',
+      'Bu kişi sana çelınc açamaz, laf sokamaz, arkadaşlık isteği gönderemez. Emin misin?',
       'Engelle'
     );
     if (!ok) return;
@@ -296,7 +296,7 @@ export default function UserProfileScreen() {
             ) : null}
           </View>
           <Text variant="small" muted>
-            {finished.isLoading ? 'Biten çelinçlere bakıyorum…' : headLine}
+            {finished.isLoading ? 'Biten çelınclara bakıyorum…' : headLine}
           </Text>
         </Card>
       ) : null}
@@ -320,7 +320,7 @@ export default function UserProfileScreen() {
         <View style={styles.actions}>
           {isFriend ? (
             <>
-              <Button title="Çelinç aç" size="lg" icon="🔥" fullWidth onPress={openChallenge} />
+              <Button title="Çelınc aç" size="lg" icon="🔥" fullWidth onPress={openChallenge} />
               <Button
                 title="Arkadaşlıktan çıkar"
                 variant="secondary"
@@ -340,7 +340,7 @@ export default function UserProfileScreen() {
                 onPress={() => acceptRequest(incomingRequestId)}
               />
               <Text variant="tiny" faint center>
-                Kabul edince çelinç açabilirsin.
+                Kabul edince çelınc açabilirsin.
               </Text>
             </>
           ) : (
@@ -356,8 +356,8 @@ export default function UserProfileScreen() {
               />
               <Text variant="tiny" faint center>
                 {outgoingPending
-                  ? 'İsteği kabul edince birlikte çelinç açabilirsiniz.'
-                  : 'Çelinç açmak için önce kanka olmanız lazım.'}
+                  ? 'İsteği kabul edince birlikte çelınc açabilirsiniz.'
+                  : 'Çelınc açmak için önce kanka olmanız lazım.'}
               </Text>
             </>
           )}

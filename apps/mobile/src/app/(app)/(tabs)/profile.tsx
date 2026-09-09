@@ -41,17 +41,17 @@ const AVATAR_EMOJI = [
 
 const LEVEL_CHIP: Record<VulgarityLevel, { label: string; emoji: string }> = {
   1: { label: 'Nazik', emoji: '🙂' },
-  2: { label: 'Argo', emoji: '😏' },
+  2: { label: 'Delikanlı', emoji: '😏' },
   3: { label: 'Ağır Abi', emoji: '🍆' },
 };
 
 /**
- * Turkish sentence for one badge stat, e.g. wins >= 5 → "5 çelinç kazan".
+ * Turkish sentence for one badge stat, e.g. wins >= 5 → "5 çelınc kazan".
  * Keyed by string so an unknown stat coming from the catalog degrades gracefully.
  */
 const RULE_TEXT: Record<string, (n: number) => string> = {
-  wins: (n) => `${formatNumber(n)} çelinç kazan`,
-  losses: (n) => `${formatNumber(n)} çelinç kaybet`,
+  wins: (n) => `${formatNumber(n)} çelınc kazan`,
+  losses: (n) => `${formatNumber(n)} çelınc kaybet`,
   ties: (n) => `${formatNumber(n)} kez berabere kal`,
   tauntsSent: (n) => `${formatNumber(n)} laf sok`,
   tauntsReceived: (n) => `${formatNumber(n)} laf ye`,
@@ -59,7 +59,7 @@ const RULE_TEXT: Record<string, (n: number) => string> = {
   focusTotalMinutes: (n) => `Toplam ${formatMinutes(n)} odaklan`,
   checkinsStreakMax: (n) => `${formatNumber(n)} gün üst üste zamanında kalk`,
   disputesWon: (n) => `${formatNumber(n)} itiraz kazan`,
-  challengesPlayed: (n) => `${formatNumber(n)} çelince katıl`,
+  challengesPlayed: (n) => `${formatNumber(n)} çelınca katıl`,
   pokesSent: (n) => `${formatNumber(n)} kanka dürt`,
   revengeWins: (n) => `${formatNumber(n)} rövanş kazan`,
 };
@@ -83,7 +83,7 @@ function parseRule(rule: string): RuleClause[] {
   return clauses;
 }
 
-/** "wins>=5 && tauntsSent>=1" → "5 çelinç kazan + 1 laf sok" */
+/** "wins>=5 && tauntsSent>=1" → "5 çelınc kazan + 1 laf sok" */
 function ruleHint(badge: BadgeDef): string {
   const clauses = parseRule(badge.rule);
   if (clauses.length === 0) return badge.descriptionTr;
@@ -491,7 +491,7 @@ function Leaderboard({
     return (
       <View style={styles.boardMessage}>
         <Text variant="small" muted center>
-          Henüz sıralama yok. Bir çelinç bitir, tabloya gir.
+          Henüz sıralama yok. Bir çelınc bitir, tabloya gir.
         </Text>
       </View>
     );

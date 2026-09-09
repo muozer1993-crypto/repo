@@ -166,7 +166,7 @@ export function dayWindowIssue(
 
 /** The Turkish 400 for a day the rules above rejected. */
 export function dayWindowError(issue: DayWindowIssue, metricType: MetricType): HttpError {
-  if (issue === 'day_out_of_range') return badRequest('day_out_of_range', 'Bu gün çelincin tarih aralığında değil.');
+  if (issue === 'day_out_of_range') return badRequest('day_out_of_range', 'Bu gün çelıncın tarih aralığında değil.');
   if (issue === 'day_in_future') return badRequest('day_in_future', 'Gelecek bir gün için giriş yapamazsın.');
   return badRequest('day_too_old', `En fazla ${backfillDaysFor(metricType)} gün geriye giriş yapabilirsin.`);
 }
@@ -182,10 +182,10 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
   // --- common rules --------------------------------------------------------
   const membership = getParticipant(db, challenge.id, user.id);
   if (!membership || membership.status !== 'accepted') {
-    throw forbidden('not_participant', 'Bu çelince katılmadın.');
+    throw forbidden('not_participant', 'Bu çelınca katılmadın.');
   }
   if (challenge.status !== 'active') {
-    throw badRequest('challenge_not_active', 'Bu çelinç şu an aktif değil.');
+    throw badRequest('challenge_not_active', 'Bu çelınc şu an aktif değil.');
   }
 
   // Day keys and the check-in deadline are read in the timezone PINNED when this
@@ -211,7 +211,7 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
 
   const allowed = ALLOWED_SOURCES[type.metricType];
   if (!allowed.includes(body.source)) {
-    throw badRequest('invalid_source', 'Bu çelinç tipi için geçersiz giriş kaynağı.');
+    throw badRequest('invalid_source', 'Bu çelınc tipi için geçersiz giriş kaynağı.');
   }
 
   if (body.value > type.maxPerEntry) {
@@ -219,7 +219,7 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
   }
 
   if (challenge.proof_required === 1 && body.source === 'manual' && !body.proofUrl) {
-    throw badRequest('proof_required', 'Bu çelinçte kanıt fotoğrafı zorunlu.');
+    throw badRequest('proof_required', 'Bu çelıncta kanıt fotoğrafı zorunlu.');
   }
 
   // --- per metric ----------------------------------------------------------
@@ -261,7 +261,7 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
 
     case 'daily_boolean': {
       if (body.value !== 0 && body.value !== 1) {
-        throw badRequest('invalid_value', 'Bu çelinçte değer 0 ya da 1 olmalı.');
+        throw badRequest('invalid_value', 'Bu çelıncta değer 0 ya da 1 olmalı.');
       }
       return upsertDayEntry(db, input, body.value, false);
     }

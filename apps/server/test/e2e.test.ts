@@ -1,7 +1,7 @@
 /**
  * The whole story, once, through the HTTP surface only.
  *
- * Two strangers sign up, become kanka, open a one-day step çelinç, walk, the clock
+ * Two strangers sign up, become kanka, open a one-day step çelınc, walk, the clock
  * runs past the end, the scheduler finishes it, the winner says "KOYDUM MU?", the
  * loser finds it in the inbox — clamped down to the level he can stomach — and asks
  * for a rövanş. Every step is a real request; only the clock is fake.
@@ -78,7 +78,7 @@ describe('KOYDUM end to end', () => {
       'veli',
     ]);
 
-    // ----------------------------------------------------------------- çelinç
+    // ----------------------------------------------------------------- çelınc
     h.advance(5 * 60_000); // Ali thinks about it for five minutes
     const created = await asAli({
       method: 'POST',

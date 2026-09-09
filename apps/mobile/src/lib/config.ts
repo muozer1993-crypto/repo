@@ -60,4 +60,19 @@ export function normalizeServerUrl(input: string): string | null {
   }
 }
 
+/**
+ * Whether the reader is allowed to retype the server address.
+ *
+ * A shipped build already knows the one server it talks to, so a
+ * "Sunucu: 192.168.1.142:4000" row there is developer plumbing leaking into
+ * the product — nobody installing KOYDUM from a store should ever see an IP.
+ * The row earns its place only when nothing baked an address in, which is
+ * exactly the case where somebody has to point the app at a laptop by hand.
+ *
+ * Set EXPO_PUBLIC_KOYDUM_API_URL at build time (see eas.json) and it vanishes.
+ */
+export function serverUrlIsEditable(): boolean {
+  return !process.env.EXPO_PUBLIC_KOYDUM_API_URL;
+}
+
 export const APP_NAME = 'KOYDUM';

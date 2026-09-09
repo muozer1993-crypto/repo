@@ -32,7 +32,7 @@ export interface CreateUserInput {
   displayName: string;
   passwordHash: string;
   timezone: string;
-  /** Chosen on the sign-up screen; defaults to 2 ("argo"). */
+  /** Chosen on the sign-up screen; defaults to 2 ("delikanlı"). */
   vulgarityMax?: VulgarityLevel;
 }
 

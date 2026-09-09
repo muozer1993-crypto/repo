@@ -28,7 +28,7 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
         <Text style={styles.emoji}>{type?.emoji ?? '🎯'}</Text>
         <View style={styles.headerBody}>
           <Text variant="lead" numberOfLines={1}>
-            {challenge.title || type?.nameTr || 'Çelinç'}
+            {challenge.title || type?.nameTr || 'Çelınc'}
           </Text>
           <Text variant="tiny" muted numberOfLines={1}>
             {participants.filter((p) => p.status === 'accepted').length} kişi

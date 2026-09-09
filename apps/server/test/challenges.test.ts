@@ -120,7 +120,7 @@ describe('POST /challenges', () => {
     // The invite is rendered at the RECIPIENT's level (Veli is level 1 = nazik).
     const inbox = listByType(harness.db, veli.me.id, 'challenge_invite');
     expect(inbox).toHaveLength(1);
-    expect(inbox[0].title).toBe('📩 Çelinç daveti');
+    expect(inbox[0].title).toBe('📩 Çelınc daveti');
     expect(inbox[0].body).toContain('Ali');
     expect(JSON.parse(inbox[0].data)).toMatchObject({ challengeId: challenge.id });
   });
@@ -416,7 +416,7 @@ describe('accept / decline / leave / cancel', () => {
 
     const inbox = listByType(harness.db, veli.me.id, 'challenge_cancelled');
     expect(inbox).toHaveLength(1);
-    expect(inbox[0].title).toBe('Çelinç iptal 🍆'); // Veli is level 3
+    expect(inbox[0].title).toBe('Çelınc iptal 🍆'); // Veli is level 3
 
     const again = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${id}/cancel` });
     expect(again.statusCode).toBe(400);

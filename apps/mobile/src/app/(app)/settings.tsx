@@ -15,6 +15,7 @@ import { useToast } from '@/components/Toast';
 import { useUpdateMe } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { ApiError } from '@/lib/api';
+import { serverUrlIsEditable } from '@/lib/config';
 import { registerForPush, type PushRegistration } from '@/services/notifications';
 import {
   getStepAvailability,
@@ -40,9 +41,20 @@ const PREVIEW_VARS: TauntVars = {
 
 const LEVELS: { value: VulgarityLevel; label: string; emoji: string }[] = [
   { value: 1, label: 'Nazik', emoji: '🙂' },
-  { value: 2, label: 'Argo', emoji: '😏' },
+  { value: 2, label: 'Delikanlı', emoji: '😏' },
   { value: 3, label: 'Ağır Abi', emoji: '🍆' },
 ];
+
+/**
+ * Who each level IS, not how it talks. The middle one used to be called "Argo",
+ * which is a way of speaking rather than a character — a nazik adam and an ağır
+ * abi can both use argo, so it never belonged on this scale.
+ */
+const LEVEL_CHARACTER: Record<VulgarityLevel, string> = {
+  1: 'Kırmaz, dalga geçmez, düz konuşur. Aile grubuna da girer, iş arkadaşına da.',
+  2: 'Laf sokar ama küfretmez. Kankasına "yedin lan" der, sonra sırtına vurur. Çoğu insanın yeri burası.',
+  3: 'Ağzı bozuk, yumuşatmaz, geri de almaz. Kaldırabilenler için.',
+};
 
 const PUSH_REASONS: Record<NonNullable<PushRegistration['reason']>, string> = {
   web: 'Tarayıcıda push bildirimi yok. Telefondaki uygulamada çalışır; burada uygulama içi bildirim görürsün.',
@@ -63,7 +75,7 @@ const STEP_REASONS: Record<
   Extract<StepAvailability, { available: false }>['reason'],
   string
 > = {
-  web: 'Tarayıcıda adım sayacı yok. Adım çelinçlerinde değerini elle beyan edebilirsin.',
+  web: 'Tarayıcıda adım sayacı yok. Adım çelınclarında değerini elle beyan edebilirsin.',
   'no-sensor': 'Bu cihazda adım sensörü bulamadım. Adımları elle gireceksin.',
   denied: 'Hareket/aktivite izni verilmemiş. İzni ver, adımların otomatik sayılsın.',
   'health-connect-missing':
@@ -80,6 +92,7 @@ export default function SettingsScreen() {
   const me = useAuth((s) => s.me);
   const logout = useAuth((s) => s.logout);
   const serverUrl = useAuth((s) => s.serverUrl);
+  const serverEditable = serverUrlIsEditable();
   const level = useLevel();
   const api = useApi();
   const toast = useToast();
@@ -244,7 +257,7 @@ export default function SettingsScreen() {
   const deleteAccount = async () => {
     const first = await confirmTr(
       'Hesabı sil',
-      'Çelinçlerin, skorların, rozetlerin, laf soktukların… hepsi silinecek. Devam edeyim mi?',
+      'Çelınclarını, skorlarını, rozetlerin, laf soktukların… hepsi silinecek. Devam edeyim mi?',
       'Devam et'
     );
     if (!first) return;
@@ -309,6 +322,7 @@ export default function SettingsScreen() {
         <Text variant="label">{t('settings_vulgarity_label', pendingLevel)}</Text>
         <View style={styles.block}>
           <SegmentedControl options={LEVELS} value={pendingLevel} onChange={chooseLevel} />
+          <Text variant="small">{LEVEL_CHARACTER[pendingLevel]}</Text>
           <Text variant="tiny" muted>
             Hazır laflar bu seviyeyi aşamaz: ağır abi bir kankan bile sana ancak bu kadar koyabilir.
           </Text>
@@ -373,7 +387,8 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
-      {/* ---------------------------------------------------------- server */}
+      {/* ------ server: only when no address was baked into the build ------ */}
+      {serverEditable ? (
       <Card>
         <Text variant="label">Sunucu</Text>
         <Pressable accessibilityRole="button" onPress={() => void changeServer()}>
@@ -392,6 +407,7 @@ export default function SettingsScreen() {
           </View>
         </Pressable>
       </Card>
+      ) : null}
 
       {/* ------------------------------------------------------------ push */}
       <Card>
@@ -478,7 +494,7 @@ export default function SettingsScreen() {
             onPress={() => void deleteAccount()}
           />
           <Text variant="micro" faint>
-            Hesabı silmek her şeyi siler: çelinçler, skorlar, rozetler, yediğin ve koyduğun ne varsa.
+            Hesabı silmek her şeyi siler: çelınclar, skorlar, rozetler, yediğin ve koyduğun ne varsa.
           </Text>
         </View>
       </Card>
@@ -496,7 +512,8 @@ export default function SettingsScreen() {
           {build ? ` (${build})` : ''} · {PLATFORM}
         </Text>
         <Text variant="micro" faint center>
-          Arkadaşlar arası şaka uygulamasıdır. Kırıcı olmak isteyen kendi seviyesini düşürsün.
+          Bu uygulama eğlence ve gelişim için tasarlandı. Amacının dışına çıkarmayın: burada
+          yenen laf burada kalır, kimse alınmasın, kimse kavga etmesin.
         </Text>
       </View>
     </Screen>

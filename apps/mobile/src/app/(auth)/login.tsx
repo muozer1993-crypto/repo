@@ -7,6 +7,7 @@ import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { ApiError } from '@/lib/api';
+import { serverUrlIsEditable } from '@/lib/config';
 import { deviceTimezone, useAuth } from '@/store/auth';
 import { Colors, Spacing } from '@/theme';
 
@@ -91,11 +92,13 @@ export default function LoginScreen() {
             Hesabın yok mu? <Text variant="small" color={Colors.accent} bold>Kaydol</Text>
           </Text>
         </Link>
-        <Link href="/(auth)/server" asChild>
-          <Text variant="tiny" faint style={styles.link}>
-            Sunucu: {serverUrl.replace(/^https?:\/\//, '')} · değiştir
-          </Text>
-        </Link>
+        {serverUrlIsEditable() ? (
+          <Link href="/(auth)/server" asChild>
+            <Text variant="tiny" faint style={styles.link}>
+              Sunucu: {serverUrl.replace(/^https?:\/\//, '')} · değiştir
+            </Text>
+          </Link>
+        ) : null}
       </View>
     </Screen>
   );

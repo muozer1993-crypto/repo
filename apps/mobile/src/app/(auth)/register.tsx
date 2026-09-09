@@ -17,6 +17,7 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { ApiError } from '@/lib/api';
+import { serverUrlIsEditable } from '@/lib/config';
 import { deviceTimezone, useAuth } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 
@@ -34,7 +35,7 @@ const PREVIEW_VARS: TauntVars = {
 
 const LEVELS: { value: VulgarityLevel; label: string; emoji: string }[] = [
   { value: 1, label: 'Nazik', emoji: '🙂' },
-  { value: 2, label: 'Argo', emoji: '😏' },
+  { value: 2, label: 'Delikanlı', emoji: '😏' },
   { value: 3, label: 'Ağır Abi', emoji: '🍆' },
 ];
 
@@ -156,7 +157,7 @@ export default function RegisterScreen() {
       </View>
 
       <View style={styles.levelBlock}>
-        <Text variant="label">Kabalık seviyesi</Text>
+        <Text variant="label">Adamlık seviyesi</Text>
         <SegmentedControl options={LEVELS} value={level} onChange={setLevel} />
         <Text variant="tiny" muted>
           {LEVEL_NOTE[level]}
@@ -200,11 +201,13 @@ export default function RegisterScreen() {
             </Text>
           </Text>
         </Link>
-        <Link href="/(auth)/server" asChild>
-          <Text variant="tiny" faint style={styles.link}>
-            Sunucu: {serverUrl.replace(/^https?:\/\//, '')} · değiştir
-          </Text>
-        </Link>
+        {serverUrlIsEditable() ? (
+          <Link href="/(auth)/server" asChild>
+            <Text variant="tiny" faint style={styles.link}>
+              Sunucu: {serverUrl.replace(/^https?:\/\//, '')} · değiştir
+            </Text>
+          </Link>
+        ) : null}
       </View>
     </Screen>
   );

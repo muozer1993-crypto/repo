@@ -126,7 +126,7 @@ export default function HomeScreen() {
             <Text variant="small" muted style={styles.errorBody}>
               {challenges.error instanceof ApiError
                 ? challenges.error.message
-                : 'Çelinçler yüklenemedi.'}
+                : 'Çelınclar yüklenemedi.'}
             </Text>
             <Button
               title="Tekrar dene"
@@ -227,11 +227,11 @@ export default function HomeScreen() {
                 noFriends
                   ? byLevel(
                       level,
-                      'Çelinç için en az bir arkadaş lazım. Önce birini davet et.',
-                      'Tek başına çelinç olmaz lan. Önce bir kanka bul.',
-                      'Kurban olmadan çelinç olmaz 🍆 Önce birini getir.'
+                      'Çelınc için en az bir arkadaş lazım. Önce birini davet et.',
+                      'Tek başına çelınc olmaz lan. Önce bir kanka bul.',
+                      'Kurban olmadan çelınc olmaz 🍆 Önce birini getir.'
                     )
-                  : 'Bir çelinç aç, kankaları davet et, skorlar kendiliğinden işlesin.'
+                  : 'Bir çelınc aç, kankaları davet et, skorlar kendiliğinden işlesin.'
               }
               actionLabel={
                 noFriends ? t('invite_friends_cta', level) : t('create_challenge_cta', level)
@@ -503,7 +503,7 @@ function InviteCard({
           title: kind === 'accept' ? 'Kabul ettin' : 'Reddettin',
           body:
             kind === 'accept'
-              ? 'Çelinç senin listende. Bastır bakalım.'
+              ? 'Çelınc senin listende. Bastır bakalım.'
               : 'Bu sefer pas geçtin.',
           kind: kind === 'accept' ? 'success' : 'info',
         });
@@ -524,7 +524,7 @@ function InviteCard({
         <Text style={styles.inviteEmoji}>{type?.emoji ?? '🎯'}</Text>
         <View style={styles.inviteBody}>
           <Text variant="lead" numberOfLines={1}>
-            {summary.challenge.title || type?.nameTr || 'Çelinç'}
+            {summary.challenge.title || type?.nameTr || 'Çelınc'}
           </Text>
           <Text variant="tiny" muted numberOfLines={1}>
             {inviter ? `${inviter.displayName} davet etti` : 'Bir kanka davet etti'}

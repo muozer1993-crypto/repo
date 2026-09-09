@@ -8,10 +8,10 @@
 import type { BadgeDef, BadgeStatKey, BadgeStats, MicrocopyEntry, MicrocopyKey, VulgarityLevel } from './types';
 
 export const MICROCOPY: Record<MicrocopyKey, MicrocopyEntry> = {
-  "home_empty": { level1: "Henüz çelinç yok. Bir arkadaşını davet et, ilk yarışı başlat.", level2: "Ortalık bomboş lan. Kimseye koymadın, kimse sana koymadı. Bir çelinç aç.", level3: "Burası çöl gibi. Ne koyan var ne yiyen. Aç bir çelinç, birine sapla 🍆" },
-  "create_challenge_cta": { level1: "Çelinç Başlat", level2: "Çelinç Aç Lan", level3: "Koymaya Başla 🍆" },
+  "home_empty": { level1: "Henüz çelınc yok. Bir arkadaşını davet et, ilk yarışı başlat.", level2: "Ortalık bomboş lan. Kimseye koymadın, kimse sana koymadı. Bir çelınc aç.", level3: "Burası çöl gibi. Ne koyan var ne yiyen. Aç bir çelınc, birine sapla 🍆" },
+  "create_challenge_cta": { level1: "Çelınc Başlat", level2: "Çelınc Aç Lan", level3: "Koymaya Başla 🍆" },
   "invite_friends_cta": { level1: "Arkadaş Davet Et", level2: "Kankaları Çağır", level3: "Kurban Getir" },
-  "challenge_pending_you": { level1: "Bu çelinç seni bekliyor. Kabul et, yarış başlasın.", level2: "Sana meydan okundu lan. Kabul et ya da korkak ol.", level3: "Biri sana koymak istiyor. Kabul et, kim kime koyacak görelim 🍆" },
+  "challenge_pending_you": { level1: "Bu çelınc seni bekliyor. Kabul et, yarış başlasın.", level2: "Sana meydan okundu lan. Kabul et ya da korkak ol.", level3: "Biri sana koymak istiyor. Kabul et, kim kime koyacak görelim 🍆" },
   "challenge_active_leading": { level1: "Öndesin! Böyle devam, farkı koru.", level2: "Öndesin lan, koyuyorsun. Gevşeme, akşam bildirim atacağız.", level3: "Saplıyorsun 🍆 Sakın durma, sonuna kadar götür." },
   "challenge_active_losing": { level1: "Biraz gerideyiz. Küçük bir gayretle toparlanır.", level2: "Geridesin lan. Böyle giderse yiyeceksin, kalk hareket et.", level3: "Yemeye doğru gidiyorsun. Kalk yoksa akşam sapır sapır 🍆" },
   "challenge_finished_won": { level1: "Tebrikler, kazandın! Arkadaşına nazik bir mesaj gönderebilirsin.", level2: "Koydun lan! Şimdi kaybedene bir bildirim yolla, tadını çıkar.", level3: "SAPLADIN 🍆 Kaybeden şu an kıvranıyor. Bildirimi seç, hesabı kapat." },
@@ -31,13 +31,13 @@ export const MICROCOPY: Record<MicrocopyKey, MicrocopyEntry> = {
   "proof_needed": { level1: "Bu giriş için bir fotoğraf kanıtı ekleyebilirsin.", level2: "Kanıt yok mu lan? Fotoğraf at, yoksa kimse inanmaz.", level3: "Fotoğraf yoksa palavra. Kanıt ekle, itiraz yeme." },
   "dispute_button": { level1: "İtiraz Et", level2: "Yalan Lan, İtiraz", level3: "Palavra, İtiraz" },
   "profile_record": { level1: "Kişisel rekor", level2: "En iyi koyuş", level3: "Rekor saplama 🍆" },
-  "onboarding_1": { level1: "Arkadaşlarınla çelinç aç: adım, odak, erken kalkma, su, sayfa.", level2: "Kankalarla çelinç aç lan: adım at, telefonu bırak, erken kalk.", level3: "Kankalarla çelinç aç. Adım, odak, erken kalkma. Kim kime koyacak? 🍆" },
+  "onboarding_1": { level1: "Arkadaşlarınla çelınc aç: adım, odak, erken kalkma, su, sayfa.", level2: "Kankalarla çelınc aç lan: adım at, telefonu bırak, erken kalk.", level3: "Kankalarla çelınc aç. Adım, odak, erken kalkma. Kim kime koyacak? 🍆" },
   "onboarding_2": { level1: "Skorlar otomatik veya beyanla sayılır. Arkadaşlar itiraz edebilir.", level2: "Skorlar sayılır. Yalan atarsan kankalar itiraz eder, rezil olursun.", level3: "Herkesin skoru sayılır. Yalan atan itiraz yer, itiraz yiyen saplanır." },
   "onboarding_3": { level1: "Kazanan ödülü alır ve kaybedene nazik bir mesaj gönderir.", level2: "Kazanan 'KOYDUM MU?' der, kaybedene bildirim gider. Yedin, rezil oldun.", level3: "Kazanan 'KOYDUM MU?' der, kaybedenin telefonuna 🍆 iner. Hazır mısın?" },
-  "notification_daily_reminder": { level1: "Bugünkü çelincini unutma. Küçük bir adım bile sayılır.", level2: "Bugün ne yaptın lan? Skor sıfır, kalk bir şeyler yap.", level3: "Skor sıfır. Kankalar bakıyor. Kalk yoksa akşam sapır sapır 🍆" },
+  "notification_daily_reminder": { level1: "Bugünkü çelıncını unutma. Küçük bir adım bile sayılır.", level2: "Bugün ne yaptın lan? Skor sıfır, kalk bir şeyler yap.", level3: "Skor sıfır. Kankalar bakıyor. Kalk yoksa akşam sapır sapır 🍆" },
   "login_title": { level1: "Tekrar hoş geldin", level2: "Gel bakalım", level3: "Kim geldi lan?" },
   "register_title": { level1: "Aramıza katıl", level2: "Kayıt ol, koymaya başla", level3: "Kayıt ol: kurban ol ya da sapla 🍆" },
-  "settings_vulgarity_label": { level1: "Kabalık seviyesi: Nazik", level2: "Kabalık seviyesi: Argo", level3: "Kabalık seviyesi: Ağır Abi" },
+  "settings_vulgarity_label": { level1: "Adamlık seviyesi: Nazik", level2: "Adamlık seviyesi: Delikanlı", level3: "Adamlık seviyesi: Ağır Abi" },
   "logout_confirm": { level1: "Çıkış yapmak istediğine emin misin?", level2: "Kaçıyor musun lan? Çıkış yapmak istediğine emin misin?", level3: "Kaçıyorsun ha? Çıkarsan kankalar 'yedi kaçtı' diyecek. Emin misin?" },
 };
 
@@ -51,11 +51,11 @@ export function t(key: MicrocopyKey, level: VulgarityLevel): string {
 }
 
 export const BADGES: readonly BadgeDef[] = [
-  { key: "first_blood", nameTr: "İlk Koyuş", emoji: "🍆", descriptionTr: "İlk çelincini kazandın. Kaybeden ilk bildirimini aldı.", rule: "wins>=1" },
-  { key: "serial_winner", nameTr: "Seri Koyucu", emoji: "🔥", descriptionTr: "5 çelinç kazandın. Grup artık seninle çelinç açmadan önce iki kere düşünüyor.", rule: "wins>=5" },
-  { key: "agir_abi", nameTr: "Ağır Abi", emoji: "👑", descriptionTr: "20 çelinç kazandın. Grup senin, koltuk senin, laf hakkı senin.", rule: "wins>=20" },
-  { key: "first_bite", nameTr: "İlk Lokma", emoji: "🍽️", descriptionTr: "İlk çelincini kaybettin. Herkes bir yerden başlar, sen yiyerek başladın.", rule: "losses>=1" },
-  { key: "open_buffet", nameTr: "Açık Büfe", emoji: "🥄", descriptionTr: "10 çelinç kaybettin. Yemeye doyamadın, tabağın hiç boş kalmadı.", rule: "losses>=10" },
+  { key: "first_blood", nameTr: "İlk Koyuş", emoji: "🍆", descriptionTr: "İlk çelıncını kazandın. Kaybeden ilk bildirimini aldı.", rule: "wins>=1" },
+  { key: "serial_winner", nameTr: "Seri Koyucu", emoji: "🔥", descriptionTr: "5 çelınc kazandın. Grup artık seninle çelınc açmadan önce iki kere düşünüyor.", rule: "wins>=5" },
+  { key: "agir_abi", nameTr: "Ağır Abi", emoji: "👑", descriptionTr: "20 çelınc kazandın. Grup senin, koltuk senin, laf hakkı senin.", rule: "wins>=20" },
+  { key: "first_bite", nameTr: "İlk Lokma", emoji: "🍽️", descriptionTr: "İlk çelıncını kaybettin. Herkes bir yerden başlar, sen yiyerek başladın.", rule: "losses>=1" },
+  { key: "open_buffet", nameTr: "Açık Büfe", emoji: "🥄", descriptionTr: "10 çelınc kaybettin. Yemeye doyamadın, tabağın hiç boş kalmadı.", rule: "losses>=10" },
   { key: "loudmouth", nameTr: "Laf Sokucu", emoji: "🗣️", descriptionTr: "10 bildirim gönderdin. Ağzından bal damlıyor, hem de acı biberli.", rule: "tauntsSent>=10" },
   { key: "thick_skin", nameTr: "Kalın Deri", emoji: "🛡️", descriptionTr: "10 bildirim yedin ve hâlâ buradasın. Saygı duyuyoruz.", rule: "tauntsReceived>=10" },
   { key: "walker", nameTr: "Yürüyen Efsane", emoji: "🚶", descriptionTr: "Tek günde 15.000 adım. Kaz gibi değil, at gibi yürüdün.", rule: "stepsSingleDayMax>=15000" },

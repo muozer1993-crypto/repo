@@ -217,7 +217,7 @@ describe('missing route params', () => {
     const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
     const tree = renderScreen(<ChallengeScreen />);
     await settle();
-    expect(rendered(tree)).toContain('Çelinç bulunamadı');
+    expect(rendered(tree)).toContain('Çelınc bulunamadı');
     // the query must never have been started for an empty id
     expect(api.challenge).not.toHaveBeenCalled();
   });
@@ -226,7 +226,7 @@ describe('missing route params', () => {
     const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
     const tree = renderScreen(<ResultsScreen />);
     await settle();
-    expect(rendered(tree)).toContain('Çelinç bulunamadı');
+    expect(rendered(tree)).toContain('Çelınc bulunamadı');
     expect(api.results).not.toHaveBeenCalled();
   });
 
@@ -244,7 +244,7 @@ describe('missing route params', () => {
     const tree = renderScreen(<ChallengeScreen />);
     await settle();
     expect(api.challenge).toHaveBeenCalledWith('c-1');
-    expect(rendered(tree)).toContain('Bu çelinç sende yok');
+    expect(rendered(tree)).toContain('Bu çelınc sende yok');
   });
 });
 

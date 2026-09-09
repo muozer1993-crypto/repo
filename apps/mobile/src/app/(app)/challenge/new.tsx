@@ -39,17 +39,22 @@ import { byLevel } from '@/utils/levelCopy';
 
 const STEP_LABELS = ['TÜR', 'AYARLAR', 'KANKALAR', 'ÖZET'] as const;
 const DURATION_CHOICES = [1, 3, 7, 14, 30] as const;
+const STAKE_OPTIONS: { value: StakeMode; label: string; emoji: string }[] = [
+  { value: 'reward', label: 'Ödül', emoji: '🎁' },
+  { value: 'penalty', label: 'Ceza', emoji: '💀' },
+];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type StartMode = 'now' | 'tomorrow';
 type DurationChoice = number | 'custom';
-type InfoTab = 'measure' | 'cheat' | null;
+/** A çelınc is played for ONE thing: a prize, or a forfeit. Never both. */
+type StakeMode = 'reward' | 'penalty';
 
 /* ------------------------------------------------------------- utilities */
 
 function errorText(error: unknown): string {
   if (error instanceof ApiError) return error.message;
-  return 'Çelinç açılamadı. Biraz sonra tekrar dene.';
+  return 'Çelınc açılamadı. Biraz sonra tekrar dene.';
 }
 
 /** "8 Eylül Salı · 09:00", read in the account's zone like every other screen. */
@@ -66,7 +71,7 @@ function formatMoment(iso: string, tz: string): string {
  * server slices into day keys — and the end is snapped to the last millisecond
  * of the final local day, so "3 gün" really covers three day keys instead of
  * four (which would quietly add a `missingDayPenalty` day to a lower-is-better
- * çelinç). A window too short to be legal falls back to plain 24 h steps.
+ * çelınc). A window too short to be legal falls back to plain 24 h steps.
  */
 function computeWindow(startMode: StartMode, days: number, tz: string): { startsAt: string; endsAt: string } {
   const now = new Date();
@@ -142,12 +147,10 @@ interface TypeRowProps {
   type: ChallengeType;
   level: VulgarityLevel;
   selected: boolean;
-  infoTab: InfoTab;
   onSelect: (type: ChallengeType) => void;
-  onInfo: (tab: Exclude<InfoTab, null>) => void;
 }
 
-function TypeRow({ type, level, selected, infoTab, onSelect, onInfo }: TypeRowProps) {
+function TypeRow({ type, level, selected, onSelect }: TypeRowProps) {
   return (
     <Card
       padded={false}
@@ -176,30 +179,7 @@ function TypeRow({ type, level, selected, infoTab, onSelect, onInfo }: TypeRowPr
 
       {selected ? (
         <View style={styles.typeInfo}>
-          <View style={styles.infoTabs}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ expanded: infoTab === 'measure' }}
-              onPress={() => onInfo('measure')}
-              style={[styles.infoTab, infoTab === 'measure' && styles.infoTabOn]}>
-              <Text variant="micro" color={infoTab === 'measure' ? Colors.accent : Colors.textMuted}>
-                {infoTab === 'measure' ? '▾' : '▸'} Nasıl ölçülür?
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ expanded: infoTab === 'cheat' }}
-              onPress={() => onInfo('cheat')}
-              style={[styles.infoTab, infoTab === 'cheat' && styles.infoTabOn]}>
-              <Text variant="micro" color={infoTab === 'cheat' ? Colors.accent : Colors.textMuted}>
-                {infoTab === 'cheat' ? '▾' : '▸'} Hile olur mu?
-              </Text>
-            </Pressable>
-          </View>
-          {infoTab === 'measure' ? (
-            <InfoBlock title="Nasıl ölçülür?" body={type.howMeasuredTr} />
-          ) : null}
-          {infoTab === 'cheat' ? <InfoBlock title="Hile olur mu?" body={type.antiCheatTr} /> : null}
+          <InfoBlock title="Nasıl sayılıyor?" body={type.howMeasuredTr} />
         </View>
       ) : null}
     </Card>
@@ -260,7 +240,7 @@ function SummaryRow({ label, value, color }: { label: string; value: string; col
 
 export default function NewChallengeScreen() {
   const level = useLevel();
-  // the çelinç window is counted in the account's zone, not the phone's
+  // the çelınc window is counted in the account's zone, not the phone's
   const tz = useTimezone();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
@@ -276,7 +256,6 @@ export default function NewChallengeScreen() {
 
   const [step, setStep] = useState(0);
   const [typeKey, setTypeKey] = useState<string | null>(null);
-  const [infoTab, setInfoTab] = useState<InfoTab>(null);
 
   const [title, setTitle] = useState('');
   const [startMode, setStartMode] = useState<StartMode>('now');
@@ -284,8 +263,8 @@ export default function NewChallengeScreen() {
   const [customDays, setCustomDays] = useState('');
   const [deadlineTime, setDeadlineTime] = useState('');
   const [proofRequired, setProofRequired] = useState(false);
-  const [rewardText, setRewardText] = useState('');
-  const [penaltyText, setPenaltyText] = useState('');
+  const [stakeMode, setStakeMode] = useState<StakeMode>('reward');
+  const [stakeText, setStakeText] = useState('');
 
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(preselected ? [preselected] : []);
@@ -327,7 +306,7 @@ export default function NewChallengeScreen() {
     if (step === 0 && !type) {
       return byLevel(
         level,
-        'Devam etmek için bir çelinç türü seç.',
+        'Devam etmek için bir çelınc türü seç.',
         'Önce bir tür seç lan, boşluğa koyamayız.',
         'Tür seçmeden koyamazsın. Birini seç 🍆'
       );
@@ -352,8 +331,15 @@ export default function NewChallengeScreen() {
     return null;
   })();
 
+  /** Switching sides swaps the suggestion, but never eats something typed. */
+  const chooseStakeMode = (next: StakeMode) => {
+    if (next === stakeMode) return;
+    const suggested = type ? clip(type.suggestedRewardTr, LIMITS.REWARD_TEXT_MAX) : '';
+    if (next === 'penalty' && stakeText.trim() === suggested.trim()) setStakeText('');
+    setStakeMode(next);
+  };
+
   const chooseType = (next: ChallengeType) => {
-    setInfoTab(null);
     if (next.key === typeKey) return;
     setTypeKey(next.key);
     setDurationChoice(
@@ -364,7 +350,8 @@ export default function NewChallengeScreen() {
     setCustomDays(String(next.defaultDurationDays));
     setDeadlineTime(next.defaultDeadlineTime ?? '');
     setProofRequired(next.proofRequired);
-    setRewardText(clip(next.suggestedRewardTr, LIMITS.REWARD_TEXT_MAX));
+    setStakeMode('reward');
+    setStakeText(clip(next.suggestedRewardTr, LIMITS.REWARD_TEXT_MAX));
   };
 
   const toggleFriend = (id: string) => {
@@ -401,8 +388,8 @@ export default function NewChallengeScreen() {
         startsAt,
         endsAt,
         participantIds,
-        rewardText: rewardText.trim() || undefined,
-        penaltyText: penaltyText.trim() || undefined,
+        rewardText: stakeMode === 'reward' ? stakeText.trim() || undefined : undefined,
+        penaltyText: stakeMode === 'penalty' ? stakeText.trim() || undefined : undefined,
         deadlineTime: needsDeadline ? deadlineTime.trim() : undefined,
         proofRequired,
       });
@@ -464,9 +451,7 @@ export default function NewChallengeScreen() {
                       type={item}
                       level={level}
                       selected={item.key === typeKey}
-                      infoTab={item.key === typeKey ? infoTab : null}
                       onSelect={chooseType}
-                      onInfo={(tab) => setInfoTab(infoTab === tab ? null : tab)}
                     />
                   ))}
                 </View>
@@ -579,28 +564,33 @@ export default function NewChallengeScreen() {
               />
             </View>
 
+            <View style={styles.field}>
+              <Text variant="label">Ne üzerine oynuyoruz?</Text>
+              <SegmentedControl
+                options={STAKE_OPTIONS}
+                value={stakeMode}
+                onChange={chooseStakeMode}
+              />
+            </View>
             <Input
-              label="Ödül (kazanan ne alacak?)"
-              placeholder={clip(type.suggestedRewardTr, LIMITS.REWARD_TEXT_MAX)}
-              value={rewardText}
-              onChangeText={setRewardText}
-              maxLength={LIMITS.REWARD_TEXT_MAX}
+              label={stakeMode === 'reward' ? 'Kazanan ne alacak?' : 'Kaybeden ne yapacak?'}
+              placeholder={
+                stakeMode === 'reward'
+                  ? clip(type.suggestedRewardTr, LIMITS.REWARD_TEXT_MAX)
+                  : byLevel(
+                      level,
+                      'Örn. kaybeden herkese kahve ısmarlar.',
+                      'Örn. kaybeden bir hafta profil fotoğrafını değiştirir.',
+                      'Örn. kaybeden gruba rezil bir fotoğrafını atar.'
+                    )
+              }
+              value={stakeText}
+              onChangeText={setStakeText}
+              maxLength={stakeMode === 'reward' ? LIMITS.REWARD_TEXT_MAX : LIMITS.PENALTY_TEXT_MAX}
               multiline
-              hint={`${rewardText.length}/${LIMITS.REWARD_TEXT_MAX}`}
-            />
-            <Input
-              label="Ceza (kaybeden ne yapacak?)"
-              placeholder={byLevel(
-                level,
-                'Örn. kaybeden herkese kahve ısmarlar.',
-                'Örn. kaybeden bir hafta profil fotoğrafını değiştirir.',
-                'Örn. kaybeden gruba rezil bir fotoğrafını atar.'
-              )}
-              value={penaltyText}
-              onChangeText={setPenaltyText}
-              maxLength={LIMITS.PENALTY_TEXT_MAX}
-              multiline
-              hint={`${penaltyText.length}/${LIMITS.PENALTY_TEXT_MAX}`}
+              hint={`Boş bırakabilirsin. ${stakeText.length}/${
+                stakeMode === 'reward' ? LIMITS.REWARD_TEXT_MAX : LIMITS.PENALTY_TEXT_MAX
+              }`}
             />
 
             <Card style={styles.windowCard}>
@@ -704,14 +694,15 @@ export default function NewChallengeScreen() {
                   color={proofRequired ? Colors.yellow : undefined}
                 />
                 <SummaryRow
-                  label="Ödül"
-                  value={rewardText.trim() || 'Ödül yazılmadı'}
-                  color={rewardText.trim() ? Colors.success : Colors.textFaint}
-                />
-                <SummaryRow
-                  label="Ceza"
-                  value={penaltyText.trim() || 'Ceza yazılmadı'}
-                  color={penaltyText.trim() ? Colors.danger : Colors.textFaint}
+                  label={stakeMode === 'reward' ? 'Ödül' : 'Ceza'}
+                  value={stakeText.trim() || 'Ortada bir şey yok, sadece laf hakkı'}
+                  color={
+                    stakeText.trim()
+                      ? stakeMode === 'reward'
+                        ? Colors.success
+                        : Colors.danger
+                      : Colors.textFaint
+                  }
                 />
               </View>
 
@@ -836,15 +827,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.lg,
   },
-  infoTabs: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
-  infoTab: {
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  infoTabOn: { borderColor: Colors.accent, backgroundColor: Colors.surfaceHigh },
   infoBlock: {
     gap: Spacing.xs,
     padding: Spacing.md,

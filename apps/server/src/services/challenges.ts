@@ -267,9 +267,9 @@ function levelOf(user: UserRow): VulgarityLevel {
 }
 
 function startedCopy(level: VulgarityLevel, title: string): { title: string; body: string } {
-  if (level === 1) return { title: '🔔 Çelinç başladı', body: `${title} başladı. Bol şans, elinden geleni yap.` };
-  if (level === 3) return { title: '🍆 ÇELİNÇ BAŞLADI', body: `${title} başladı. Ya koyarsın ya yersin, üçüncü yol yok.` };
-  return { title: '🔥 Çelinç başladı', body: `${title} başladı lan. Koymaya bak, gevşeme.` };
+  if (level === 1) return { title: '🔔 Çelınc başladı', body: `${title} başladı. Bol şans, elinden geleni yap.` };
+  if (level === 3) return { title: '🍆 ÇELINC BAŞLADI', body: `${title} başladı. Ya koyarsın ya yersin, üçüncü yol yok.` };
+  return { title: '🔥 Çelınc başladı', body: `${title} başladı lan. Koymaya bak, gevşeme.` };
 }
 
 /**
@@ -289,9 +289,9 @@ function finishedTitle(level: VulgarityLevel, role: 'winner' | 'loser'): string 
 }
 
 function cancelledCopy(level: VulgarityLevel, title: string): { title: string; body: string } {
-  if (level === 1) return { title: 'Çelinç iptal edildi', body: `${title} yeterli katılımcı olmadığı için iptal edildi.` };
-  if (level === 3) return { title: 'Çelinç iptal 🍆', body: `${title} iptal. Kimse cesaret edemedi, boşuna beklettin.` };
-  return { title: 'Çelinç iptal oldu', body: `${title} iptal lan, kimse kabul etmedi.` };
+  if (level === 1) return { title: 'Çelınc iptal edildi', body: `${title} yeterli katılımcı olmadığı için iptal edildi.` };
+  if (level === 3) return { title: 'Çelınc iptal 🍆', body: `${title} iptal. Kimse cesaret edemedi, boşuna beklettin.` };
+  return { title: 'Çelınc iptal oldu', body: `${title} iptal lan, kimse kabul etmedi.` };
 }
 
 function reminderTitle(level: VulgarityLevel): string {

@@ -105,7 +105,7 @@ export default function FriendsScreen() {
         onSuccess: () =>
           toast({
             title: kind === 'accept' ? 'Kanka oldunuz' : 'Reddettin',
-            body: kind === 'accept' ? `${name} artık listende. Aç bir çelinç.` : `${name} elendi.`,
+            body: kind === 'accept' ? `${name} artık listende. Aç bir çelınc.` : `${name} elendi.`,
             kind: kind === 'accept' ? 'success' : 'info',
           }),
         onError: fail,
@@ -453,10 +453,14 @@ const styles = StyleSheet.create({
   code: {
     fontFamily: MONO,
     fontSize: FontSize.huge,
+    // a monospace cap at 36px needs the room spelled out, or Android slices the
+    // top and bottom off the code people are supposed to read out loud
+    lineHeight: Math.round(FontSize.huge * 1.35),
     fontWeight: FontWeight.black,
     letterSpacing: 4,
     color: Colors.yellow,
     marginTop: Spacing.xs,
+    paddingVertical: 2,
   },
   codeHint: { marginTop: Spacing.sm },
   codeActions: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.lg },

@@ -30,7 +30,7 @@ const SLIDES: Slide[] = [
     art: '🔥',
     titles: {
       1: 'Arkadaşlarınla yarış',
-      2: 'Kankalarla çelinç aç',
+      2: 'Kankalarla çelınc aç',
       3: 'Kim kime koyacak?',
     },
   },

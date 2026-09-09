@@ -2,7 +2,7 @@
 
 **Arkadaşına koy. Sapır sapır.**
 
-Arkadaşlar arası "çelinç" uygulaması. Bir yarışma açarsın (3 günlük adım yarışı, bir haftalık
+Arkadaşlar arası "çelınc" uygulaması. Bir yarışma açarsın (3 günlük adım yarışı, bir haftalık
 odak seansı, sabah 07:00'den önce kalkma...), herkesin skoru sayılır, süre bitince kazanan
 **"KOYDUM MU?"** deme hakkını kazanır. Kaybedenlerin telefonuna bildirim düşer:
 
@@ -32,8 +32,8 @@ Bu görüntüler uçtan uca test çalışırken gerçek veriyle çekildi (<code>
 3. [Telefonda açmak](#telefonda-açmak)
 4. [Gerçek uygulama derlemek (EAS)](#gerçek-uygulama-derlemek-eas)
 5. [Sunucuyu internete açmak](#sunucuyu-internete-açmak)
-6. [Kabalık seviyeleri](#kabalık-seviyeleri)
-7. [Çelinç türleri](#çelinç-türleri)
+6. [Adamlık seviyeleri](#adamlık-seviyeleri)
+7. [Çelınc türleri](#çelınc-türleri)
 8. [Adım sayımı nasıl çalışıyor](#adım-sayımı-nasıl-çalışıyor)
 9. [Proje yapısı](#proje-yapısı)
 10. [Geliştirme komutları](#geliştirme-komutları)
@@ -48,9 +48,9 @@ Bu görüntüler uçtan uca test çalışırken gerçek veriyle çekildi (<code>
 |---|---|
 | `apps/mobile` | Telefon uygulaması. Expo SDK 57, expo-router, TypeScript. |
 | `apps/server` | Sunucu. Fastify + SQLite. Tek dosyalık veritabanı, ORM yok. |
-| `packages/shared` | İki tarafın da kullandığı tipler, doğrulama şemaları, puanlama, çelinç kataloğu, 84 laf sokma metni ve üç seviyelik arayüz metinleri. |
+| `packages/shared` | İki tarafın da kullandığı tipler, doğrulama şemaları, puanlama, çelınc kataloğu, 84 laf sokma metni ve üç seviyelik arayüz metinleri. |
 | `SPEC.md` | Teknik şartname. Veri modeli, API sözleşmesi, ekran listesi. Kod değiştirirken buraya bak. |
-| `docs/ARCHITECTURE.md` | Kodun neden böyle bölündüğü: zaman/gün mantığı, çelincin ömrü, puanlama, laf sokma zinciri. |
+| `docs/ARCHITECTURE.md` | Kodun neden böyle bölündüğü: zaman/gün mantığı, çelıncın ömrü, puanlama, laf sokma zinciri. |
 
 Gereksinimler: **Node 20 veya üstü** ve telefonunda **Expo Go** (ya da bir geliştirme derlemesi).
 
@@ -92,7 +92,7 @@ Telefonunla QR kodu okut. Uygulama kendiliğinden bilgisayarının IP adresini b
 bağlanmaya çalışır. Bağlanamazsa giriş ekranındaki **"Sunucu: ... · değiştir"** satırından
 adresi elle yazabilirsin (aşağıya bak).
 
-Kayıt ol, arkadaşını da kaydet, arkadaş ekleyin, çelinç açın. Hepsi bu.
+Kayıt ol, arkadaşını da kaydet, arkadaş ekleyin, çelınc açın. Hepsi bu.
 
 ---
 
@@ -209,16 +209,16 @@ yedeklemek için o dosyayı kopyalaman yeterli.
 
 ---
 
-## Kabalık seviyeleri
+## Adamlık seviyeleri
 
 Herkes **kendi** tavan seviyesini seçer ve o seviye korunur. Sen 3'te olsan bile, 1'i seçmiş
 arkadaşına giden bildirim 1. seviyeye yumuşatılır. Bunu sunucu zorlar, uygulama değil.
 
 | Seviye | Kimin için | Örnek |
 |---|---|---|
-| **1 — Nazik** | Aile grubu, iş arkadaşı | *"Mustafa bu sefer seni geçti: 12.430 vs 4.201 adım. Rövanş?"* |
-| **2 — Argo** | Kanka muhabbeti (varsayılan) | *"Mustafa koydu lan: 12.430 adım karşısında 4.201. Yedin Ali, afiyet olsun."* |
-| **3 — Ağır abi** | Ne dediğini bilenler | *"Mustafa sana sapır sapır sapladı 🍆 ... Yedin Ali, sindir."* |
+| **1 — Nazik** | Kırmaz, dalga geçmez. Aile grubu, iş arkadaşı | *"Mustafa bu sefer seni geçti: 12.430 vs 4.201 adım. Rövanş?"* |
+| **2 — Delikanlı** | Laf sokar, küfretmez. Kanka muhabbeti (varsayılan) | *"Mustafa koydu lan: 12.430 adım karşısında 4.201. Yedin Ali, afiyet olsun."* |
+| **3 — Ağır Abi** | Ağzı bozuk, yumuşatmaz. Kaldırabilenler | *"Mustafa sana sapır sapır sapladı 🍆 ... Yedin Ali, sindir."* |
 
 Ne yaparsan yap uygulamanın üretmediği şeyler: etnik, dini, cinsiyet, cinsel yönelim veya
 engellilik temelli hakaret; tehdit; aile fertlerine küfür. Kullanıcı kendi metnini yazarken de
@@ -226,11 +226,11 @@ bu filtre çalışır. Ayrıca herkes birbirini engelleyebilir ve şikayet edebi
 
 ---
 
-## Çelinç türleri
+## Çelınc türleri
 
 21 tür var, hepsi telefonda gerçekten ölçülebilir:
 
-| Kategori | Çelinçler |
+| Kategori | Çelınclar |
 |---|---|
 | **Hareket** | Adım Yarışı 🚶 · Koşu Kilometresi 🏃 · Şınav Kapışması 💪 · Merdiven Canavarı 🪜 |
 | **Ekran** | Odak Seansı 🎯 · Ekran Süresi Düellosu 📱 · Sosyal Medya Orucu 🚫 |
@@ -282,7 +282,7 @@ koydum/
 │   │   └── assets/brand/  ikon, splash, favicon
 │   └── server/
 │       ├── src/routes/    HTTP uçları
-│       ├── src/services/  çelinç yaşam döngüsü, bildirim, push
+│       ├── src/services/  çelınc yaşam döngüsü, bildirim, push
 │       └── src/db/        şema ve göçler
 ├── packages/shared/       tipler, şemalar, puanlama, katalog, laflar
 ├── SPEC.md                teknik şartname
@@ -331,9 +331,9 @@ Depoyu güncelle (`git pull`) ve Metro önbelleğini temizleyerek başlat:
 yüklenirken patlıyordu ve bütün uygulamayı düşürüyordu; artık bildirim modülü ayrı ayrı
 yükleniyor, gelmezse uygulama onsuz devam ediyor.
 
-**Çelinç bitti ama sonuç çıkmadı.**
+**Çelınc bitti ama sonuç çıkmadı.**
 Sonuçlandırmayı sunucudaki zamanlayıcı yapar ve 30 saniyede bir çalışır. Sunucu kapalıysa
-açıldığında geçmiş çelinçleri de kapatır.
+açıldığında geçmiş çelınclarını da kapatır.
 
 **Saat farkı.**
 Günler kullanıcının kendi saat dilimine göre hesaplanır. Yurt dışına çıkarsan Ayarlar
@@ -351,7 +351,7 @@ node e2e/smoke.mjs    # gerçek sunucu + tarayıcı, uçtan uca (playwright-core
 ```
 
 `e2e/smoke.mjs` geçici bir veritabanıyla sunucuyu ayağa kaldırır, iki kullanıcı kaydeder,
-aralarında bir adım çelinci oynatır, çelinci kapatır, KOYDUM gönderir; sonra web derlemesini
+aralarında bir adım çelıncı oynatır, çelıncı kapatır, KOYDUM gönderir; sonra web derlemesini
 Chromium'da açıp giriş, ana sayfa, rezillik ekranı, kazanan ekranı ve gelen kutusunu doğrular ve
 `docs/screens/` altındaki görüntüleri yeniler.
 

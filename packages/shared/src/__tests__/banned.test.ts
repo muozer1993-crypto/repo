@@ -50,7 +50,7 @@ describe('containsBanned', () => {
     for (const text of [
       'amk', 'lan', 'sikeyim', 'yedin mi lan', 'koydum mu amk', 'mal', 'yarrak gibi koştun', 'ananas', 'bacım nasıl', 'karın ağrısı', 'kurt', 'ailen nasıl', 'sülalesi', 'yezidi', 'engelli', 'seni öldü', 'Kalk lan yürü', '', '   ',
       // sık- (boredom / tightness / squeezing) after a family word is not the sik- verb
-      'ailen sıkıntıda mı', 'oğlun sıkıldı mı', 'kızın sıkıştı', 'karın sıkı', 'soyun sıkıcı', 'AİLEN SIKINTIDA MI', 'sıkıntı yok', 'çok sıkıcı bir çelinç', 'boğazın sıkıştı', 'boğazına sıkıştı',
+      'ailen sıkıntıda mı', 'oğlun sıkıldı mı', 'kızın sıkıştı', 'karın sıkı', 'soyun sıkıcı', 'AİLEN SIKINTIDA MI', 'sıkıntı yok', 'çok sıkıcı bir çelınc', 'boğazın sıkıştı', 'boğazına sıkıştı',
       // knives and pictures and traditions
       'bıçaklar keskin', 'bıçakla kesmek', 'pic', 'resim pic attım', 'anane', 'ananevi',
       // idioms in the past tense: wore you out / gave you a hard time

@@ -58,15 +58,15 @@ const EMPTY_TITLE: Record<1 | 2 | 3, string> = {
 };
 
 const EMPTY_BODY: Record<1 | 2 | 3, string> = {
-  1: 'Bir çelinç açtığında ya da bir kanka seni davet ettiğinde burada görürsün.',
-  2: 'Ne laf var ne bildirim. Git bir çelinç aç da ortalık hareketlensin.',
-  3: 'Kimse sana koymamış, sen de kimseye koymamışsın. Aç bir çelinç, birine sapla.',
+  1: 'Bir çelınc açtığında ya da bir kanka seni davet ettiğinde burada görürsün.',
+  2: 'Ne laf var ne bildirim. Git bir çelınc aç da ortalık hareketlensin.',
+  3: 'Kimse sana koymamış, sen de kimseye koymamışsın. Aç bir çelınc, birine sapla.',
 };
 
 /**
  * What a taunt bubble needs in its header. The server's taunt notification only
  * carries `{ challengeId, tauntId }`, so the sender is resolved from the
- * çelinç itself — only its winner is allowed to send one.
+ * çelınc itself — only its winner is allowed to send one.
  */
 interface TauntContextInfo {
   title: string;
@@ -138,7 +138,7 @@ export default function InboxScreen() {
   const tauntContext = new Map<string, TauntContextInfo>();
   for (const summary of challenges.data ?? []) {
     const type = getChallengeType(summary.challenge.typeKey);
-    const title = summary.challenge.title || type?.nameTr || 'Çelinç';
+    const title = summary.challenge.title || type?.nameTr || 'Çelınc';
     const winner = summary.challenge.winnerId
       ? summary.participants.find((p) => p.user.id === summary.challenge.winnerId)?.user
       : undefined;
@@ -252,7 +252,7 @@ export default function InboxScreen() {
             emoji="📭"
             title={EMPTY_TITLE[level]}
             subtitle={EMPTY_BODY[level]}
-            actionLabel="Çelinç aç"
+            actionLabel="Çelınc aç"
             onAction={() => router.push('/challenge/new')}
           />
         }

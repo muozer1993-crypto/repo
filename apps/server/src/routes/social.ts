@@ -70,9 +70,9 @@ function requireTarget(db: Database, challenge: ChallengeRow, userId: string): U
   const row = db
     .prepare("SELECT * FROM challenge_participants WHERE challenge_id = ? AND user_id = ? AND status = 'accepted'")
     .get(challenge.id, userId) as { user_id: string } | undefined;
-  if (!row) throw notFound('participant_not_found', 'Bu kişi çelinçte değil.');
+  if (!row) throw notFound('participant_not_found', 'Bu kişi çelıncta değil.');
   const user = getUserRow(db, userId);
-  if (!user) throw notFound('participant_not_found', 'Bu kişi çelinçte değil.');
+  if (!user) throw notFound('participant_not_found', 'Bu kişi çelıncta değil.');
   return user;
 }
 
@@ -89,7 +89,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
 
     const challenge = requireChallengeRow(db, id);
     requireAcceptedMembership(db, challenge, me.id);
-    if (challenge.status !== 'active') throw badRequest('challenge_not_active', 'Sadece devam eden çelinçte dürtebilirsin.');
+    if (challenge.status !== 'active') throw badRequest('challenge_not_active', 'Sadece devam eden çelıncta dürtebilirsin.');
     if (body.toUserId === me.id) throw badRequest('self_poke', 'Kendini dürtemezsin.');
 
     const target = requireTarget(db, challenge, body.toUserId);
@@ -130,7 +130,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     requireMembership(db, challenge, me.id);
 
     if (challenge.status !== 'finished') {
-      throw badRequest('challenge_not_finished', 'Çelinç bitmeden laf sokamazsın.');
+      throw badRequest('challenge_not_finished', 'Çelınc bitmeden laf sokamazsın.');
     }
     // Only the winner earns the right to "KOYDUM MU?" — a tie leaves nobody with it.
     if (!challenge.winner_id || challenge.winner_id !== me.id) {
@@ -165,13 +165,13 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     const challenge = requireChallengeRow(db, id);
     requireAcceptedMembership(db, challenge, me.id);
     if (challenge.status !== 'finished') {
-      throw badRequest('challenge_not_finished', 'Rövanş sadece biten çelinç için istenir.');
+      throw badRequest('challenge_not_finished', 'Rövanş sadece biten çelınc için istenir.');
     }
 
     const duplicate = db
       .prepare('SELECT id FROM challenges WHERE rematch_of_id = ? AND creator_id = ?')
       .get(challenge.id, me.id) as { id: string } | undefined;
-    if (duplicate) throw conflict('already_rematched', 'Bu çelinç için zaten rövanş açtın.');
+    if (duplicate) throw conflict('already_rematched', 'Bu çelınc için zaten rövanş açtın.');
 
     // Same settings, same length; only the calendar moves.
     const startsAt = new Date(now.getTime() + LIMITS.REMATCH_START_DELAY_MS).toISOString();

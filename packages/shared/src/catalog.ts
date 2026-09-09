@@ -1,5 +1,5 @@
 /**
- * The challenge catalog: every measurable "çelinç" the app offers.
+ * The challenge catalog: every measurable "çelınc" the app offers.
  *
  * Generated from the product design pass and reviewed by hand. Each entry has
  * to be measurable on a phone — see `howMeasuredTr` — and carries anti-abuse
@@ -17,10 +17,10 @@ export const CHALLENGE_TYPES: readonly ChallengeType[] = [
     direction: "higher",
     descriptionTr: "Telefon cebinde, ayaklar yerde. Süre bitince en çok adım atan koyar, en az atan kaz gibi yürümüş sayılır lan. Kanepede gün geçiren rezil olur.",
     descriptionPoliteTr: "Belirlenen süre boyunca en çok adım atan kazanır. Kanepe takımı sonda kalır; üzülmeyin, yürüyün.",
-    howMeasuredTr: "Telefonun kendi adım sayacı. iOS: CoreMotion (CMPedometer) son 7 günün adım geçmişini verir; uygulama her açıldığında çelinç başlangıcından itibaren günlük ve saatlik toplamları sorgulayıp sunucuya yazar. Arka plan servisi gerekmez ama kullanıcı en az 7 günde bir (tercihen her gün) uygulamayı açmalı. Android: sürekli arka plan sayımı yok; günlük adım geçmişi Health Connect üzerinden okunur (Samsung Health / Google Fit / Fitbit gibi bir kaynak uygulamanın Health Connect'e yazıyor olması gerekir). Her iki platformda dev build şart, Expo Go'da çalışmaz. Çelinç başlangıç saatinden itibaren sayılır, sunucu günlük toplamı tutar.",
+    howMeasuredTr: "Telefonun kendi adım sayacı. iOS: CoreMotion (CMPedometer) son 7 günün adım geçmişini verir; uygulama her açıldığında çelınc başlangıcından itibaren günlük ve saatlik toplamları sorgulayıp sunucuya yazar. Arka plan servisi gerekmez ama kullanıcı en az 7 günde bir (tercihen her gün) uygulamayı açmalı. Android: sürekli arka plan sayımı yok; günlük adım geçmişi Health Connect üzerinden okunur (Samsung Health / Google Fit / Fitbit gibi bir kaynak uygulamanın Health Connect'e yazıyor olması gerekir). Her iki platformda dev build şart, Expo Go'da çalışmaz. Çelınc başlangıç saatinden itibaren sayılır, sunucu günlük toplamı tutar.",
     defaultDurationDays: 3,
     suggestedRewardTr: "Kaybeden herkese döner ısmarlar.",
-    antiCheatTr: "Hile: telefonu çamaşır makinesine bantlamak, köpeğin tasmasına takmak, elle sallamak. Caydırma: saatlik adım dağılımı sunucuda tutulur; 1 saatte 12.000+ adım gibi imkânsız sıçramalar 'şüpheli' bayrağı alır (hızlı koşucu bile saatte 10 bin civarı atar) ve arkadaşlar itiraz açabilir. İtiraz kazanırsa o günün adımı silinir. Sadece tek cihaz bağlanabilir; çelinç sırasında cihaz değişirse önceki günler kilitlenir.",
+    antiCheatTr: "Hile: telefonu çamaşır makinesine bantlamak, köpeğin tasmasına takmak, elle sallamak. Caydırma: saatlik adım dağılımı sunucuda tutulur; 1 saatte 12.000+ adım gibi imkânsız sıçramalar 'şüpheli' bayrağı alır (hızlı koşucu bile saatte 10 bin civarı atar) ve arkadaşlar itiraz açabilir. İtiraz kazanırsa o günün adımı silinir. Sadece tek cihaz bağlanabilir; çelınc sırasında cihaz değişirse önceki günler kilitlenir.",
     proofRequired: false,
     category: "hareket",
     maxPerEntry: 100000,
@@ -343,8 +343,8 @@ export const CHALLENGE_TYPES: readonly ChallengeType[] = [
     unitTr: "gün",
     direction: "higher",
     descriptionTr: "Her gün 'yemedim' de, sonunda tırnak fotoğrafını at. Toplantıda parmağı ağzında yakalanan yedi. En çok temiz günü toplayan koyar, kemirgen takımı rezil olur.",
-    descriptionPoliteTr: "Her gün tırnak yemediğinizi işaretleyin, çelinç başında ve sonunda el fotoğrafı paylaşın. En çok temiz gün toplayan kazanır.",
-    howMeasuredTr: "Günlük 'yemedim / yedim' işareti; işaretlenmeyen gün 'yedi' sayılır. Çelinç başında ve sonunda uygulama içi kameradan el fotoğrafı zorunlu; iki fotoğraf yan yana gösterilir. Bitiş fotoğrafında tırnaklar başlangıçtan daha yenik görünüyorsa arkadaşlar toplu itiraz açar; çoğunluk 'yemiş' derse son 3 gün düşer.",
+    descriptionPoliteTr: "Her gün tırnak yemediğinizi işaretleyin, çelınc başında ve sonunda el fotoğrafı paylaşın. En çok temiz gün toplayan kazanır.",
+    howMeasuredTr: "Günlük 'yemedim / yedim' işareti; işaretlenmeyen gün 'yedi' sayılır. Çelınc başında ve sonunda uygulama içi kameradan el fotoğrafı zorunlu; iki fotoğraf yan yana gösterilir. Bitiş fotoğrafında tırnaklar başlangıçtan daha yenik görünüyorsa arkadaşlar toplu itiraz açar; çoğunluk 'yemiş' derse son 3 gün düşer.",
     defaultDurationDays: 14,
     suggestedRewardTr: "Kaybeden kazanana manikür veya el kremi seti alır.",
     antiCheatTr: "Hile: başkasının eli, eski fotoğraf, işaretleyip kemirmeye devam etmek. Caydırma: fotoğraf sadece uygulama içi kameradan (galeriden yükleme yok), sunucu zaman damgalı; gün içi arkadaş itirazında 5 dk içinde 'canlı el fotoğrafı' istenir, gelmezse itiraz kabul edilir ve o gün düşer.",

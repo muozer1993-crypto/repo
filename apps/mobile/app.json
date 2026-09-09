@@ -83,12 +83,12 @@
     },
     "backgroundColor": "#0B0B0F",
     "primaryColor": "#FF3D71",
-    "description": "Arkadaşlar arası çelinç uygulaması. Kazanan koyar, kaybeden yer.",
+    "description": "Arkadaşlar arası çelınc uygulaması. Kazanan koyar, kaybeden yer.",
     "ios": {
       "bundleIdentifier": "com.koydum.app",
       "supportsTablet": false,
       "infoPlist": {
-        "NSMotionUsageDescription": "Çelinçlerde adımlarını sayabilmek için hareket verine erişmemiz gerekiyor.",
+        "NSMotionUsageDescription": "Çelınclarde adımlarını sayabilmek için hareket verine erişmemiz gerekiyor.",
         "UIBackgroundModes": [
           "processing",
           "remote-notification"

@@ -208,7 +208,7 @@ export default function FocusScreen() {
         <EmptyState
           emoji="🫥"
           title="Seans açılmadı"
-          subtitle="Bu bağlantıda çelinç numarası yok. Odak seansını çelincin içinden başlat."
+          subtitle="Bu bağlantıda çelınc numarası yok. Odak seansını çelıncın içinden başlat."
           actionLabel="Geri dön"
           onAction={leave}
         />
@@ -230,7 +230,7 @@ export default function FocusScreen() {
         <EmptyState
           emoji="🫥"
           title="Seans açılmadı"
-          subtitle={query.isError ? errorText(query.error, 'Çelinç bilgisi gelmedi.') : 'Çelinç tipi tanınmadı.'}
+          subtitle={query.isError ? errorText(query.error, 'Çelınc bilgisi gelmedi.') : 'Çelınc tipi tanınmadı.'}
           actionLabel="Geri dön"
           onAction={leave}
         />
@@ -244,8 +244,8 @@ export default function FocusScreen() {
         <EmptyState
           emoji="🎯"
           title="Burada odak seansı yok"
-          subtitle="Bu çelinç odak dakikasıyla ölçülmüyor. Seans sadece odak çelinçlerinde çalışır."
-          actionLabel="Çelince dön"
+          subtitle="Bu çelınc odak dakikasıyla ölçülmüyor. Seans sadece odak çelınclarında çalışır."
+          actionLabel="Çelınca dön"
           onAction={leave}
         />
       </Screen>
@@ -289,8 +289,8 @@ export default function FocusScreen() {
           <Card edgeColor={Colors.danger}>
             <Text variant="small">
               {detail.challenge.status !== 'active'
-                ? 'Çelinç aktif değil; seans süresi skora yazılmaz.'
-                : 'Bu çelinçte oyuncu değilsin; önce daveti kabul et.'}
+                ? 'Çelınc aktif değil; seans süresi skora yazılmaz.'
+                : 'Bu çelıncta oyuncu değilsin; önce daveti kabul et.'}
             </Text>
           </Card>
         ) : null}
@@ -414,7 +414,7 @@ export default function FocusScreen() {
         </Card>
 
         <Button title="Yeniden başlat" size="lg" fullWidth onPress={reset} />
-        <Button title="Çelince dön" variant="ghost" size="md" fullWidth onPress={leave} />
+        <Button title="Çelınca dön" variant="ghost" size="md" fullWidth onPress={leave} />
       </Screen>
     );
   }

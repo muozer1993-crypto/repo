@@ -2,7 +2,7 @@
 
 Buradaki PNG'ler elle çekilmez; `node e2e/smoke.mjs` uçtan uca testi çalışırken üretir.
 Test gerçek sunucuyu geçici bir veritabanıyla başlatır, iki kullanıcı kaydeder, aralarında
-bir çelinç oynatır, sonucu kesinleştirir ve kazananın "KOYDUM MU?" bildirimini gönderir;
+bir çelınc oynatır, sonucu kesinleştirir ve kazananın "KOYDUM MU?" bildirimini gönderir;
 ardından web derlemesini Chromium'da açıp her ekranı yakalar.
 
 Yani bu görüntüler sahte veriyle değil, uygulamanın kendi ürettiği veriyle çekilmiştir.

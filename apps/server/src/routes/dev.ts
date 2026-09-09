@@ -54,13 +54,13 @@ export default async function devRoutes(app: FastifyInstance): Promise<void> {
   app.post('/dev/finalize/:id', async (request): Promise<{ ok: true; standings: ParticipantView[] }> => {
     const { id } = request.params as IdParams;
     const challenge = getChallengeRow(db, id);
-    if (!challenge) throw notFound('challenge_not_found', 'Böyle bir çelinç yok.');
+    if (!challenge) throw notFound('challenge_not_found', 'Böyle bir çelınc yok.');
 
     if (challenge.status === 'finished') {
       return { ok: true, standings: computeStandings(db, challenge) };
     }
     if (challenge.status === 'cancelled') {
-      throw badRequest('challenge_cancelled', 'İptal edilmiş çelinç bitirilemez.');
+      throw badRequest('challenge_cancelled', 'İptal edilmiş çelınc bitirilemez.');
     }
 
     const standings = finalizeChallenge(db, challenge, app.now());

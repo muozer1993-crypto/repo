@@ -116,11 +116,11 @@ export default function ChallengeDetailScreen() {
   if (!id) {
     return (
       <Screen scroll contentStyle={styles.content}>
-        <Header onBack={back} title="Çelinç" />
+        <Header onBack={back} title="Çelınc" />
         <EmptyState
           emoji="🫥"
-          title="Çelinç bulunamadı"
-          subtitle="Bu bağlantıda çelinç numarası yok. Listeden birine dokun."
+          title="Çelınc bulunamadı"
+          subtitle="Bu bağlantıda çelınc numarası yok. Listeden birine dokun."
           actionLabel="Listeye dön"
           onAction={back}
         />
@@ -131,7 +131,7 @@ export default function ChallengeDetailScreen() {
   if (query.isPending) {
     return (
       <Screen scroll contentStyle={styles.content}>
-        <Header onBack={back} title="Çelinç" />
+        <Header onBack={back} title="Çelınc" />
         <Skeleton height={150} style={styles.block} />
         <Skeleton height={190} style={styles.block} />
         <Skeleton height={120} style={styles.block} />
@@ -144,13 +144,13 @@ export default function ChallengeDetailScreen() {
     const missing = err instanceof ApiError && err.status === 404;
     return (
       <Screen scroll contentStyle={styles.content}>
-        <Header onBack={back} title="Çelinç" />
+        <Header onBack={back} title="Çelınc" />
         <EmptyState
           emoji={missing ? '🫥' : '📡'}
-          title={missing ? 'Bu çelinç sende yok' : 'Çelinç gelmedi'}
+          title={missing ? 'Bu çelınc sende yok' : 'Çelınc gelmedi'}
           subtitle={
             missing
-              ? 'Ya silindi ya da bu çelincin içinde değilsin.'
+              ? 'Ya silindi ya da bu çelıncın içinde değilsin.'
               : errorText(err, 'Sunucuya ulaşamadım.')
           }
           actionLabel={missing ? 'Listeye dön' : 'Tekrar dene'}
@@ -170,7 +170,7 @@ export default function ChallengeDetailScreen() {
   const isPlayer = mine?.status === 'accepted';
   const leading = (mine?.rank ?? 0) === 1;
   /**
-   * A pending çelinç whose start time has passed is not starting: the server
+   * A pending çelınc whose start time has passed is not starting: the server
    * only activates it once at least two people have accepted, and otherwise
    * cancels it at the end date. Saying "Başlıyor" for days would be a lie.
    */
@@ -191,7 +191,7 @@ export default function ChallengeDetailScreen() {
       refreshing={query.isRefetching}
       contentStyle={styles.content}
       bottomInset={Spacing.xxl}>
-      <Header onBack={back} title={type?.nameTr ?? 'Çelinç'} />
+      <Header onBack={back} title={type?.nameTr ?? 'Çelınc'} />
 
       {/* --------------------------------------------------------- hero */}
       <Card glow={challenge.status === 'active'} edgeColor={status.color}>
@@ -199,7 +199,7 @@ export default function ChallengeDetailScreen() {
           <Text style={styles.heroEmoji}>{type?.emoji ?? '🎯'}</Text>
           <View style={styles.heroBody}>
             <Text variant="title" numberOfLines={2}>
-              {challenge.title || type?.nameTr || 'Çelinç'}
+              {challenge.title || type?.nameTr || 'Çelınc'}
             </Text>
             <Text variant="tiny" muted numberOfLines={1}>
               {accepted.length} kişi · {type?.unitTr ?? ''}
@@ -378,7 +378,7 @@ function InviteActions({ id }: { id: string }) {
       await action.mutateAsync(kind);
       toast({
         title: kind === 'accept' ? 'Girdin' : 'Kaçtın',
-        body: kind === 'accept' ? 'Skorun sayılmaya başladı.' : 'Bu çelinç sensiz devam ediyor.',
+        body: kind === 'accept' ? 'Skorun sayılmaya başladı.' : 'Bu çelınc sensiz devam ediyor.',
         kind: kind === 'accept' ? 'success' : 'info',
       });
     } catch (error) {
@@ -484,7 +484,7 @@ function StepsAction({ id, detail, type, today }: ActionProps) {
   const sync = async () => {
     setSyncing(true);
     try {
-      // one sync fans out to every auto_steps çelinç, so it refreshes the list
+      // one sync fans out to every auto_steps çelınc, so it refreshes the list
       // and me.stats too — not just this screen
       const result = await syncStepsNow({ client: api, queryClient, refreshMe });
       if (result.days === 0) {
@@ -850,7 +850,7 @@ function CountAction({ id, detail, type, today }: ActionProps) {
 
       {type.proofRequired || detail.challenge.proofRequired ? (
         <Text variant="tiny" faint>
-          Bu çelinçte kanıt fotoğrafı isteniyor; hızlı ekleme yerine “+ Giriş” kullan.
+          Bu çelıncta kanıt fotoğrafı isteniyor; hızlı ekleme yerine “+ Giriş” kullan.
         </Text>
       ) : (
         <View style={styles.chipRow}>
@@ -951,7 +951,7 @@ function Feed({
   const [removingId, setRemovingId] = useState<string | null>(null);
 
   // Only a friend's itiraz could undo a mistyped value before this: the server
-  // lets you delete your own manual rows while the çelinç is running.
+  // lets you delete your own manual rows while the çelınc is running.
   const active = detail.challenge.status === 'active';
   const canDelete = (item: FeedItem) =>
     active && item.userId === meId && item.source === 'manual' && item.status !== 'rejected';
@@ -1280,7 +1280,7 @@ function FooterActions({
 
   const run = async (kind: 'leave' | 'cancel') => {
     const ok = await confirmTr(
-      kind === 'leave' ? 'Ayrılıyor musun?' : 'Çelinci iptal et',
+      kind === 'leave' ? 'Ayrılıyor musun?' : 'Çelıncı iptal et',
       kind === 'leave'
         ? 'Skorun silinmez ama sıralamadan düşersin. Kankalar bunu görecek.'
         : 'Herkese iptal bildirimi gider. Emin misin?',
@@ -1291,7 +1291,7 @@ function FooterActions({
       await action.mutateAsync(kind);
       toast({
         title: kind === 'leave' ? 'Ayrıldın' : 'İptal edildi',
-        body: kind === 'leave' ? 'Bu çelinç sensiz devam ediyor.' : 'Çelinç kapandı.',
+        body: kind === 'leave' ? 'Bu çelınc sensiz devam ediyor.' : 'Çelınc kapandı.',
         kind: 'info',
       });
       onLeft();

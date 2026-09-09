@@ -24,8 +24,8 @@ değiştirdiğinde iki taraf da aynı anda derlenmez, hata anında ortaya çıka
 
 ## Zaman ve günler
 
-Bir çelinç "gün" üzerinden puanlanır ve gün, **kullanıcının kendi saat dilimine** göre hesaplanır
-(`users.timezone`). İstanbul'daki biriyle Berlin'deki biri aynı çelinçte yarışırken herkesin
+Bir çelınc "gün" üzerinden puanlanır ve gün, **kullanıcının kendi saat dilimine** göre hesaplanır
+(`users.timezone`). İstanbul'daki biriyle Berlin'deki biri aynı çelıncta yarışırken herkesin
 günü kendi yerel gece yarısında döner. Sunucu hiçbir zaman istemcinin gönderdiği saate güvenmez:
 
 * `clientTime` sadece kayıt amaçlıdır, doğrulamada kullanılmaz.
@@ -33,9 +33,9 @@ günü kendi yerel gece yarısında döner. Sunucu hiçbir zaman istemcinin gön
 * Geçmiş güne giriş penceresi (manuel 2 gün, adım 7 gün) sunucunun "şimdi"sine göredir.
 
 Sunucudaki tek "şimdi" kaynağı `app.now()`'dur. Testler oraya kontrollü bir saat enjekte eder,
-bu yüzden çelinç yaşam döngüsü gerçek zamana hiç bağlı değildir.
+bu yüzden çelınc yaşam döngüsü gerçek zamana hiç bağlı değildir.
 
-## Çelincin ömrü
+## Çelıncın ömrü
 
 ```
 pending ──(başlangıç geldi, ≥2 kabul)──► active ──(bitiş geldi)──► finished
@@ -53,18 +53,18 @@ davranışı beklemeden test edilebilir.
 
 ## Puanlama
 
-`packages/shared/src/scoring.ts` saf bir fonksiyondur: girdi olarak çelinç tipi, gün listesi ve
+`packages/shared/src/scoring.ts` saf bir fonksiyondur: girdi olarak çelınc tipi, gün listesi ve
 girişler alır, sıralamayı döndürür. Veritabanına, tarihe veya ağa dokunmaz. Sunucu her yazma
-sonrası bunu bellekte yeniden çalıştırır; kaydedilmiş bir "skor" alanı yoktur, sadece çelinç
+sonrası bunu bellekte yeniden çalıştırır; kaydedilmiş bir "skor" alanı yoktur, sadece çelınc
 kapanırken sonuç `challenge_participants.final_score` alanına yazılır.
 
 Altı metrik türü vardır ve hepsi aynı arayüze oturur: `auto_steps`, `focus_minutes`,
-`checkin_deadline`, `daily_boolean`, `manual_count`, `manual_lower_is_better`. Yeni bir çelinç
+`checkin_deadline`, `daily_boolean`, `manual_count`, `manual_lower_is_better`. Yeni bir çelınc
 türü eklemek katalogda bir satır demektir — sunucu ve uygulama kodu değişmez.
 
 ## Laf sokma zinciri
 
-1. Çelinç biter, `winner_id` yazılır.
+1. Çelınc biter, `winner_id` yazılır.
 2. Kazanan `/challenges/:id/taunt` çağırır, isterse bir şablon seçer.
 3. Sunucu şablonun seviyesini **alıcının** `vulgarity_max` değerine kırpar. Seviye 3 bir kanka,
    seviye 1 seçmiş birine ancak seviye 1 laf sokabilir.

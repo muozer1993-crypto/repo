@@ -62,8 +62,8 @@ const TIE_SUB: Record<VulgarityLevel, string> = {
 };
 
 const WATCHER_SUB: Record<VulgarityLevel, string> = {
-  1: 'Bu çelinçte yarışmadın, sonuç aşağıda.',
-  2: 'Sen bu çelince girmedin, sadece izledin.',
+  1: 'Bu çelıncta yarışmadın, sonuç aşağıda.',
+  2: 'Sen bu çelınca girmedin, sadece izledin.',
   3: 'Sen kenarda durdun. Koyan koydu, yiyen yedi 🍆',
 };
 
@@ -143,7 +143,7 @@ export default function ResultsScreen() {
       if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       toast({
         title: 'Rövanş açıldı',
-        body: 'Yeni çelinç kuruldu, kankalar davet edildi.',
+        body: 'Yeni çelınc kuruldu, kankalar davet edildi.',
         kind: 'success',
       });
       router.replace({ pathname: '/challenge/[id]', params: { id: created.id } });
@@ -159,8 +159,8 @@ export default function ResultsScreen() {
         <Header onBack={back} title="Sonuç" />
         <EmptyState
           emoji="🫥"
-          title="Çelinç bulunamadı"
-          subtitle="Bu bağlantıda çelinç numarası yok. Listeden birine dokun."
+          title="Çelınc bulunamadı"
+          subtitle="Bu bağlantıda çelınc numarası yok. Listeden birine dokun."
           actionLabel="Listeye dön"
           onAction={back}
         />
@@ -188,15 +188,15 @@ export default function ResultsScreen() {
         <Header onBack={back} title="Sonuç" />
         <EmptyState
           emoji={missing ? '🫥' : early ? '⏳' : '📡'}
-          title={missing ? 'Böyle bir çelinç yok' : early ? 'Çelinç daha bitmedi' : 'Sonuç gelmedi'}
+          title={missing ? 'Böyle bir çelınc yok' : early ? 'Çelınc daha bitmedi' : 'Sonuç gelmedi'}
           subtitle={
             missing
-              ? 'Ya silindi ya da bu çelincin içinde değilsin.'
+              ? 'Ya silindi ya da bu çelıncın içinde değilsin.'
               : early
-                ? 'Bitmeden sonuç olmaz. Çelince dön, skorunu yükselt.'
+                ? 'Bitmeden sonuç olmaz. Çelınca dön, skorunu yükselt.'
                 : errorText(err, 'Sunucuya ulaşamadım.')
           }
-          actionLabel={missing ? 'Listeye dön' : early ? 'Çelince dön' : 'Tekrar dene'}
+          actionLabel={missing ? 'Listeye dön' : early ? 'Çelınca dön' : 'Tekrar dene'}
           onAction={() => {
             if (missing) back();
             else if (early) router.navigate({ pathname: '/challenge/[id]', params: { id } });
@@ -217,13 +217,13 @@ export default function ResultsScreen() {
         <Header onBack={back} title="Sonuç" />
         <EmptyState
           emoji={challenge.status === 'cancelled' ? '🚫' : '⏳'}
-          title={challenge.status === 'cancelled' ? 'Bu çelinç iptal edildi' : 'Çelinç daha bitmedi'}
+          title={challenge.status === 'cancelled' ? 'Bu çelınc iptal edildi' : 'Çelınc daha bitmedi'}
           subtitle={
             challenge.status === 'cancelled'
               ? 'Kimse koymadı, kimse yemedi. Yeni bir tane aç.'
               : 'Bitiş saatini bekle, sonuç o zaman yazılır.'
           }
-          actionLabel="Çelince dön"
+          actionLabel="Çelınca dön"
           onAction={() => router.navigate({ pathname: '/challenge/[id]', params: { id } })}
         />
       </Screen>
@@ -275,7 +275,7 @@ export default function ResultsScreen() {
         <ShameHeader level={level} />
       ) : (
         <NeutralHeader
-          title="ÇELİNÇ BİTTİ"
+          title="ÇELINC BİTTİ"
           subtitle={WATCHER_SUB[level]}
           emoji="🏁"
         />
@@ -438,13 +438,13 @@ export default function ResultsScreen() {
       {/* -------------------------------------------------------- summary */}
       <Card>
         <Text variant="label" style={styles.sectionLabel}>
-          Çelinç özeti
+          Çelınc özeti
         </Text>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryEmoji}>{type?.emoji ?? '🎯'}</Text>
           <View style={styles.grow}>
             <Text variant="lead" numberOfLines={2}>
-              {challenge.title || type?.nameTr || 'Çelinç'}
+              {challenge.title || type?.nameTr || 'Çelınc'}
             </Text>
             <Text variant="tiny" muted numberOfLines={1}>
               {type?.nameTr ?? challenge.metricType} · {challenge.unit}
@@ -471,7 +471,7 @@ export default function ResultsScreen() {
           />
         ) : null}
         <Button
-          title="Çelince dön"
+          title="Çelınca dön"
           variant="ghost"
           size="md"
           fullWidth

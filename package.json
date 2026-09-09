@@ -2,7 +2,7 @@
   "name": "koydum",
   "private": true,
   "version": "1.0.0",
-  "description": "KOYDUM — arkadaşlar arası çelinç uygulaması (mobil + sunucu)",
+  "description": "KOYDUM — arkadaşlar arası çelınc uygulaması (mobil + sunucu)",
   "workspaces": [
     "packages/*",
     "apps/*"

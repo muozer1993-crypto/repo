@@ -375,7 +375,7 @@ async function main() {
     await page.fill('input >> nth=0', 'ali');
     await page.fill('input >> nth=1', 'koydum123');
     await page.getByText(/gir bakalım/i).first().click();
-    await expectText(page, ['Çelinç', 'çelinç', 'Su İçme', 'Devam'], 'home screen after login');
+    await expectText(page, ['Çelınc', 'çelınc', 'Su İçme', 'Devam'], 'home screen after login');
     await page.screenshot({ path: join(SHOT_DIR, '02-home-loser.png'), fullPage: true });
 
     // 3. the loser's shame screen
@@ -403,7 +403,7 @@ async function main() {
 
     // 5. home as the winner
     await page.goto(`${statics.url}/`, { waitUntil: 'domcontentloaded' });
-    await expectText(page, ['Su İçme', 'Çelinç', 'çelinç'], 'home screen as the winner');
+    await expectText(page, ['Su İçme', 'Çelınc', 'çelınc'], 'home screen as the winner');
     await page.screenshot({ path: join(SHOT_DIR, '05-home-winner.png'), fullPage: true });
 
     // 6. the inbox

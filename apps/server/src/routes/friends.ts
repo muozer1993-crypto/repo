@@ -30,13 +30,13 @@ function requestCopy(level: VulgarityLevel, name: string): { title: string; body
   if (level === 3) {
     return { title: '🍆 Kanka isteği', body: `${name} sana kanka olmak istiyor. Kabul et de kim kime koyuyor görelim.` };
   }
-  return { title: '👊 Kanka isteği', body: `${name} seni kanka listesine ekledi. Kabul et de çelinç açalım.` };
+  return { title: '👊 Kanka isteği', body: `${name} seni kanka listesine ekledi. Kabul et de çelınc açalım.` };
 }
 
 function acceptedCopy(level: VulgarityLevel, name: string): { title: string; body: string } {
   if (level === 1) return { title: 'Kanka isteğin kabul edildi', body: `${name} kanka isteğini kabul etti.` };
   if (level === 3) return { title: '🍆 Kanka oldunuz', body: `${name} kabul etti. Sıra kime koyacağını seçmekte.` };
-  return { title: '🔥 Kanka oldunuz', body: `${name} kanka isteğini kabul etti. Aç bir çelinç, koy bakalım.` };
+  return { title: '🔥 Kanka oldunuz', body: `${name} kanka isteğini kabul etti. Aç bir çelınc, koy bakalım.` };
 }
 
 function levelOf(user: UserRow): VulgarityLevel {

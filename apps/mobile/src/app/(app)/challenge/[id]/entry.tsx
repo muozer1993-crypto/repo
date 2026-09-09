@@ -108,8 +108,8 @@ export default function EntryModalScreen() {
       <Screen scroll contentStyle={styles.content}>
         <EmptyState
           emoji="🫥"
-          title="Çelinç bulunamadı"
-          subtitle="Bu bağlantıda çelinç numarası yok. Çelinci açıp oradan giriş yap."
+          title="Çelınc bulunamadı"
+          subtitle="Bu bağlantıda çelınc numarası yok. Çelıncı açıp oradan giriş yap."
           actionLabel="Kapat"
           onAction={close}
         />
@@ -120,7 +120,7 @@ export default function EntryModalScreen() {
   if (query.isPending) {
     return (
       <Screen contentStyle={styles.center}>
-        <Loading label="Çelinç yükleniyor..." />
+        <Loading label="Çelınc yükleniyor..." />
       </Screen>
     );
   }
@@ -132,7 +132,7 @@ export default function EntryModalScreen() {
           emoji="🫥"
           title="Giriş yapılamıyor"
           subtitle={
-            query.isError ? errorText(query.error, 'Çelinç bilgisi gelmedi.') : 'Bu çelincin tipi tanınmadı.'
+            query.isError ? errorText(query.error, 'Çelınc bilgisi gelmedi.') : 'Bu çelıncın tipi tanınmadı.'
           }
           actionLabel="Kapat"
           onAction={close}
@@ -283,8 +283,8 @@ export default function EntryModalScreen() {
         <Card edgeColor={Colors.danger}>
           <Text variant="small">
             {notActive
-              ? 'Bu çelinç şu an aktif değil, giriş kabul edilmiyor.'
-              : 'Bu çelinçte oyuncu değilsin, giriş yapamazsın.'}
+              ? 'Bu çelınc şu an aktif değil, giriş kabul edilmiyor.'
+              : 'Bu çelıncta oyuncu değilsin, giriş yapamazsın.'}
           </Text>
         </Card>
       ) : null}

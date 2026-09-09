@@ -114,7 +114,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const body = parseBody(schema, request.body);
 
     const type = getChallengeType(body.typeKey);
-    if (!type) throw badRequest('unknown_type', 'Böyle bir çelinç tipi yok.');
+    if (!type) throw badRequest('unknown_type', 'Böyle bir çelınc tipi yok.');
 
     if (body.participantIds.includes(me.id)) {
       throw badRequest('self_participant', 'Kendini davet edemezsin, zaten içindesin.');
@@ -218,9 +218,9 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const challenge = requireChallengeRow(db, id);
     const membership = requireMembership(db, challenge, me.id);
 
-    if (membership.status === 'accepted') throw conflict('already_accepted', 'Bu çelinci zaten kabul ettin.');
+    if (membership.status === 'accepted') throw conflict('already_accepted', 'Bu çelıncı zaten kabul ettin.');
     if (challenge.status !== 'pending' && challenge.status !== 'active') {
-      throw badRequest('challenge_closed', 'Bu çelinç kapandı, artık katılamazsın.');
+      throw badRequest('challenge_closed', 'Bu çelınc kapandı, artık katılamazsın.');
     }
     // Joining in the last hour would be a free ride, so the door closes early —
     // but never earlier than a quarter of the way in, or a challenge of the
@@ -229,7 +229,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const endsAt = Date.parse(challenge.ends_at);
     const cutoff = Math.min(LIMITS.ACCEPT_CUTOFF_MS, Math.max(0, (endsAt - startsAt) / 4));
     if (now.getTime() >= endsAt - cutoff) {
-      throw badRequest('accept_closed', 'Çelincin bitmesine az kaldı, artık katılamazsın.');
+      throw badRequest('accept_closed', 'Çelıncın bitmesine az kaldı, artık katılamazsın.');
     }
 
     const iso = nowIso(now);
@@ -250,7 +250,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const membership = requireMembership(db, challenge, me.id);
 
     if (membership.status === 'accepted') {
-      throw conflict('already_accepted', 'Kabul ettikten sonra reddedemezsin, çelinçten ayrıl.');
+      throw conflict('already_accepted', 'Kabul ettikten sonra reddedemezsin, çelınctan ayrıl.');
     }
     if (membership.status !== 'invited') throw conflict('already_declined', 'Bu daveti zaten cevapladın.');
 
@@ -271,10 +271,10 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const membership = requireMembership(db, challenge, me.id);
 
     if (challenge.status !== 'pending' && challenge.status !== 'active') {
-      throw badRequest('challenge_closed', 'Biten çelinçten ayrılamazsın.');
+      throw badRequest('challenge_closed', 'Biten çelınctan ayrılamazsın.');
     }
     if (membership.status !== 'accepted' && membership.status !== 'invited') {
-      throw conflict('already_left', 'Bu çelinçte zaten değilsin.');
+      throw conflict('already_left', 'Bu çelıncta zaten değilsin.');
     }
 
     db.prepare("UPDATE challenge_participants SET status = 'left' WHERE challenge_id = ? AND user_id = ?").run(
@@ -294,9 +294,9 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const challenge = requireChallengeRow(db, id);
     requireMembership(db, challenge, me.id);
 
-    if (challenge.creator_id !== me.id) throw forbidden('not_creator', 'Sadece çelinci açan iptal edebilir.');
+    if (challenge.creator_id !== me.id) throw forbidden('not_creator', 'Sadece çelıncı açan iptal edebilir.');
     if (challenge.status !== 'pending') {
-      throw badRequest('challenge_started', 'Başlamış çelinç iptal edilemez.');
+      throw badRequest('challenge_started', 'Başlamış çelınc iptal edilemez.');
     }
 
     const iso = nowIso(now);

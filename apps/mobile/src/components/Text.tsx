@@ -1,4 +1,9 @@
-import { Text as RNText, type TextProps as RNTextProps, StyleSheet } from 'react-native';
+import {
+  Text as RNText,
+  type TextProps as RNTextProps,
+  StyleSheet,
+  type TextStyle,
+} from 'react-native';
 
 import { Colors, FontSize, FontWeight } from '@/theme';
 
@@ -25,6 +30,21 @@ export interface TextProps extends RNTextProps {
   upper?: boolean;
 }
 
+/**
+ * A caller that bumps `fontSize` inherits the variant's `lineHeight`, and a big
+ * glyph in a small line box gets its top and bottom sliced off — which is how a
+ * 36px invite code ended up rendering inside `body`'s 22px line. Turkish makes
+ * it worse: İ, Ğ and Ş carry marks past the cap height, so they go first.
+ *
+ * So when a style sets fontSize and says nothing about lineHeight, give it one
+ * that fits.
+ */
+function fittedLineHeight(style: TextProps['style']): TextStyle | null {
+  const flat = StyleSheet.flatten(style) as TextStyle | undefined;
+  if (!flat || typeof flat.fontSize !== 'number' || flat.lineHeight !== undefined) return null;
+  return { lineHeight: Math.round(flat.fontSize * 1.25) };
+}
+
 export function Text({
   variant = 'body',
   color,
@@ -43,6 +63,7 @@ export function Text({
       style={[
         styles.base,
         styles[variant],
+        fittedLineHeight(style),
         muted && { color: Colors.textMuted },
         faint && { color: Colors.textFaint },
         bold && { fontWeight: FontWeight.bold },
@@ -60,10 +81,10 @@ const styles = StyleSheet.create({
   base: {
     color: Colors.text,
   },
-  giant: { fontSize: FontSize.giant, fontWeight: FontWeight.black, letterSpacing: -1.5, lineHeight: FontSize.giant * 1.05 },
-  huge: { fontSize: FontSize.huge, fontWeight: FontWeight.black, letterSpacing: -1, lineHeight: FontSize.huge * 1.1 },
-  big: { fontSize: FontSize.big, fontWeight: FontWeight.black, letterSpacing: -0.6, lineHeight: FontSize.big * 1.15 },
-  title: { fontSize: FontSize.title, fontWeight: FontWeight.bold, letterSpacing: -0.3, lineHeight: FontSize.title * 1.2 },
+  giant: { fontSize: FontSize.giant, fontWeight: FontWeight.black, letterSpacing: -1.5, lineHeight: FontSize.giant * 1.18 },
+  huge: { fontSize: FontSize.huge, fontWeight: FontWeight.black, letterSpacing: -1, lineHeight: FontSize.huge * 1.2 },
+  big: { fontSize: FontSize.big, fontWeight: FontWeight.black, letterSpacing: -0.6, lineHeight: FontSize.big * 1.22 },
+  title: { fontSize: FontSize.title, fontWeight: FontWeight.bold, letterSpacing: -0.3, lineHeight: FontSize.title * 1.25 },
   lead: { fontSize: FontSize.lead, fontWeight: FontWeight.semibold, lineHeight: FontSize.lead * 1.35 },
   body: { fontSize: FontSize.body, fontWeight: FontWeight.regular, lineHeight: FontSize.body * 1.4 },
   small: { fontSize: FontSize.small, fontWeight: FontWeight.regular, lineHeight: FontSize.small * 1.4 },

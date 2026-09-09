@@ -13,7 +13,7 @@ const ICONS: Record<string, string> = {
 };
 
 const LABELS: Record<string, string> = {
-  index: 'Çelinçler',
+  index: 'Çelınclar',
   friends: 'Kankalar',
   inbox: 'Gelen',
   profile: 'Ben',

@@ -33,7 +33,7 @@ export const FEED_LIMIT = 40;
 
 export function requireChallengeRow(db: Database, challengeId: string): ChallengeRow {
   const row = getChallengeRow(db, challengeId);
-  if (!row) throw notFound('challenge_not_found', 'Böyle bir çelinç yok.');
+  if (!row) throw notFound('challenge_not_found', 'Böyle bir çelınc yok.');
   return row;
 }
 
@@ -46,14 +46,14 @@ export function getParticipant(db: Database, challengeId: string, userId: string
 /** Any row in `challenge_participants` (invited, declined and left included). */
 export function requireMembership(db: Database, challenge: ChallengeRow, userId: string): ParticipantRow {
   const row = getParticipant(db, challenge.id, userId);
-  if (!row) throw notFound('challenge_not_found', 'Böyle bir çelinç yok.');
+  if (!row) throw notFound('challenge_not_found', 'Böyle bir çelınc yok.');
   return row;
 }
 
 /** Membership that also joined the race — the bar for writing entries, poking, rematching. */
 export function requireAcceptedMembership(db: Database, challenge: ChallengeRow, userId: string): ParticipantRow {
   const row = requireMembership(db, challenge, userId);
-  if (row.status !== 'accepted') throw forbidden('not_participant', 'Bu çelince katılmadın.');
+  if (row.status !== 'accepted') throw forbidden('not_participant', 'Bu çelınca katılmadın.');
   return row;
 }
 
@@ -208,38 +208,38 @@ export interface CopyText {
 
 export function inviteCopy(level: VulgarityLevel, creator: string, title: string): CopyText {
   if (level === 1) {
-    return { title: '📩 Çelinç daveti', body: `${creator} seni "${title}" çelincine davet etti. Kabul et, yarış başlasın.` };
+    return { title: '📩 Çelınc daveti', body: `${creator} seni "${title}" çelıncına davet etti. Kabul et, yarış başlasın.` };
   }
   if (level === 3) {
-    return { title: '🍆 SANA KOYMAK İSTİYORLAR', body: `${creator} "${title}" çelincini açtı ve gözüne seni kestirdi. Kabul et de kim kime koyacak görelim.` };
+    return { title: '🍆 SANA KOYMAK İSTİYORLAR', body: `${creator} "${title}" çelıncını açtı ve gözüne seni kestirdi. Kabul et de kim kime koyacak görelim.` };
   }
-  return { title: '🔥 Sana çelinç açıldı', body: `${creator} "${title}" çelincinde sana meydan okudu lan. Kabul et ya da korkak diye anıl.` };
+  return { title: '🔥 Sana çelınc açıldı', body: `${creator} "${title}" çelıncında sana meydan okudu lan. Kabul et ya da korkak diye anıl.` };
 }
 
 export function cancelledByCreatorCopy(level: VulgarityLevel, creator: string, title: string): CopyText {
-  if (level === 1) return { title: 'Çelinç iptal edildi', body: `${creator}, "${title}" çelincini iptal etti.` };
-  if (level === 3) return { title: 'Çelinç iptal 🍆', body: `${creator} "${title}" çelincini iptal etti. Bugün kimse yemiyor, şanslısın.` };
-  return { title: 'Çelinç iptal oldu', body: `${creator} "${title}" çelincini iptal etti lan. Boşuna heveslenmişsin.` };
+  if (level === 1) return { title: 'Çelınc iptal edildi', body: `${creator}, "${title}" çelıncını iptal etti.` };
+  if (level === 3) return { title: 'Çelınc iptal 🍆', body: `${creator} "${title}" çelıncını iptal etti. Bugün kimse yemiyor, şanslısın.` };
+  return { title: 'Çelınc iptal oldu', body: `${creator} "${title}" çelıncını iptal etti lan. Boşuna heveslenmişsin.` };
 }
 
 export function disputeCopy(level: VulgarityLevel, by: string, title: string, dayKey: string): CopyText {
   if (level === 1) {
-    return { title: 'Girişine itiraz var', body: `${by}, "${title}" çelincinde ${dayKey} girişine itiraz etti. Kanıtını paylaşabilirsin.` };
+    return { title: 'Girişine itiraz var', body: `${by}, "${title}" çelıncında ${dayKey} girişine itiraz etti. Kanıtını paylaşabilirsin.` };
   }
   if (level === 3) {
-    return { title: 'PALAVRA DEDİLER 🍆', body: `${by}, "${title}" çelincinde ${dayKey} girişin için "palavra" dedi. Kanıtla yoksa gün gidiyor.` };
+    return { title: 'PALAVRA DEDİLER 🍆', body: `${by}, "${title}" çelıncında ${dayKey} girişin için "palavra" dedi. Kanıtla yoksa gün gidiyor.` };
   }
-  return { title: 'İtiraz yedin', body: `${by}, "${title}" çelincinde ${dayKey} girişine "yalan" dedi lan. Kanıtını göster.` };
+  return { title: 'İtiraz yedin', body: `${by}, "${title}" çelıncında ${dayKey} girişine "yalan" dedi lan. Kanıtını göster.` };
 }
 
 export function entryRejectedCopy(level: VulgarityLevel, title: string, dayKey: string): CopyText {
   if (level === 1) {
-    return { title: 'Girişin silindi', body: `"${title}" çelincinde ${dayKey} girişin itiraz sonucu iptal edildi. Skorundan düştü.` };
+    return { title: 'Girişin silindi', body: `"${title}" çelıncında ${dayKey} girişin itiraz sonucu iptal edildi. Skorundan düştü.` };
   }
   if (level === 3) {
-    return { title: 'GİRİŞİN ÇÖPE GİTTİ 🍆', body: `"${title}" çelincinde ${dayKey} girişin çoğunlukla "hile" sayıldı. Silindi, skorun eridi.` };
+    return { title: 'GİRİŞİN ÇÖPE GİTTİ 🍆', body: `"${title}" çelıncında ${dayKey} girişin çoğunlukla "hile" sayıldı. Silindi, skorun eridi.` };
   }
-  return { title: 'Girişin iptal', body: `"${title}" çelincinde ${dayKey} girişine çoğunluk "yalan" dedi lan. Giriş silindi.` };
+  return { title: 'Girişin iptal', body: `"${title}" çelıncında ${dayKey} girişine çoğunluk "yalan" dedi lan. Giriş silindi.` };
 }
 
 export function rematchCopy(level: VulgarityLevel, by: string, title: string): CopyText {

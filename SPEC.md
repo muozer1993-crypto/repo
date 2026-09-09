@@ -1,10 +1,11 @@
 # KOYDUM — Technical Specification (single source of truth)
 
-KOYDUM is a friends-only challenge ("çelinç") app for iOS + Android. Friends compete on
+KOYDUM is a friends-only challenge ("çelınc") app for iOS + Android. Friends compete on
 measurable habits (steps, focus time, early wake-ups, water, no-smoking days, ...). The
 winner earns the right to "KOYDUM MU?" — a vulgar-comedy taunt delivered as a push
 notification + in-app inbox item to every loser. All UI copy is Turkish; the tone is
-crude banter between friends, scaled by a per-user vulgarity level (1 nazik, 2 argo,
+crude banter between friends, scaled by a per-user vulgarity level — "adamlık
+seviyesi" in the UI (1 nazik, 2 delikanlı,
 3 ağır abi). The RECIPIENT's max level always wins (server clamps).
 
 Monorepo (npm workspaces):
@@ -371,10 +372,10 @@ _layout.tsx                 providers (QueryClientProvider, GestureHandlerRootVi
 (auth)/register.tsx         + display name, vulgarity level picker (with live preview of a taunt at that level)
 (auth)/server.tsx           edit server URL, "Bağlantıyı test et" → GET /health
 onboarding.tsx              3 slides (copy onboarding_1..3), shown once after register
-(app)/(tabs)/_layout.tsx    Tabs: index "Çelinçler", friends "Kankalar", inbox "Gelen Kutusu" (badge = unread), profile "Ben"
+(app)/(tabs)/_layout.tsx    Tabs: index "Çelınclar", friends "Kankalar", inbox "Gelen Kutusu" (badge = unread), profile "Ben"
 (app)/(tabs)/index.tsx      header: today's steps + sync button + level chip; sections: Davetler (accept/decline inline),
                             Aktif (cards: emoji, title, countdown, mini standings, my rank; losing → red "yiyorsun" chip),
-                            Bekleyen, Biten (last 5); FAB "Çelinç Aç"
+                            Bekleyen, Biten (last 5); FAB "Çelınc Aç"
 (app)/(tabs)/friends.tsx    list friends (tap → user/[id]), incoming/outgoing requests, search by username, my invite code (copy/share)
 (app)/(tabs)/inbox.tsx      inbox list grouped by day; taunt items rendered as TauntBubble (big, red, shame); tap → challenge or friends; "Hepsini okundu yap"
 (app)/(tabs)/profile.tsx    me: avatar emoji picker, stats grid (Koydum / Yedin / Berabere / Kankalar), badges, leaderboard preview, settings link, logout
@@ -390,7 +391,7 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             "X bunu kaldıramaz" note), custom text field (banned-word check client side), preview, "GÖNDER" → success animation
 (app)/challenge/[id]/entry.tsx     modal: log manual value (numeric pad, quick +1/+5 chips per unit), note, proof photo (camera/gallery → /uploads), day selector (today/yesterday)
 (app)/focus/[id].tsx        full-screen timer (pick 15/25/45/60 min), big countdown, "elini telefondan çek" copy, leaving app → abandoned state with copy focus_abandoned; completion posts entry
-(app)/user/[id].tsx         public profile + head-to-head record vs me + "Çelinç aç" shortcut
+(app)/user/[id].tsx         public profile + head-to-head record vs me + "Çelınc aç" shortcut
 (app)/settings.tsx          vulgarity level (with preview), reminder hour, timezone (auto), server URL, push status + "yeniden dene", delete account (double confirm), about
 ```
 

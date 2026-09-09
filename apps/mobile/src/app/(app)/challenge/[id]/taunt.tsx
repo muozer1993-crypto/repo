@@ -37,7 +37,7 @@ import { CUSTOM_TAUNT_CEILING_NOTE, byLevel } from '@/utils/levelCopy';
 
 const LEVEL_LABEL: Record<VulgarityLevel, string> = {
   1: 'Nazik',
-  2: 'Argo',
+  2: 'Delikanlı',
   3: 'Ağır Abi',
 };
 
@@ -85,7 +85,7 @@ const SEND_LABEL: Record<VulgarityLevel, string> = {
 
 const NOT_WINNER: Record<VulgarityLevel, string> = {
   1: 'Mesaj gönderme hakkı kazananın.',
-  2: 'Laf sokma hakkı kazananın lan. Sen bu çelinci kazanmadın.',
+  2: 'Laf sokma hakkı kazananın lan. Sen bu çelıncı kazanmadın.',
   3: 'Koyma hakkı kazananın 🍆 Sen kazanmadın, sıraya gir.',
 };
 
@@ -168,8 +168,8 @@ export default function TauntPickerScreen() {
         <Header title="Laf seç" onClose={close} />
         <EmptyState
           emoji="🫥"
-          title="Çelinç bulunamadı"
-          subtitle="Bu bağlantıda çelinç numarası yok. Sonuç ekranından laf seç."
+          title="Çelınc bulunamadı"
+          subtitle="Bu bağlantıda çelınc numarası yok. Sonuç ekranından laf seç."
           actionLabel="Kapat"
           onAction={close}
         />
@@ -213,7 +213,7 @@ export default function TauntPickerScreen() {
         <Header title="Laf seç" onClose={close} />
         <EmptyState
           emoji="⏳"
-          title="Çelinç daha bitmedi"
+          title="Çelınc daha bitmedi"
           subtitle="Bitmeden laf yok. Önce skoru yap, sonra konuş."
           actionLabel="Kapat"
           onAction={close}
@@ -264,9 +264,9 @@ export default function TauntPickerScreen() {
             losers.length === 0
               ? byLevel(
                   level,
-                  'Bu çelinçte mesaj gönderecek kimse kalmamış.',
-                  'Bu çelinçte laf sokacak kimse kalmamış.',
-                  'Bu çelinçte saplayacak kimse kalmamış 🍆'
+                  'Bu çelıncta mesaj gönderecek kimse kalmamış.',
+                  'Bu çelıncta laf sokacak kimse kalmamış.',
+                  'Bu çelıncta saplayacak kimse kalmamış 🍆'
                 )
               : byLevel(
                   level,
@@ -328,7 +328,7 @@ export default function TauntPickerScreen() {
     loserScore: formatNumberTr(theirScore),
     diff: formatNumberTr(Math.abs(myScore - theirScore)),
     unit: challenge.unit,
-    challenge: challenge.title || type?.nameTr || 'çelinç',
+    challenge: challenge.title || type?.nameTr || 'çelınc',
   };
 
   const customText = custom.trim();

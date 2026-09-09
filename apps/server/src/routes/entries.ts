@@ -99,7 +99,7 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       const entry = getEntryRow(db, entryId);
       if (!entry || entry.challenge_id !== challenge.id) throw notFound('entry_not_found', 'Böyle bir giriş yok.');
       if (entry.user_id !== me.id) throw forbidden('not_your_entry', 'Sadece kendi girişini silebilirsin.');
-      if (challenge.status !== 'active') throw badRequest('challenge_not_active', 'Bu çelinç şu an aktif değil.');
+      if (challenge.status !== 'active') throw badRequest('challenge_not_active', 'Bu çelınc şu an aktif değil.');
       // Automatic rows (pedometer, focus, check-in) are evidence, not drafts.
       if (entry.source !== 'manual') throw badRequest('not_deletable', 'Sadece elle girdiğin kayıtları silebilirsin.');
       // A day friends have challenged is no longer the owner's to retract: deleting

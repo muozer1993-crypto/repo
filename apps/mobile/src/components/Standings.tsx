@@ -27,7 +27,7 @@ export function Standings({ participants, type, meId, limit, finished, style }: 
   const ranked = [...playing].sort((a, b) => a.rank - b.rank);
   const shown = limit ? takeWithMe(ranked, limit, meId) : ranked;
 
-  // In a lower-is-better çelinç rank 1 holds the SMALLEST number, so a raw
+  // In a lower-is-better çelınc rank 1 holds the SMALLEST number, so a raw
   // score/max ratio would hand the last-placed player the fullest bar.
   const lower = type?.direction === 'lower';
   const scores = ranked.filter((p) => p.status !== 'invited').map((p) => p.score);
