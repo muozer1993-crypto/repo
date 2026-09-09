@@ -105,11 +105,21 @@ export function computeUserStats(db: Database, userId: string, now: Date = new D
       .all(userId) as { day_key: string }[]
   ).map((row) => row.day_key);
 
+  // A `users.timezone` this runtime does not know (an ICU downgrade, an image
+  // rollback, a restored row) throws inside Intl. It must degrade one number, not
+  // 500 `/users/:id` and `/leaderboard` for every friend who reads the profile —
+  // the same guard the scheduler and the steps sync already use.
+  let today: string;
+  try {
+    today = todayKey(timezone, now);
+  } catch {
+    today = todayKey(DEFAULT_TIMEZONE, now);
+  }
   const stepsToday = countOf(
     db,
     'SELECT COALESCE(steps, 0) AS n FROM steps_daily WHERE user_id = ? AND day_key = ?',
     userId,
-    todayKey(timezone, now),
+    today,
   );
 
   return {

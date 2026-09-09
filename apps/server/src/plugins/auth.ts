@@ -58,12 +58,16 @@ export function registerAuth(app: FastifyInstance, deps: AuthDeps): void {
     if (!token) throw unauthorized('unauthorized', 'Giriş yapman gerekiyor.');
 
     const now = clock();
+    // SPEC 2.2 documents ONE auth failure code (`unauthorized`), so an expired or
+    // invalid session must not answer with a code the client has never heard of —
+    // that is exactly the case that needs a re-login. The Turkish message is what
+    // tells the two apart for a human.
     const claims = verifyToken(token, config.jwtSecret, now);
-    if (!claims) throw unauthorized('invalid_token', 'Oturumun geçersiz ya da süresi dolmuş. Tekrar giriş yap.');
+    if (!claims) throw unauthorized('unauthorized', 'Oturumun geçersiz ya da süresi dolmuş. Tekrar giriş yap.');
 
     const row = selectUser.get(claims.sub) as UserRow | undefined;
     if (!row || row.deleted_at !== null) {
-      throw unauthorized('invalid_token', 'Oturumun geçersiz ya da süresi dolmuş. Tekrar giriş yap.');
+      throw unauthorized('unauthorized', 'Oturumun geçersiz ya da süresi dolmuş. Tekrar giriş yap.');
     }
 
     const last = row.last_seen_at ? Date.parse(row.last_seen_at) : 0;

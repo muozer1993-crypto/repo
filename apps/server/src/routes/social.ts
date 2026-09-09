@@ -33,12 +33,13 @@ import {
   freshDetail,
   levelOf,
   rematchCopy,
+  getUserRow,
   requireAcceptedMembership,
   requireChallengeRow,
   requireMembership,
-  requireUserRow,
   tauntsForUser,
 } from '../services/challengeViews.js';
+import { areFriends, assertNotBlocked, isBlockedBetween } from '../services/friends.js';
 import { sendPoke, sendTaunt, tauntPreviewsForWinner } from '../services/taunts.js';
 
 interface IdParams {
@@ -58,13 +59,22 @@ export interface TauntResponse {
   taunt: Taunt;
 }
 
-/** Accepted participant of this challenge, or a 404 that does not leak membership. */
+/**
+ * Accepted participant of this challenge, or a 404 that does not leak membership.
+ *
+ * A participant who has since deleted their account is still part of the history of
+ * a finished challenge (`softDeleteUser` only pulls people out of pending/active
+ * ones), so the anonymised row is returned rather than a 404 — otherwise the winner
+ * could never taunt a line-up that includes a deleted friend.
+ */
 function requireTarget(db: Database, challenge: ChallengeRow, userId: string): UserRow {
   const row = db
     .prepare("SELECT * FROM challenge_participants WHERE challenge_id = ? AND user_id = ? AND status = 'accepted'")
     .get(challenge.id, userId) as { user_id: string } | undefined;
   if (!row) throw notFound('participant_not_found', 'Bu kişi çelinçte değil.');
-  return requireUserRow(db, userId);
+  const user = getUserRow(db, userId);
+  if (!user) throw notFound('participant_not_found', 'Bu kişi çelinçte değil.');
+  return user;
 }
 
 export default async function socialRoutes(app: FastifyInstance): Promise<void> {
@@ -84,6 +94,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     if (body.toUserId === me.id) throw badRequest('self_poke', 'Kendini dürtemezsin.');
 
     const target = requireTarget(db, challenge, body.toUserId);
+    assertNotBlocked(db, me.id, target.id);
     const result = sendPoke(db, {
       challenge,
       from: me.row,
@@ -129,6 +140,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     if (body.toUserId === me.id) throw badRequest('self_taunt', 'Kendine koyamazsın.');
 
     const target = requireTarget(db, challenge, body.toUserId);
+    assertNotBlocked(db, me.id, target.id);
 
     const { taunt } = sendTaunt(db, {
       challenge,
@@ -173,6 +185,23 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       .prepare("SELECT user_id FROM challenge_participants WHERE challenge_id = ? AND status = 'accepted' ORDER BY user_id ASC")
       .all(challenge.id) as { user_id: string }[];
 
+    // The old line-up is not a licence to invite: a rematch goes through the same
+    // gate as POST /challenges, so somebody who blocked me (or is no longer a friend)
+    // cannot be dragged into a brand-new challenge — and pushed at — from here.
+    const invitees: UserRow[] = [];
+    for (const row of previous) {
+      if (row.user_id === me.id) continue;
+      const user = db.prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL').get(row.user_id) as
+        | UserRow
+        | undefined;
+      if (!user) continue;
+      if (isBlockedBetween(db, me.id, user.id) || !areFriends(db, me.id, user.id)) continue;
+      invitees.push(user);
+    }
+    if (invitees.length === 0) {
+      throw badRequest('no_participants', 'Rövanş için davet edilecek kimse kalmadı.');
+    }
+
     const run = db.transaction(() => {
       db.prepare(
         `INSERT INTO challenges (id, creator_id, type_key, metric_type, direction, unit, title, starts_at, ends_at,
@@ -206,12 +235,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       );
       insertParticipant.run(rematchId, me.id, 'accepted', createdAt, createdAt, me.row.timezone);
 
-      for (const row of previous) {
-        if (row.user_id === me.id) continue;
-        const user = db.prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL').get(row.user_id) as
-          | UserRow
-          | undefined;
-        if (!user) continue;
+      for (const user of invitees) {
         insertParticipant.run(rematchId, user.id, 'invited', createdAt, null, null);
         const copy = rematchCopy(levelOf(user), me.row.display_name, challenge.title);
         notify(db, {
@@ -250,8 +274,11 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
 
     if (challenge.status === 'finished' && challenge.winner_id === me.id) {
       // Previews are rendered against the runner-up; the picker re-renders per loser.
+      // A loser who deleted their account stays in the history of a finished
+      // challenge, so the anonymised row is used ("Silinen kanka") instead of 404ing
+      // the whole results screen.
       const runnerUp = summary.participants.find((p) => p.status === 'accepted' && p.user.id !== me.id);
-      const loser = runnerUp ? requireUserRow(db, runnerUp.user.id) : undefined;
+      const loser = runnerUp ? getUserRow(db, runnerUp.user.id) : undefined;
       results.tauntTemplatesForWinner = tauntPreviewsForWinner(db, challenge, me.row, loser);
     }
 

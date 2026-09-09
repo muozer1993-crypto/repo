@@ -19,6 +19,7 @@
  * relationship is forcibly replaced.
  */
 import { newId, nowIso, type Database, type FriendshipRow, type UserRow } from '../db/index.js';
+import { forbidden } from '../errors.js';
 
 /**
  * The row describing `a`↔`b`, whichever direction it was created in.
@@ -49,6 +50,15 @@ function ownRow(db: Database, requesterId: string, addresseeId: string): Friends
 /** True when either side has blocked the other. */
 export function isBlockedBetween(db: Database, a: string, b: string): boolean {
   return friendshipBetween(db, a, b)?.status === 'blocked';
+}
+
+/**
+ * Guard for every social write (invite, poke, taunt, rematch): a blocked pair must
+ * not be able to reach each other, not even through an endpoint that only looks at
+ * an old participant list.
+ */
+export function assertNotBlocked(db: Database, a: string, b: string): void {
+  if (isBlockedBetween(db, a, b)) throw forbidden('blocked', 'Bu kişiyle aranızda engel var.');
 }
 
 /** True when the pair is an accepted friendship. */

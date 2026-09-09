@@ -228,9 +228,14 @@ export function sendPoke(db: Database, input: SendPokeInput): SendPokeResult {
     )
     .get(challenge.id, from.id, to.id) as PokeRow | undefined;
   if (last) {
+    // A row from the future (a clock stepped back by NTP, a container restored from a
+    // snapshot) would otherwise be reported as "525720 dakika sonra tekrar dene".
+    // Negative elapsed time means the cooldown cannot be trusted: treat it as expired,
+    // and clamp the remaining minutes to the cooldown itself either way.
     const elapsed = now.getTime() - Date.parse(last.created_at);
-    if (Number.isFinite(elapsed) && elapsed < LIMITS.POKE_COOLDOWN_MS) {
-      const minutes = Math.max(1, Math.ceil((LIMITS.POKE_COOLDOWN_MS - elapsed) / 60000));
+    if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed < LIMITS.POKE_COOLDOWN_MS) {
+      const remaining = Math.min(LIMITS.POKE_COOLDOWN_MS, LIMITS.POKE_COOLDOWN_MS - elapsed);
+      const minutes = Math.max(1, Math.ceil(remaining / 60000));
       throw tooMany('poke_cooldown', `Bu kankayı az önce dürttün. ${minutes} dakika sonra tekrar dene.`);
     }
   }

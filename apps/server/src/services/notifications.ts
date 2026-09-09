@@ -100,6 +100,19 @@ export function unreadCount(db: Database, userId: string): UnreadCount {
 }
 
 /**
+ * `created_at` is compared as a STRING in SQL, and the column always holds
+ * `2026-01-05T08:01:00.000Z`. The schema accepts any ISO-8601 instant, so a cursor
+ * with an offset (`...+03:00`) or without milliseconds would compare wrong: the same
+ * instant would page as if it were older or newer, returning rows the client has
+ * already seen — or the same page forever. Normalising to the stored form fixes both.
+ */
+function canonicalInstant(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? value : new Date(parsed).toISOString();
+}
+
+/**
  * Newest first, optionally paging backwards from `before`.
  *
  * Rows written in the same millisecond (one scheduler pass can finish a challenge,
@@ -109,12 +122,13 @@ export function unreadCount(db: Database, userId: string): UnreadCount {
  */
 export function listInbox(db: Database, userId: string, options: InboxQueryOptions = {}): NotificationRow[] {
   const limit = Math.min(Math.max(1, Math.trunc(options.limit ?? LIMITS.INBOX_PAGE_DEFAULT)), LIMITS.INBOX_PAGE_MAX);
-  if (options.before) {
+  const before = canonicalInstant(options.before);
+  if (before) {
     return db
       .prepare(
         'SELECT * FROM notifications WHERE user_id = ? AND created_at < ? ORDER BY created_at DESC, rowid DESC LIMIT ?',
       )
-      .all(userId, options.before, limit) as NotificationRow[];
+      .all(userId, before, limit) as NotificationRow[];
   }
   return db
     .prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
