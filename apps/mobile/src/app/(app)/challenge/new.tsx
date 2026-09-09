@@ -654,7 +654,7 @@ export default function NewChallengeScreen() {
                 </Text>
                 {visibleFriends.length === 0 ? (
                   <Text variant="small" muted center style={styles.noMatch}>
-                    "{search.trim()}" diye biri yok.
+                    “{search.trim()}” diye biri yok.
                   </Text>
                 ) : (
                   visibleFriends.map((friend) => (

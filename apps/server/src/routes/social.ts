@@ -30,10 +30,9 @@ import { toChallenge } from '../serialize.js';
 import { computeUserStats } from '../services/stats.js';
 import {
   buildSummary,
-  freshDetail,
+  getUserRow,
   levelOf,
   rematchCopy,
-  getUserRow,
   requireAcceptedMembership,
   requireChallengeRow,
   requireMembership,

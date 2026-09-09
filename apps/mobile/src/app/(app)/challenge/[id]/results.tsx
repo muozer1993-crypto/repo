@@ -2,7 +2,7 @@ import type { ChallengeType, ParticipantView, Taunt, VulgarityLevel } from '@koy
 import { getChallengeType, scoreLabel, t } from '@koydum/shared';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
@@ -21,7 +21,7 @@ import { ApiError } from '@/lib/api';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
-import { USE_NATIVE_DRIVER } from '@/utils/animation';
+import { USE_NATIVE_DRIVER, useAnimatedValue } from '@/utils/animation';
 import { safeDayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { formatDayKey, relativeTime } from '@/utils/format';
@@ -89,7 +89,7 @@ const WAIT_SUB = (level: VulgarityLevel, winner: string): string => {
 
 /** Springs a block up into place once, `delay` ms after mount. */
 function useRise(delay: number): Animated.Value {
-  const value = useRef(new Animated.Value(0)).current;
+  const value = useAnimatedValue(0);
   useEffect(() => {
     const animation = Animated.spring(value, {
       toValue: 1,
@@ -657,7 +657,7 @@ function PodiumColumn({
 }
 
 function Crown({ animate }: { animate: boolean }) {
-  const value = useRef(new Animated.Value(0)).current;
+  const value = useAnimatedValue(0);
 
   useEffect(() => {
     if (!animate) return;
@@ -696,14 +696,16 @@ const CONFETTI_EMOJI = ['🎉', '🔥', '🍆', '💥', '🏆', '✨', '🎊', '
 
 /** Cheap one-shot burst above the podium — Animated only, no extra dependency. */
 function Confetti() {
-  const pieces = useRef(
+  // `useState` rather than a ref: the compiler forbids reading a ref during
+  // render, and these values only ever need to be created once.
+  const [pieces] = useState(() =>
     CONFETTI_EMOJI.map((emoji, index) => ({
       emoji,
       key: `${emoji}-${index}`,
       delay: index * 90,
       value: new Animated.Value(0),
     }))
-  ).current;
+  );
 
   useEffect(() => {
     const group = Animated.parallel(

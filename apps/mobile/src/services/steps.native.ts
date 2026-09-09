@@ -68,7 +68,9 @@ function loadHealthConnect(): HealthConnect | null {
     return null;
   }
   try {
-    // required lazily: in Expo Go the native module is missing and any call throws
+    // Required lazily on purpose: in Expo Go the native module is missing and a
+    // top-level import would throw before the fallback can take over.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     healthConnect = require('react-native-health-connect') as HealthConnect;
   } catch {
     healthConnect = null;

@@ -5,8 +5,10 @@
  * verdict and the entry `late` flag are all decided here from the SERVER clock and
  * the catalog type stored on the challenge, never from `clientTime`.
  *
- * Day keys always live in the WRITER's timezone (`users.timezone`), so two friends
- * in different zones each log against their own calendar day.
+ * Day keys always live in the WRITER's timezone — the one PINNED on
+ * `challenge_participants` when they joined, not the editable `users.timezone` — so
+ * two friends in different zones each log against their own calendar day and nobody
+ * can move their own deadline mid-challenge.
  */
 import {
   LIMITS,

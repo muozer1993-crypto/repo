@@ -8,5 +8,9 @@ export function useApi(): ApiClient {
   const serverUrl = useAuth((s) => s.serverUrl);
   const token = useAuth((s) => s.token);
   const makeClient = useAuth((s) => s.client);
+  // `makeClient` is a stable zustand action that reads the CURRENT url and
+  // token, so the two values below are listed only to rebuild the client when
+  // either of them changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   return useMemo(() => makeClient(), [serverUrl, token, makeClient]);
 }

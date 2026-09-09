@@ -136,26 +136,20 @@ export function participantTimezone(
   return typeof pinned === 'string' && pinned.trim() !== '' ? pinned : DEFAULT_TIMEZONE;
 }
 
-/** Day window of a challenge in one timezone; an unknown zone degrades to the default. */
+/**
+ * Day window of a challenge in one timezone; an unknown zone degrades to the default.
+ *
+ * `challengeWindow(challenge, participantTimezone(participant, user))` is THE window
+ * expression: entry validation, the steps fan-out and the missing-day penalty all
+ * build it exactly this way, so the days a player may write and the days they are
+ * scored against can never drift apart.
+ */
 export function challengeWindow(challenge: Pick<ChallengeRow, 'starts_at' | 'ends_at'>, tz: string): string[] {
   try {
     return dayKeysBetween(challenge.starts_at, challenge.ends_at, tz);
   } catch {
     return dayKeysBetween(challenge.starts_at, challenge.ends_at, DEFAULT_TIMEZONE);
   }
-}
-
-/**
- * The days one participant may write — and is scored against. THE window: every
- * other caller (entry validation, the steps fan-out, the missing-day penalty) goes
- * through this function so the two can never drift apart.
- */
-export function participantDayKeys(db: Database, challenge: ChallengeRow, userId: string): string[] {
-  const participant = db
-    .prepare('SELECT * FROM challenge_participants WHERE challenge_id = ? AND user_id = ?')
-    .get(challenge.id, userId) as ParticipantRow | undefined;
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRow | undefined;
-  return challengeWindow(challenge, participantTimezone(participant, user));
 }
 
 /**

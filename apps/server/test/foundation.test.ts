@@ -265,7 +265,10 @@ describe('authenticate + error envelope', () => {
       headers: { authorization: 'Bearer not.a.token' },
     });
     expect(garbage.statusCode).toBe(401);
-    expect(garbage.json().error.code).toBe('invalid_token');
+    // SPEC 2.2 documents a single auth failure code, so an invalid or expired
+    // session answers `unauthorized` too — the Turkish message is what differs.
+    expect(garbage.json().error.code).toBe('unauthorized');
+    expect(garbage.json().error.message).toContain('Oturumun');
 
     const ok = await app.inject({ method: 'GET', url: '/__protected', headers: { authorization: `Bearer ${ali.token}` } });
     expect(ok.statusCode).toBe(200);

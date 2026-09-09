@@ -112,7 +112,7 @@ afterEach(() => {
 async function settle(): Promise<void> {
   for (let i = 0; i < 10; i++) {
     // each pass drains one macrotask worth of promise chains
-    // eslint-disable-next-line no-await-in-loop
+     
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });

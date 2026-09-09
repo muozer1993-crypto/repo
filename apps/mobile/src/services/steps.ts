@@ -27,7 +27,6 @@ export async function requestStepPermission(): Promise<boolean> {
   return false;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function getDailySteps(_days: number): Promise<DailySteps[]> {
   return [];
 }

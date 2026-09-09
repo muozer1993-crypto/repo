@@ -30,7 +30,7 @@ import {
   type FocusSession,
 } from '@/services/focus';
 import { useTimezone } from '@/hooks/useTimezone';
-import { USE_NATIVE_DRIVER } from '@/utils/animation';
+import { USE_NATIVE_DRIVER, useAnimatedValue } from '@/utils/animation';
 import { useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { safeTodayKey } from '@/utils/datetime';
@@ -64,7 +64,7 @@ export default function FocusScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const postedRef = useRef<string | null>(null);
-  const celebrate = useRef(new Animated.Value(0)).current;
+  const celebrate = useAnimatedValue(0);
 
   /* ------------------------------------------------------------ restore */
   useEffect(() => {
@@ -121,23 +121,8 @@ export default function FocusScreen() {
   }, [running]);
 
   /* ------------------------------------------------------- post on done */
-  const status = session?.status;
-  useEffect(() => {
-    if (status !== 'done' || !session) return;
-    if (postedRef.current === session.sessionId) return;
-    postedRef.current = session.sessionId;
-    if (Platform.OS !== 'web') {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-    Animated.sequence([
-      Animated.timing(celebrate, { toValue: 1, duration: 320, useNativeDriver: USE_NATIVE_DRIVER }),
-      Animated.timing(celebrate, { toValue: 0.85, duration: 220, useNativeDriver: USE_NATIVE_DRIVER }),
-    ]).start();
-    void submit(session);
-    // `submit` closes over fresh state on every render; the guard above makes it run once
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
-
+  // Declared before the effect that calls it: the React Compiler rejects
+  // reading a binding that is still in its temporal dead zone.
   const submit = async (target: FocusSession) => {
     const earned = snapshot(target, Date.now()).earnedMinutes;
     if (earned < LIMITS.FOCUS_MIN_MINUTES) {
@@ -161,6 +146,25 @@ export default function FocusScreen() {
       setSaving(false);
     }
   };
+
+  /* ------------------------------------------------------- post on done */
+  const status = session?.status;
+  useEffect(() => {
+    if (status !== 'done' || !session) return;
+    if (postedRef.current === session.sessionId) return;
+    postedRef.current = session.sessionId;
+    if (Platform.OS !== 'web') {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    Animated.sequence([
+      Animated.timing(celebrate, { toValue: 1, duration: 320, useNativeDriver: USE_NATIVE_DRIVER }),
+      Animated.timing(celebrate, { toValue: 0.85, duration: 220, useNativeDriver: USE_NATIVE_DRIVER }),
+    ]).start();
+    void submit(session);
+    // `submit` closes over fresh state on every render; the guard above makes it run once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
 
   const start = () => {
     const stamp = Date.now();

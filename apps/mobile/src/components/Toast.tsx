@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
 import { Colors, Layout, Radius, Shadow, Spacing } from '@/theme';
-import { USE_NATIVE_DRIVER } from '@/utils/animation';
+import { USE_NATIVE_DRIVER, useAnimatedValue } from '@/utils/animation';
 
 export type ToastKind = 'info' | 'success' | 'danger' | 'taunt';
 
@@ -36,7 +36,7 @@ const KIND_COLOR: Record<ToastKind, string> = {
 /** In-app banner used for events that arrive while the app is open. */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<ToastState | null>(null);
-  const opacity = useRef(new Animated.Value(0)).current;
+  const opacity = useAnimatedValue(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
   const nextId = useRef(0);

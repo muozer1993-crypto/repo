@@ -121,13 +121,33 @@ export default function SettingsScreen() {
   };
 
   const refreshSteps = async () => {
-    setSteps(await getStepAvailability());
+    const next = await getStepAvailability();
+    setSteps(next);
   };
 
+  // Read on mount. Inlined rather than calling the two helpers so nothing sets
+  // state synchronously inside the effect, and a screen closed mid-read stops.
   useEffect(() => {
-    void refreshPush();
-    void refreshSteps();
-    // run once when the screen opens
+    let cancelled = false;
+    (async () => {
+      const [pushResult, stepResult] = await Promise.all([
+        registerForPush(),
+        getStepAvailability(),
+      ]);
+      if (cancelled) return;
+      setPush(pushResult);
+      setSteps(stepResult);
+      if (pushResult.token) {
+        try {
+          await api.setPushToken({ token: pushResult.token, platform: PLATFORM });
+        } catch {
+          // the inbox still works without a registered token
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

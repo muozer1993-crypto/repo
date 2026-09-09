@@ -301,10 +301,30 @@ function useStepsHeader(): StepsState {
     }
   };
 
+  // Read on mount. The work is inlined rather than delegated to `reload()` so
+  // no state is set synchronously inside the effect, and so a screen that
+  // unmounts mid-read does not set state afterwards.
   useEffect(() => {
-    void reload();
-    // run once on mount; `reload` is recreated on every render by design
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    (async () => {
+      try {
+        const next = await getStepAvailability();
+        if (cancelled) return;
+        setAvailability(next);
+        const steps = next.available ? await getTodaySteps() : null;
+        if (cancelled) return;
+        setToday(steps);
+      } catch {
+        if (cancelled) return;
+        setAvailability({ available: false, reason: 'error' });
+        setToday(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const sync = async () => {

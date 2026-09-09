@@ -104,6 +104,10 @@ export default function ChallengeDetailScreen() {
   const type = detail ? getChallengeType(detail.challenge.typeKey) : undefined;
 
   const [proofUrl, setProofUrl] = useState<string | null>(null);
+  // Read once per mount instead of during render: `Date.now()` in render is
+  // impure for the React Compiler. The query refetches every 45 s, so a start
+  // time that passes while the screen is open is still picked up.
+  const [renderedAt] = useState(() => Date.now());
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)'));
 
@@ -170,9 +174,12 @@ export default function ChallengeDetailScreen() {
    * only activates it once at least two people have accepted, and otherwise
    * cancels it at the end date. Saying "Başlıyor" for days would be a lie.
    */
-  const startPassed = Number.isFinite(Date.parse(challenge.startsAt))
-    ? Date.parse(challenge.startsAt) <= Date.now()
-    : false;
+  // `renderedAt` is captured once per mount rather than read during render:
+  // the React Compiler treats `Date.now()` in render as impure, and a start
+  // time that passes while the screen is open is picked up by the countdown's
+  // own refetch anyway.
+  const startsAtMs = Date.parse(challenge.startsAt);
+  const startPassed = Number.isFinite(startsAtMs) ? startsAtMs <= renderedAt : false;
   const waitingForAccepts = challenge.status === 'pending' && startPassed;
   const isCreator = challenge.creatorId === meId;
 
@@ -843,7 +850,7 @@ function CountAction({ id, detail, type, today }: ActionProps) {
 
       {type.proofRequired || detail.challenge.proofRequired ? (
         <Text variant="tiny" faint>
-          Bu çelinçte kanıt fotoğrafı isteniyor; hızlı ekleme yerine "+ Giriş" kullan.
+          Bu çelinçte kanıt fotoğrafı isteniyor; hızlı ekleme yerine “+ Giriş” kullan.
         </Text>
       ) : (
         <View style={styles.chipRow}>
@@ -1174,7 +1181,7 @@ function PokeSection({
   const toast = useToast();
   const [blocked, setBlocked] = useState<Record<string, number>>({});
   const [pending, setPending] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
+  const [tick, setTick] = useState(() => Date.now());
 
   // Keep the "x dk sonra" note honest while the screen stays open — but only
   // while a cooldown is actually running. Re-arming per tick means the chain
@@ -1182,11 +1189,15 @@ function PokeSection({
   // this card every 30 s for a value that is almost always absent.
   useEffect(() => {
     if (!Object.values(blocked).some((until) => until > Date.now())) return;
-    const timer = setTimeout(() => setTick((n) => n + 1), 30_000);
+    const timer = setTimeout(() => setTick(Date.now()), 30_000);
     return () => clearTimeout(timer);
   }, [blocked, tick]);
 
   if (rivals.length === 0) return null;
+
+  // One clock reading per render: `tick` is seeded from the clock and moved
+  // forward by the timer above while a cooldown is running.
+  const now = tick;
 
   const send = async (userId: string, name: string) => {
     setPending(userId);
@@ -1214,7 +1225,7 @@ function PokeSection({
       <View style={styles.pokeList}>
         {rivals.map((rival) => {
           const until = blocked[rival.user.id] ?? 0;
-          const cooling = until > Date.now();
+          const cooling = until > now;
           return (
             <View key={rival.user.id} style={styles.pokeRow}>
               <Avatar emoji={rival.user.avatarEmoji} name={rival.user.displayName} size={34} />
@@ -1224,7 +1235,7 @@ function PokeSection({
                 </Text>
                 <Text variant="tiny" faint numberOfLines={1}>
                   {cooling
-                    ? `2 saat dolmadan tekrar dürtemezsin (${formatRemaining(until - Date.now())})`
+                    ? `2 saat dolmadan tekrar dürtemezsin (${formatRemaining(until - now)})`
                     : `${rival.rank}. sırada`}
                 </Text>
               </View>
