@@ -112,8 +112,7 @@ export default function ServerScreen() {
         </Pressable>
         <Text variant="title">Sunucu adresi</Text>
         <Text variant="small" muted>
-          KOYDUM kendi sunucunda çalışır. Telefonun, sunucunun çalıştığı bilgisayarı bulabilmesi
-          için adresi buraya yaz.
+          KOYDUM kendi sunucunda çalışır. Sunucunun çalıştığı bilgisayarın adresini buraya yaz.
         </Text>
       </View>
 

@@ -32,7 +32,7 @@ import { TAUNT_CTA, TAUNT_CTA_ICON, byLevel } from '@/utils/levelCopy';
 
 const LEVEL_LABEL: Record<VulgarityLevel, string> = {
   1: 'NAZİK',
-  2: 'ARGO',
+  2: 'DELİKANLI',
   3: 'AĞIR ABİ',
 };
 
@@ -227,11 +227,11 @@ export default function HomeScreen() {
                 noFriends
                   ? byLevel(
                       level,
-                      'Çelınc için en az bir arkadaş lazım. Önce birini davet et.',
-                      'Tek başına çelınc olmaz lan. Önce bir kanka bul.',
-                      'Kurban olmadan çelınc olmaz 🍆 Önce birini getir.'
+                      'Çelınc açmak için en az bir arkadaş lazım. Önce birini davet et.',
+                      'Önce bir kanka ekle, sonra çelınc açarsın.',
+                      'Kurban lazım 🍆 Önce bir kanka bul.'
                     )
-                  : 'Bir çelınc aç, kankaları davet et, skorlar kendiliğinden işlesin.'
+                  : 'Bir çelınc aç, kankalarını davet et. Skoru uygulama tutuyor.'
               }
               actionLabel={
                 noFriends ? t('invite_friends_cta', level) : t('create_challenge_cta', level)
@@ -333,8 +333,8 @@ function useStepsHeader(): StepsState {
       const result = await syncStepsNow({ client: api, queryClient: qc, refreshMe });
       if (result.days === 0) {
         toast({
-          title: 'Sayacak adım yok',
-          body: 'Telefon henüz adım vermedi. Biraz yürü, sonra tekrar dene.',
+          title: 'Adım yok',
+          body: 'Telefonda bugüne ait adım görünmüyor. Biraz yürü, tekrar dene.',
           kind: 'info',
         });
         return;
@@ -373,8 +373,8 @@ function useStepsHeader(): StepsState {
     const granted = await requestStepPermission();
     if (!granted) {
       toast({
-        title: 'İzin yok, adım yok',
-        body: 'Telefon ayarlarından hareket/adım iznini açman lazım.',
+        title: 'Adım izni verilmedi',
+        body: 'Telefonun ayarlarından hareket iznini açman gerekiyor.',
         kind: 'danger',
       });
     }
@@ -452,11 +452,11 @@ function reasonText(availability: StepAvailability | null): string {
   if (!availability || availability.available) return '';
   switch (availability.reason) {
     case 'web':
-      return 'Adımlar telefondan sayılıyor; tarayıcıda sayaç yok.';
+      return 'Adımlar telefondan sayılıyor. Tarayıcıda sayaç yok.';
     case 'no-sensor':
-      return 'Bu cihazda adım sensörü yok. Değeri elle beyan edebilirsin.';
+      return 'Bu telefonda adım sensörü yok. Adımı elle girebilirsin.';
     case 'denied':
-      return 'Adım izni verilmedi. İzin ver, sayaç çalışsın.';
+      return 'Adım izni verilmedi. İzni açarsan sayaç çalışır.';
     case 'health-connect-missing':
       return 'Health Connect kurulu değil. Kurup izin verirsen adımlar otomatik gelir.';
     default:
@@ -503,7 +503,12 @@ function InviteCard({
           title: kind === 'accept' ? 'Kabul ettin' : 'Reddettin',
           body:
             kind === 'accept'
-              ? 'Çelınc senin listende. Bastır bakalım.'
+              ? byLevel(
+                  level,
+                  'Çelınc listene eklendi. Kolay gelsin.',
+                  'Çelınc listende. Bastır bakalım.',
+                  'Çelınc listende. Göster kendini 🍆'
+                )
               : 'Bu sefer pas geçtin.',
           kind: kind === 'accept' ? 'success' : 'info',
         });

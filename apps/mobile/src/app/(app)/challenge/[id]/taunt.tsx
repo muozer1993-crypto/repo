@@ -54,9 +54,9 @@ const CONTEXT_LABEL: Record<string, string> = {
  * sentence the sender types is delivered word for word (see the custom field).
  */
 const CEILING_NOTE: Record<VulgarityLevel, string> = {
-  1: 'Not: Alıcı daha nazik bir seviye seçtiyse sunucu bu hazır lafı ona göre yumuşatır, yani birebir bu metin gitmeyebilir.',
-  2: 'Not: Karşı taraf daha yumuşak seviyedeyse sunucu hazır lafı ona göre kısar — birebir bu metin gitmeyebilir.',
-  3: 'Not: Kaldıramayacaksa sunucu hazır lafı otomatik yumuşatır 🍆 Birebir bu metin gitmeyebilir.',
+  1: 'Not: Karşı taraf daha nazik bir seviyedeyse hazır laf ona göre yumuşatılır. Birebir bu metin gitmeyebilir.',
+  2: 'Not: Karşı taraf daha yumuşak seviyedeyse hazır laf ona göre kısılır. Birebir bu metin gitmeyebilir.',
+  3: 'Not: Kaldıramayacaksa hazır laf otomatik yumuşatılır. Birebir bu metin gitmeyebilir 🍆',
 };
 
 const BANNED_WARNING: Record<VulgarityLevel, string> = {
@@ -85,7 +85,7 @@ const SEND_LABEL: Record<VulgarityLevel, string> = {
 
 const NOT_WINNER: Record<VulgarityLevel, string> = {
   1: 'Mesaj gönderme hakkı kazananın.',
-  2: 'Laf sokma hakkı kazananın lan. Sen bu çelıncı kazanmadın.',
+  2: 'Laf sokmak kazananın hakkı. Sen bu çelıncı kazanmadın.',
   3: 'Koyma hakkı kazananın 🍆 Sen kazanmadın, sıraya gir.',
 };
 
@@ -214,7 +214,7 @@ export default function TauntPickerScreen() {
         <EmptyState
           emoji="⏳"
           title="Çelınc daha bitmedi"
-          subtitle="Bitmeden laf yok. Önce skoru yap, sonra konuş."
+          subtitle="Çelınc bitince laf hakkı açılır."
           actionLabel="Kapat"
           onAction={close}
         />
@@ -229,7 +229,7 @@ export default function TauntPickerScreen() {
         <EmptyState
           emoji={challenge.isTie ? '🤝' : '🤐'}
           title={challenge.isTie ? 'Berabere bitti' : 'Bu hak sende değil'}
-          subtitle={challenge.isTie ? 'Kimse kazanmadı, kimse laf sokamaz. Rövanş aç.' : NOT_WINNER[level]}
+          subtitle={challenge.isTie ? 'Kazanan olmadığı için laf hakkı da yok. Rövanş aç.' : NOT_WINNER[level]}
           actionLabel="Kapat"
           onAction={close}
         />
@@ -271,8 +271,8 @@ export default function TauntPickerScreen() {
               : byLevel(
                   level,
                   'Herkese bir kere gönderdin. İkincisi yok.',
-                  'Herkese bir kere koydun. İkincisi yok, sofra kapandı.',
-                  'Herkese bir kere sapladın. İkincisi yok, sofra kapandı.'
+                  'Herkese bir kere koydun. İkincisi yok.',
+                  'Herkese bir kere sapladın. İkincisi yok.'
                 )
           }
           actionLabel="Kapat"
@@ -441,7 +441,7 @@ export default function TauntPickerScreen() {
           </View>
         ) : (
           <Text variant="small" muted>
-            Önce kime koyacağını seç.
+            Önce kime göndereceğini seç.
           </Text>
         )}
 
@@ -457,7 +457,7 @@ export default function TauntPickerScreen() {
       {!chosen ? (
         <Card>
           <Text variant="small" muted>
-            Yukarıdan kime koyacağını seç, laflar o kişinin skoruyla burada çıksın.
+            Yukarıdan birini seç, laflar onun skoruyla burada çıksın.
           </Text>
         </Card>
       ) : null}
@@ -572,8 +572,8 @@ export default function TauntPickerScreen() {
             ) : (
               <Card>
                 <Text variant="small" muted>
-                  Bir laf seç ya da kendi cümleni yaz — burada göreceksin. Hazır lafları sunucu
-                  alıcının seviyesine göre yumuşatabilir; kendi yazdığın cümle aynen gider.
+                  Bir laf seç ya da kendi cümleni yaz, önizlemesi burada çıkar. Hazır laflar
+                  alıcının seviyesine göre yumuşatılabilir, kendi yazdığın cümle aynen gider.
                 </Text>
               </Card>
             )}

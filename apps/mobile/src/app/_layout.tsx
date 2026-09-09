@@ -26,9 +26,9 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
     <View style={styles.errorRoot}>
       <ScrollView contentContainerStyle={styles.errorBody}>
-        <RNText style={styles.errorTitle}>KOYDUM çuvalladı</RNText>
+        <RNText style={styles.errorTitle}>Bu ekran açılmadı</RNText>
         <RNText style={styles.errorLead}>
-          Bir ekran açılamadı. Aşağıdaki yazıyı bize gösterirsen ne olduğunu anlarız.
+          Tekrar dene. Sorun geçmezse aşağıdaki yazıyı bize gönder, ne olduğunu anlarız.
         </RNText>
         <RNText style={styles.errorDetail} selectable>
           {error?.message ?? 'Bilinmeyen hata'}

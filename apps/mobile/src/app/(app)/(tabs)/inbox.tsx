@@ -61,8 +61,8 @@ const EMPTY_TITLE: Record<1 | 2 | 3, string> = {
 
 const EMPTY_BODY: Record<1 | 2 | 3, string> = {
   1: 'Bir çelınc açtığında ya da bir kanka seni davet ettiğinde burada görürsün.',
-  2: 'Ne laf var ne bildirim. Git bir çelınc aç da ortalık hareketlensin.',
-  3: 'Kimse sana koymamış, sen de kimseye koymamışsın. Aç bir çelınc, birine sapla.',
+  2: 'Kimse ses etmemiş. Bir çelınc aç da ortalık hareketlensin.',
+  3: 'Kimse sana koymamış. Aç bir çelınc da birine sapla.',
 };
 
 /**
@@ -229,7 +229,7 @@ export default function InboxScreen() {
         <EmptyState
           emoji={isNetwork ? '📡' : '💥'}
           title={isNetwork ? 'Sunucuya ulaşamadım' : 'Bildirimler gelmedi'}
-          subtitle={err instanceof ApiError ? err.message : 'Bilinmeyen bir hata çıktı.'}
+          subtitle={err instanceof ApiError ? err.message : 'Bilinmeyen bir hata oldu.'}
           actionLabel="Tekrar dene"
           onAction={() => void inbox.refetch()}
         />

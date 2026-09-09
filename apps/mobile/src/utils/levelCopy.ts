@@ -50,9 +50,9 @@ export const TAUNT_DONE_CHIP: Record<VulgarityLevel, string> = {
 
 /** Line under the loser list once every one of them has been taunted. */
 export const TAUNT_ALL_DONE: Record<VulgarityLevel, string> = {
-  1: 'Herkese mesajını gönderdin ✅',
-  2: 'Hepsine koydun. Sofra kapandı ✅',
-  3: 'Hepsine sapladın. Sofra kapandı ✅🍆',
+  1: 'Hepsine mesajını gönderdin ✅',
+  2: 'Hepsine koydun ✅',
+  3: 'Hepsine sapladın ✅🍆',
 };
 
 /**
@@ -62,7 +62,7 @@ export const TAUNT_ALL_DONE: Record<VulgarityLevel, string> = {
 export const REMATCH_WINNER: Record<VulgarityLevel, string> = {
   1: 'Bir tur daha',
   2: 'Bir daha koyalım',
-  3: 'Bir daha sapla 🍆',
+  3: 'Bir daha saplayalım 🍆',
 };
 
 /**
@@ -72,4 +72,4 @@ export const REMATCH_WINNER: Record<VulgarityLevel, string> = {
  * promise is made.
  */
 export const CUSTOM_TAUNT_CEILING_NOTE =
-  'Hazır laflar alıcının seviyesini aşamaz; kendi yazdığın cümle sadece yasaklı kelime filtresinden geçer — aynen gider.';
+  'Hazır laflar karşıdakinin seviyesini aşmaz. Kendi yazdığın cümle sadece yasaklı kelime filtresinden geçer, yazdığın gibi gider.';

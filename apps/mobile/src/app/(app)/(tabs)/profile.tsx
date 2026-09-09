@@ -294,7 +294,7 @@ export default function ProfileScreen() {
         <Text variant="label">Karne</Text>
         <View style={styles.statRow}>
           <Stat label="Koydum" value={statValue(stats, 'wins')} emoji="🍆" color={Colors.success} />
-          <Stat label="Yedin" value={statValue(stats, 'losses')} emoji="😵" color={Colors.danger} />
+          <Stat label="Yedim" value={statValue(stats, 'losses')} emoji="😵" color={Colors.danger} />
           <Stat label="Berabere" value={statValue(stats, 'ties')} emoji="🤝" />
         </View>
         <View style={styles.statRow}>
@@ -496,7 +496,7 @@ function Leaderboard({
     return (
       <View style={styles.boardMessage}>
         <Text variant="small" muted center>
-          Henüz sıralama yok. Bir çelınc bitir, tabloya gir.
+          Henüz sıralama yok. Bir çelınc bitince burası dolar.
         </Text>
       </View>
     );

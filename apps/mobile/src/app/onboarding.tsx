@@ -38,8 +38,8 @@ const SLIDES: Slide[] = [
     key: 'onboarding_2',
     art: '📊',
     titles: {
-      1: 'Skorlar sayılır',
-      2: 'Skor tutuluyor lan',
+      1: 'Skorları uygulama tutar',
+      2: 'Sallamak yok',
       3: 'Palavra sökmez',
     },
   },

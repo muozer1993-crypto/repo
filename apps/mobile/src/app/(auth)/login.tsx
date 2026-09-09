@@ -44,7 +44,11 @@ export default function LoginScreen() {
       }
       router.replace('/(app)/(tabs)');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Giriş yapılamadı.');
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : 'Giriş yapılamadı. Kullanıcı adını ve şifreni kontrol et.'
+      );
     } finally {
       setBusy(false);
     }

@@ -214,8 +214,8 @@ export default function ChallengeDetailScreen() {
               <Text variant="label">Kabul bekleniyor</Text>
               <Text variant="big">{accepted.length}/2 kişi</Text>
               <Text variant="tiny" faint>
-                Başlaması için en az 2 kişinin kabul etmesi lazım; o zamana kadar süre işlemiyor.
-                Kimse kabul etmezse bitiş tarihinde kendiliğinden iptal olur.
+                En az 2 kişi kabul edene kadar süre işlemiyor. Kimse kabul etmezse bitiş
+                tarihinde kendiliğinden iptal olur.
                 {isCreator ? ' İstersen aşağıdan şimdi iptal edebilirsin.' : ''}
               </Text>
             </>
@@ -550,12 +550,12 @@ function StepsAction({ id, detail, type, today }: ActionProps) {
 
       {approximate ? (
         <Text variant="tiny" faint>
-          Yaklaşık (uygulama açıkken sayılıyor). Sayaç eksik kalırsa değeri elle beyan et.
+          Yaklaşık (uygulama açıkken sayılıyor). Sayaç eksik kalırsa değeri elle gir.
         </Text>
       ) : null}
       {unavailable ? (
         <Text variant="tiny" faint>
-          {stepsReason(availability)} Skorun sıfır kalmasın diye günlük adımını elle beyan edebilirsin.
+          {stepsReason(availability)} Skorun sıfır kalmasın diye günlük adımını elle girebilirsin.
         </Text>
       ) : null}
     </View>
@@ -566,7 +566,7 @@ function stepsReason(availability: StepAvailability | null): string {
   if (!availability || availability.available) return '';
   switch (availability.reason) {
     case 'web':
-      return 'Adımlar telefondan sayılıyor; tarayıcıda sayaç yok.';
+      return 'Adımlar telefondan sayılıyor, tarayıcıda sayaç yok.';
     case 'no-sensor':
       return 'Bu cihazda adım sensörü yok.';
     case 'denied':
@@ -718,7 +718,7 @@ function BooleanAction({ id, detail, today, yesterday, dayKeys }: ActionProps) {
       }
       toast({
         title: value === 1 ? 'Yaptın' : 'Yapmadın',
-        body: value === 1 ? 'Gün senin lehine yazıldı.' : 'Dürüstlük de bir erdem, hadi yarın.',
+        body: value === 1 ? 'Gün senin lehine yazıldı.' : 'Yarın telafi edersin.',
         kind: value === 1 ? 'success' : 'info',
       });
     } catch (error) {
@@ -850,7 +850,7 @@ function CountAction({ id, detail, type, today }: ActionProps) {
 
       {type.proofRequired || detail.challenge.proofRequired ? (
         <Text variant="tiny" faint>
-          Bu çelıncta kanıt fotoğrafı isteniyor; hızlı ekleme yerine “+ Giriş” kullan.
+          Bu çelıncta kanıt fotoğrafı isteniyor. Hızlı ekleme yerine “+ Giriş” kullan.
         </Text>
       ) : (
         <View style={styles.chipRow}>
@@ -903,8 +903,8 @@ function LowerAction({ id, detail, type, level, today }: ActionProps) {
         </Text>
       </View>
       <Text variant="tiny" faint>
-        Az olan kazanır. Girilmeyen gün {formatNumber(type.missingDayPenalty ?? type.maxPerDay)} {type.unitTr} sayılır,
-        yani hiç girmemek en kötüsü.
+        Az olan kazanır. Girmediğin gün {formatNumber(type.missingDayPenalty ?? type.maxPerDay)}{' '}
+        {type.unitTr} sayılır.
       </Text>
       <Text variant="tiny" color={Colors.yellow}>
         📸 {t('proof_needed', level)}

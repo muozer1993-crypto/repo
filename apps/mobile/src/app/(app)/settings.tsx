@@ -57,13 +57,13 @@ const LEVEL_CHARACTER: Record<VulgarityLevel, string> = {
 };
 
 const PUSH_REASONS: Record<NonNullable<PushRegistration['reason']>, string> = {
-  web: 'Tarayıcıda push bildirimi yok. Telefondaki uygulamada çalışır; burada uygulama içi bildirim görürsün.',
+  web: 'Tarayıcıda push bildirimi yok. Telefondaki uygulamada çalışır, burada uygulama içi bildirim görürsün.',
   simulator:
     'Simülatör/emülatör push token alamaz. Gerçek bir telefonda dene, orada sorunsuz çalışır.',
   denied:
     'Bildirim iznini vermemişsin. Telefon ayarlarından KOYDUM’a bildirim izni ver, sonra “tekrar dene”ye bas.',
   'expo-go-android':
-    'Expo Go’da Android push çalışmıyor (Expo’nun kuralı). Uygulama açıkken bildirimleri yine görürsün; gerçek push için development build gerekiyor.',
+    'Expo Go’da Android push çalışmıyor (Expo’nun kuralı). Uygulama açıkken bildirimleri yine görürsün. Gerçek push için development build gerekiyor.',
   'no-project-id':
     'EAS proje kimliği yok. Bilgisayarda “eas init” çalıştırıp uygulamayı yeniden derlemen lazım.',
   unavailable:
@@ -75,7 +75,7 @@ const STEP_REASONS: Record<
   Extract<StepAvailability, { available: false }>['reason'],
   string
 > = {
-  web: 'Tarayıcıda adım sayacı yok. Adım çelınclarında değerini elle beyan edebilirsin.',
+  web: 'Tarayıcıda adım sayacı yok. Adım çelınclarında adımını elle girebilirsin.',
   'no-sensor': 'Bu cihazda adım sensörü bulamadım. Adımları elle gireceksin.',
   denied: 'Hareket/aktivite izni verilmemiş. İzni ver, adımların otomatik sayılsın.',
   'health-connect-missing':
@@ -257,7 +257,7 @@ export default function SettingsScreen() {
   const deleteAccount = async () => {
     const first = await confirmTr(
       'Hesabı sil',
-      'Çelınclarını, skorlarını, rozetlerin, laf soktukların… hepsi silinecek. Devam edeyim mi?',
+      'Çelınclar, skorlar, rozetler, laf soktukların… hepsi gidecek. Devam edeyim mi?',
       'Devam et'
     );
     if (!first) return;
@@ -289,7 +289,7 @@ export default function SettingsScreen() {
       return {
         label: 'Açık',
         color: Colors.success,
-        detail: 'Bildirimler telefonuna düşüyor. Kankalar sana koyduğunda anında haberin olacak.',
+        detail: 'Bildirimler telefonuna düşüyor.',
       };
     }
     const reason = push.reason ?? 'error';
@@ -512,8 +512,8 @@ export default function SettingsScreen() {
           {build ? ` (${build})` : ''} · {PLATFORM}
         </Text>
         <Text variant="micro" faint center>
-          Bu uygulama eğlence ve gelişim için tasarlandı. Amacının dışına çıkarmayın: burada
-          yenen laf burada kalır, kimse alınmasın, kimse kavga etmesin.
+          Bu uygulama eğlence ve gelişim için tasarlandı. Amacının dışına çıkarmayın, kimse
+          kimseyi kırmasın.
         </Text>
       </View>
     </Screen>

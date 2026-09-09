@@ -82,7 +82,7 @@ export function tauntContextFor(
 
 function customTitle(level: VulgarityLevel, winner: string): string {
   if (level === 1) return `${winner} bir mesaj bıraktı`;
-  if (level === 3) return `${winner} SAPLADI 🍆`;
+  if (level === 3) return `${winner} SANA SAPLADI 🍆`;
   return `${winner} laf soktu`;
 }
 
@@ -126,7 +126,7 @@ export function sendTaunt(db: Database, input: SendTauntInput): SendTauntResult 
 
   if (customBody !== undefined) {
     if (containsBanned(customBody)) {
-      throw badRequest('banned_content', 'Bu laf fazla ağır: aile, tehdit ve nefret içeren sözler yasak.');
+      throw badRequest('banned_content', 'Bu laf fazla ağır. Aile, tehdit ve nefret içeren sözler yasak.');
     }
     level = clampLevel(levelOf(from), recipientMax);
     const rendered = renderTaunt({ title: customTitle(level, from.display_name), body: customBody }, vars);

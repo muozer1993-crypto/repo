@@ -105,7 +105,7 @@ export default function FriendsScreen() {
         onSuccess: () =>
           toast({
             title: kind === 'accept' ? 'Kanka oldunuz' : 'Reddettin',
-            body: kind === 'accept' ? `${name} artık listende. Aç bir çelınc.` : `${name} elendi.`,
+            body: kind === 'accept' ? `${name} artık listende. Aç bir çelınc.` : `${name} eklenmedi.`,
             kind: kind === 'accept' ? 'success' : 'info',
           }),
         onError: fail,
@@ -118,7 +118,7 @@ export default function FriendsScreen() {
     if (!me?.inviteCode) return;
     try {
       await Clipboard.setStringAsync(me.inviteCode);
-      toast({ title: 'Kopyalandı', body: 'Kodu kankana yapıştır.', kind: 'success' });
+      toast({ title: 'Kopyalandı', body: 'Kodu kankana gönder.', kind: 'success' });
     } catch {
       toast({ title: 'Kopyalanamadı', body: 'Kodu elle yaz gitsin.', kind: 'danger' });
     }
@@ -159,9 +159,9 @@ export default function FriendsScreen() {
         <Text variant="tiny" faint>
           {byLevel(
             level,
-            'Kanka listen. Yarışacak birini buradan ekle.',
-            'Kurban listen. Kimseye koyamazsan buradan başla.',
-            'Kurban listen 🍆 Kimseye koyamıyorsan buradan başla.'
+            'Kanka listen. Yarışacak birini buradan ekleyebilirsin.',
+            'Kurban listen. Boşsa aşağıdan birini ekle.',
+            'Kurban listen 🍆 Boşsa önce birini bul.'
           )}
         </Text>
       </View>
@@ -349,7 +349,7 @@ export default function FriendsScreen() {
           {me?.inviteCode ?? '········'}
         </Text>
         <Text variant="tiny" muted style={styles.codeHint}>
-          Kankan bu kodu yukarıdaki arama kutusuna yazıp “Kod ile ekle”ye basarsa seni ekler.
+          Kankan bu kodu arama kutusuna yazıp “Kod ile ekle”ye bassın.
         </Text>
         <View style={styles.codeActions}>
           <Button

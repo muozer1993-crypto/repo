@@ -110,11 +110,11 @@ export async function syncReminders(
         const ok = await schedule(api, {
           content: {
             title:
-              level === 1 ? 'Check-in vakti' : level === 2 ? 'Kalk lan, süre doluyor' : 'Kalk yoksa yiyeceksin 🍆',
+              level === 1 ? 'Check-in vakti' : level === 2 ? 'Süre doluyor lan' : 'Yetiştir yoksa yersin 🍆',
             body:
               level === 1
-                ? `${challenge.title}: ${challenge.deadlineTime}'e ${MINUTES_BEFORE_DEADLINE} dakika kaldı.`
-                : `${challenge.title}: ${MINUTES_BEFORE_DEADLINE} dakikan var. "GELDİM" demezsen uyudun sayılırsın.`,
+                ? `${challenge.title}: check-in saati ${challenge.deadlineTime}. ${MINUTES_BEFORE_DEADLINE} dakikan kaldı.`
+                : `${challenge.title}: ${MINUTES_BEFORE_DEADLINE} dakikan kaldı. Check-in yapmazsan bugün sayılmaz.`,
             data: { kind: REMINDER_KIND, reminder: 'checkin', challengeId: challenge.id, type: 'reminder' },
             sound: true,
           },
@@ -139,7 +139,7 @@ export async function syncReminders(
           body:
             level === 1
               ? `${challenge.title} bir saat sonra bitiyor. Girişlerini kontrol et.`
-              : `${challenge.title} bitiyor. Adımlarını senkronla, senkronsuz yiyen çok oldu.`,
+              : `${challenge.title} bir saat sonra bitiyor. Skorunu girmediysen yersin.`,
           data: { kind: REMINDER_KIND, reminder: 'last_hour', challengeId: challenge.id, type: 'reminder' },
           sound: true,
         },

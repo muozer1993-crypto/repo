@@ -270,9 +270,9 @@ function levelOf(user: UserRow): VulgarityLevel {
 }
 
 function startedCopy(level: VulgarityLevel, title: string): { title: string; body: string } {
-  if (level === 1) return { title: '🔔 Çelınc başladı', body: `${title} başladı. Bol şans, elinden geleni yap.` };
-  if (level === 3) return { title: '🍆 ÇELINC BAŞLADI', body: `${title} başladı. Ya koyarsın ya yersin, üçüncü yol yok.` };
-  return { title: '🔥 Çelınc başladı', body: `${title} başladı lan. Koymaya bak, gevşeme.` };
+  if (level === 1) return { title: '🔔 Çelınc başladı', body: `${title} başladı. Bol şans.` };
+  if (level === 3) return { title: '🍆 ÇELINC BAŞLADI', body: `${title} başladı. Bugün başlamazsan yersin.` };
+  return { title: '🔥 Çelınc başladı', body: `${title} başladı. Hadi bakalım.` };
 }
 
 /**
@@ -293,8 +293,8 @@ function finishedTitle(level: VulgarityLevel, role: 'winner' | 'loser'): string 
 
 function cancelledCopy(level: VulgarityLevel, title: string): { title: string; body: string } {
   if (level === 1) return { title: 'Çelınc iptal edildi', body: `${title} yeterli katılımcı olmadığı için iptal edildi.` };
-  if (level === 3) return { title: 'Çelınc iptal 🍆', body: `${title} iptal. Kimse cesaret edemedi, boşuna beklettin.` };
-  return { title: 'Çelınc iptal oldu', body: `${title} iptal lan, kimse kabul etmedi.` };
+  if (level === 3) return { title: 'Çelınc iptal 🍆', body: `${title} iptal oldu. Kimse kabul etmedi, korkaklar.` };
+  return { title: 'Çelınc iptal oldu', body: `${title} iptal oldu, kimse kabul etmedi.` };
 }
 
 /**
@@ -310,7 +310,7 @@ function nudgeAction(metricType: MetricType, level: VulgarityLevel): string {
     case 'focus_minutes':
       return polite ? 'Kısa bir odak seansı farkı kapatır.' : 'Telefonu bırak da bir seans yap.';
     case 'manual_lower_is_better':
-      return polite ? 'Telefonu biraz kenara koy, ortalaman düşer.' : 'Telefonu bırak lan, düşsün.';
+      return polite ? 'Telefonu biraz kenara koy, ortalaman düşer.' : 'Telefonu bırak da ortalaman düşsün.';
     case 'daily_boolean':
       return polite ? 'Bugünü işaretlemeyi unutma.' : 'Bugünü kaçırma.';
     default:
@@ -337,7 +337,7 @@ function nudgeCopy(
   if (level === 3) {
     return {
       title: 'O NE LAN 🍆',
-      body: `${leader} sana ${fark} farkı koymuş. ${action} Akşama saplanmak istemiyorsan tabii.`,
+      body: `${leader} sana ${fark} fark koymuş 🍆 ${action}`,
     };
   }
   return { title: 'O ne lan', body: `${leader} sana ${fark} fark koymuş. ${action}` };
@@ -503,7 +503,7 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
           userId: user.id,
           type: 'challenge_finished',
           title: level === 1 ? 'Berabere' : level === 3 ? 'BERABERE 🍆' : 'Berabere kaldınız',
-          body: `${challenge.title} berabere bitti. Skor: ${myScore}. Kimse kimseye koyamadı, rövanş şart.`,
+          body: `${challenge.title} berabere bitti. Senin skorun ${myScore}. İsteyen rövanş açsın.`,
           data: { challengeId: challenge.id, role: 'tie' },
           createdAt: iso,
         });
@@ -515,7 +515,7 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
           userId: user.id,
           type: 'challenge_finished',
           title: finishedTitle(level, 'winner'),
-          body: `${t('challenge_finished_won', level)} ${challenge.title} bitti, skorun ${myScore}. Kaybedenlere "KOYDUM MU?" deme sırası sende.`,
+          body: `${t('challenge_finished_won', level)} ${challenge.title} bitti, skorun ${myScore}.`,
           data: { challengeId: challenge.id, role: 'winner' },
           createdAt: iso,
         });

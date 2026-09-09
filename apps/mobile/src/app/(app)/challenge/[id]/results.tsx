@@ -40,7 +40,7 @@ import {
 const TAUNT_PROMPT: Record<VulgarityLevel, string> = {
   1: 'Kime mesaj göndereceğini seç.',
   2: 'Kime koyacağını seç, gerisini biz yazarız.',
-  3: 'Kime saplayacağını seç 🍆 Metni biz hazırladık.',
+  3: 'Kime saplayacağını seç. Lafı biz yazdık 🍆',
 };
 
 const WIN_TITLE: Record<VulgarityLevel, string> = {
@@ -56,15 +56,15 @@ const TIE_TITLE: Record<VulgarityLevel, string> = {
 };
 
 const TIE_SUB: Record<VulgarityLevel, string> = {
-  1: 'Kimse öne geçemedi. Rövanş bu işi çözer.',
-  2: 'Ne koydun ne yedin. Rövanş aç da biri yesin.',
-  3: 'Ortada sahipsiz bir 🍆 kaldı. Rövanş aç, biri sahiplensin.',
+  1: 'Kimse öne geçemedi. Rövanş açabilirsin.',
+  2: 'Kimse öne geçemedi. Rövanş aç da biri yesin.',
+  3: 'Ortada sahipsiz bir 🍆 kaldı. Rövanş aç.',
 };
 
 const WATCHER_SUB: Record<VulgarityLevel, string> = {
   1: 'Bu çelıncta yarışmadın, sonuç aşağıda.',
   2: 'Sen bu çelınca girmedin, sadece izledin.',
-  3: 'Sen kenarda durdun. Koyan koydu, yiyen yedi 🍆',
+  3: 'Sen kenardan izledin, iş bitti 🍆',
 };
 
 const NO_REWARD: Record<VulgarityLevel, string> = {
@@ -75,14 +75,14 @@ const NO_REWARD: Record<VulgarityLevel, string> = {
 
 const NO_PENALTY: Record<VulgarityLevel, string> = {
   1: 'Ceza yazılmamış. Bu sefer sadece gurur meselesi.',
-  2: 'Ceza yok ama rezillik bedava lan.',
+  2: 'Ceza yazılmamış. Yine de yedin.',
   3: 'Ceza yazmamışlar. Yediğin yeter zaten 🍆',
 };
 
 const WAIT_SUB = (level: VulgarityLevel, winner: string): string => {
   if (level === 1) return `${winner} henüz bir şey yazmadı. Belki nazik davranıyor.`;
   if (level === 3) return `${winner} daha saplamadı. Telefonunu yakınında tut 🍆`;
-  return `${winner} daha lafını sokmadı. Bildirim yolda, dişini sık.`;
+  return `${winner} daha ağzını açmadı. Beklemede kal.`;
 };
 
 /* ------------------------------------------------------------------ utils */
@@ -193,7 +193,7 @@ export default function ResultsScreen() {
             missing
               ? 'Ya silindi ya da bu çelıncın içinde değilsin.'
               : early
-                ? 'Bitmeden sonuç olmaz. Çelınca dön, skorunu yükselt.'
+                ? 'Çelınc bitince sonuç burada olur.'
                 : errorText(err, 'Sunucuya ulaşamadım.')
           }
           actionLabel={missing ? 'Listeye dön' : early ? 'Çelınca dön' : 'Tekrar dene'}
@@ -220,7 +220,7 @@ export default function ResultsScreen() {
           title={challenge.status === 'cancelled' ? 'Bu çelınc iptal edildi' : 'Çelınc daha bitmedi'}
           subtitle={
             challenge.status === 'cancelled'
-              ? 'Kimse koymadı, kimse yemedi. Yeni bir tane aç.'
+              ? 'Sonuç yazılmadı. İstersen yeni bir tane aç.'
               : 'Bitiş saatini bekle, sonuç o zaman yazılır.'
           }
           actionLabel="Çelınca dön"
@@ -302,7 +302,7 @@ export default function ResultsScreen() {
           />
         ) : (
           <Card edgeColor={Colors.accentDim}>
-            <Text variant="title">henüz konuşmadı, bekle</Text>
+            <Text variant="title">Daha sesi çıkmadı</Text>
             <Text variant="small" muted style={styles.gap}>
               {WAIT_SUB(level, winner?.user.displayName ?? 'Kazanan')}
             </Text>
@@ -323,7 +323,7 @@ export default function ResultsScreen() {
         ) : null}
         {isPlayer && iWon && runnerUp ? (
           <Text variant="small" bold color={Colors.success} style={styles.gapLine}>
-            En yakın takipçin {runnerUp.user.displayName} — arada {scoreText(winnerGap)} var.
+            En yakın takipçin {runnerUp.user.displayName}, arada {scoreText(winnerGap)} var.
           </Text>
         ) : null}
       </Card>
@@ -346,7 +346,7 @@ export default function ResultsScreen() {
 
           {losers.length === 0 ? (
             <Text variant="small" faint style={styles.gap}>
-              Kimse kalmadı: rakip yok, laf da yok.
+              Kaybeden yok, mesaj gidecek kimse kalmamış.
             </Text>
           ) : (
             <View style={styles.loserList}>

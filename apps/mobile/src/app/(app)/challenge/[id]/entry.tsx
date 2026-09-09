@@ -220,14 +220,14 @@ export default function EntryModalScreen() {
       return;
     }
     if (value <= 0 && type.direction === 'higher') {
-      setError('Sıfır girişin kimseye faydası yok.');
+      setError('Sıfırdan büyük bir sayı yaz.');
       return;
     }
     if (appends && value > remaining) {
       setError(
         remaining <= 0
           ? `${dayLabel} için günlük tavan doldu (${formatNumber(type.maxPerDay)} ${type.unitTr}).`
-          : `${dayLabel} için ${formatNumber(remaining)} ${type.unitTr} kaldı — günlük tavan ${formatNumber(type.maxPerDay)} ${type.unitTr}.`
+          : `${dayLabel} için ${formatNumber(remaining)} ${type.unitTr} kaldı. Günlük tavan ${formatNumber(type.maxPerDay)} ${type.unitTr}.`
       );
       return;
     }

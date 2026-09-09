@@ -16,37 +16,37 @@ import {
 } from './types';
 
 export const MICROCOPY: Record<MicrocopyKey, MicrocopyEntry> = {
-  "home_empty": { level1: "Henüz çelınc yok. Bir arkadaşını davet et, ilk yarışı başlat.", level2: "Ortalık bomboş lan. Kimseye koymadın, kimse sana koymadı. Bir çelınc aç.", level3: "Burası çöl gibi. Ne koyan var ne yiyen. Aç bir çelınc, birine sapla 🍆" },
-  "create_challenge_cta": { level1: "Çelınc Başlat", level2: "Çelınc Aç Lan", level3: "Koymaya Başla 🍆" },
+  "home_empty": { level1: "Henüz çelınc yok", level2: "Ortalık boş", level3: "Kimse kimseye koymuyor" },
+  "create_challenge_cta": { level1: "Çelınc Başlat", level2: "Çelınc Aç", level3: "Koymaya Başla" },
   "invite_friends_cta": { level1: "Arkadaş Davet Et", level2: "Kankaları Çağır", level3: "Kurban Getir" },
-  "challenge_pending_you": { level1: "Bu çelınc seni bekliyor. Kabul et, yarış başlasın.", level2: "Sana meydan okundu lan. Kabul et ya da korkak ol.", level3: "Biri sana koymak istiyor. Kabul et, kim kime koyacak görelim 🍆" },
-  "challenge_active_leading": { level1: "Öndesin! Böyle devam, farkı koru.", level2: "Öndesin lan, koyuyorsun. Gevşeme, akşam bildirim atacağız.", level3: "Saplıyorsun 🍆 Sakın durma, sonuna kadar götür." },
-  "challenge_active_losing": { level1: "Biraz gerideyiz. Küçük bir gayretle toparlanır.", level2: "Geridesin lan. Böyle giderse yiyeceksin, kalk hareket et.", level3: "Yemeye doğru gidiyorsun. Kalk yoksa akşam sapır sapır 🍆" },
-  "challenge_finished_won": { level1: "Tebrikler, kazandın! Arkadaşına nazik bir mesaj gönderebilirsin.", level2: "Koydun lan! Şimdi kaybedene bir bildirim yolla, tadını çıkar.", level3: "SAPLADIN 🍆 Kaybeden şu an kıvranıyor. Bildirimi seç, hesabı kapat." },
-  "challenge_finished_lost": { level1: "Bu sefer olmadı. Rövanş isteyebilirsin.", level2: "Yedin kanka. Şimdi bildirim gelecek, dişini sık.", level3: "Yedin. Sapır sapır 🍆 Bildirim yolda, kabullen ve rövanş iste." },
-  "shame_screen_title": { level1: "Bu tur senin değil", level2: "REZİL OLDUN", level3: "SAPLANDIN 🍆" },
-  "shame_screen_subtitle": { level1: "Kazanan sana küçük bir not bıraktı.", level2: "Kazanan sana bir laf soktu. Oku ve ders al.", level3: "Yediğin resmi olarak tescillendi. Kazananın mesajı aşağıda." },
-  "taunt_picker_title": { level1: "Bir mesaj seç", level2: "Hangi lafı sokalım?", level3: "Nasıl saplayalım? 🍆" },
-  "taunt_sent_confirmation": { level1: "Mesajın gönderildi.", level2: "Laf sokuldu, bildirim gitti.", level3: "Saplandı. Şu an telefonu titriyor 🍆" },
-  "poke_button": { level1: "Dürt", level2: "Kalk Yürü Lan", level3: "Dürt, Sıkı Dursun" },
-  "rematch_button": { level1: "Rövanş İste", level2: "Rövanş Lan", level3: "Geri Koyacağım" },
-  "add_friend_empty": { level1: "Henüz arkadaş yok. Kullanıcı adıyla ekle.", level2: "Kankan yok mu lan? Kullanıcı adını yaz, ekle.", level3: "Kurban listesi boş. Birini ekle, sonra sapla 🍆" },
-  "focus_start": { level1: "Odak seansını başlat. Uygulamadan çıkarsan seans biter.", level2: "Odak seansı başlıyor. Çıkarsan seans yanar, sen de yanarsın.", level3: "Telefonu bırak lan. Çıkarsan seans gider, sonra da sen yersin 🍆" },
-  "focus_abandoned": { level1: "Seans yarıda kaldı. Bir daha dene.", level2: "Kaçtın lan. Seans yandı, ekran seni yendi.", level3: "Dayanamadın. Seans gitti, telefon sana koydu 🍆" },
-  "focus_done": { level1: "Seans tamamlandı, harika!", level2: "Seans bitti. Telefona koydun lan, aferin.", level3: "Bitirdin. Telefona sapladın, bu sefer o yedi 🍆" },
-  "checkin_late": { level1: "Bugünün check-in saati geçti. Yarın erken davran.", level2: "Geç kaldın lan. Bugün sayılmadı, yarın erken kalk.", level3: "Uyudun kaldın, gün gitti. Yarın erken kalk yoksa saplanırsın 🍆" },
-  "checkin_ok": { level1: "Check-in alındı. Güne erken başladın!", level2: "Check-in tamam. Erken kalktın, koydun.", level3: "Kalktın, tescillendi. Hâlâ uyuyanlara sapladın 🍆" },
-  "proof_needed": { level1: "Bu giriş için bir fotoğraf kanıtı ekleyebilirsin.", level2: "Kanıt yok mu lan? Fotoğraf at, yoksa kimse inanmaz.", level3: "Fotoğraf yoksa palavra. Kanıt ekle, itiraz yeme." },
-  "dispute_button": { level1: "İtiraz Et", level2: "Yalan Lan, İtiraz", level3: "Palavra, İtiraz" },
+  "challenge_pending_you": { level1: "Bu çelınc seni bekliyor. Kabul edersen başlar.", level2: "Sana çelınc geldi. Kabul et bakalım.", level3: "Biri sana koymak istiyor. Kabul et de görelim." },
+  "challenge_active_leading": { level1: "Öndesin. Böyle devam et.", level2: "Öndesin lan. Sakın gevşeme.", level3: "Şu an sen koyuyorsun. Gevşersen adam geri alır." },
+  "challenge_active_losing": { level1: "Biraz gerideysin. Küçük bir gayret yeter.", level2: "Geridesin. Böyle giderse yiyeceksin.", level3: "Geridesin. Kalk yoksa akşam yersin 🍆" },
+  "challenge_finished_won": { level1: "Kazandın, tebrikler. İstersen arkadaşına bir mesaj gönder.", level2: "Koydun lan. Kaybedene bir laf gönder.", level3: "SAPLADIN. Bildirimi seç, gitsin." },
+  "challenge_finished_lost": { level1: "Bu sefer olmadı. Rövanş isteyebilirsin.", level2: "Yedin. Birazdan bildirim gelecek.", level3: "Yedin işte. Bildirim yolda, aç da oku." },
+  "shame_screen_title": { level1: "Bu tur senin değil", level2: "YEDİN", level3: "SAPLANDIN 🍆" },
+  "shame_screen_subtitle": { level1: "Kazanan sana bir not bıraktı.", level2: "Kazanan sana laf soktu, aşağıda.", level3: "Kazanan sana koydu. Mesajı aşağıda." },
+  "taunt_picker_title": { level1: "Bir mesaj seç", level2: "Hangi lafı sokalım?", level3: "Nasıl saplayalım?" },
+  "taunt_sent_confirmation": { level1: "Mesajın gönderildi.", level2: "Laf gitti.", level3: "Gitti. Şu an okuyor 🍆" },
+  "poke_button": { level1: "Dürt", level2: "Dürt Bakalım", level3: "Dürt Şunu" },
+  "rematch_button": { level1: "Rövanş İste", level2: "Rövanş İstiyorum", level3: "Geri Koyacağım" },
+  "add_friend_empty": { level1: "Henüz arkadaşın yok. Kullanıcı adıyla ekleyebilirsin.", level2: "Liste boş. Kullanıcı adını yaz, ekle.", level3: "Kurban listesi boş. Birini ekle de başlayalım." },
+  "focus_start": { level1: "Odak seansı başlıyor. Uygulamadan çıkarsan seans biter.", level2: "Odak başlıyor. Çıkarsan seans yanar.", level3: "Telefonu bırak lan. Çıkarsan seans gider." },
+  "focus_abandoned": { level1: "Seans yarıda kaldı. Yeniden deneyebilirsin.", level2: "Kaçtın. Seans yandı.", level3: "Dayanamadın. Telefon sana koydu." },
+  "focus_done": { level1: "Seans tamamlandı. Güzel iş.", level2: "Seans bitti. Telefona koydun.", level3: "Bitirdin. Bu sefer telefon yedi." },
+  "checkin_late": { level1: "Bugünün check-in saati geçti. Yarın deneriz.", level2: "Geç kaldın, bugün sayılmadı.", level3: "Uyuyakaldın, gün gitti lan." },
+  "checkin_ok": { level1: "Check-in alındı. Erken kalkmışsın.", level2: "Check-in tamam. Erken kalktın, koydun.", level3: "Kalktın demek. Check-in yazıldı 🍆" },
+  "proof_needed": { level1: "Bu giriş için fotoğraf gerekiyor.", level2: "Fotoğraf lazım. Yoksa kimse inanmaz.", level3: "Fotoğrafı at lan, palavraya kimse inanmıyor." },
+  "dispute_button": { level1: "İtiraz Et", level2: "Yalan Bu", level3: "Palavra Bu" },
   "profile_record": { level1: "Kişisel rekor", level2: "En iyi koyuş", level3: "Rekor saplama 🍆" },
-  "onboarding_1": { level1: "Arkadaşlarınla çelınc aç: adım, odak, erken kalkma, su, sayfa.", level2: "Kankalarla çelınc aç lan: adım at, telefonu bırak, erken kalk.", level3: "Kankalarla çelınc aç. Adım, odak, erken kalkma. Kim kime koyacak? 🍆" },
-  "onboarding_2": { level1: "Skorlar otomatik veya beyanla sayılır. Arkadaşlar itiraz edebilir.", level2: "Skorlar sayılır. Yalan atarsan kankalar itiraz eder, rezil olursun.", level3: "Herkesin skoru sayılır. Yalan atan itiraz yer, itiraz yiyen saplanır." },
-  "onboarding_3": { level1: "Kazanan ödülü alır ve kaybedene nazik bir mesaj gönderir.", level2: "Kazanan 'KOYDUM MU?' der, kaybedene bildirim gider. Yedin, rezil oldun.", level3: "Kazanan 'KOYDUM MU?' der, kaybedenin telefonuna 🍆 iner. Hazır mısın?" },
-  "notification_daily_reminder": { level1: "Bugünkü çelıncını unutma. Küçük bir adım bile sayılır.", level2: "Bugün ne yaptın lan? Skor sıfır, kalk bir şeyler yap.", level3: "Skor sıfır. Kankalar bakıyor. Kalk yoksa akşam sapır sapır 🍆" },
+  "onboarding_1": { level1: "Arkadaşlarınla çelınc aç: adım, odak, erken kalkma, su.", level2: "Kankalarla çelınc aç. Adım at, telefonu bırak, erken kalk.", level3: "Kankalarla çelınc aç. Bakalım kim kime koyacak." },
+  "onboarding_2": { level1: "Skorlar otomatik ya da beyanla sayılır. Arkadaşların itiraz edebilir.", level2: "Skorlar sayılır. Yalan atarsan kankalar itiraz eder.", level3: "Her skor sayılır. Sayıyı şişirirsen itiraz yersin." },
+  "onboarding_3": { level1: "Kazanan ödülü alır, kaybedene bir mesaj gider.", level2: "Kazanan 'KOYDUM MU?' der, kaybedenin telefonu öter.", level3: "Kazanan 'KOYDUM MU?' der, kaybedenin telefonuna 🍆 iner." },
+  "notification_daily_reminder": { level1: "Bugünkü çelıncı unutma.", level2: "Bugün skorun sıfır. Kalk bir şeyler yap.", level3: "Skorun sıfır lan. Kankalar bakıyor." },
   "login_title": { level1: "Tekrar hoş geldin", level2: "Gel bakalım", level3: "Kim geldi lan?" },
-  "register_title": { level1: "Aramıza katıl", level2: "Kayıt ol, koymaya başla", level3: "Kayıt ol: kurban ol ya da sapla 🍆" },
+  "register_title": { level1: "Aramıza katıl", level2: "Kayıt ol, başlayalım", level3: "Kayıt ol, kurbanını seç" },
   "settings_vulgarity_label": { level1: "Adamlık seviyesi: Nazik", level2: "Adamlık seviyesi: Delikanlı", level3: "Adamlık seviyesi: Ağır Abi" },
-  "logout_confirm": { level1: "Çıkış yapmak istediğine emin misin?", level2: "Kaçıyor musun lan? Çıkış yapmak istediğine emin misin?", level3: "Kaçıyorsun ha? Çıkarsan kankalar 'yedi kaçtı' diyecek. Emin misin?" },
+  "logout_confirm": { level1: "Çıkış yapmak istediğine emin misin?", level2: "Çıkış yapıyorsun. Emin misin?", level3: "Çıkarsan 'yedi kaçtı' derler. Emin misin?" },
 };
 
 /** Reads a copy string at the given level. */
@@ -68,38 +68,38 @@ export function t(key: MicrocopyKey, level: VulgarityLevel): string {
  */
 export const BADGES: readonly BadgeDef[] = [
   // koyuş — the whole point of the app
-  { key: "koyus_1", family: "koyus", tier: 1, nameTr: "Çırak Saplamacı", emoji: "🍆", descriptionTr: "İlk çelıncını kazandın. Karşı taraf ilk bildirimini yedi.", rule: "wins>=1" },
-  { key: "koyus_2", family: "koyus", tier: 2, nameTr: "Saplamacı", emoji: "🔥", descriptionTr: "5 çelınc kazandın. Artık seninle çelınca girmeden önce iki kere düşünüyorlar.", rule: "wins>=5" },
-  { key: "koyus_3", family: "koyus", tier: 3, nameTr: "Usta Saplamacı", emoji: "👑", descriptionTr: "20 çelınc kazandın. Grupta son sözü sen söylüyorsun.", rule: "wins>=20" },
+  { key: "koyus_1", family: "koyus", tier: 1, nameTr: "Çırak Saplamacı", emoji: "🍆", descriptionTr: "İlk çelıncını kazandın.", rule: "wins>=1" },
+  { key: "koyus_2", family: "koyus", tier: 2, nameTr: "Saplamacı", emoji: "🔥", descriptionTr: "5 çelınc kazandın.", rule: "wins>=5" },
+  { key: "koyus_3", family: "koyus", tier: 3, nameTr: "Usta Saplamacı", emoji: "👑", descriptionTr: "20 çelınc kazandın. Grupta sözün geçiyor.", rule: "wins>=20" },
   { key: "koyus_4", family: "koyus", tier: 4, nameTr: "Saplama Mühendisi", emoji: "🎓", descriptionTr: "50 çelınc kazandın. Bu iş artık meslek.", rule: "wins>=50" },
 
   // yiyiş — losing is content too
-  { key: "yiyis_1", family: "yiyis", tier: 1, nameTr: "Ağzının Tadını Aldın", emoji: "🍽️", descriptionTr: "İlk çelıncını kaybettin. Herkes bir yerden başlar, sen yiyerek başladın.", rule: "losses>=1" },
-  { key: "yiyis_2", family: "yiyis", tier: 2, nameTr: "Açık Büfe", emoji: "🥄", descriptionTr: "10 çelınc kaybettin. Tabağın hiç boş kalmadı.", rule: "losses>=10" },
-  { key: "yiyis_3", family: "yiyis", tier: 3, nameTr: "Abone Oldun", emoji: "🧾", descriptionTr: "30 çelınc kaybettin. Bu artık kaza değil, düzenli ödeme.", rule: "losses>=30" },
+  { key: "yiyis_1", family: "yiyis", tier: 1, nameTr: "Ağzının Tadını Aldın", emoji: "🍽️", descriptionTr: "İlk çelıncını kaybettin.", rule: "losses>=1" },
+  { key: "yiyis_2", family: "yiyis", tier: 2, nameTr: "Açık Büfe", emoji: "🥄", descriptionTr: "10 çelınc kaybettin. Tabağın hiç boş kalmıyor.", rule: "losses>=10" },
+  { key: "yiyis_3", family: "yiyis", tier: 3, nameTr: "Abone Oldun", emoji: "🧾", descriptionTr: "30 çelınc kaybettin. Artık aidat gibi ödüyorsun.", rule: "losses>=30" },
 
   // adım
-  { key: "adim_1", family: "adim", tier: 1, nameTr: "Yürüyen Adam", emoji: "🚶", descriptionTr: "Tek günde 15.000 adım. Kanepe seni özledi.", rule: "stepsSingleDayMax>=15000" },
-  { key: "adim_2", family: "adim", tier: 2, nameTr: "Ayakkabı Katili", emoji: "👟", descriptionTr: "Tek günde 25.000 adım. Tabanı sen ödeyeceksin.", rule: "stepsSingleDayMax>=25000" },
+  { key: "adim_1", family: "adim", tier: 1, nameTr: "Yürüyen Adam", emoji: "🚶", descriptionTr: "Tek günde 15.000 adım attın.", rule: "stepsSingleDayMax>=15000" },
+  { key: "adim_2", family: "adim", tier: 2, nameTr: "Ayakkabı Katili", emoji: "👟", descriptionTr: "Tek günde 25.000 adım. Ayakkabı dayanmıyor.", rule: "stepsSingleDayMax>=25000" },
   { key: "adim_3", family: "adim", tier: 3, nameTr: "Evi Yok Bunun", emoji: "🏅", descriptionTr: "Tek günde 40.000 adım. Nereye gidiyorsun sen?", rule: "stepsSingleDayMax>=40000" },
 
   // odak
-  { key: "odak_1", family: "odak", tier: 1, nameTr: "Telefonu Bıraktın", emoji: "🧘", descriptionTr: "Toplam 300 dakika odak. İlk defa sen kazandın, telefon yedi.", rule: "focusTotalMinutes>=300" },
-  { key: "odak_2", family: "odak", tier: 2, nameTr: "Dağ Keşişi", emoji: "🏔️", descriptionTr: "Toplam 1000 dakika odak. Bildirimler kendi kendine konuşuyor.", rule: "focusTotalMinutes>=1000" },
-  { key: "odak_3", family: "odak", tier: 3, nameTr: "Aradı, Açmadın", emoji: "📵", descriptionTr: "Toplam 3000 dakika odak. Telefon seni aradı, sen bakmadın bile.", rule: "focusTotalMinutes>=3000" },
+  { key: "odak_1", family: "odak", tier: 1, nameTr: "Telefonu Bıraktın", emoji: "🧘", descriptionTr: "Toplam 300 dakika odaklandın.", rule: "focusTotalMinutes>=300" },
+  { key: "odak_2", family: "odak", tier: 2, nameTr: "Dağ Keşişi", emoji: "🏔️", descriptionTr: "Toplam 1.000 dakika odaklandın. Bildirimler seni bekliyor.", rule: "focusTotalMinutes>=1000" },
+  { key: "odak_3", family: "odak", tier: 3, nameTr: "Aradı, Açmadın", emoji: "📵", descriptionTr: "Toplam 3.000 dakika odaklandın. Telefon sana küstü.", rule: "focusTotalMinutes>=3000" },
 
   // erken kalkma
-  { key: "erken_1", family: "erken", tier: 1, nameTr: "Horoz", emoji: "🐓", descriptionTr: "7 gün üst üste zamanında kalktın. Herkes hâlâ uyuyordu.", rule: "checkinsStreakMax>=7" },
-  { key: "erken_2", family: "erken", tier: 2, nameTr: "Horozdan Erken", emoji: "🌅", descriptionTr: "30 gün üst üste. Horoz saati artık senden soruyor.", rule: "checkinsStreakMax>=30" },
-  { key: "erken_3", family: "erken", tier: 3, nameTr: "Güneşi Sen Kaldırıyorsun", emoji: "☀️", descriptionTr: "100 gün üst üste. Güneş senden sonra kalkıyor.", rule: "checkinsStreakMax>=100" },
+  { key: "erken_1", family: "erken", tier: 1, nameTr: "Horoz", emoji: "🐓", descriptionTr: "7 gün üst üste zamanında kalktın.", rule: "checkinsStreakMax>=7" },
+  { key: "erken_2", family: "erken", tier: 2, nameTr: "Horozdan Erken", emoji: "🌅", descriptionTr: "30 gün üst üste erken kalktın.", rule: "checkinsStreakMax>=30" },
+  { key: "erken_3", family: "erken", tier: 3, nameTr: "Güneşi Sen Kaldırıyorsun", emoji: "☀️", descriptionTr: "100 gün üst üste erken kalktın.", rule: "checkinsStreakMax>=100" },
 
   // itiraz
-  { key: "itiraz_1", family: "itiraz", tier: 1, nameTr: "Yalan Dedektörü", emoji: "🕵️", descriptionTr: "3 itiraz kazandın. Sana palavra sıkılmıyor.", rule: "disputesWon>=3" },
-  { key: "itiraz_2", family: "itiraz", tier: 2, nameTr: "Savcı", emoji: "⚖️", descriptionTr: "10 itiraz kazandın. Kimse senin önünde sayı şişiremiyor.", rule: "disputesWon>=10" },
+  { key: "itiraz_1", family: "itiraz", tier: 1, nameTr: "Yalan Dedektörü", emoji: "🕵️", descriptionTr: "3 itiraz kazandın.", rule: "disputesWon>=3" },
+  { key: "itiraz_2", family: "itiraz", tier: 2, nameTr: "Savcı", emoji: "⚖️", descriptionTr: "10 itiraz kazandın. Yanında kimse sayı şişiremiyor.", rule: "disputesWon>=10" },
 
   // rövanş
-  { key: "rovans_1", family: "rovans", tier: 1, nameTr: "Faiziyle Aldı", emoji: "🔁", descriptionTr: "3 rövanş kazandın. Yediğini geri vermeyi biliyorsun.", rule: "revengeWins>=3" },
-  { key: "rovans_2", family: "rovans", tier: 2, nameTr: "Unutmayan Adam", emoji: "🐘", descriptionTr: "10 rövanş kazandın. Sen unutmuyorsun, sadece bekliyorsun.", rule: "revengeWins>=10" },
+  { key: "rovans_1", family: "rovans", tier: 1, nameTr: "Faiziyle Aldı", emoji: "🔁", descriptionTr: "3 rövanş kazandın. Yediğini geri veriyorsun.", rule: "revengeWins>=3" },
+  { key: "rovans_2", family: "rovans", tier: 2, nameTr: "Unutmayan Adam", emoji: "🐘", descriptionTr: "10 rövanş kazandın.", rule: "revengeWins>=10" },
 ] as const;
 
 const RULE = /^([a-zA-Z_]+)\s*(>=|<=|==|>|<)\s*(-?\d+(?:\.\d+)?)$/;

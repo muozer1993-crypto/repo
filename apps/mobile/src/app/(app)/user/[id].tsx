@@ -71,10 +71,10 @@ export default function UserProfileScreen() {
     head.total === 0
       ? 'Henüz karşı karşıya gelmediniz. Bir çelınc aç da görelim.'
       : head.mine > head.theirs
-        ? `${head.mine}-${head.theirs} öndesin. Koymaya devam.`
+        ? `${head.mine}-${head.theirs} öndesin.`
         : head.mine < head.theirs
           ? `${head.mine}-${head.theirs} geridesin. Bu böyle kalmasın.`
-          : `${head.mine}-${head.theirs} başa baş. Biri birine koyacak, kim olacak?`;
+          : `${head.mine}-${head.theirs} başa baş. Bir tane daha aç.`;
 
   const openChallenge = () => {
     router.push({ pathname: '/(app)/challenge/new', params: { friend: id } });
@@ -310,7 +310,7 @@ export default function UserProfileScreen() {
         <Text variant="label">Rozetler</Text>
         {badges.length === 0 ? (
           <Text variant="small" muted style={styles.badgeEmpty}>
-            Henüz rozet yok. Demek ki daha çok koyması lazım.
+            Henüz rozet yok. Kazandıkça gelir.
           </Text>
         ) : (
           <View style={styles.badges}>

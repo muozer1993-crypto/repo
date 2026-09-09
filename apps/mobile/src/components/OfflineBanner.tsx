@@ -26,7 +26,7 @@ export function OfflineBanner() {
       style={styles.wrap}>
       <View style={styles.dot} />
       <Text variant="micro" color={Colors.white} numberOfLines={1} style={styles.text}>
-        Sunucuya ulaşamıyorum. Girişlerin kaydedilip sonra gönderilecek. Adresi düzelt →
+        Sunucuya bağlanamıyorum. Girdiklerin kaydedildi, bağlanınca gönderilir. Adresi düzelt →
       </Text>
     </Pressable>
   );

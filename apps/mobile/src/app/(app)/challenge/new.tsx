@@ -306,23 +306,23 @@ export default function NewChallengeScreen() {
     if (step === 0 && !type) {
       return byLevel(
         level,
-        'Devam etmek için bir çelınc türü seç.',
-        'Önce bir tür seç lan, boşluğa koyamayız.',
-        'Tür seçmeden koyamazsın. Birini seç 🍆'
+        'Devam etmek için bir tür seç.',
+        'Önce bir tür seç.',
+        'Tür seçmeden devam yok 🍆'
       );
     }
     if (step === 1 && !daysValid) {
       return `Gün sayısı 1 ile ${LIMITS.MAX_DURATION_DAYS} arasında olmalı.`;
     }
     if (step === 1 && !deadlineValid) {
-      return 'Check-in saatini SS:dd yaz (ör. 07:30).';
+      return 'Check-in saatini SS:DD yaz (ör. 07:30).';
     }
     if (step === 2 && participantIds.length === 0) {
       return byLevel(
         level,
         'En az bir kanka seçmelisin.',
-        'Kime koyacaksın lan? En az bir kanka seç.',
-        'Kurban seçmeden olmaz. En az bir kanka işaretle 🍆'
+        'En az bir kanka seç.',
+        'En az bir kanka seç 🍆'
       );
     }
     if (step === 2 && participantIds.length >= LIMITS.PARTICIPANTS_MAX) {
@@ -464,7 +464,7 @@ export default function NewChallengeScreen() {
         {step === 1 && type ? (
           <View style={styles.section}>
             <Text variant="big">
-              {byLevel(level, 'Kuralları belirle', 'Kuralları koy', 'Kuralları koy, kaçış olmasın')}
+              {byLevel(level, 'Kuralları belirle', 'Kuralları koy', 'Kuralları koy, sonra ağlamak yok')}
             </Text>
 
             <Card>
@@ -541,8 +541,8 @@ export default function NewChallengeScreen() {
                 onChangeText={(value) => setDeadlineTime(value.replace(/[^0-9:]/g, '').slice(0, 5))}
                 keyboardType="numbers-and-punctuation"
                 maxLength={5}
-                error={deadlineTime && !deadlineValid ? 'Saat SS:dd olmalı (ör. 07:30).' : null}
-                hint="Bu saate kadar 'GELDİM' diyen o günü kazanır."
+                error={deadlineTime && !deadlineValid ? 'Saat SS:DD olmalı (ör. 07:30).' : null}
+                hint="Bu saatten sonraki check-in o gün için sayılmaz."
               />
             ) : null}
 
@@ -552,7 +552,12 @@ export default function NewChallengeScreen() {
                   Fotoğraf kanıtı zorunlu
                 </Text>
                 <Text variant="tiny" muted>
-                  {t('proof_needed', level)}
+                  {byLevel(
+                    level,
+                    'Açarsan her giriş için fotoğraf şart olur.',
+                    'Açarsan fotoğrafsız giriş geçmez.',
+                    'Açarsan fotoğrafsız giriş geçmez 🍆'
+                  )}
                 </Text>
               </View>
               <Switch
@@ -686,16 +691,16 @@ export default function NewChallengeScreen() {
                 <SummaryRow label="Bitiş" value={formatMoment(preview.endsAt, tz)} />
                 <SummaryRow label="Süre" value={`${days} gün`} />
                 {needsDeadline ? (
-                  <SummaryRow label="Check-in" value={`${deadlineTime.trim()}'e kadar`} />
+                  <SummaryRow label="Check-in" value={`Her gün ${deadlineTime.trim()} öncesi`} />
                 ) : null}
                 <SummaryRow
                   label="Kanıt"
-                  value={proofRequired ? 'Fotoğraf zorunlu 📸' : 'Fotoğraf istemiyoruz'}
+                  value={proofRequired ? 'Fotoğraf zorunlu 📸' : 'Fotoğraf şart değil'}
                   color={proofRequired ? Colors.yellow : undefined}
                 />
                 <SummaryRow
                   label={stakeMode === 'reward' ? 'Ödül' : 'Ceza'}
-                  value={stakeText.trim() || 'Ortada bir şey yok, sadece laf hakkı'}
+                  value={stakeText.trim() || 'Yazılmamış, sadece laf hakkı var'}
                   color={
                     stakeText.trim()
                       ? stakeMode === 'reward'
@@ -725,8 +730,8 @@ export default function NewChallengeScreen() {
               {byLevel(
                 level,
                 'Onaylarsan davet gider, kabul edenler yarışa girer.',
-                'Bas şuna, kankalara davet gitsin. Kabul etmeyen korkak yazılır.',
-                'Bas şuna. Davet gitsin, kim kime koyacak görelim 🍆'
+                'Bas şuna, davet gitsin. Kabul etmeyeni sonra konuşuruz.',
+                'Bas şuna, davet gitsin. Kim kime koyacak görelim 🍆'
               )}
             </Text>
 
@@ -765,7 +770,7 @@ export default function NewChallengeScreen() {
             />
           ) : (
             <Button
-              title="KOY BAKALIM"
+              title={byLevel(level, 'Çelıncı başlat', 'KOY BAKALIM', 'KOY BAKALIM 🍆')}
               size="lg"
               style={styles.nextButton}
               loading={create.isPending}

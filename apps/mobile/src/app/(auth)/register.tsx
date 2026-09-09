@@ -40,9 +40,9 @@ const LEVELS: { value: VulgarityLevel; label: string; emoji: string }[] = [
 ];
 
 const LEVEL_NOTE: Record<VulgarityLevel, string> = {
-  1: 'Kibar takılırız. Bildirimler tatlı sert olur, kimse alınmaz.',
-  2: 'Kanka ağzı. Laf sokulur, "yedin lan" denir, gülüp geçilir.',
-  3: 'Ağır abi modu. Sapır sapır 🍆 Sana gelen bildirimler de bu seviyeden gelir.',
+  1: 'Kibar takılırız. Bildirimlerde argo, küfür olmaz.',
+  2: 'Kanka ağzı. Laf sokar ama küfretmez.',
+  3: 'Ağır abi modu 🍆 Sana gelen bildirimler de bu ağızdan olur.',
 };
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
@@ -68,11 +68,11 @@ export default function RegisterScreen() {
     const display = displayName.trim();
 
     if (!USERNAME_RE.test(name)) {
-      setError('Kullanıcı adı 3-20 karakter olacak: küçük harf, rakam ve alt çizgi.');
+      setError('Kullanıcı adı 3-20 karakter olmalı. Sadece küçük harf, rakam ve alt çizgi.');
       return;
     }
     if (display.length < 1 || display.length > 30) {
-      setError('Görünen ad 1 ile 30 karakter arasında olmalı.');
+      setError('Görünen adı boş bırakma. En fazla 30 karakter.');
       return;
     }
     if (password.length < 6) {
@@ -176,8 +176,8 @@ export default function RegisterScreen() {
             loud={level === 3}
           />
           <Text variant="micro" faint center>
-            Seviyeyi sonra Ayarlar’dan değiştirebilirsin. Hazır laflar seviyeni aşamaz; kankanın
-            kendi yazdığı cümle sadece yasaklı kelime filtresinden geçer.
+            Seviyeyi sonra Ayarlar’dan değiştirebilirsin. Hazır laflar seviyeni aşmaz. Kankanın
+            kendi yazdığı cümle ise sadece yasaklı kelime filtresinden geçer.
           </Text>
         </View>
       </View>

@@ -126,7 +126,7 @@ export default function FocusScreen() {
   const submit = async (target: FocusSession) => {
     const earned = snapshot(target, Date.now()).earnedMinutes;
     if (earned < LIMITS.FOCUS_MIN_MINUTES) {
-      setSaveError('Tam dakika bile dolmadı, kaydedecek bir şey yok.');
+      setSaveError('Bir tam dakika bile dolmadı, kaydedecek bir şey yok.');
       return;
     }
     setSaving(true);
@@ -289,8 +289,8 @@ export default function FocusScreen() {
           <Card edgeColor={Colors.danger}>
             <Text variant="small">
               {detail.challenge.status !== 'active'
-                ? 'Çelınc aktif değil; seans süresi skora yazılmaz.'
-                : 'Bu çelıncta oyuncu değilsin; önce daveti kabul et.'}
+                ? 'Çelınc aktif değil, seans süresi skora yazılmaz.'
+                : 'Bu çelıncta oyuncu değilsin. Önce daveti kabul et.'}
             </Text>
           </Card>
         ) : null}
@@ -332,7 +332,7 @@ export default function FocusScreen() {
             <Loading label="Dakikalar yazılıyor..." />
           ) : savedMinutes !== null ? (
             <Text variant="small">
-              {formatMinutes(savedMinutes)} skoruna eklendi. Telefon bu turu kaybetti.
+              {formatMinutes(savedMinutes)} skoruna eklendi.
             </Text>
           ) : (
             <View style={styles.retryBlock}>
@@ -438,7 +438,7 @@ export default function FocusScreen() {
           {formatClock(Math.ceil((snap?.remainingMs ?? 0) / 1000))}
         </Text>
         <Text variant="tiny" faint>
-          {formatMinutes(snap?.earnedMinutes ?? 0)} biriktin
+          {formatMinutes(snap?.earnedMinutes ?? 0)} biriktirdin
         </Text>
       </View>
 
@@ -460,7 +460,7 @@ export default function FocusScreen() {
         </Card>
       ) : (
         <Text variant="lead" center muted style={styles.handsOff}>
-          Elini telefondan çek. Ekran açık kalsın, sen bırak.
+          Elini telefondan çek. Ekran açık kalsın.
         </Text>
       )}
 
