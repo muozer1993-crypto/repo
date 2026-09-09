@@ -834,6 +834,12 @@ describe('poke cooldown', () => {
   it('never reports a wait longer than the cooldown itself', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await livePair(harness, 'adim_yarisi');
+    // only whoever is ahead may talk, so put Ali in front first
+    await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: today(harness), value: 9_000, source: 'pedometer', clientTime: iso(harness) },
+    });
     const poke = () =>
       authed(harness!.app, ali.token)({
         method: 'POST',

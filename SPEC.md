@@ -163,7 +163,10 @@ UserStats { wins, losses, ties, tauntsSent, tauntsReceived, stepsSingleDayMax, f
 Challenge { id, creatorId, typeKey, metricType, direction, unit, title, startsAt, endsAt, status, rewardText, penaltyText, deadlineTime, dailyTarget, proofRequired, createdAt, finalizedAt, winnerId, isTie, rematchOfId }
 ParticipantView { user: PublicUser, status, score, days, rank, lastEntryAt, isWinner }
 ChallengeSummary { challenge: Challenge, participants: ParticipantView[], me: ParticipantView | null, unreadTaunts: number }
-ChallengeDetail extends ChallengeSummary { myEntries: Entry[], feed: FeedItem[], disputes: Dispute[], taunts: Taunt[], canTaunt: { toUserId: string; done: boolean }[], canPoke: boolean }
+ChallengeDetail extends ChallengeSummary { myEntries: Entry[], feed: FeedItem[], disputes: Dispute[], taunts: Taunt[], canTaunt: { toUserId: string; done: boolean }[], canPoke: boolean, pokeTargets: { toUserId: string; done: boolean }[] }
+  -- pokeTargets: while a çelınc runs, talking is earned. Only whoever is AHEAD gets entries,
+     and only for the rivals they are strictly ahead of (a tie earns nothing). `done` = still
+     inside the 2h cooldown, so canPoke = pokeTargets.some(t => !t.done).
 Entry { id, challengeId, userId, dayKey, value, source, note, proofUrl, status, createdAt, late?: boolean }
 FeedItem { id, userId, displayName, dayKey, value, source, status, createdAt, proofUrl }
 Dispute { id, entryId, byUserId, reason, status: 'open'|'upheld'|'dismissed', createdAt }
@@ -272,7 +275,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | POST /challenges/:id/entries | see 2.3; returns `{ entry, standings }` |
 | DELETE /challenges/:id/entries/:entryId | own manual entries only, while active |
 | POST /challenges/:id/entries/:entryId/dispute | not own; one per user per entry; threshold rule → entry `rejected` + `entry_rejected` notification to owner; disputers get `disputesWon` |
-| POST /challenges/:id/poke | active only; target must be participant; rate limit 1 per (from,to,challenge) per 2h → 429 `poke_cooldown`. Template from `poke` context clamped to target's level (or default pick). Notification type `poke` |
+| POST /challenges/:id/poke | active only; target must be a participant the sender is strictly AHEAD of, else 403 `not_ahead`; rate limit 1 per (from,to,challenge) per 2h → 429 `poke_cooldown`. Template from `poke` context clamped to target's level (or default pick). Notification type `poke` |
 | POST /challenges/:id/taunt | finished only; sender must be winner (`winnerId`), target must be a loser (accepted, not winner); one per target (409 `already_taunted`); template clamped to target's `vulgarity_max` — if requested template level > target max, pick deterministic template same context at target max; `customBody` allowed (level = sender-chosen ≤ target max, checked by `containsBanned` → 400 `banned_content`). Notification type `taunt` with data `{ challengeId, tauntId }` |
 | POST /challenges/:id/rematch | 201, returns the new bare `Challenge`. Finished only, any accepted participant; clones settings (same type, duration, reward), startsAt = now + 5 min, invites all previous accepted participants, `rematch_of_id`; notification `rematch` |
 | GET /challenges/:id/results | `{ challenge, standings: ParticipantView[], taunts, tauntTemplatesForWinner?: TauntTemplate[] (rendered previews per loser) }` |
@@ -388,7 +391,8 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             2) ayarlar (title, start now / tomorrow, duration days 1/3/7/14/30 or custom, deadline time for checkin, proof toggle, reward, penalty)
                             3) kankalar seç (multi-select friends) 4) özet + "KOY BAKALIM" create
 (app)/challenge/[id].tsx    detail: hero (emoji, title, status/countdown, reward), standings (ranked bars with scores + "koyuyor/yiyor" labels),
-                            my action area per metric type (see 3.4), feed of recent entries with dispute button, poke buttons per rival,
+                            my action area per metric type (see 3.4), feed of recent entries with dispute button,
+                            "laf sok" per rival you lead — opens a sheet of rendered `poke` lines to choose from,
                             leave/cancel; finished → button to results
 (app)/challenge/[id]/results.tsx   winner view: podium + "KOYDUM MU?" CTA per loser (or "Hepsine koy") → taunt picker; loser view: shame screen
                             (big TauntBubble if received, else "bekliyor..." ), rewards/penalty text, "Rövanş" button; tie view

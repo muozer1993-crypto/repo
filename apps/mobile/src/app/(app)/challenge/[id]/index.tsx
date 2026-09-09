@@ -1,12 +1,23 @@
 import type {
+  Challenge,
   ChallengeDetail,
   ChallengeType,
   EntrySource,
   FeedItem,
   ParticipantView,
+  TauntVars,
   VulgarityLevel,
 } from '@koydum/shared';
-import { LIMITS, addDays, getChallengeType, scoreLabel, t } from '@koydum/shared';
+import {
+  LIMITS,
+  addDays,
+  formatNumberTr,
+  getChallengeType,
+  renderTaunt,
+  scoreLabel,
+  t,
+  tauntsAtLevel,
+} from '@koydum/shared';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -41,6 +52,7 @@ import { getStepAvailability, getTodaySteps, type StepAvailability } from '@/ser
 import { syncStepsNow } from '@/services/stepSync';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
+import { byLevel } from '@/utils/levelCopy';
 import { confirmTr } from '@/utils/confirm';
 import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
@@ -169,6 +181,14 @@ export default function ChallengeDetailScreen() {
   const yesterday = addDays(today, -1);
   const isPlayer = mine?.status === 'accepted';
   const leading = (mine?.rank ?? 0) === 1;
+  /**
+   * Who the reader may talk to right now. The server decides — it is the only
+   * side that knows the standings AND the cooldowns — and an older server that
+   * does not send the field yet simply offers nobody.
+   */
+  const pokeTargets = detail.pokeTargets ?? [];
+  const coolingIds = new Set(pokeTargets.filter((row) => row.done).map((row) => row.toUserId));
+  const targets = accepted.filter((p) => pokeTargets.some((row) => row.toUserId === p.user.id));
   /**
    * A pending çelınc whose start time has passed is not starting: the server
    * only activates it once at least two people have accepted, and otherwise
@@ -325,8 +345,15 @@ export default function ChallengeDetailScreen() {
       />
 
       {/* --------------------------------------------------------- pokes */}
-      {challenge.status === 'active' && isPlayer && detail.canPoke !== false ? (
-        <PokeSection id={id} rivals={accepted.filter((p) => p.user.id !== meId)} level={level} />
+      {challenge.status === 'active' && isPlayer && targets.length > 0 ? (
+        <PokeSection
+          id={id}
+          challenge={challenge}
+          rivals={targets}
+          cooling={coolingIds}
+          me={mine}
+          level={level}
+        />
       ) : null}
 
       {/* -------------------------------------------------------- footer */}
@@ -1168,18 +1195,33 @@ function FeedRow({
 
 /* ------------------------------------------------------------------ pokes */
 
+/**
+ * Talking while the çelınc is still running.
+ *
+ * It is a privilege, not a button everybody has: the server only lists rivals
+ * the reader is genuinely ahead of (`pokeTargets`), and pressing the button
+ * opens the same choice the winner gets at the end — a handful of ready lines,
+ * rendered with the real names and scores, pick one and it goes.
+ */
 function PokeSection({
   id,
+  challenge,
   rivals,
+  cooling,
+  me,
   level,
 }: {
   id: string;
+  challenge: Challenge;
   rivals: ParticipantView[];
+  cooling: Set<string>;
+  me: ParticipantView | undefined;
   level: VulgarityLevel;
 }) {
   const poke = usePoke(id);
   const toast = useToast();
   const [blocked, setBlocked] = useState<Record<string, number>>({});
+  const [picking, setPicking] = useState<ParticipantView | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [tick, setTick] = useState(() => Date.now());
 
@@ -1198,19 +1240,45 @@ function PokeSection({
   // One clock reading per render: `tick` is seeded from the clock and moved
   // forward by the timer above while a cooldown is running.
   const now = tick;
+  const type = getChallengeType(challenge.typeKey);
+  const scoreText = (value: number) => scoreLabel({ unitTr: challenge.unit }, value);
 
-  const send = async (userId: string, name: string) => {
-    setPending(userId);
+  /** The lines on offer, filled in with who is where. */
+  const linesFor = (rival: ParticipantView) => {
+    const vars: TauntVars = {
+      winner: me?.user.displayName ?? 'Sen',
+      loser: rival.user.displayName,
+      metric: type?.nameTr ?? challenge.title,
+      winnerScore: formatNumberTr(me?.score ?? 0),
+      loserScore: formatNumberTr(rival.score),
+      diff: formatNumberTr(Math.abs((me?.score ?? 0) - rival.score)),
+      unit: challenge.unit,
+      challenge: challenge.title,
+    };
+    return tauntsAtLevel('poke', level).map((template) => ({
+      id: template.id,
+      ...renderTaunt(template, vars),
+    }));
+  };
+
+  const send = async (rival: ParticipantView, templateId: string) => {
+    setPending(templateId);
     try {
-      await poke.mutateAsync({ toUserId: userId });
-      setBlocked((prev) => ({ ...prev, [userId]: Date.now() + LIMITS.POKE_COOLDOWN_MS }));
-      toast({ title: 'Dürttün', body: `${name} şu an titredi.`, kind: 'taunt' });
+      await poke.mutateAsync({ toUserId: rival.user.id, templateId });
+      setBlocked((prev) => ({ ...prev, [rival.user.id]: Date.now() + LIMITS.POKE_COOLDOWN_MS }));
+      setPicking(null);
+      toast({
+        title: byLevel(level, 'Gitti', 'Soktun', 'Soktun 🍆'),
+        body: `${rival.user.displayName} şu an titredi.`,
+        kind: 'taunt',
+      });
     } catch (error) {
       if (error instanceof ApiError && error.code === 'poke_cooldown') {
-        setBlocked((prev) => ({ ...prev, [userId]: Date.now() + LIMITS.POKE_COOLDOWN_MS }));
+        setBlocked((prev) => ({ ...prev, [rival.user.id]: Date.now() + LIMITS.POKE_COOLDOWN_MS }));
+        setPicking(null);
         toast({ title: 'Çok sık oldu', body: error.message, kind: 'info' });
       } else {
-        toast({ title: 'Dürtemedim', body: errorText(error, 'Gönderilemedi.'), kind: 'danger' });
+        toast({ title: 'Gönderemedim', body: errorText(error, 'Gönderilemedi.'), kind: 'danger' });
       }
     } finally {
       setPending(null);
@@ -1220,12 +1288,20 @@ function PokeSection({
   return (
     <Card>
       <Text variant="label" style={styles.sectionLabel}>
-        Dürt
+        {byLevel(level, 'Mesaj gönder', 'Laf sok', 'Laf sok 🍆')}
+      </Text>
+      <Text variant="tiny" muted style={styles.pokeNote}>
+        {byLevel(
+          level,
+          'Öndesin, bir mesaj gönderebilirsin.',
+          'Öndesin, laf sokma hakkı sende.',
+          'Öndesin. Laf sokma hakkı senin 🍆'
+        )}
       </Text>
       <View style={styles.pokeList}>
         {rivals.map((rival) => {
           const until = blocked[rival.user.id] ?? 0;
-          const cooling = until > now;
+          const coolingNow = until > now || cooling.has(rival.user.id);
           return (
             <View key={rival.user.id} style={styles.pokeRow}>
               <Avatar emoji={rival.user.avatarEmoji} name={rival.user.displayName} size={34} />
@@ -1234,23 +1310,47 @@ function PokeSection({
                   {rival.user.displayName}
                 </Text>
                 <Text variant="tiny" faint numberOfLines={1}>
-                  {cooling
-                    ? `2 saat dolmadan tekrar dürtemezsin (${formatRemaining(until - now)})`
-                    : `${rival.rank}. sırada`}
+                  {coolingNow
+                    ? until > now
+                      ? `Tekrar sokmak için ${formatRemaining(until - now)}`
+                      : 'Az önce soktun, biraz beklet'
+                    : `${scoreText(rival.score)} · ${rival.rank}. sırada`}
                 </Text>
               </View>
               <Button
                 title={t('poke_button', level)}
                 size="sm"
-                variant={cooling ? 'ghost' : 'secondary'}
-                disabled={cooling}
-                loading={pending === rival.user.id}
-                onPress={() => void send(rival.user.id, rival.user.displayName)}
+                variant={coolingNow ? 'ghost' : 'secondary'}
+                disabled={coolingNow}
+                onPress={() => setPicking(rival)}
               />
             </View>
           );
         })}
       </View>
+
+      <Sheet
+        visible={!!picking}
+        onClose={() => setPicking(null)}
+        title={picking ? `${picking.user.displayName}'a ne diyelim?` : ''}>
+        {picking
+          ? linesFor(picking).map((line) => (
+              <Pressable
+                key={line.id}
+                accessibilityRole="button"
+                disabled={pending !== null}
+                onPress={() => void send(picking, line.id)}
+                style={({ pressed }) => [styles.pokeOption, pressed && styles.pokeOptionOn]}>
+                <Text variant="small" bold>
+                  {line.title}
+                </Text>
+                <Text variant="tiny" muted>
+                  {line.body}
+                </Text>
+              </Pressable>
+            ))
+          : null}
+      </Sheet>
     </Card>
   );
 }
@@ -1393,6 +1493,17 @@ const styles = StyleSheet.create({
   proofFull: { width: '100%', height: 380, borderRadius: Radius.md, backgroundColor: Colors.surfaceHigh },
 
   pokeList: { gap: Spacing.md },
+  pokeNote: { marginBottom: Spacing.sm },
+  pokeOption: {
+    gap: 2,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    marginBottom: Spacing.sm,
+  },
+  pokeOptionOn: { borderColor: Colors.accent, backgroundColor: Colors.surfaceHigh },
   pokeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   pokeBody: { flex: 1, gap: 2 },
 

@@ -205,7 +205,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const { id } = request.params as IdParams;
     const challenge = requireChallengeRow(db, id);
     requireMembership(db, challenge, me.id);
-    return buildDetail(db, challenge, me.id);
+    return buildDetail(db, challenge, me.id, app.now());
   });
 
   // -------------------------------------------------------------------------
@@ -237,7 +237,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       "UPDATE challenge_participants SET status = 'accepted', joined_at = ?, timezone = ? WHERE challenge_id = ? AND user_id = ?",
     ).run(iso, me.row.timezone, challenge.id, me.id);
 
-    return freshDetail(db, challenge.id, me.id);
+    return freshDetail(db, challenge.id, me.id, app.now());
   });
 
   // -------------------------------------------------------------------------
@@ -258,7 +258,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       challenge.id,
       me.id,
     );
-    return freshDetail(db, challenge.id, me.id);
+    return freshDetail(db, challenge.id, me.id, app.now());
   });
 
   // -------------------------------------------------------------------------
@@ -281,7 +281,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       challenge.id,
       me.id,
     );
-    return freshDetail(db, challenge.id, me.id);
+    return freshDetail(db, challenge.id, me.id, app.now());
   });
 
   // -------------------------------------------------------------------------
@@ -327,6 +327,6 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     });
     run();
 
-    return freshDetail(db, challenge.id, me.id);
+    return freshDetail(db, challenge.id, me.id, app.now());
   });
 }

@@ -8,6 +8,7 @@
  * Visibility rule (SPEC 2.2): a non-participant must not be able to tell an existing
  * challenge from a made-up id, so `requireMembership` throws 404 — never 403.
  */
+import { LIMITS } from '@koydum/shared';
 import type {
   CanTaunt,
   ChallengeDetail,
@@ -168,6 +169,49 @@ export function canTauntList(db: Database, challenge: ChallengeRow, userId: stri
 // Response builders
 // ---------------------------------------------------------------------------
 
+/**
+ * Who the reader may talk to while the çelınc is still running.
+ *
+ * Talking mid-çelınc is a privilege, not a button everybody has: only whoever
+ * is AHEAD earns it, and only over the people they are actually ahead of. A tie
+ * earns nothing — "sana fark koydum" has to be true.
+ *
+ * `done` marks a rival still inside the poke cooldown, so the client can grey
+ * them out instead of letting the send fail.
+ */
+export function pokeTargetList(
+  db: Database,
+  challenge: ChallengeRow,
+  userId: string,
+  now: Date,
+): CanTaunt[] {
+  if (challenge.status !== 'active') return [];
+  const standings = computeStandings(db, challenge);
+  const mine = standings.find((view) => view.user.id === userId);
+  if (!mine || mine.status !== 'accepted') return [];
+
+  const ahead = challenge.direction === 'lower'
+    ? (theirs: number) => mine.score < theirs
+    : (theirs: number) => mine.score > theirs;
+
+  const lastPoke = db.prepare(
+    `SELECT created_at FROM pokes
+      WHERE challenge_id = ? AND from_user_id = ? AND to_user_id = ?
+      ORDER BY created_at DESC LIMIT 1`,
+  );
+
+  const targets: CanTaunt[] = [];
+  for (const view of standings) {
+    if (view.user.id === userId || view.status !== 'accepted') continue;
+    if (!ahead(view.score)) continue;
+    const last = lastPoke.get(challenge.id, userId, view.user.id) as { created_at: string } | undefined;
+    const elapsed = last ? now.getTime() - Date.parse(last.created_at) : Number.POSITIVE_INFINITY;
+    const cooling = Number.isFinite(elapsed) && elapsed >= 0 && elapsed < LIMITS.POKE_COOLDOWN_MS;
+    targets.push({ toUserId: view.user.id, done: cooling });
+  }
+  return targets;
+}
+
 export function buildSummary(db: Database, challenge: ChallengeRow, userId: string): ChallengeSummary {
   const participants: ParticipantView[] = computeStandings(db, challenge);
   return {
@@ -178,9 +222,14 @@ export function buildSummary(db: Database, challenge: ChallengeRow, userId: stri
   };
 }
 
-export function buildDetail(db: Database, challenge: ChallengeRow, userId: string): ChallengeDetail {
+export function buildDetail(
+  db: Database,
+  challenge: ChallengeRow,
+  userId: string,
+  now: Date = new Date(),
+): ChallengeDetail {
   const summary = buildSummary(db, challenge, userId);
-  const mine = summary.me;
+  const pokeTargets = pokeTargetList(db, challenge, userId, now);
   return {
     ...summary,
     myEntries: myEntries(db, challenge.id, userId),
@@ -188,13 +237,20 @@ export function buildDetail(db: Database, challenge: ChallengeRow, userId: strin
     disputes: challengeDisputes(db, challenge.id),
     taunts: tauntsForUser(db, challenge.id, userId),
     canTaunt: canTauntList(db, challenge, userId),
-    canPoke: challenge.status === 'active' && mine?.status === 'accepted' && acceptedCount(db, challenge.id) >= 2,
+    pokeTargets,
+    // the button only lights up when there is somebody to talk to right now
+    canPoke: pokeTargets.some((target) => !target.done),
   };
 }
 
 /** Reload from the database so the response always mirrors what was committed. */
-export function freshDetail(db: Database, challengeId: string, userId: string): ChallengeDetail {
-  return buildDetail(db, requireChallengeRow(db, challengeId), userId);
+export function freshDetail(
+  db: Database,
+  challengeId: string,
+  userId: string,
+  now: Date = new Date(),
+): ChallengeDetail {
+  return buildDetail(db, requireChallengeRow(db, challengeId), userId, now);
 }
 
 // ---------------------------------------------------------------------------

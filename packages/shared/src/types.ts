@@ -371,6 +371,12 @@ export interface ChallengeDetail extends ChallengeSummary {
   taunts: Taunt[];
   canTaunt: CanTaunt[];
   canPoke: boolean;
+  /**
+   * While a çelınc is still running, talking is a privilege: only whoever is
+   * ahead gets entries here, and only for the people they are actually ahead
+   * of. `done` means that one is still inside the poke cooldown.
+   */
+  pokeTargets: CanTaunt[];
 }
 
 /** `GET /challenges/:id/results` */

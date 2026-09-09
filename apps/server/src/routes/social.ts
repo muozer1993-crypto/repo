@@ -35,6 +35,7 @@ import {
   rematchCopy,
   requireAcceptedMembership,
   requireChallengeRow,
+  pokeTargetList,
   requireMembership,
   tauntsForUser,
 } from '../services/challengeViews.js';
@@ -94,6 +95,12 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
 
     const target = requireTarget(db, challenge, body.toUserId);
     assertNotBlocked(db, me.id, target.id);
+    // Talking mid-çelınc is earned: you may only say it to somebody you are
+    // actually ahead of. The client hides the button, but the rule lives here.
+    const allowed = pokeTargetList(db, challenge, me.id, app.now());
+    if (!allowed.some((entry) => entry.toUserId === target.id)) {
+      throw forbidden('not_ahead', 'Önde olan konuşur. Önce geç, sonra sok.');
+    }
     const result = sendPoke(db, {
       challenge,
       from: me.row,

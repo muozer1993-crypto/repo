@@ -176,6 +176,8 @@ describe('API contract as the mobile client consumes it', () => {
     expect(Array.isArray(detail.taunts)).toBe(true);
     expect(Array.isArray(detail.canTaunt)).toBe(true);
     expect(typeof detail.canPoke).toBe('boolean');
+    // the picker reads this to decide who it may offer a line about
+    expect(Array.isArray(detail.pokeTargets)).toBe(true);
 
     /* poke ----------------------------------------------------------------- */
     await call(winner.token, 'POST', `/challenges/${created.id}/poke`, { toUserId: loser.me.id });

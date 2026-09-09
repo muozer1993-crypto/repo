@@ -74,6 +74,15 @@ async function twoPlayerChallenge(h: TestApp) {
   return { ali, veli, challengeId };
 }
 
+/** Same, but Ali is ahead — mid-çelınc talking is only for whoever leads. */
+async function leadingChallenge(h: TestApp) {
+  const ctx = await twoPlayerChallenge(h);
+  const day = today(h);
+  await postEntry(h, ctx.ali, ctx.challengeId, { dayKey: day, value: 12430, source: 'pedometer', clientTime: iso(h) });
+  await postEntry(h, ctx.veli, ctx.challengeId, { dayKey: day, value: 900, source: 'pedometer', clientTime: iso(h) });
+  return ctx;
+}
+
 /** Same, but Ali wins by a mile and the challenge is force-finished. */
 async function finishedChallenge(h: TestApp) {
   const ctx = await twoPlayerChallenge(h);
@@ -588,9 +597,76 @@ describe('POST /challenges/:id/taunt', () => {
 // ---------------------------------------------------------------------------
 
 describe('POST /challenges/:id/poke', () => {
-  it('pokes once every two hours', async () => {
+  it('only lets whoever is ahead talk', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await leadingChallenge(harness);
+
+    // Veli is behind: the button is not his to press
+    const fromBehind = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/poke`,
+      payload: { toUserId: ali.me.id },
+    });
+    expect(fromBehind.statusCode).toBe(403);
+    expect(fromBehind.json().error.code).toBe('not_ahead');
+    expect(listByType(harness.db, ali.me.id, 'poke')).toHaveLength(0);
+
+    const fromFront = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/poke`,
+      payload: { toUserId: veli.me.id },
+    });
+    expect(fromFront.statusCode).toBe(201);
+  });
+
+  it('gives nobody the right to talk while it is level', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await twoPlayerChallenge(harness);
+    const day = today(harness);
+    await postEntry(harness, ali, challengeId, { dayKey: day, value: 5_000, source: 'pedometer', clientTime: iso(harness) });
+    await postEntry(harness, veli, challengeId, { dayKey: day, value: 5_000, source: 'pedometer', clientTime: iso(harness) });
+
+    const level = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/poke`,
+      payload: { toUserId: veli.me.id },
+    });
+    expect(level.statusCode).toBe(403);
+  });
+
+  it('tells the client who may be talked to, and who is still cooling down', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await leadingChallenge(harness);
+    const detailFor = async (token: string) =>
+      (
+        await authed(harness!.app, token)({ method: 'GET', url: `/challenges/${challengeId}` })
+      ).json<ChallengeDetail>();
+
+    const leader = await detailFor(ali.token);
+    expect(leader.pokeTargets).toEqual([{ toUserId: veli.me.id, done: false }]);
+    expect(leader.canPoke).toBe(true);
+
+    const behind = await detailFor(veli.token);
+    expect(behind.pokeTargets).toEqual([]);
+    expect(behind.canPoke).toBe(false);
+
+    await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/poke`,
+      payload: { toUserId: veli.me.id },
+    });
+    const afterSending = await detailFor(ali.token);
+    expect(afterSending.pokeTargets).toEqual([{ toUserId: veli.me.id, done: true }]);
+    // still ahead, but with nothing to say for two hours
+    expect(afterSending.canPoke).toBe(false);
+
+    harness.advance(2 * 60 * 60 * 1000 + 1000);
+    expect((await detailFor(ali.token)).canPoke).toBe(true);
+  });
+
+  it('pokes once every two hours', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await leadingChallenge(harness);
 
     const first = await authed(harness.app, ali.token)({
       method: 'POST',
