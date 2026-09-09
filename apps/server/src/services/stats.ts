@@ -18,13 +18,10 @@ import { countOf, nowIso, type BadgeRow, type Database, type UserRow } from '../
 import { notify } from './notifications.js';
 
 /**
- * `UserStats` plus `revengeWins` (SPEC 1.5: the `revenge_master` badge needs it).
- *
- * It is written as an intersection on purpose: @koydum/shared is still settling
- * whether `revengeWins` lives inside `BadgeStats`, and this shape compiles — and
- * ships the number — either way.
+ * The stats the API returns. `UserStats` in @koydum/shared already carries every
+ * field including `revengeWins`; the alias stays so route code reads clearly.
  */
-export type ServerUserStats = UserStats & { revengeWins: number };
+export type ServerUserStats = UserStats;
 
 /** Longest run of consecutive day keys (already sorted ascending, de-duplicated). */
 function longestStreak(dayKeys: string[]): number {
