@@ -25,10 +25,11 @@ import { awardBadges } from '../services/stats.js';
 import {
   disputeCopy,
   entryRejectedCopy,
+  getUserRow,
   levelOf,
   requireAcceptedMembership,
   requireChallengeRow,
-  requireUserRow,
+  requireMembership,
 } from '../services/challengeViews.js';
 import { getEntryRow, recordDispute, validateAndUpsertEntry } from '../services/entries.js';
 import { toDispute, toEntry } from '../serialize.js';
@@ -64,6 +65,10 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
     const { id } = request.params as IdParams;
     const body = parseBody(EntryBodySchema, request.body);
     const challenge = requireChallengeRow(db, id);
+    // A stranger must not be able to tell an existing challenge from a made-up id,
+    // so membership answers 404 here; `validateAndUpsertEntry` keeps the 403
+    // `not_participant` for the invited / declined / left cases.
+    requireMembership(db, challenge, me.id);
 
     const { entry, created } = validateAndUpsertEntry(db, {
       challenge,
@@ -97,6 +102,13 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       if (challenge.status !== 'active') throw badRequest('challenge_not_active', 'Bu çelinç şu an aktif değil.');
       // Automatic rows (pedometer, focus, check-in) are evidence, not drafts.
       if (entry.source !== 'manual') throw badRequest('not_deletable', 'Sadece elle girdiğin kayıtları silebilirsin.');
+      // A day friends have challenged is no longer the owner's to retract: deleting
+      // it would drop the disputes with it (ON DELETE CASCADE) and let the same day
+      // be re-posted as a clean `ok` entry — laundering exactly what `upsertDayEntry`
+      // refuses to launder.
+      if (entry.status !== 'ok') {
+        throw badRequest('entry_disputed', 'İtiraz edilen bir girişi silemezsin.');
+      }
 
       db.prepare('DELETE FROM entries WHERE id = ?').run(entry.id);
       return { ok: true, standings: computeStandings(db, challenge) };
@@ -121,24 +133,33 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       const entry = getEntryRow(db, entryId);
       if (!entry || entry.challenge_id !== challenge.id) throw notFound('entry_not_found', 'Böyle bir giriş yok.');
 
+      // The owner is looked up BEFORE the write: `recordDispute` commits its own
+      // transaction, so a throw afterwards (an owner who deleted their account) would
+      // report a failure for a dispute that actually landed. A soft-deleted owner is
+      // simply not notified — the dispute itself still counts.
+      const owner = getUserRow(db, entry.user_id);
+      if (!owner) throw notFound('entry_not_found', 'Böyle bir giriş yok.');
+      const notifyOwner = owner.deleted_at === null;
+
       const outcome = recordDispute(db, { challenge, entry, byUserId: me.id, reason: body.reason, now });
-      const owner = requireUserRow(db, entry.user_id);
       const iso = nowIso(now);
 
       if (outcome.upheld) {
-        const copy = entryRejectedCopy(levelOf(owner), challenge.title, entry.day_key);
-        notify(db, {
-          userId: owner.id,
-          type: 'entry_rejected',
-          title: copy.title,
-          body: copy.body,
-          data: { challengeId: challenge.id, entryId: entry.id, dayKey: entry.day_key },
-          createdAt: iso,
-        });
+        if (notifyOwner) {
+          const copy = entryRejectedCopy(levelOf(owner), challenge.title, entry.day_key);
+          notify(db, {
+            userId: owner.id,
+            type: 'entry_rejected',
+            title: copy.title,
+            body: copy.body,
+            data: { challengeId: challenge.id, entryId: entry.id, dayKey: entry.day_key },
+            createdAt: iso,
+          });
+        }
         // `disputesWon` is derived from upheld disputes, so this recount is the bump
         // (and hands out the lie_detector badge).
         for (const disputerId of outcome.disputerIds) awardBadges(db, disputerId, now);
-      } else {
+      } else if (notifyOwner) {
         const copy = disputeCopy(levelOf(owner), me.row.display_name, challenge.title, entry.day_key);
         notify(db, {
           userId: owner.id,
