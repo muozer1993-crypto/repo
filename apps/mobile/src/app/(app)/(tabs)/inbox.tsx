@@ -33,6 +33,7 @@ const TYPE_EMOJI: Record<NotificationType, string> = {
   reminder: '⏰',
   badge: '🏅',
   rematch: '🔁',
+  nudge: '👀',
 };
 
 const TYPE_COLOR: Partial<Record<NotificationType, string>> = {
@@ -49,6 +50,7 @@ const TYPE_COLOR: Partial<Record<NotificationType, string>> = {
   reminder: Colors.info,
   badge: Colors.yellow,
   rematch: Colors.accent,
+  nudge: Colors.yellow,
 };
 
 const EMPTY_TITLE: Record<1 | 2 | 3, string> = {

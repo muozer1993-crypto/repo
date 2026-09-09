@@ -17,6 +17,7 @@
 import {
   DEFAULT_TIMEZONE,
   computeScore,
+  formatScore,
   dayKeysBetween,
   localHour,
   rankParticipants,
@@ -25,6 +26,7 @@ import {
   t,
   todayKey,
   type ChallengeType,
+  type MetricType,
   type ParticipantView,
   type RankingResult,
   type ScoreInput,
@@ -47,6 +49,7 @@ export interface SchedulerSummary {
   finalized: number;
   cancelled: number;
   reminders: number;
+  nudges: number;
 }
 
 export interface SchedulerDeps {
@@ -292,6 +295,52 @@ function cancelledCopy(level: VulgarityLevel, title: string): { title: string; b
   if (level === 1) return { title: 'Çelınc iptal edildi', body: `${title} yeterli katılımcı olmadığı için iptal edildi.` };
   if (level === 3) return { title: 'Çelınc iptal 🍆', body: `${title} iptal. Kimse cesaret edemedi, boşuna beklettin.` };
   return { title: 'Çelınc iptal oldu', body: `${title} iptal lan, kimse kabul etmedi.` };
+}
+
+/**
+ * What to actually do about being behind. "Kalk da iki dolaş" is the line the
+ * app was designed around, but it is nonsense on a focus çelınc, so the tail
+ * follows the metric.
+ */
+function nudgeAction(metricType: MetricType, level: VulgarityLevel): string {
+  const polite = level === 1;
+  switch (metricType) {
+    case 'auto_steps':
+      return polite ? 'Bugün biraz yürüsen kapanır.' : 'Kalk da iki dolaş.';
+    case 'focus_minutes':
+      return polite ? 'Kısa bir odak seansı farkı kapatır.' : 'Telefonu bırak da bir seans yap.';
+    case 'manual_lower_is_better':
+      return polite ? 'Telefonu biraz kenara koy, ortalaman düşer.' : 'Telefonu bırak lan, düşsün.';
+    case 'daily_boolean':
+      return polite ? 'Bugünü işaretlemeyi unutma.' : 'Bugünü kaçırma.';
+    default:
+      return polite ? 'Bugünkü girişini yapmayı unutma.' : 'Bir şeyler yap da gir şuraya.';
+  }
+}
+
+/**
+ * The mid-day "somebody is ahead of you" notification the server sends by
+ * itself, once per çelınc per person per local day.
+ */
+function nudgeCopy(
+  level: VulgarityLevel,
+  leader: string,
+  gap: number,
+  unit: string,
+  metricType: MetricType
+): { title: string; body: string } {
+  const fark = `${formatScore(gap)} ${unit}`;
+  const action = nudgeAction(metricType, level);
+  if (level === 1) {
+    return { title: 'Fark açılıyor', body: `${leader} önde, aradaki fark ${fark}. ${action}` };
+  }
+  if (level === 3) {
+    return {
+      title: 'O NE LAN 🍆',
+      body: `${leader} sana ${fark} farkı koymuş. ${action} Akşama saplanmak istemiyorsan tabii.`,
+    };
+  }
+  return { title: 'O ne lan', body: `${leader} sana ${fark} fark koymuş. ${action}` };
 }
 
 function reminderTitle(level: VulgarityLevel): string {
@@ -558,12 +607,100 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
   return sent;
 }
 
+/** Nobody wants a nudge at 3am, and after 22:00 the day is already lost. */
+const NUDGE_FROM_HOUR = 12;
+const NUDGE_UNTIL_HOUR = 22;
+/** Below this the "fark" is noise — a 40-step gap is not a story. */
+const NUDGE_MIN_RELATIVE_GAP = 0.1;
+
+/**
+ * The mid-day poke the server sends on its own: "o ne lan, {leader} sana fark
+ * koymuş, kalk da iki dolaş".
+ *
+ * A friend can already poke by hand; this is the one that arrives when nobody
+ * is looking, and it is what turns a çelınc from a scoreboard into something
+ * that follows you around during the day.
+ *
+ * Four rules keep it from becoming spam: once per çelınc per person per LOCAL
+ * day (the primary key of `nudges_sent` IS the rate limit), only between noon
+ * and 22:00 where that person actually lives, only when somebody is genuinely
+ * ahead, and never on a check-in çelınc — those have their own deadline
+ * reminder and "you are behind" means nothing there.
+ */
+export function sendNudges(db: Database, now: Date = new Date()): number {
+  const iso = nowIso(now);
+  const active = db.prepare(`SELECT * FROM challenges WHERE status = 'active'`).all() as ChallengeRow[];
+
+  const claim = db.prepare(
+    'INSERT OR IGNORE INTO nudges_sent (challenge_id, user_id, day_key) VALUES (?, ?, ?)',
+  );
+  let sent = 0;
+
+  for (const challenge of active) {
+    if (challenge.metric_type === 'checkin_deadline') continue;
+    // the final hour has its own warning on the device; do not pile on
+    if (Date.parse(challenge.ends_at) - now.getTime() < 60 * 60_000) continue;
+
+    const standings = computeStandings(db, challenge);
+    if (standings.length < 2) continue;
+    const leader = standings[0];
+
+    const participants = new Map(
+      acceptedParticipants(db, challenge.id).map((row) => [row.user_id, row]),
+    );
+    const users = userMap(db, standings.map((view) => view.user.id));
+
+    for (const view of standings) {
+      if (view.user.id === leader.user.id) continue;
+      const gap = Math.abs(leader.score - view.score);
+      if (gap <= 0) continue;
+      // a gap only counts when it is big next to what the leader has
+      const reference = Math.abs(leader.score) || Math.abs(view.score);
+      if (reference > 0 && gap / reference < NUDGE_MIN_RELATIVE_GAP) continue;
+
+      const user = users.get(view.user.id);
+      if (!user || user.deleted_at) continue;
+
+      const timezone = participantTimezone(participants.get(user.id), user);
+      let hour: number;
+      let dayKey: string;
+      try {
+        hour = localHour(now, timezone);
+        dayKey = todayKey(timezone, now);
+      } catch {
+        continue;
+      }
+      if (hour < NUDGE_FROM_HOUR || hour >= NUDGE_UNTIL_HOUR) continue;
+      if (claim.run(challenge.id, user.id, dayKey).changes === 0) continue;
+
+      const copy = nudgeCopy(
+        levelOf(user),
+        leader.user.displayName,
+        gap,
+        challenge.unit,
+        challenge.metric_type as MetricType,
+      );
+      notify(db, {
+        userId: user.id,
+        type: 'nudge',
+        title: copy.title,
+        body: copy.body,
+        data: { challengeId: challenge.id, fromUserId: leader.user.id, dayKey },
+        createdAt: iso,
+      });
+      sent += 1;
+    }
+  }
+
+  return sent;
+}
+
 /**
  * One scheduler pass. Every step is isolated: a failure in one is reported through
  * `deps.onError` and the others still run.
  */
 export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: SchedulerDeps = {}): SchedulerSummary {
-  const summary: SchedulerSummary = { activated: 0, finalized: 0, cancelled: 0, reminders: 0 };
+  const summary: SchedulerSummary = { activated: 0, finalized: 0, cancelled: 0, reminders: 0, nudges: 0 };
   const step = <T>(name: string, fn: () => T, apply: (value: T) => void): void => {
     try {
       apply(fn());
@@ -576,6 +713,7 @@ export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: Sch
   step('finalize', () => finalizeEndedChallenges(db, now), (n) => (summary.finalized = n));
   step('cancel', () => cancelUnderfilled(db, now), (n) => (summary.cancelled = n));
   step('reminders', () => sendReminders(db, now), (n) => (summary.reminders = n));
+  step('nudges', () => sendNudges(db, now), (n) => (summary.nudges = n));
 
   return summary;
 }

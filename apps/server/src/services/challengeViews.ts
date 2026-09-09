@@ -208,12 +208,21 @@ export interface CopyText {
 
 export function inviteCopy(level: VulgarityLevel, creator: string, title: string): CopyText {
   if (level === 1) {
-    return { title: '📩 Çelınc daveti', body: `${creator} seni "${title}" çelıncına davet etti. Kabul et, yarış başlasın.` };
+    return {
+      title: 'Çelınc daveti',
+      body: `${creator} seni "${title}" çelıncına çağırdı. Var mısın?`,
+    };
   }
   if (level === 3) {
-    return { title: '🍆 SANA KOYMAK İSTİYORLAR', body: `${creator} "${title}" çelıncını açtı ve gözüne seni kestirdi. Kabul et de kim kime koyacak görelim.` };
+    return {
+      title: 'ADAMLIĞIN YETER Mİ? 🍆',
+      body: `Adamlığın yeter mi bilmiyorum ama ${creator} sana "${title}" çelıncı gönderdi.`,
+    };
   }
-  return { title: '🔥 Sana çelınc açıldı', body: `${creator} "${title}" çelıncında sana meydan okudu lan. Kabul et ya da korkak diye anıl.` };
+  return {
+    title: 'Sana çelınc geldi',
+    body: `Adamlığın yeter mi bilmiyorum ama ${creator} sana "${title}" çelıncı gönderdi.`,
+  };
 }
 
 export function cancelledByCreatorCopy(level: VulgarityLevel, creator: string, title: string): CopyText {

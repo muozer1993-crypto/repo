@@ -215,7 +215,7 @@ describe('challenge lifecycle', () => {
     });
 
     const summary = runSchedulerOnce(db, app.now());
-    expect(summary).toEqual({ activated: 1, finalized: 0, cancelled: 1, reminders: 0 });
+    expect(summary).toEqual({ activated: 1, finalized: 0, cancelled: 1, reminders: 0, nudges: 0 });
 
     harness.setNow('2026-01-06T08:00:00.000Z');
     expect(runSchedulerOnce(db, app.now()).finalized).toBe(1);

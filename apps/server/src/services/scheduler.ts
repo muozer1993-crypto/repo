@@ -25,7 +25,13 @@ export function startScheduler(app: FastifyInstance, db: Database, config: Confi
       const summary = runSchedulerOnce(db, app.now(), {
         onError: (stepName, err) => app.log.error({ err, step: stepName }, 'scheduler step failed'),
       });
-      if (summary.activated || summary.finalized || summary.cancelled || summary.reminders) {
+      if (
+        summary.activated ||
+        summary.finalized ||
+        summary.cancelled ||
+        summary.reminders ||
+        summary.nudges
+      ) {
         app.log.info(summary, 'scheduler pass');
       }
     } catch (err) {

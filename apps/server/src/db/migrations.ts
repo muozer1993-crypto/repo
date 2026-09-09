@@ -222,8 +222,22 @@ const PARTICIPANT_TIMEZONE = `
 ALTER TABLE challenge_participants ADD COLUMN timezone TEXT;
 `;
 
+/**
+ * One mid-day nudge per person per çelınc per local day. The primary key IS the
+ * rate limit: an INSERT OR IGNORE that changes nothing means "already nudged".
+ */
+const NUDGES_SENT = `
+CREATE TABLE IF NOT EXISTS nudges_sent (
+  challenge_id TEXT NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day_key      TEXT NOT NULL,
+  PRIMARY KEY (challenge_id, user_id, day_key)
+);
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
   { id: '003_participant_timezone', sql: PARTICIPANT_TIMEZONE },
+  { id: '004_nudges_sent', sql: NUDGES_SENT },
 ];

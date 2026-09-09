@@ -59,7 +59,7 @@ export type FriendshipStatus = 'pending' | 'accepted' | 'blocked';
 export type NotificationType =
   | 'friend_request' | 'friend_accepted' | 'challenge_invite' | 'challenge_started'
   | 'challenge_cancelled' | 'challenge_finished' | 'taunt' | 'poke' | 'dispute'
-  | 'entry_rejected' | 'reminder' | 'badge' | 'rematch';
+  | 'entry_rejected' | 'reminder' | 'badge' | 'rematch' | 'nudge';
 export type TauntContext = 'win' | 'win_big' | 'win_close' | 'tie' | 'poke' | 'streak' | 'revenge';
 ```
 
@@ -230,6 +230,8 @@ taunts(id TEXT PK, challenge_id TEXT, from_user_id TEXT, to_user_id TEXT, templa
 pokes(id TEXT PK, challenge_id TEXT, from_user_id TEXT, to_user_id TEXT, created_at TEXT)
 notifications(id TEXT PK, user_id TEXT, type TEXT, title TEXT, body TEXT, data TEXT (json), read_at TEXT, created_at TEXT, pushed_at TEXT, push_error TEXT)
 badges(user_id TEXT, badge_key TEXT, earned_at TEXT, PRIMARY KEY(user_id, badge_key))
+nudges_sent(challenge_id TEXT, user_id TEXT, day_key TEXT, PRIMARY KEY(challenge_id, user_id, day_key))
+  -- the primary key IS the rate limit for the mid-day nudge: one per çelınc per person per local day
 reports(id TEXT PK, reporter_id TEXT, reported_id TEXT, reason TEXT, created_at TEXT)
 reminders_sent(user_id TEXT, day_key TEXT, PRIMARY KEY(user_id, day_key))
 ```

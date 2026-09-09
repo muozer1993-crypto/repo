@@ -55,6 +55,8 @@ export const NOTIFICATION_TYPES = [
   'reminder',
   'badge',
   'rematch',
+  /** the mid-day "o ne lan, sana fark koymuş" poke the server sends by itself */
+  'nudge',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
