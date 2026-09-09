@@ -245,6 +245,21 @@ async function textOf(page) {
   return page.evaluate(() => document.body.innerText ?? '');
 }
 
+/**
+ * Presses the form's own submit control.
+ *
+ * Deliberately not "click the button that says X": the Turkish copy is rewritten
+ * as the product finds its voice, and a smoke test that breaks every time
+ * somebody improves a sentence teaches people to ignore it. React-native-web
+ * renders the app's Button as a real <button role="button">, and on the auth
+ * screens the submit is the first one — the links below it are anchors.
+ */
+async function submitForm(page) {
+  const button = page.locator('button[role="button"]').first();
+  await button.waitFor({ state: 'visible', timeout: 15_000 });
+  await button.click();
+}
+
 async function expectText(page, needles, label) {
   let lastSeen = '';
   try {
@@ -374,7 +389,7 @@ async function main() {
     // 2. sign in through the real form
     await page.fill('input >> nth=0', 'ali');
     await page.fill('input >> nth=1', 'koydum123');
-    await page.getByText(/gir bakalım/i).first().click();
+    await submitForm(page);
     await expectText(page, ['Çelınc', 'çelınc', 'Su İçme', 'Devam'], 'home screen after login');
     await page.screenshot({ path: join(SHOT_DIR, '02-home-loser.png'), fullPage: true });
 
