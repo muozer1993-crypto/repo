@@ -152,10 +152,16 @@ interface TypeRowProps {
 
 function TypeRow({ type, level, selected, onSelect }: TypeRowProps) {
   return (
+    // Every geometric value here is the same selected or not: the edge is
+    // always 4dp and only its COLOUR changes, the row never grows, nothing is
+    // clipped and nothing is elevated. On Android each of those four was a way
+    // for a tapped row to stop being drawn — see CardProps.clip.
     <Card
       padded={false}
+      clip={false}
+      flat
       style={selected ? styles.typeCardOn : styles.typeCard}
-      edgeColor={selected ? Colors.accent : undefined}>
+      edgeColor={selected ? Colors.accent : Colors.border}>
       {/* the head is the only pressable part: nesting it inside a pressable Card
           would fire both handlers on web */}
       <Pressable
@@ -176,12 +182,6 @@ function TypeRow({ type, level, selected, onSelect }: TypeRowProps) {
           </Text>
         </View>
       </Pressable>
-
-      {selected ? (
-        <View style={styles.typeInfo}>
-          <InfoBlock title="Nasıl sayılıyor?" body={type.howMeasuredTr} />
-        </View>
-      ) : null}
     </Card>
   );
 }
@@ -747,6 +747,9 @@ export default function NewChallengeScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, Spacing.lg) }]}>
+        {/* the measurement note lives here rather than inside the chosen row:
+            a row that grows and shrinks moves the whole list under the thumb */}
+        {step === 0 && type ? <InfoBlock title="Nasıl sayılıyor?" body={type.howMeasuredTr} /> : null}
         {hint ? (
           <Text variant="tiny" color={Colors.yellow} center>
             {hint}
@@ -816,7 +819,7 @@ const styles = StyleSheet.create({
   section: { gap: Spacing.lg, paddingTop: Spacing.sm },
   group: { gap: Spacing.sm },
 
-  typeCard: {},
+  typeCard: { borderColor: Colors.border },
   typeCardOn: { borderColor: Colors.accent },
   typeHead: {
     flexDirection: 'row',
@@ -827,11 +830,6 @@ const styles = StyleSheet.create({
   typeEmoji: { fontSize: 30, lineHeight: 38 },
   typeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   typeDesc: { marginTop: Spacing.xs },
-  typeInfo: {
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.lg,
-  },
   infoBlock: {
     gap: Spacing.xs,
     padding: Spacing.md,
