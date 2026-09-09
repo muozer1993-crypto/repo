@@ -108,8 +108,11 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
       try {
         done(null, JSON.parse(text));
       } catch (error) {
-        const failure = error as Error & { statusCode?: number };
+        // The code is what `errorHandler` maps to the Turkish "Geçersiz JSON
+        // gönderdin."; without it a broken body falls through to the generic 400.
+        const failure = error as Error & { statusCode?: number; code?: string };
         failure.statusCode = 400;
+        failure.code = 'FST_ERR_CTP_INVALID_JSON';
         done(failure, undefined);
       }
     },
@@ -118,14 +121,22 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
     limits: { fileSize: LIMITS.UPLOAD_MAX_BYTES, files: 1 },
   });
 
-  // Proof photos are served straight from disk at /uploads/<file>.
+  // Proof photos are served straight from disk at /uploads/<file>. When the
+  // directory cannot be created (read-only filesystem, a file in the way),
+  // @fastify/static would throw on the missing root and take the WHOLE API down with
+  // a raw ENOTDIR stack — so the mount is skipped instead and the rest of the server
+  // still boots; uploads then fail at write time, which is what the operator needs.
   const uploadDir = path.resolve(config.uploadDir);
+  let uploadDirReady = true;
   try {
     fs.mkdirSync(uploadDir, { recursive: true });
-  } catch {
-    // read-only filesystem: uploads will fail loudly at write time instead
+  } catch (err) {
+    uploadDirReady = false;
+    app.log.warn({ err, uploadDir }, 'upload directory unavailable, /uploads is not served');
   }
-  await app.register(fastifyStatic, { root: uploadDir, prefix: '/uploads/', decorateReply: false });
+  if (uploadDirReady) {
+    await app.register(fastifyStatic, { root: uploadDir, prefix: '/uploads/', decorateReply: false });
+  }
 
   registerAuth(app, { db, config, now });
 

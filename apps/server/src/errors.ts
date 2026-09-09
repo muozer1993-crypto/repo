@@ -82,14 +82,26 @@ export interface ErrorBody {
 }
 
 const FASTIFY_MESSAGES: Record<string, { status: number; code: string; message: string }> = {
+  // Unreachable through our own JSON parser (it turns an empty payload into `{}`),
+  // kept for any other content type Fastify parses itself.
   FST_ERR_CTP_EMPTY_JSON_BODY: { status: 400, code: 'empty_body', message: 'İstek gövdesi boş.' },
   FST_ERR_CTP_INVALID_JSON: { status: 400, code: 'invalid_json', message: 'Geçersiz JSON gönderdin.' },
   FST_ERR_CTP_INVALID_MEDIA_TYPE: { status: 415, code: 'invalid_media_type', message: 'Bu içerik tipi desteklenmiyor.' },
   FST_ERR_CTP_BODY_TOO_LARGE: { status: 413, code: 'body_too_large', message: 'Gönderdiğin veri çok büyük.' },
   FST_REQ_FILE_TOO_LARGE: { status: 413, code: 'file_too_large', message: 'Dosya çok büyük (en fazla 5 MB).' },
   FST_PARTS_LIMIT: { status: 400, code: 'too_many_parts', message: 'Çok fazla dosya gönderdin.' },
+  FST_FILES_LIMIT: { status: 400, code: 'too_many_parts', message: 'Çok fazla dosya gönderdin.' },
   FST_INVALID_MULTIPART_CONTENT_TYPE: { status: 400, code: 'invalid_multipart', message: 'Dosya yüklemek için multipart form gerekli.' },
+  // busboy/dicer give up on a truncated body with this one; a dropped mobile upload
+  // is a client problem, not a server fault.
+  ERR_STREAM_PREMATURE_CLOSE: { status: 400, code: 'invalid_multipart', message: 'Dosya yüklenemedi, bağlantı koptu. Tekrar dene.' },
 };
+
+/**
+ * The same failures without a `code`: busboy throws plain Errors when the multipart
+ * body ends mid-part, and those must not be logged as unhandled server errors.
+ */
+const MULTIPART_STREAM_MESSAGE = /multipart data|Premature close|Unexpected end of form/i;
 
 /** `app.setErrorHandler(errorHandler)` — the single renderer for every failure. */
 export function errorHandler(error: Error, request: FastifyRequest, reply: FastifyReply): void {
@@ -112,6 +124,13 @@ export function errorHandler(error: Error, request: FastifyRequest, reply: Fasti
   const known = fastifyCode ? FASTIFY_MESSAGES[fastifyCode] : undefined;
   if (known) {
     void reply.code(known.status).send({ error: { code: known.code, message: known.message } } satisfies ErrorBody);
+    return;
+  }
+
+  if (typeof error.message === 'string' && MULTIPART_STREAM_MESSAGE.test(error.message)) {
+    void reply.code(400).send({
+      error: { code: 'invalid_multipart', message: 'Dosya yüklenemedi, bağlantı koptu. Tekrar dene.' },
+    } satisfies ErrorBody);
     return;
   }
 
