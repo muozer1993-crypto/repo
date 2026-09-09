@@ -263,9 +263,30 @@ edebilir; yeterli itiraz gelirse o giriş silinir.
 | **Android, Health Connect yoksa** | `Pedometer.watchStepCount` | Sadece uygulama açıkken sayar, cihazda birikir. Uygulama bunu "yaklaşık" diye açıkça işaretler. |
 | **Web** | yok | Web derlemesi test amaçlıdır; adım gösterilmez. |
 
+Android 10 ve üstünde adım sayacını okumak için **Fiziksel Aktivite** izni gerekiyor. Uygulama
+bunu adım saymaya başlamadan önce istiyor; vermezsen ayarlar ekranı "izin verilmedi" der.
+İzni sormadan saymaya kalkan bir uygulama sıfır sayar ve bozuk görünür.
+
 Adımlar sunucuya günlük özet olarak gider (`POST /me/steps`), ham konum veya sensör verisi
 asla gönderilmez. Uygulama açıldığında, ön plana geldiğinde ve arka plan görevinde
 (15 dakikada bir, platformun izin verdiği ölçüde) senkronize olur.
+
+### Ekran süresi neden elle giriliyor?
+
+Kısa cevap: **iPhone'da başka yolu yok.**
+
+* **iOS:** Ekran Süresi verisini üçüncü parti bir uygulama okuyamaz. Apple'ın Family Controls /
+  DeviceActivity çerçevesi özel bir yetki istiyor ve o yetkiyle bile rakamlar uygulamanın
+  erişemediği bir kutunun içinde kalıyor — sunucuya göndermek zaten tasarım gereği mümkün değil.
+  Bu Expo'nun eksiği değil, Apple'ın kararı.
+* **Android:** Mümkün. `UsageStatsManager` günlük ekran süresini veriyor, ama kullanıcının sistem
+  ayarlarından "kullanım erişimi" izni vermesi ve uygulamanın gerçek bir derleme olması gerekiyor
+  (Expo Go'da çalışmaz).
+
+`apps/mobile/src/services/screenTime.ts` bu boşluğu dürüstçe yönetiyor: yerel modülü **adıyla**
+arıyor (`requireOptionalNativeModule`), bulamazsa `needs-native-module` diyor ve uygulama elle
+girişe düşüyor. Android tarafını açmak isteyen bir `KoydumScreenTime` yerel modülü eklediğinde
+başka hiçbir yeri değiştirmesi gerekmiyor.
 
 ---
 
