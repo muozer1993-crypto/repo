@@ -30,7 +30,7 @@ Bu görüntüler uçtan uca test çalışırken gerçek veriyle çekildi (<code>
 1. [Ne var içinde](#ne-var-içinde)
 2. [Hızlı başlangıç (5 dakika)](#hızlı-başlangıç-5-dakika)
 3. [Telefonda açmak](#telefonda-açmak)
-4. [Gerçek uygulama derlemek (EAS)](#gerçek-uygulama-derlemek-eas)
+4. [APK yapıp arkadaşına göndermek](#apk-yapıp-arkadaşına-göndermek)
 5. [Sunucuyu internete açmak](#sunucuyu-internete-açmak)
 6. [Adamlık seviyeleri](#adamlık-seviyeleri)
 7. [Çelınc türleri](#çelınc-türleri)
@@ -136,33 +136,52 @@ Expo Go ile her şey çalışır, iki istisna dışında:
 
 ---
 
-## Gerçek uygulama derlemek (EAS)
+## APK yapıp arkadaşına göndermek
 
-Push bildirimi, Health Connect ve kendi ikonuyla kurulabilir bir uygulama için:
+Evet, olur. İki ayrı iş var ve **asıl mesele ikincisi**.
+
+### 1. APK
 
 ```bash
 npm install -g eas-cli
 eas login                       # ücretsiz Expo hesabı
 cd apps/mobile
-eas init                        # app.json'a extra.eas.projectId yazar
+eas init                        # app.json'a extra.eas.projectId yazar (push için şart)
+eas build --profile preview --platform android
 ```
 
-Sonra platformuna göre:
+Derleme Expo'nun sunucularında yapılır (ücretsiz kuyrukta 10-30 dakika sürebilir). Bitince bir
+indirme bağlantısı verir: `.apk` dosyasını indir, WhatsApp'tan, Drive'dan, nereden istersen
+gönder. Arkadaşın kurarken Android "bilinmeyen kaynak" uyarısı verir, bir kere izin vermesi
+yeterli.
 
-```bash
-# Android: kurulabilir APK
-eas build --profile development --platform android
+`preview` profili bilerek **uygulama içi sunucu adresi ekranını açık bırakır** — arkadaşın
+uygulamayı açtığında adresi kendisi yazabilir. `production` profili adresi derlemeye gömer ve o
+ekranı gizler; onu kullanacaksan `apps/mobile/eas.json` içindeki `EXPO_PUBLIC_KOYDUM_API_URL`
+değerini **önce kendi adresinle değiştir**, yoksa açılmayan bir sunucuya bakan bir uygulama
+çıkar.
 
-# iOS: cihazına kurmak için Apple Developer hesabı gerekir
-eas build --profile development --platform ios
-```
+> **iPhone:** Bir arkadaşının iPhone'una kurmak için Apple Developer hesabı ($99/yıl) ve
+> TestFlight gerekiyor. Apple'ın kuralı, bunu aşmanın yolu yok. Android tarafında böyle bir
+> engel yok.
 
-Derleme bitince çıkan bağlantıdan uygulamayı telefonuna kur, sonra `npx expo start --dev-client`
-ile bağlan. `preview` profili arkadaşlara dağıtılabilir bir APK, `production` profili mağaza
-sürümü üretir.
+### 2. Sunucu — asıl iş bu
 
-> **Push için not:** `eas init` çalıştırılmadan `extra.eas.projectId` olmadığı için push token
-> alınamaz. Uygulama bunu Ayarlar ekranında açıkça söyler.
+APK tek başına yetmez: uygulama bir KOYDUM sunucusuna bağlanmak zorunda. Üç senaryo var:
+
+| Durum | Ne yapman lazım |
+|---|---|
+| **Aynı evdesiniz / aynı Wi-Fi** | Hiçbir şey. Senin bilgisayarında `npm run server` açık olduğu sürece arkadaşın uygulamaya senin yerel IP'ni (`192.168.1.x:4000`) yazar ve oynarsınız. Bilgisayarı kapatınca oyun durur. |
+| **Farklı yerdesiniz, hızlıca denemek istiyorsunuz** | Bir tünel aç: `cloudflared tunnel --url http://localhost:4000` ya da `npx localtunnel --port 4000`. Çıkan `https://...` adresini arkadaşına ver. Bilgisayarın açık kaldığı sürece çalışır. |
+| **Kalıcı olarak oynayacaksınız** | Sunucuyu bir yere kur. Depoda hazır `Dockerfile` ve `docker-compose.yml` var; en ucuz VPS'te (aylık birkaç dolar) ya da Fly.io / Railway gibi bir yerde çalışır. Aşağıdaki bölüme bak. |
+
+Kalıcı kurulumda sunucu **7/24 açık kalmalı**: çelınclar bitince sonucu hesaplayan ve "KOYDUM"
+bildirimini gönderen zamanlayıcı orada çalışıyor. Bilgisayar kapalıyken çelınc bitmez, biriken
+işleri sunucu açılınca yapar.
+
+> **Push bildirimi için:** `eas init` çalıştırmadan `extra.eas.projectId` olmaz ve push token
+> alınamaz. Uygulama bunu Ayarlar ekranında açıkça söyler; token yoksa bildirimler gelen
+> kutusundan gecikmeli gelir.
 
 ---
 
