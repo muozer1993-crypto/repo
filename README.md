@@ -161,6 +161,12 @@ ekranı gizler; onu kullanacaksan `apps/mobile/eas.json` içindeki `EXPO_PUBLIC_
 değerini **önce kendi adresinle değiştir**, yoksa açılmayan bir sunucuya bakan bir uygulama
 çıkar.
 
+> **Düz HTTP hakkında:** Android 9'dan beri şifresiz `http://` bağlantıları varsayılan olarak
+> engelli. Bu uygulama kendi sunucusuna bağlanmak zorunda ve o sunucu çoğu zaman ev ağındaki bir
+> IP adresinde (`http://192.168.1.x:4000`) duruyor, o yüzden `app.json` içinde
+> `usesCleartextTraffic: true` açık. Sunucunu gerçek bir alan adına ve HTTPS'e taşıdığında bunu
+> kapatabilirsin.
+
 > **iPhone:** Bir arkadaşının iPhone'una kurmak için Apple Developer hesabı ($99/yıl) ve
 > TestFlight gerekiyor. Apple'ın kuralı, bunu aşmanın yolu yok. Android tarafında böyle bir
 > engel yok.

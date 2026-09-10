@@ -77,7 +77,8 @@
           "android": {
             "minSdkVersion": 26,
             "compileSdkVersion": 36,
-            "targetSdkVersion": 36
+            "targetSdkVersion": 36,
+            "usesCleartextTraffic": true
           }
         }
       ]
