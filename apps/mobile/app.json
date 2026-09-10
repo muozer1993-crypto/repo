@@ -93,16 +93,12 @@
       "bundleIdentifier": "com.koydum.app",
       "supportsTablet": false,
       "infoPlist": {
-        "NSMotionUsageDescription": "Çelınclarde adımlarını sayabilmek için hareket verine erişmemiz gerekiyor.",
         "UIBackgroundModes": [
           "processing",
           "remote-notification"
         ],
         "CFBundleAllowMixedLocalizations": true
       }
-    },
-    "locales": {
-      "tr": "./assets/locales/tr.json"
     }
   }
 }
