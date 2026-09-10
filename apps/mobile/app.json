@@ -2,6 +2,11 @@
   "expo": {
     "name": "KOYDUM",
     "slug": "koydum",
+    "extra": {
+      "eas": {
+        "projectId": "2f97cf50-d6b1-4439-9cfe-a57208caa39e"
+      }
+    },
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/brand/icon.png",
