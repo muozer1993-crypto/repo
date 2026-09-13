@@ -103,6 +103,25 @@ function clip(value: string, max: number): string {
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
+/** What the settings step starts from for a given type. */
+function defaultsFor(type: ChallengeType): {
+  durationChoice: DurationChoice;
+  customDays: string;
+  deadlineTime: string;
+  proofRequired: boolean;
+  stakeText: string;
+} {
+  return {
+    durationChoice: (DURATION_CHOICES as readonly number[]).includes(type.defaultDurationDays)
+      ? type.defaultDurationDays
+      : 'custom',
+    customDays: String(type.defaultDurationDays),
+    deadlineTime: type.defaultDeadlineTime ?? '',
+    proofRequired: type.proofRequired,
+    stakeText: clip(type.suggestedRewardTr, LIMITS.REWARD_TEXT_MAX),
+  };
+}
+
 function normalize(value: string): string {
   return value.trim().toLocaleLowerCase('tr-TR');
 }
@@ -250,21 +269,25 @@ export default function NewChallengeScreen() {
       : Array.isArray(params.friend)
         ? params.friend[0]
         : undefined;
+  // a badge on the profile can send the reader here with the type already chosen
+  const typeParam = typeof params.type === 'string' ? params.type : undefined;
+  const initialType = typeParam ? getChallengeType(typeParam) : undefined;
+  const initial = initialType ? defaultsFor(initialType) : null;
 
   const friendsQuery = useFriends();
   const create = useCreateChallenge();
 
   const [step, setStep] = useState(0);
-  const [typeKey, setTypeKey] = useState<string | null>(null);
+  const [typeKey, setTypeKey] = useState<string | null>(initialType?.key ?? null);
 
   const [title, setTitle] = useState('');
   const [startMode, setStartMode] = useState<StartMode>('now');
-  const [durationChoice, setDurationChoice] = useState<DurationChoice>(3);
-  const [customDays, setCustomDays] = useState('');
-  const [deadlineTime, setDeadlineTime] = useState('');
-  const [proofRequired, setProofRequired] = useState(false);
+  const [durationChoice, setDurationChoice] = useState<DurationChoice>(initial?.durationChoice ?? 3);
+  const [customDays, setCustomDays] = useState(initial?.customDays ?? '');
+  const [deadlineTime, setDeadlineTime] = useState(initial?.deadlineTime ?? '');
+  const [proofRequired, setProofRequired] = useState(initial?.proofRequired ?? false);
   const [stakeMode, setStakeMode] = useState<StakeMode>('reward');
-  const [stakeText, setStakeText] = useState('');
+  const [stakeText, setStakeText] = useState(initial?.stakeText ?? '');
 
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(preselected ? [preselected] : []);
@@ -341,17 +364,14 @@ export default function NewChallengeScreen() {
 
   const chooseType = (next: ChallengeType) => {
     if (next.key === typeKey) return;
+    const defaults = defaultsFor(next);
     setTypeKey(next.key);
-    setDurationChoice(
-      (DURATION_CHOICES as readonly number[]).includes(next.defaultDurationDays)
-        ? next.defaultDurationDays
-        : 'custom'
-    );
-    setCustomDays(String(next.defaultDurationDays));
-    setDeadlineTime(next.defaultDeadlineTime ?? '');
-    setProofRequired(next.proofRequired);
+    setDurationChoice(defaults.durationChoice);
+    setCustomDays(defaults.customDays);
+    setDeadlineTime(defaults.deadlineTime);
+    setProofRequired(defaults.proofRequired);
     setStakeMode('reward');
-    setStakeText(clip(next.suggestedRewardTr, LIMITS.REWARD_TEXT_MAX));
+    setStakeText(defaults.stakeText);
   };
 
   const toggleFriend = (id: string) => {

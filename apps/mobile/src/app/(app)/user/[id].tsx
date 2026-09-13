@@ -1,4 +1,5 @@
 import { LIMITS, getBadge } from '@koydum/shared';
+import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -39,9 +40,12 @@ export default function UserProfileScreen() {
   const profile = useProfile(id);
   const friends = useFriends();
   const finished = useChallenges('finished');
+  // a çelınc still running between us is not "henüz karşı karşıya gelmediniz"
+  const live = useChallenges('active,pending');
   const friendAction = useFriendAction();
 
   const [reportOpen, setReportOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState<null | 'block' | 'report'>(null);
 
@@ -67,9 +71,30 @@ export default function UserProfileScreen() {
     else head.ties += 1;
   }
 
+  const shared = (live.data ?? []).filter(
+    (summary) =>
+      summary.challenge.status !== 'cancelled' &&
+      summary.participants.some((p) => p.user.id === myId && p.status === 'accepted') &&
+      summary.participants.some((p) => p.user.id === id && p.status !== 'declined')
+  );
+  const liveLine = (() => {
+    const current = shared.find((summary) => summary.challenge.status === 'active') ?? shared[0];
+    if (!current) return null;
+    const title = current.challenge.title;
+    if (current.challenge.status !== 'active') return `"${title}" başlamak üzere, kabul bekliyor.`;
+    const mineSide = current.participants.find((p) => p.user.id === myId);
+    const theirSide = current.participants.find((p) => p.user.id === id);
+    if (!mineSide || !theirSide) return `"${title}" şu an sürüyor.`;
+    if (mineSide.rank < theirSide.rank) return `"${title}" sürüyor, şu an öndesin.`;
+    if (mineSide.rank > theirSide.rank) return `"${title}" sürüyor, şu an geridesin.`;
+    return `"${title}" sürüyor, şu an başa başsınız.`;
+  })();
+
   const headLine =
     head.total === 0
-      ? 'Henüz karşı karşıya gelmediniz. Bir çelınc aç da görelim.'
+      ? liveLine
+        ? 'Daha bitmiş bir çelıncınız yok, ilki sürüyor.'
+        : 'Henüz karşı karşıya gelmediniz. Bir çelınc aç da görelim.'
       : head.mine > head.theirs
         ? `${head.mine}-${head.theirs} öndesin.`
         : head.mine < head.theirs
@@ -303,6 +328,11 @@ export default function UserProfileScreen() {
           <Text variant="small" muted>
             {finished.isLoading ? 'Biten çelınclara bakıyorum…' : headLine}
           </Text>
+          {liveLine ? (
+            <Text variant="small" color={Colors.yellow} style={styles.liveLine}>
+              🔥 {liveLine}
+            </Text>
+          ) : null}
         </Card>
       ) : null}
 
@@ -324,16 +354,7 @@ export default function UserProfileScreen() {
       {!isMe ? (
         <View style={styles.actions}>
           {isFriend ? (
-            <>
-              <Button title="Çelınc aç" size="lg" icon="🔥" fullWidth onPress={openChallenge} />
-              <Button
-                title="Arkadaşlıktan çıkar"
-                variant="secondary"
-                fullWidth
-                loading={friendAction.isPending}
-                onPress={() => void removeFriend()}
-              />
-            </>
+            <Button title="Çelınc aç" size="lg" icon="🔥" fullWidth onPress={openChallenge} />
           ) : incomingRequestId ? (
             <>
               <Button
@@ -366,29 +387,75 @@ export default function UserProfileScreen() {
               </Text>
             </>
           )}
-          <View style={styles.dangerRow}>
-            <Button
-              title="Engelle"
-              variant="ghost"
-              size="sm"
-              loading={busy === 'block'}
-              onPress={() => void block()}
-              style={styles.flexButton}
-            />
-            <Button
-              title="Şikayet et"
-              variant="ghost"
-              size="sm"
-              onPress={() => setReportOpen(true)}
-              style={styles.flexButton}
-            />
-          </View>
+          {/* Arkadaşlıktan çıkar / Engelle used to sit right on this screen,
+              one thumb-slip below "Çelınc aç". They live behind a menu now. */}
+          <Button
+            title="Diğer seçenekler"
+            variant="ghost"
+            size="sm"
+            icon="⋯"
+            fullWidth
+            loading={busy === 'block' || friendAction.isPending}
+            onPress={() => setMoreOpen(true)}
+          />
         </View>
       ) : (
         <Text variant="small" muted center>
           Bu sensin. Kendine koyamazsın.
         </Text>
       )}
+
+      <Sheet visible={moreOpen} onClose={() => setMoreOpen(false)} title={user.displayName} scroll={false}>
+        <View style={styles.menu}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setMoreOpen(false);
+              void Clipboard.setStringAsync(`@${user.username}`);
+              toast({ title: 'Kopyalandı', body: `@${user.username}`, kind: 'info' });
+            }}
+            style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemOn]}>
+            <Text variant="body">📋 Kullanıcı adını kopyala</Text>
+          </Pressable>
+          {isFriend ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setMoreOpen(false);
+                void removeFriend();
+              }}
+              style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemOn]}>
+              <Text variant="body">👋 Arkadaşlıktan çıkar</Text>
+              <Text variant="tiny" muted>
+                Ortak çelınclar kalır, yenisini açamazsınız.
+              </Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setMoreOpen(false);
+              setReportOpen(true);
+            }}
+            style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemOn]}>
+            <Text variant="body">🚩 Şikayet et</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setMoreOpen(false);
+              void block();
+            }}
+            style={({ pressed }) => [styles.menuItem, styles.menuItemDanger, pressed && styles.menuItemOn]}>
+            <Text variant="body" color={Colors.danger}>
+              ⛔ Engelle
+            </Text>
+            <Text variant="tiny" muted>
+              Sana çelınc açamaz, laf sokamaz, istek gönderemez.
+            </Text>
+          </Pressable>
+        </View>
+      </Sheet>
 
       <Sheet visible={reportOpen} onClose={() => setReportOpen(false)} title="Şikayet et">
         <Text variant="small" muted>
@@ -431,7 +498,17 @@ const styles = StyleSheet.create({
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginTop: Spacing.sm },
   badgeEmpty: { marginTop: Spacing.sm },
   actions: { gap: Spacing.md },
-  dangerRow: { flexDirection: 'row', gap: Spacing.sm },
-  flexButton: { flex: 1 },
+  liveLine: { marginTop: Spacing.sm },
+  menu: { gap: Spacing.sm },
+  menuItem: {
+    gap: 2,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  menuItemDanger: { borderColor: Colors.dangerDim },
+  menuItemOn: { backgroundColor: Colors.surfaceHigh },
   reportInput: { minHeight: 96, textAlignVertical: 'top', borderRadius: Radius.md },
 });

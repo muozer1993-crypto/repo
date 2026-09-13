@@ -9,6 +9,7 @@ import {
   badgeStatKey,
   badgeTarget,
   type BadgeDef,
+  type BadgeFamily,
   type BadgeRung,
   type LeaderboardEntry,
   type UserStats,
@@ -82,15 +83,67 @@ function statValue(stats: UserStats, key: string): number {
 }
 
 /**
+ * Tapping a rung explains what it takes and, where a çelınc type answers that,
+ * opens the wizard with the type already chosen.
+ */
+const BADGE_HOWTO: Record<
+  BadgeFamily,
+  { how: string; cta: string; href: { pathname: string; params?: Record<string, string> } }
+> = {
+  koyus: {
+    how: 'Çelınc kazandıkça yükselir. Herhangi bir türde, kim kazanırsa o koyar.',
+    cta: 'Çelınc aç',
+    href: { pathname: '/(app)/challenge/new' },
+  },
+  yiyis: {
+    how: 'Kaybettikçe yükselir. Kimse bunu istemez ama herkes bir yerden başlar.',
+    cta: 'Çelınc aç',
+    href: { pathname: '/(app)/challenge/new' },
+  },
+  adim: {
+    how: 'Tek günde attığın adıma bakar. Bir adım çelıncı açıp yürümen yeter, telefon sayıyor.',
+    cta: 'Adım çelıncı aç',
+    href: { pathname: '/(app)/challenge/new', params: { type: 'adim_yarisi' } },
+  },
+  odak: {
+    how: 'Odak seanslarında biriktirdiğin toplam dakikaya bakar. Telefonu bırak, sayaç çalışsın.',
+    cta: 'Odak çelıncı aç',
+    href: { pathname: '/(app)/challenge/new', params: { type: 'odak_seansi' } },
+  },
+  erken: {
+    how: 'Üst üste kaç gün zamanında check-in yaptığına bakar. Bir erken kalkma çelıncı aç.',
+    cta: 'Erken kalkma çelıncı aç',
+    href: { pathname: '/(app)/challenge/new', params: { type: 'erken_kus' } },
+  },
+  itiraz: {
+    how: 'Bir kankanın şüpheli girişine itiraz et; itirazı çoğunluk kabul ederse sayılır.',
+    cta: 'Çelınclara bak',
+    href: { pathname: '/(app)/(tabs)' },
+  },
+  rovans: {
+    how: 'Kaybettiğin bir çelıncın sonuç ekranından rövanş iste ve bu sefer kazan.',
+    cta: 'Biten çelınclara bak',
+    href: { pathname: '/(app)/(tabs)' },
+  },
+};
+
+/**
  * One rung. Earned rungs say what they are; the single locked one says what it
  * costs and how close you are — the rungs above it are not drawn at all, so
  * the ladder grows as you climb instead of greeting a new user with a wall of
  * grey squares.
  */
-function BadgeTile({ rung }: { rung: BadgeRung }) {
+function BadgeTile({ rung, onPress }: { rung: BadgeRung; onPress: (rung: BadgeRung) => void }) {
   const { badge, earned } = rung;
   return (
-    <View style={[styles.badge, earned ? styles.badgeOn : styles.badgeOff]}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => onPress(rung)}
+      style={({ pressed }) => [
+        styles.badge,
+        earned ? styles.badgeOn : styles.badgeOff,
+        pressed && styles.badgePressed,
+      ]}>
       <Text style={[styles.badgeEmoji, !earned && styles.dim]}>{badge.emoji}</Text>
       <Text
         variant="tiny"
@@ -121,7 +174,7 @@ function BadgeTile({ rung }: { rung: BadgeRung }) {
           />
         </>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -142,6 +195,7 @@ export default function ProfileScreen() {
   const [nameDraft, setNameDraft] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [openRung, setOpenRung] = useState<BadgeRung | null>(null);
 
   if (!me) {
     return (
@@ -339,7 +393,7 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.badgeGrid}>
                 {rungs.map((rung) => (
-                  <BadgeTile key={rung.badge.key} rung={rung} />
+                  <BadgeTile key={rung.badge.key} rung={rung} onPress={setOpenRung} />
                 ))}
               </View>
             </View>
@@ -431,6 +485,49 @@ export default function ProfileScreen() {
           loading={updateMe.isPending}
           onPress={saveName}
         />
+      </Sheet>
+
+      <Sheet
+        visible={!!openRung}
+        onClose={() => setOpenRung(null)}
+        title={openRung ? `${openRung.badge.emoji} ${openRung.badge.nameTr}` : ''}
+        scroll={false}>
+        {openRung ? (
+          <View style={styles.rungSheet}>
+            <Text variant="small" muted>
+              {BADGE_FAMILY_LABELS_TR[openRung.badge.family]} merdiveni · {openRung.badge.tier}. basamak
+            </Text>
+            <Text variant="body">{BADGE_HOWTO[openRung.badge.family].how}</Text>
+            {openRung.earned ? (
+              <Text variant="small" color={Colors.yellow}>
+                ✓ {openRung.badge.descriptionTr}
+              </Text>
+            ) : (
+              <>
+                <Text variant="small" color={Colors.accent}>
+                  {ruleHint(openRung.badge)} · {formatNumber(Math.min(openRung.current, openRung.target))}/
+                  {formatNumber(openRung.target)}
+                </Text>
+                <ProgressBar
+                  value={openRung.progress}
+                  color={Colors.accent}
+                  track={Colors.surfaceHigh}
+                  height={6}
+                />
+              </>
+            )}
+            <Button
+              title={BADGE_HOWTO[openRung.badge.family].cta}
+              icon="🔥"
+              fullWidth
+              onPress={() => {
+                const target = BADGE_HOWTO[openRung.badge.family].href;
+                setOpenRung(null);
+                router.push(target);
+              }}
+            />
+          </View>
+        ) : null}
       </Sheet>
 
       <Sheet visible={logoutOpen} onClose={() => setLogoutOpen(false)} title="Çıkış" scroll={false}>
@@ -594,6 +691,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   badgeOn: { backgroundColor: Colors.surface, borderColor: Colors.yellowDim },
+  badgePressed: { opacity: 0.8 },
+  rungSheet: { gap: Spacing.md },
   badgeOff: { backgroundColor: Colors.bg, borderColor: Colors.border },
   badgeEmoji: { fontSize: 26 },
   dim: { opacity: 0.35 },

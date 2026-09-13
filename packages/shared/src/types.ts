@@ -143,6 +143,7 @@ export const MICROCOPY_KEYS = [
   'invite_friends_cta',
   'challenge_pending_you',
   'challenge_active_leading',
+  'challenge_active_tie',
   'challenge_active_losing',
   'challenge_finished_won',
   'challenge_finished_lost',

@@ -20,7 +20,8 @@ export const MICROCOPY: Record<MicrocopyKey, MicrocopyEntry> = {
   "create_challenge_cta": { level1: "Çelınc Başlat", level2: "Çelınc Aç", level3: "Koymaya Başla" },
   "invite_friends_cta": { level1: "Arkadaş Davet Et", level2: "Kankaları Çağır", level3: "Kurban Getir" },
   "challenge_pending_you": { level1: "Bu çelınc seni bekliyor. Kabul edersen başlar.", level2: "Sana çelınc geldi. Kabul et bakalım.", level3: "Biri sana koymak istiyor. Kabul et de görelim." },
-  "challenge_active_leading": { level1: "Öndesin. Böyle devam et.", level2: "Öndesin lan. Sakın gevşeme.", level3: "Şu an sen koyuyorsun. Gevşersen adam geri alır." },
+  "challenge_active_leading": { level1: "Öndesin, aferin. Böyle devam.", level2: "Aferin lan koçum benim, böyle devam.", level3: "Aferin lan koçum benim, böyle devam. Gevşersen adam geri alır 🍆" },
+  "challenge_active_tie": { level1: "Başa başsınız. Küçük bir fark yeter.", level2: "Başa baş gidiyorsunuz. Bir kıpırda, öne geç.", level3: "Kafa kafaya. Kim önce kıpırdarsa o koyar." },
   "challenge_active_losing": { level1: "Biraz gerideysin. Küçük bir gayret yeter.", level2: "Geridesin. Böyle giderse yiyeceksin.", level3: "Geridesin. Kalk yoksa akşam yersin 🍆" },
   "challenge_finished_won": { level1: "Kazandın, tebrikler. İstersen arkadaşına bir mesaj gönder.", level2: "Koydun lan. Kaybedene bir laf gönder.", level3: "SAPLADIN. Bildirimi seç, gitsin." },
   "challenge_finished_lost": { level1: "Bu sefer olmadı. Rövanş isteyebilirsin.", level2: "Yedin. Birazdan bildirim gelecek.", level3: "Yedin işte. Bildirim yolda, aç da oku." },
@@ -79,9 +80,10 @@ export const BADGES: readonly BadgeDef[] = [
   { key: "yiyis_3", family: "yiyis", tier: 3, nameTr: "Abone Oldun", emoji: "🧾", descriptionTr: "30 çelınc kaybettin. Artık aidat gibi ödüyorsun.", rule: "losses>=30" },
 
   // adım
-  { key: "adim_1", family: "adim", tier: 1, nameTr: "Yürüyen Adam", emoji: "🚶", descriptionTr: "Tek günde 15.000 adım attın.", rule: "stepsSingleDayMax>=15000" },
-  { key: "adim_2", family: "adim", tier: 2, nameTr: "Ayakkabı Katili", emoji: "👟", descriptionTr: "Tek günde 25.000 adım. Ayakkabı dayanmıyor.", rule: "stepsSingleDayMax>=25000" },
-  { key: "adim_3", family: "adim", tier: 3, nameTr: "Evi Yok Bunun", emoji: "🏅", descriptionTr: "Tek günde 40.000 adım. Nereye gidiyorsun sen?", rule: "stepsSingleDayMax>=40000" },
+  { key: "adim_1", family: "adim", tier: 1, nameTr: "Yola Çıktın", emoji: "🥾", descriptionTr: "Tek günde 7.500 adım attın.", rule: "stepsSingleDayMax>=7500" },
+  { key: "adim_2", family: "adim", tier: 2, nameTr: "Yürüyen Adam", emoji: "🚶", descriptionTr: "Tek günde 15.000 adım attın.", rule: "stepsSingleDayMax>=15000" },
+  { key: "adim_3", family: "adim", tier: 3, nameTr: "Ayakkabı Katili", emoji: "👟", descriptionTr: "Tek günde 25.000 adım. Ayakkabı dayanmıyor.", rule: "stepsSingleDayMax>=25000" },
+  { key: "adim_4", family: "adim", tier: 4, nameTr: "Evi Yok Bunun", emoji: "🏅", descriptionTr: "Tek günde 40.000 adım. Nereye gidiyorsun sen?", rule: "stepsSingleDayMax>=40000" },
 
   // odak
   { key: "odak_1", family: "odak", tier: 1, nameTr: "Telefonu Bıraktın", emoji: "🧘", descriptionTr: "Toplam 300 dakika odaklandın.", rule: "focusTotalMinutes>=300" },

@@ -52,10 +52,17 @@ describe('Turkish formatting', () => {
     expect(formatDayKeyFriendly('2026-09-01', '2026-09-08', '2026-09-07')).toBe('1 Eylül');
   });
 
-  it('describes recent times', () => {
+  it('describes recent times in Turkish without Intl.RelativeTimeFormat', () => {
     const now = new Date('2026-09-08T12:00:00Z');
     expect(relativeTime('2026-09-08T11:59:50Z', now)).toBe('az önce');
-    expect(relativeTime('2026-09-08T11:00:00Z', now)).toContain('saat');
+    expect(relativeTime('2026-09-08T11:59:00Z', now)).toBe('1 dakika önce');
+    expect(relativeTime('2026-09-08T11:00:00Z', now)).toBe('1 saat önce');
+    expect(relativeTime('2026-09-08T09:30:00Z', now)).toBe('3 saat önce');
+    expect(relativeTime('2026-09-07T12:00:00Z', now)).toBe('dün');
+    expect(relativeTime('2026-09-05T12:00:00Z', now)).toBe('3 gün önce');
+    expect(relativeTime('2026-08-20T12:00:00Z', now)).toBe('3 hafta önce');
+    expect(relativeTime('2026-09-08T12:10:00Z', now)).toBe('10 dakika sonra');
+    expect(relativeTime('2026-09-09T12:00:00Z', now)).toBe('yarın');
     expect(relativeTime('bozuk', now)).toBe('');
   });
 

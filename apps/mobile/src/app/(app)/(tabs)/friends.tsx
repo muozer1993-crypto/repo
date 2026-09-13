@@ -126,7 +126,9 @@ export default function FriendsScreen() {
 
   const shareCode = async () => {
     if (!me?.inviteCode) return;
-    const message = `KOYDUM'da bana kanka ekle. Davet kodum: ${me.inviteCode} (@${me.username})`;
+    // No store link yet, so the message says how to get the app instead of
+    // pretending there is one to tap.
+    const message = `KOYDUM'da bana kanka ekle. Davet kodum: ${me.inviteCode} (@${me.username}). Uygulama sende yoksa benden iste, APK'yı yollarım.`;
     if (Platform.OS === 'web') {
       // react-native-web's Share is not reliable in every browser; copying always works
       await copyCode();

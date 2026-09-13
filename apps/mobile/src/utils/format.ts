@@ -24,28 +24,36 @@ export function formatClock(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-const RELATIVE_STEPS: [limitSeconds: number, divisor: number, unit: Intl.RelativeTimeFormatUnit][] = [
-  [60, 1, 'second'],
-  [3600, 60, 'minute'],
-  [86400, 3600, 'hour'],
-  [604800, 86400, 'day'],
-  [2629800, 604800, 'week'],
-  [31557600, 2629800, 'month'],
-  [Infinity, 31557600, 'year'],
+/**
+ * "3 dakika önce" / "2 gün sonra", written by hand.
+ *
+ * Not `Intl.RelativeTimeFormat`: Hermes on Android does not ship it, so
+ * `new Intl.RelativeTimeFormat(...)` throws "undefined cannot be used as a
+ * constructor" on a real phone — which took the inbox and every challenge
+ * screen down while the web build, on V8, was fine. Turkish needs no plural
+ * agreement here, so a table is all it takes.
+ */
+const RELATIVE_STEPS: [limitSeconds: number, divisor: number, unitTr: string][] = [
+  [60, 1, 'saniye'],
+  [3600, 60, 'dakika'],
+  [86400, 3600, 'saat'],
+  [604800, 86400, 'gün'],
+  [2629800, 604800, 'hafta'],
+  [31557600, 2629800, 'ay'],
+  [Infinity, 31557600, 'yıl'],
 ];
 
-/** "3 dakika önce" / "2 gün önce" */
 export function relativeTime(iso: string, now: Date = new Date()): string {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return '';
   const deltaSeconds = (then - now.getTime()) / 1000;
   const abs = Math.abs(deltaSeconds);
   if (abs < 45) return 'az önce';
-  const formatter = new Intl.RelativeTimeFormat('tr-TR', { numeric: 'auto' });
-  for (const [limit, divisor, unit] of RELATIVE_STEPS) {
-    if (abs < limit) return formatter.format(Math.round(deltaSeconds / divisor), unit);
-  }
-  return formatter.format(Math.round(deltaSeconds / 31557600), 'year');
+  const step = RELATIVE_STEPS.find(([limit]) => abs < limit) ?? RELATIVE_STEPS[RELATIVE_STEPS.length - 1];
+  const [, divisor, unit] = step;
+  const count = Math.max(1, Math.round(abs / divisor));
+  if (count === 1 && unit === 'gün') return deltaSeconds < 0 ? 'dün' : 'yarın';
+  return deltaSeconds < 0 ? `${count} ${unit} önce` : `${count} ${unit} sonra`;
 }
 
 const TR_MONTHS = [

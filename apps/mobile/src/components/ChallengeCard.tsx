@@ -61,7 +61,16 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
         )}
         {me && challenge.status === 'active' ? (
           <Text variant="tiny" muted numberOfLines={1} style={styles.hint}>
-            {t(me.rank === 1 ? 'challenge_active_leading' : 'challenge_active_losing', level)}
+            {/* the same reading as the chip: rank 1 is shared in a dead heat,
+                so "sen koyuyorsun" on equal scores would be a lie */}
+            {t(
+              status.key === 'leading'
+                ? 'challenge_active_leading'
+                : status.key === 'tie'
+                  ? 'challenge_active_tie'
+                  : 'challenge_active_losing',
+              level
+            )}
           </Text>
         ) : null}
       </View>
