@@ -12,19 +12,31 @@
       },
       "ios": {
         "simulator": false
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "preview"
+    },
+    "play-internal": {
+      "extends": "preview",
+      "distribution": "store",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "autoIncrement": true,
+      "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_KOYDUM_API_URL": "https://SUNUCUNU-BURAYA-YAZ.example.com"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {

@@ -171,6 +171,64 @@ değerini **önce kendi adresinle değiştir**, yoksa açılmayan bir sunucuya b
 > TestFlight gerekiyor. Apple'ın kuralı, bunu aşmanın yolu yok. Android tarafında böyle bir
 > engel yok.
 
+### 1b. Güncellemeleri APK indirmeden almak (EAS Update)
+
+Uygulamada `expo-updates` kurulu. Bunun anlamı: **JavaScript'e dokunan her düzeltme** (metin,
+ekran, kural, rozet, laf) kurulu telefonlara **yeniden derlemeden** gider. Derleme yalnızca yerel
+tarafa dokunan değişikliklerde gerekir (yeni bir native paket, `app.json`'daki izinler, ikon).
+
+Bir düzeltmeyi yaymak için:
+
+```bash
+cd apps/mobile
+eas update --channel preview --message "berabere metni düzeldi"
+```
+
+Bir dakika sürer. `preview` kanalındaki her kurulu uygulama (APK ya da Play iç testi) bir sonraki
+açılışta yeni sürümü alır. Kanal, `eas.json`'daki profilde yazıyor; `play-internal` profili de
+`preview` kanalını dinler, yani tek komut ikisine birden gider.
+
+Kural: `app.json`'daki `version` değeri, uygulamanın "çalışma zamanı"dır (`runtimeVersion:
+appVersion`). Yerel tarafı değiştiren bir derleme yaptığında `version`'ı yükselt (1.0.0 → 1.1.0),
+böylece eski kurulumlar kendilerinde olmayan native kodu varsayan bir güncelleme almaz.
+
+### 1c. Google Play'e gizli olarak koymak (dahili test)
+
+Play'de "gizli uygulama" diye bir şey var, adı **Internal testing**. Mağazada listelenmez,
+aramada çıkmaz; sadece senin eklediğin e-postalar (en fazla 100 kişi) ya da verdiğin bağlantıyla
+kurulur ve **güncellemeler Play üzerinden** normal bir uygulama gibi gelir. Piyasaya çıkmadan
+arkadaşlarla denemek için tam olarak bu.
+
+Bir kerelik işler:
+
+1. **Google Play Console** hesabı aç: [play.google.com/console](https://play.google.com/console) —
+   25 $ tek seferlik ücret ve kimlik doğrulaması (birkaç gün sürebilir).
+2. Console'da **Create app** → adı KOYDUM, uygulama, ücretsiz.
+3. Derlemeyi mağaza formatında (AAB) al:
+   ```bash
+   cd apps/mobile
+   eas build --profile play-internal --platform android
+   ```
+   Bu profil `preview` ile aynıdır, sadece APK yerine AAB üretir ve sürüm numarasını her seferinde
+   otomatik artırır. Uygulama içi sunucu adresi ekranı açık kalır.
+4. Console'da **Testing → Internal testing → Create new release**, indirdiğin `.aab` dosyasını
+   yükle, kaydet, yayınla. İlk yüklemede Play imzalama anahtarını kendisinin yönetmesini kabul et.
+5. Aynı sayfada **Testers** sekmesinden bir liste oluştur, arkadaşlarının Gmail adreslerini ekle.
+   **Copy link** ile çıkan bağlantıyı onlara gönder; bağlantıya girip "Become a tester" deyince
+   uygulama Play'de görünür ve kurulur.
+
+Sonraki her sürümde sadece 3. ve 4. adım. (`eas submit -p android` ile 4. adımı da otomatiğe
+bağlayabilirsin; bunun için Console'dan bir servis hesabı anahtarı gerekiyor, README'nin bu
+kısmını ona göre genişletiriz.)
+
+İki şey bilinsin:
+
+* Google, yeni kişisel geliştirici hesaplarının **mağazaya (production) çıkmadan önce** en az 12
+  kişiyle 14 gün kapalı test yapmasını istiyor. Dahili test için böyle bir şart yok — o hemen
+  çalışır. Zaten sizin yapacağınız şey de bu.
+* Play'den kurmak sunucu sorununu çözmez. Arkadaşların uygulamayı Play'den de alsa, uygulamanın
+  konuşacağı bir KOYDUM sunucusu olmak zorunda — aşağıdaki bölüm.
+
 ### 2. Sunucu — asıl iş bu
 
 APK tek başına yetmez: uygulama bir KOYDUM sunucusuna bağlanmak zorunda. Üç senaryo var:

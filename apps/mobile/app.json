@@ -8,6 +8,13 @@
       }
     },
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/64086b22-8613-491a-a6e4-80c947df8d31",
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "portrait",
     "icon": "./assets/brand/icon.png",
     "scheme": "koydum",
