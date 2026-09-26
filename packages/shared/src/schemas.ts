@@ -149,6 +149,23 @@ export const StepsSyncBodySchema = z.object({
 });
 export type StepsSyncBody = z.infer<typeof StepsSyncBodySchema>;
 
+/**
+ * One day of screen time as the phone itself counted it (Android usage access).
+ * Whole minutes; a day has 1440 of them and the phone may not claim more.
+ */
+export const ScreenTimeSyncDaySchema = z.object({
+  dayKey: DayKeySchema,
+  minutes: z.number().int().min(0).max(LIMITS.SCREEN_TIME_MINUTES_PER_DAY_MAX),
+});
+export type ScreenTimeSyncDay = z.infer<typeof ScreenTimeSyncDaySchema>;
+
+export const ScreenTimeSyncBodySchema = z.object({
+  days: z
+    .array(ScreenTimeSyncDaySchema)
+    .max(LIMITS.SCREEN_TIME_SYNC_DAYS_MAX, `En fazla ${LIMITS.SCREEN_TIME_SYNC_DAYS_MAX} gün`),
+});
+export type ScreenTimeSyncBody = z.infer<typeof ScreenTimeSyncBodySchema>;
+
 // ---------------------------------------------------------------------------
 // Friends
 // ---------------------------------------------------------------------------

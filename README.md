@@ -191,6 +191,8 @@ açılışta yeni sürümü alır. Kanal, `eas.json`'daki profilde yazıyor; `pl
 Kural: `app.json`'daki `version` değeri, uygulamanın "çalışma zamanı"dır (`runtimeVersion:
 appVersion`). Yerel tarafı değiştiren bir derleme yaptığında `version`'ı yükselt (1.0.0 → 1.1.0),
 böylece eski kurulumlar kendilerinde olmayan native kodu varsayan bir güncelleme almaz.
+Ekran süresi modülü tam olarak böyle bir değişiklikti: 1.1.0 sürümü yeni bir APK ister, `eas update`
+ile 1.0.0 kurulumlarına gitmez.
 
 ### 1c. Google Play'e gizli olarak koymak (dahili test)
 
@@ -354,22 +356,34 @@ Adımlar sunucuya günlük özet olarak gider (`POST /me/steps`), ham konum veya
 asla gönderilmez. Uygulama açıldığında, ön plana geldiğinde ve arka plan görevinde
 (15 dakikada bir, platformun izin verdiği ölçüde) senkronize olur.
 
-### Ekran süresi neden elle giriliyor?
+### Ekran süresi nereden geliyor?
 
-Kısa cevap: **iPhone'da başka yolu yok.**
+| Platform | Kaynak | Not |
+|---|---|---|
+| **Android (APK / Play)** | `UsageStatsManager` — telefonun kendi kullanım verisi | Ayarlar'da bir kere **kullanım erişimi** veriyorsun, sonra ekran süren her açılışta ve arka planda kendi gidiyor. Elle giriş kapanıyor; telefonun okuduğu günü ekran görüntüsüyle değiştirmek mümkün değil. |
+| **iOS** | yok, elle giriş | Apple Ekran Süresi verisini hiçbir üçüncü parti uygulamaya açmıyor. Family Controls / DeviceActivity çerçevesi özel yetki istiyor, o yetkiyle bile rakamlar uygulamanın erişemediği bir kutuda kalıyor. Bu Expo'nun eksiği değil, Apple'ın kararı. iPhone'da Ekran Süresi ekranındaki toplamı ekran görüntüsüyle giriyorsun. |
+| **Expo Go** | yok, elle giriş | Yerel modül Expo Go'da yok; uygulama bunu söyler ve elle girişe düşer. |
 
-* **iOS:** Ekran Süresi verisini üçüncü parti bir uygulama okuyamaz. Apple'ın Family Controls /
-  DeviceActivity çerçevesi özel bir yetki istiyor ve o yetkiyle bile rakamlar uygulamanın
-  erişemediği bir kutunun içinde kalıyor — sunucuya göndermek zaten tasarım gereği mümkün değil.
-  Bu Expo'nun eksiği değil, Apple'ın kararı.
-* **Android:** Mümkün. `UsageStatsManager` günlük ekran süresini veriyor, ama kullanıcının sistem
-  ayarlarından "kullanım erişimi" izni vermesi ve uygulamanın gerçek bir derleme olması gerekiyor
-  (Expo Go'da çalışmaz).
+Android tarafı `apps/mobile/modules/koydum-screen-time/` altındaki yerel Expo modülü (Kotlin).
+Günlük dakikaları `queryEvents` üzerinden hesaplıyor: her uygulamanın ön planda kaldığı aralık,
+yerel gece yarısına göre gün gün toplanıyor. Dijital Denge'nin gösterdiği "ekran süresi" de aynı
+şekilde çıkıyor. Modülün `app.plugin.js` dosyası manifeste `PACKAGE_USAGE_STATS` iznini ekler.
 
-`apps/mobile/src/services/screenTime.ts` bu boşluğu dürüstçe yönetiyor: yerel modülü **adıyla**
-arıyor (`requireOptionalNativeModule`), bulamazsa `needs-native-module` diyor ve uygulama elle
-girişe düşüyor. Android tarafını açmak isteyen bir `KoydumScreenTime` yerel modülü eklediğinde
-başka hiçbir yeri değiştirmesi gerekmiyor.
+İki şey bilinsin:
+
+* **Kullanım erişimi çalışma zamanında istenmez.** Android bu izni sistem ayarlarından açtırır:
+  Ayarlar → Uygulamalar → Özel uygulama erişimi → Kullanım erişimi → KOYDUM. Uygulamadaki
+  "Kullanım erişimi ver" düğmesi seni doğrudan o sayfaya götürür, geri geldiğinde durumu yeniden
+  okur.
+* **Google Play'e yüklerken** bu izin için Console'da bir açıklama formu çıkar (kullanım erişimi
+  "hassas izin" sayılır). "Ekran süresi yarışması için kullanıcının kendi ekran süresini okur"
+  demek yeterli; dahili test sürümünde bu form engel değildir.
+
+Uygulama tarafı (`apps/mobile/src/services/screenTime.ts`) yerel modülü **adıyla** arıyor
+(`requireOptionalNativeModule('KoydumScreenTime')`); bulamazsa ya da izin yoksa sebebini söyleyip
+elle girişe düşüyor. Sunucu tarafında `POST /me/screen-time`, adımlardaki `POST /me/steps` ile aynı
+işi yapar: telefonun gönderdiği günleri saklar ve oynadığın her Ekran Süresi çelıncına
+`usage_stats` kaynaklı giriş olarak dağıtır.
 
 ---
 

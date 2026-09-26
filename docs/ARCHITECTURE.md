@@ -133,6 +133,33 @@ Cihaza dokunan her modül web'de de derlenir: `steps.ts` (web) ve `steps.native.
 çifti Metro tarafından platforma göre seçilir. Bu sayede `expo export --platform web` çalışır ve
 uçtan uca test tarayıcıda koşabilir.
 
+## Telefonun kendi okuduğu değerler
+
+İki metrik elle girilmez, telefon söyler: adımlar ve (Android'de) ekran süresi. İkisi de aynı
+kalıpla akar:
+
+```
+cihaz → services/stepSync.ts / screenTimeSync.ts → POST /me/steps | /me/screen-time
+      → services/deviceSync.ts: steps_daily / screen_time_daily'ye yaz,
+        kullanıcının oynadığı her uygun çelınca entry olarak dağıt (upsert)
+```
+
+Hangi çelınc tipinin hangi cihaz verisiyle dolduğunu katalog söyler (`ChallengeType.deviceMetric`:
+`steps` ya da `screen_time`); sunucu tip anahtarlarını oradan okur, uygulama hiçbir zaman "hangi
+çelınclar var" diye düşünmez. Dağıtım, `POST /challenges/:id/entries` ile aynı gün kurallarına
+uyar (`dayWindowIssue`): pencere dışı, gelecek ya da 7 günden eski bir gün sessizce atlanır, ham
+okuma yine de saklanır.
+
+Cihaz kaynağı (`pedometer`, `health_connect`, `usage_stats`) elle yazılmış değerin üstüne yazar;
+tersi yasaktır: telefonun okuduğu bir gün için `manual` yazmaya kalkan istek 409 `device_locked`
+alır. Kanıt fotoğrafı da sadece `manual` için zorunludur.
+
+Ekran süresinin Android tarafı `apps/mobile/modules/koydum-screen-time/` altında yerel bir Expo
+modülüdür (Kotlin, `UsageStatsManager.queryEvents`). Uygulama onu adıyla arar
+(`requireOptionalNativeModule('KoydumScreenTime')`), yoksa ya da izin verilmemişse sebebiyle
+birlikte "okuyamıyorum" der ve ekran elle girişe döner. iPhone'da bu veri hiçbir uygulamaya
+açık değildir; orada elle giriş kalıcıdır.
+
 ## Neden SQLite
 
 Bu uygulamanın kullanıcısı bir arkadaş grubudur, on binlerce kişi değil. Tek dosyalık bir

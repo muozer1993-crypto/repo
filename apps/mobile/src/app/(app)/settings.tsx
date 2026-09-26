@@ -2,7 +2,7 @@ import { TAGLINE, pickTaunt, renderTaunt, t, type TauntVars, type VulgarityLevel
 import * as Application from 'expo-application';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -17,6 +17,11 @@ import { useApi } from '@/hooks/useApi';
 import { ApiError } from '@/lib/api';
 import { serverUrlIsEditable } from '@/lib/config';
 import { registerForPush, type PushRegistration } from '@/services/notifications';
+import {
+  getScreenTimeAvailability,
+  requestScreenTimePermission,
+  type ScreenTimeAvailability,
+} from '@/services/screenTime';
 import {
   getStepAvailability,
   openHealthConnectSettingsIfPossible,
@@ -83,6 +88,16 @@ const STEP_REASONS: Record<
   error: 'Adım sensörüne bakarken bir hata çıktı.',
 };
 
+const SCREEN_TIME_REASONS: Record<Extract<ScreenTimeAvailability, { available: false }>['reason'], string> = {
+  ios: 'iPhone ekran süresini hiçbir uygulamaya vermiyor, Apple kuralı. Ekran süresi çelıncında değeri ekran görüntüsüyle giriyorsun.',
+  web: 'Tarayıcıda ekran süresi okunamıyor.',
+  'needs-native-module':
+    'Bu sürüm ekran süresini okuyamıyor (Expo Go). Gerçek APK’da telefondan otomatik gelir.',
+  permission:
+    'Kullanım erişimi verilmemiş. İzni verirsen ekran süren telefondan okunur, ekran görüntüsüyle uğraşmazsın.',
+  error: 'Ekran süresi okunurken bir hata çıktı.',
+};
+
 const PLATFORM: 'ios' | 'android' | 'web' =
   Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
 
@@ -110,6 +125,7 @@ export default function SettingsScreen() {
   const [pushBusy, setPushBusy] = useState(false);
   const [steps, setSteps] = useState<StepAvailability | null>(null);
   const [stepsBusy, setStepsBusy] = useState(false);
+  const [screenTime, setScreenTime] = useState<ScreenTimeAvailability | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const pendingLevel: VulgarityLevel = levelOverride ?? me?.vulgarityMax ?? 2;
@@ -145,13 +161,15 @@ export default function SettingsScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [pushResult, stepResult] = await Promise.all([
+      const [pushResult, stepResult, screenTimeResult] = await Promise.all([
         registerForPush(),
         getStepAvailability(),
+        getScreenTimeAvailability(),
       ]);
       if (cancelled) return;
       setPush(pushResult);
       setSteps(stepResult);
+      setScreenTime(screenTimeResult);
       if (pushResult.token) {
         try {
           await api.setPushToken({ token: pushResult.token, platform: PLATFORM });
@@ -224,6 +242,25 @@ export default function SettingsScreen() {
     } finally {
       setStepsBusy(false);
     }
+  };
+
+  // The switch lives in system settings; we can only open the page and look
+  // again when the user comes back.
+  const askScreenTimePermission = async () => {
+    const opened = await requestScreenTimePermission();
+    if (!opened) {
+      toast({
+        title: 'Ayarlar açılamadı',
+        body: 'Ayarlar → Uygulamalar → Özel uygulama erişimi → Kullanım erişimi yolunu kendin dene.',
+        kind: 'danger',
+      });
+      return;
+    }
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      sub.remove();
+      void getScreenTimeAvailability().then(setScreenTime);
+    });
   };
 
   const openHealthConnect = async () => {
@@ -476,6 +513,43 @@ export default function SettingsScreen() {
             />
           ) : null}
         </View>
+      </Card>
+
+      {/* ----------------------------------------------------- screen time */}
+      <Card>
+        <View style={styles.rowBetween}>
+          <Text variant="label">Ekran süresi</Text>
+          <Chip
+            label={screenTime ? (screenTime.available ? 'Açık' : Platform.OS === 'android' ? 'Kapalı' : 'Elle') : '…'}
+            color={
+              screenTime
+                ? screenTime.available
+                  ? Colors.success
+                  : Platform.OS === 'android'
+                    ? Colors.danger
+                    : Colors.textMuted
+                : Colors.textMuted
+            }
+            size="sm"
+          />
+        </View>
+        <Text variant="tiny" muted style={styles.blockTop}>
+          {!screenTime
+            ? 'Bakıyorum…'
+            : screenTime.available
+              ? 'Ekran süren telefondan okunuyor. Ekran süresi çelıncında elle giriş yok, uygulama kendisi gönderir.'
+              : SCREEN_TIME_REASONS[screenTime.reason] +
+                (screenTime.reason === 'error' && screenTime.detail ? ` (${screenTime.detail})` : '')}
+        </Text>
+        {screenTime && !screenTime.available && screenTime.reason === 'permission' ? (
+          <Button
+            title="Kullanım erişimi ver"
+            variant="secondary"
+            size="sm"
+            style={styles.selfStart}
+            onPress={() => void askScreenTimePermission()}
+          />
+        ) : null}
       </Card>
 
       {/* --------------------------------------------------------- account */}

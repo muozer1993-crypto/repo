@@ -7,7 +7,7 @@
         "projectId": "64086b22-8613-491a-a6e4-80c947df8d31"
       }
     },
-    "version": "1.0.0",
+    "version": "1.1.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -78,6 +78,7 @@
       "expo-localization",
       "expo-web-browser",
       "react-native-health-connect",
+      "./modules/koydum-screen-time/app.plugin.js",
       [
         "expo-build-properties",
         {

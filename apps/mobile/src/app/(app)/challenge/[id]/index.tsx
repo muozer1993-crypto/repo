@@ -21,7 +21,7 @@ import {
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
@@ -48,6 +48,13 @@ import { useApi } from '@/hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { useTimezone } from '@/hooks/useTimezone';
+import {
+  getScreenTimeAvailability,
+  getTodayScreenMinutes,
+  requestScreenTimePermission,
+  type ScreenTimeAvailability,
+} from '@/services/screenTime';
+import { syncScreenTimeNow } from '@/services/screenTimeSync';
 import { getStepAvailability, getTodaySteps, type StepAvailability } from '@/services/steps';
 import { syncStepsNow } from '@/services/stepSync';
 import { useAuth, useLevel } from '@/store/auth';
@@ -66,6 +73,7 @@ const SOURCE_ICON: Record<EntrySource, string> = {
   manual: '✍️',
   focus: '🎯',
   checkin: '⏰',
+  usage_stats: '📱',
 };
 
 const SOURCE_LABEL: Record<EntrySource, string> = {
@@ -74,6 +82,7 @@ const SOURCE_LABEL: Record<EntrySource, string> = {
   manual: 'beyan',
   focus: 'odak seansı',
   checkin: 'check-in',
+  usage_stats: 'telefon okudu',
 };
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
@@ -917,13 +926,87 @@ function CountAction({ id, detail, type, today }: ActionProps) {
 
 /* manual_lower_is_better ------------------------------------------------- */
 
+/**
+ * Screen time is the one number the phone may or may not be able to give us.
+ * Android with usage access: the phone reads it, the manual button disappears
+ * (the server refuses to let a typed value replace a device reading anyway).
+ * iPhone / Expo Go / no permission: the honest fallback, a typed value with a
+ * screenshot, plus the one-tap permission request where that is the blocker.
+ */
 function LowerAction({ id, detail, type, level, today }: ActionProps) {
+  const api = useApi();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const refreshMe = useAuth((s) => s.refreshMe);
+  const [availability, setAvailability] = useState<ScreenTimeAvailability | null>(null);
+  const [deviceMinutes, setDeviceMinutes] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const deviceFed = type.deviceMetric === 'screen_time';
+
+  // Read on mount and every time the app comes back — the user may just have
+  // flipped the usage-access switch in system settings.
+  useEffect(() => {
+    if (!deviceFed) return;
+    let alive = true;
+    const read = async () => {
+      try {
+        const next = await getScreenTimeAvailability();
+        if (!alive) return;
+        setAvailability(next);
+        const value = next.available ? await getTodayScreenMinutes() : null;
+        if (alive) setDeviceMinutes(value);
+      } catch {
+        if (alive) setAvailability({ available: false, reason: 'error' });
+      }
+    };
+    void read();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void read();
+    });
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, [deviceFed]);
+
   const entry = detail.myEntries.find((e) => e.dayKey === today);
+  const deviceOn = deviceFed && availability?.available === true;
+  const needsPermission = deviceFed && availability?.available === false && availability.reason === 'permission';
+  const locked = entry?.source === 'usage_stats';
+  const shown = deviceOn ? (deviceMinutes ?? entry?.value ?? null) : (entry?.value ?? null);
+
+  const sync = async () => {
+    setSyncing(true);
+    try {
+      const result = await syncScreenTimeNow({ client: api, queryClient, refreshMe });
+      if (result.days === 0) {
+        toast({ title: 'Telefon değer vermedi', body: 'Kullanım erişimi açık mı diye bir bak.', kind: 'info' });
+        return;
+      }
+      toast({ title: 'Ekran süresi gitti', body: `${formatNumber(result.updated)} gün güncellendi.`, kind: 'success' });
+    } catch (error) {
+      toast({ title: 'Senkron olmadı', body: errorText(error, 'Ekran süresi gönderilemedi.'), kind: 'danger' });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const askPermission = async () => {
+    const opened = await requestScreenTimePermission();
+    if (!opened) {
+      toast({
+        title: 'Ayarlar açılamadı',
+        body: 'Ayarlar → Uygulamalar → Özel uygulama erişimi → Kullanım erişimi yolunu kendin dene.',
+        kind: 'danger',
+      });
+    }
+  };
+
   return (
     <View style={styles.actionBody}>
       <View style={styles.bigValueRow}>
         <Text variant="huge" numberOfLines={1} adjustsFontSizeToFit>
-          {entry ? formatNumber(entry.value) : '—'}
+          {shown === null ? '—' : formatNumber(shown)}
         </Text>
         <Text variant="small" muted style={styles.bigValueUnit}>
           {type.unitTr} · bugün
@@ -933,17 +1016,87 @@ function LowerAction({ id, detail, type, level, today }: ActionProps) {
         Az olan kazanır. Girmediğin gün {formatNumber(type.missingDayPenalty ?? type.maxPerDay)}{' '}
         {type.unitTr} sayılır.
       </Text>
-      <Text variant="tiny" color={Colors.yellow}>
-        📸 {t('proof_needed', level)}
-      </Text>
-      <Button
-        title={entry ? 'Bugünkü değeri düzelt' : 'Bugünkü değeri gir'}
-        size="lg"
-        fullWidth
-        onPress={() => openEntryModal(id, today, true)}
-      />
+
+      {deviceOn ? (
+        <>
+          {entry && deviceMinutes !== null && deviceMinutes !== entry.value ? (
+            <Text variant="tiny" faint>
+              Telefon {formatNumber(deviceMinutes)} diyor, sunucuda {formatNumber(entry.value)} yazıyor. Senkronla.
+            </Text>
+          ) : null}
+          <Button
+            title="Senkronla"
+            icon="🔄"
+            size="lg"
+            fullWidth
+            loading={syncing}
+            onPress={() => void sync()}
+          />
+          <Text variant="tiny" faint>
+            📱 Ekran süren telefondan okunuyor, elle giriş yok. Uygulama her açılışta kendisi gönderir.
+          </Text>
+        </>
+      ) : needsPermission ? (
+        <>
+          <Button
+            title="Kullanım erişimi ver"
+            icon="🔓"
+            size="lg"
+            fullWidth
+            onPress={() => void askPermission()}
+          />
+          <Text variant="tiny" faint>
+            Bir kere izin verirsen ekran süren telefondan okunur, ekran görüntüsüyle uğraşmazsın.
+          </Text>
+          <Button
+            title={entry ? 'Bugünkü değeri düzelt' : 'Şimdilik elle gir'}
+            variant="ghost"
+            size="sm"
+            onPress={() => openEntryModal(id, today, true)}
+          />
+        </>
+      ) : (
+        <>
+          <Text variant="tiny" color={Colors.yellow}>
+            📸 {t('proof_needed', level)}
+          </Text>
+          {locked ? (
+            <Text variant="tiny" faint>
+              Bugünün değerini telefon okudu, elle değiştirilemez.
+            </Text>
+          ) : (
+            <Button
+              title={entry ? 'Bugünkü değeri düzelt' : 'Bugünkü değeri gir'}
+              size="lg"
+              fullWidth
+              onPress={() => openEntryModal(id, today, true)}
+            />
+          )}
+          {deviceFed && availability?.available === false ? (
+            <Text variant="tiny" faint>
+              {screenTimeReason(availability)}
+            </Text>
+          ) : null}
+        </>
+      )}
     </View>
   );
+}
+
+function screenTimeReason(availability: ScreenTimeAvailability): string {
+  if (availability.available) return '';
+  switch (availability.reason) {
+    case 'ios':
+      return 'iPhone ekran süresini hiçbir uygulamaya vermiyor, Apple kuralı. Ekran Süresi ekranındaki toplamı ekran görüntüsüyle giriyorsun.';
+    case 'web':
+      return 'Tarayıcıda ekran süresi okunamıyor.';
+    case 'needs-native-module':
+      return 'Bu sürüm ekran süresini okuyamıyor (Expo Go). Gerçek APK\'da telefondan otomatik gelir.';
+    case 'error':
+      return `Ekran süresi okunurken hata çıktı${availability.detail ? ` (${availability.detail})` : ''}.`;
+    default:
+      return '';
+  }
 }
 
 /* ------------------------------------------------------------------- feed */

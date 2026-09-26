@@ -59,8 +59,16 @@ const ALLOWED_SOURCES: Record<MetricType, readonly EntrySource[]> = {
   checkin_deadline: ['checkin'],
   daily_boolean: ['manual'],
   manual_count: ['manual'],
-  manual_lower_is_better: ['manual'],
+  // Android reads screen time itself (`usage_stats`); iPhones still type it.
+  manual_lower_is_better: ['manual', 'usage_stats'],
 };
+
+/** Sources the phone wrote on its own — never typed, so never "beyan". */
+export const DEVICE_SOURCES: readonly EntrySource[] = ['pedometer', 'health_connect', 'usage_stats'];
+
+export function isDeviceSource(source: string): boolean {
+  return (DEVICE_SOURCES as readonly string[]).includes(source);
+}
 
 function unitLabel(type: ChallengeType, value: number): string {
   const unit = type.unitTr.trim();
@@ -134,9 +142,15 @@ function upsertDayEntry(db: Database, input: EntryWriteInput, value: number, lat
   return { entry: { ...existing, value, source: body.source, note: body.note ?? null, proof_url: body.proofUrl ?? null, client_time: body.clientTime, late: late ? 1 : 0, updated_at: iso }, created: false };
 }
 
-/** How many days back this metric may be backfilled (SPEC 2.3). */
-export function backfillDaysFor(metricType: MetricType): number {
-  return metricType === 'auto_steps' ? LIMITS.STEPS_BACKFILL_DAYS : LIMITS.MANUAL_BACKFILL_DAYS;
+/**
+ * How many days back this metric may be backfilled (SPEC 2.3). A reading the
+ * phone took itself gets the device window (the phone remembers about a week);
+ * anything typed by hand gets the short manual one, whatever the metric.
+ */
+export function backfillDaysFor(metricType: MetricType, source?: EntrySource): number {
+  if (metricType === 'auto_steps') return LIMITS.STEPS_BACKFILL_DAYS;
+  if (source === 'usage_stats') return LIMITS.SCREEN_TIME_BACKFILL_DAYS;
+  return LIMITS.MANUAL_BACKFILL_DAYS;
 }
 
 export type DayWindowIssue = 'day_out_of_range' | 'day_in_future' | 'day_too_old';
@@ -156,19 +170,20 @@ export function dayWindowIssue(
   tz: string,
   dayKey: string,
   now: Date,
+  source?: EntrySource,
 ): DayWindowIssue | null {
   if (!window.includes(dayKey)) return 'day_out_of_range';
   const today = todayKey(tz, now);
   if (compareDayKeys(dayKey, today) > 0) return 'day_in_future';
-  if (diffDayKeys(dayKey, today) > backfillDaysFor(metricType)) return 'day_too_old';
+  if (diffDayKeys(dayKey, today) > backfillDaysFor(metricType, source)) return 'day_too_old';
   return null;
 }
 
 /** The Turkish 400 for a day the rules above rejected. */
-export function dayWindowError(issue: DayWindowIssue, metricType: MetricType): HttpError {
+export function dayWindowError(issue: DayWindowIssue, metricType: MetricType, source?: EntrySource): HttpError {
   if (issue === 'day_out_of_range') return badRequest('day_out_of_range', 'Bu gün çelıncın tarih aralığında değil.');
   if (issue === 'day_in_future') return badRequest('day_in_future', 'Gelecek bir gün için giriş yapamazsın.');
-  return badRequest('day_too_old', `En fazla ${backfillDaysFor(metricType)} gün geriye giriş yapabilirsin.`);
+  return badRequest('day_too_old', `En fazla ${backfillDaysFor(metricType, source)} gün geriye giriş yapabilirsin.`);
 }
 
 /**
@@ -205,14 +220,14 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
     if (replay) return { entry: replay, created: false };
   }
 
-  const window = challengeWindow(challenge, tz);
-  const issue = dayWindowIssue(window, type.metricType, tz, body.dayKey, now);
-  if (issue) throw dayWindowError(issue, type.metricType);
-
   const allowed = ALLOWED_SOURCES[type.metricType];
   if (!allowed.includes(body.source)) {
     throw badRequest('invalid_source', 'Bu çelınc tipi için geçersiz giriş kaynağı.');
   }
+
+  const window = challengeWindow(challenge, tz);
+  const issue = dayWindowIssue(window, type.metricType, tz, body.dayKey, now, body.source);
+  if (issue) throw dayWindowError(issue, type.metricType, body.source);
 
   if (body.value > type.maxPerEntry) {
     throw badRequest('value_too_large', `Tek girişte en fazla ${unitLabel(type, type.maxPerEntry)} girebilirsin.`);
@@ -267,6 +282,12 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
     }
 
     case 'manual_lower_is_better': {
+      // Once the phone has reported a day itself, a typed number (with whatever
+      // screenshot) may not replace it — the device reading is the honest one.
+      const existing = selectDayEntry(db, challenge.id, user.id, body.dayKey);
+      if (existing && isDeviceSource(existing.source) && !isDeviceSource(body.source)) {
+        throw conflict('device_locked', 'Bu günün değerini telefon kendisi okudu, elle değiştirilemez.');
+      }
       return upsertDayEntry(db, input, body.value, false);
     }
 

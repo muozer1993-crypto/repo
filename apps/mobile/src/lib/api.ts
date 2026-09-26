@@ -187,6 +187,11 @@ export class ApiClient {
     return this.request<{ updated: number }>('POST', '/me/steps', { body: { days } });
   }
 
+  /** Android only in practice: the phone's own daily screen minutes. */
+  syncScreenTime(days: { dayKey: string; minutes: number }[]) {
+    return this.request<{ updated: number }>('POST', '/me/screen-time', { body: { days } });
+  }
+
   inbox(params: { before?: string; limit?: number } = {}) {
     return this.request<Notification[]>('GET', '/me/inbox', { query: params });
   }

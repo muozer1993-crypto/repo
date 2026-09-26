@@ -21,6 +21,7 @@ import { clearFailed, flushQueue, readQueue } from '@/services/offlineQueue';
 import { syncReminders, type ReminderChallenge } from '@/services/reminders';
 import { startForegroundStepTracking } from '@/services/steps';
 import { syncStepsNow } from '@/services/stepSync';
+import { syncScreenTimeNow } from '@/services/screenTimeSync';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { safeDayKey, safeTodayKey } from '@/utils/datetime';
@@ -176,6 +177,12 @@ export function NotificationBridge() {
         await syncStepsNow({ client: makeClient(), queryClient, refreshMe });
       } catch {
         // ignore: the user can always sync by hand from the home screen
+      }
+      // Android reads its own screen time; everywhere else this returns at once
+      try {
+        await syncScreenTimeNow({ client: makeClient(), queryClient, refreshMe });
+      } catch {
+        // same: the çelınc screen has a button for it
       }
     };
 

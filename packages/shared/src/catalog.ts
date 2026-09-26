@@ -5,7 +5,7 @@
  * to be measurable on a phone — see `howMeasuredTr` — and carries anti-abuse
  * caps used by the server when validating entries.
  */
-import type { ChallengeType, MetricType } from './types';
+import type { ChallengeType, DeviceMetric, MetricType } from './types';
 
 export const CHALLENGE_TYPES: readonly ChallengeType[] = [
   {
@@ -25,6 +25,7 @@ export const CHALLENGE_TYPES: readonly ChallengeType[] = [
     category: "hareket",
     maxPerEntry: 100000,
     maxPerDay: 100000,
+    deviceMetric: "steps",
   },
   {
     key: "kosu_km",
@@ -105,17 +106,18 @@ export const CHALLENGE_TYPES: readonly ChallengeType[] = [
     metricType: "manual_lower_is_better",
     unitTr: "dk",
     direction: "lower",
-    descriptionTr: "Her gece ekran süreni ekran görüntüsüyle giriyorsun. Ortalaması en düşük olan kazanır, günde sekiz saat TikTok izleyen baştan kaybetmiş.",
-    descriptionPoliteTr: "Her gün cihazınızın ekran süresi raporundaki toplam dakikayı girin ve ekran görüntüsünü ekleyin. En düşük ortalama kazanır.",
-    howMeasuredTr: "Uygulama ekran süreni kendi okuyamıyor, o yüzden iOS'ta Ekran Süresi ya da Android'de Dijital Denge ekranındaki toplamı ekran görüntüsüyle sen giriyorsun. Girmediğin gün 1440 dakika yazılıyor.",
+    descriptionTr: "Günlük ekran süresi ortalaması en düşük olan kazanır. Android'de telefon kendi sayıyor, iPhone'da her gece ekran görüntüsüyle giriyorsun. Günde sekiz saat TikTok izleyen baştan kaybetmiş.",
+    descriptionPoliteTr: "Süre boyunca günlük ekran süresi ortalaması en düşük olan kazanır. Android telefonlar değeri kendisi okur; iPhone'da Ekran Süresi raporundaki toplamı ekran görüntüsüyle girersiniz.",
+    howMeasuredTr: "Android'de telefonun kendi kullanım verisinden okunuyor: bir kere 'kullanım erişimi' izni veriyorsun, gerisi otomatik, elle giriş kapanıyor. iPhone'da Apple bu veriyi hiçbir uygulamaya açmıyor, orada Ekran Süresi ekranındaki toplamı ekran görüntüsüyle sen giriyorsun. Girmediğin gün 1440 dakika yazılıyor.",
     defaultDurationDays: 7,
     suggestedRewardTr: "Kaybeden bir hafta boyunca grupta 'Ekran Kölesi' olarak görünür.",
-    antiCheatTr: "Hile: sahte veya eski ekran görüntüsü, ikinci cihazda kullanım, hiç girmemek. Caydırma: ekran görüntüsünde o günün tarihi görünmeli; girilmeyen gün otomatik 1440 dk; arkadaşlar ekran görüntüsünü inceleyip itiraz açar, çoğunluk hile derse o gün 1440 dk yazılır.",
+    antiCheatTr: "Hile: sahte veya eski ekran görüntüsü, ikinci cihazda kullanım, hiç girmemek. Caydırma: Android'de değer telefondan okunur ve elle değiştirilemez; iPhone'da ekran görüntüsünde o günün tarihi görünmeli; girilmeyen gün otomatik 1440 dk; arkadaşlar ekran görüntüsünü inceleyip itiraz açar, çoğunluk hile derse o gün 1440 dk yazılır.",
     proofRequired: true,
     category: "ekran",
     maxPerEntry: 1440,
     maxPerDay: 1440,
     missingDayPenalty: 1440,
+    deviceMetric: "screen_time",
   },
   {
     key: "sosyal_medya_orucu",
@@ -417,6 +419,11 @@ export function challengeTypesByCategory(): Record<string, ChallengeType[]> {
 
 export function challengeTypesForMetric(metricType: MetricType): ChallengeType[] {
   return CHALLENGE_TYPES.filter((type) => type.metricType === metricType);
+}
+
+/** The catalog types a given phone reading fills in (`deviceMetric`). */
+export function challengeTypesForDevice(metric: DeviceMetric): ChallengeType[] {
+  return CHALLENGE_TYPES.filter((type) => type.deviceMetric === metric);
 }
 
 /** Turkish labels for the catalog categories, in display order. */

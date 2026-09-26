@@ -26,14 +26,20 @@ export const LIMITS = {
   PARTICIPANTS_MAX: 15,
   STEPS_SYNC_DAYS_MAX: 14,
   STEPS_PER_DAY_MAX: 100_000,
+  SCREEN_TIME_SYNC_DAYS_MAX: 14,
+  SCREEN_TIME_MINUTES_PER_DAY_MAX: 1440,
   /** startsAt may be at most this far in the past when creating a challenge. */
   START_GRACE_MS: 5 * 60 * 1000,
   MIN_DURATION_MS: 60 * 60 * 1000,
   MAX_DURATION_DAYS: 60,
   MAX_DURATION_MS: 60 * 24 * 60 * 60 * 1000,
-  /** Manual entries may be backfilled this many days; steps this many. */
+  /**
+   * Manual entries may be backfilled this many days; readings the phone took
+   * itself (steps, screen time) this many — the device remembers about a week.
+   */
   MANUAL_BACKFILL_DAYS: 2,
   STEPS_BACKFILL_DAYS: 7,
+  SCREEN_TIME_BACKFILL_DAYS: 7,
   FOCUS_MIN_MINUTES: 1,
   FOCUS_MAX_MINUTES: 180,
   POKE_COOLDOWN_MS: 2 * 60 * 60 * 1000,

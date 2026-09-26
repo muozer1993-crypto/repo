@@ -149,6 +149,9 @@ export default function EntryModalScreen() {
   const chips = quickAdds(type.maxPerEntry);
   const notActive = challenge.status !== 'active';
   const notPlaying = detail.me?.status !== 'accepted';
+  // the phone already reported this day: the server will answer 409 device_locked
+  const deviceLocked =
+    detail.myEntries.find((entry) => entry.dayKey === selectedDay)?.source === 'usage_stats';
   const dayLabel = selectedDay === today ? 'Bugün' : 'Dün';
 
   /**
@@ -279,12 +282,14 @@ export default function EntryModalScreen() {
         <Button title="Kapat" variant="ghost" size="sm" onPress={close} />
       </View>
 
-      {notActive || notPlaying ? (
+      {notActive || notPlaying || deviceLocked ? (
         <Card edgeColor={Colors.danger}>
           <Text variant="small">
             {notActive
               ? 'Bu çelınc şu an aktif değil, giriş kabul edilmiyor.'
-              : 'Bu çelıncta oyuncu değilsin, giriş yapamazsın.'}
+              : notPlaying
+                ? 'Bu çelıncta oyuncu değilsin, giriş yapamazsın.'
+                : `${dayLabel} için değeri telefon kendisi okudu, elle değiştirilemez.`}
           </Text>
         </Card>
       ) : null}
@@ -439,7 +444,7 @@ export default function EntryModalScreen() {
         size="xl"
         fullWidth
         loading={addEntry.isPending}
-        disabled={uploading || notActive || notPlaying}
+        disabled={uploading || notActive || notPlaying || deviceLocked}
         onPress={() => void submit()}
       />
     </Screen>

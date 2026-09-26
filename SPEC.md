@@ -53,7 +53,8 @@ export type Direction = 'higher' | 'lower';
 export type VulgarityLevel = 1 | 2 | 3;
 export type ChallengeStatus = 'pending' | 'active' | 'finished' | 'cancelled';
 export type ParticipantStatus = 'invited' | 'accepted' | 'declined' | 'left';
-export type EntrySource = 'pedometer' | 'health_connect' | 'manual' | 'focus' | 'checkin';
+export type EntrySource = 'pedometer' | 'health_connect' | 'manual' | 'focus' | 'checkin' | 'usage_stats';
+export type DeviceMetric = 'steps' | 'screen_time'; // ChallengeType.deviceMetric: which phone reading fills the type in
 export type EntryStatus = 'ok' | 'disputed' | 'rejected';
 export type FriendshipStatus = 'pending' | 'accepted' | 'blocked';
 export type NotificationType =
@@ -71,6 +72,7 @@ export interface ChallengeType {
   direction: Direction; descriptionTr: string; descriptionPoliteTr: string; howMeasuredTr: string;
   defaultDurationDays: number; defaultDeadlineTime?: string; // "HH:mm"
   suggestedRewardTr: string; antiCheatTr: string; proofRequired: boolean;
+  deviceMetric?: DeviceMetric;   // 'steps' (adim_yarisi) | 'screen_time' (ekran_suresi_beyani): the phone fills it in where it can
   category: 'hareket'|'ekran'|'uyku'|'beslenme'|'zihin'|'kotu_aliskanlik'|'diger';
   maxPerEntry: number;        // anti-abuse cap for a single manual value
   maxPerDay: number;          // cap for the daily sum
@@ -137,6 +139,7 @@ LoginBody { username, password }
 UpdateMeBody { displayName?, avatarEmoji? (1..4 chars), vulgarityMax? (1|2|3), timezone?, reminderHour? (0..23 | null) }
 PushTokenBody { token: string, platform: 'ios'|'android'|'web' }
 StepsSyncBody { days: { dayKey, steps: int 0..100000, source: 'pedometer'|'health_connect' }[] (max 14) }
+ScreenTimeSyncBody { days: { dayKey, minutes: int 0..1440 }[] (max 14) }   // Android usage access; entries get source 'usage_stats'
 FriendRequestBody { username?: string, inviteCode?: string } (exactly one)
 CreateChallengeBody {
   typeKey: string; title?: string (max 40);
@@ -196,7 +199,7 @@ src/auth/jwt.ts         sign/verify HS256 with node:crypto (header.payload.sig, 
 src/auth/password.ts    scrypt hash/verify (salt:hash hex)
 src/plugins/auth.ts     fastify decorator `authenticate` preHandler → request.user = {id}
 src/routes/auth.ts      /auth/register, /auth/login
-src/routes/me.ts        /me, PATCH /me, DELETE /me, /me/push-token, /me/steps, /me/inbox*
+src/routes/me.ts        /me, PATCH /me, DELETE /me, /me/push-token, /me/steps, /me/screen-time, /me/inbox*
 src/routes/users.ts     /users/search, /users/:id, block/unblock/report
 src/routes/friends.ts   /friends*
 src/routes/challenges.ts/challenges*, entries, disputes, poke, taunt, rematch, results
@@ -227,6 +230,7 @@ entries(id TEXT PK, challenge_id TEXT, user_id TEXT, day_key TEXT, value REAL, s
       status TEXT DEFAULT 'ok', client_time TEXT, session_id TEXT, created_at TEXT, updated_at TEXT)
   -- indexes: (challenge_id, user_id, day_key); UNIQUE(challenge_id, user_id, session_id) WHERE session_id IS NOT NULL
 steps_daily(user_id TEXT, day_key TEXT, steps INTEGER, source TEXT, updated_at TEXT, PRIMARY KEY(user_id, day_key))
+screen_time_daily(user_id TEXT, day_key TEXT, minutes INTEGER, updated_at TEXT, PRIMARY KEY(user_id, day_key))
 disputes(id TEXT PK, entry_id TEXT, by_user_id TEXT, reason TEXT, status TEXT, created_at TEXT, UNIQUE(entry_id, by_user_id))
 taunts(id TEXT PK, challenge_id TEXT, from_user_id TEXT, to_user_id TEXT, template_id TEXT, level INTEGER, title TEXT, body TEXT,
       created_at TEXT, UNIQUE(challenge_id, from_user_id, to_user_id))
@@ -255,7 +259,8 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | DELETE /me | soft delete: anonymize username → `deleted_<id8>`, clear push token, leave active challenges |
 | POST /me/push-token | store |
 | DELETE /me/push-token | clear (logout) |
-| POST /me/steps | upsert steps_daily; for every active/pending `auto_steps` challenge the user has accepted and whose day range contains dayKey → upsert entry(source). Returns `{ updated: number }` |
+| POST /me/steps | upsert steps_daily; for every active/pending challenge with `deviceMetric: 'steps'` the user has accepted and whose day range contains dayKey → upsert entry(source). Returns `{ updated: number }` (`services/deviceSync.ts`) |
+| POST /me/screen-time | upsert screen_time_daily; same fan-out for `deviceMetric: 'screen_time'` types, entries written with source `usage_stats` (7-day device backfill window, capped at maxPerDay). A device reading overwrites a typed value for that day. Returns `{ updated: number }` |
 | GET /me/inbox?before=<iso>&limit=30 | newest first |
 | POST /me/inbox/read | `{ ids }` or `{ all: true }` |
 | GET /me/inbox/unread | `{ count, latestId }` |
@@ -288,7 +293,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 Common: user must be `accepted` participant; challenge `active`; `dayKey` must be in
 `dayKeysBetween(startsAt, endsAt, user.tz)`; `dayKey <= todayKey(user.tz)`; `dayKey >= todayKey − 2 days`
 (manual types) / `− 7 days` (steps); value ≤ `type.maxPerEntry`; proof required when
-`challenge.proofRequired` and source is manual (400 `proof_required`).
+`challenge.proofRequired` and source is manual (400 `proof_required`). Device sources (`pedometer`, `health_connect`, `usage_stats`) never need proof; `usage_stats` gets the 7-day device backfill window.
 
 Per type:
 - `auto_steps`: source `manual` allowed (marks entry as beyan). Upsert by (challenge,user,day). Value ≤ maxPerDay.
@@ -296,7 +301,7 @@ Per type:
 - `checkin_deadline`: source `checkin`; dayKey must equal user's local today; server computes `localTimeHHmm(now, tz)`; if ≤ deadlineTime → value 1 else value 0 and `late: true`. One per day (409 `already_checked_in`).
 - `daily_boolean`: value 0 or 1; upsert per day.
 - `manual_count`: append; daily sum must stay ≤ maxPerDay (400 `daily_cap`).
-- `manual_lower_is_better`: upsert per day; value ≤ maxPerEntry.
+- `manual_lower_is_better`: upsert per day; value ≤ maxPerEntry. Sources `manual` and `usage_stats`; once the day's row has a device source, a `manual` write is refused (409 `device_locked`) — the phone may keep correcting itself.
 
 After every write: recompute standings (in memory via shared `rankParticipants`) and return.
 
@@ -363,6 +368,9 @@ store/auth.ts          zustand: { token, me, serverUrl, hydrated, setToken, setM
 store/ui.ts            vulgarity level used for UI copy (mirrors me.vulgarityMax), onboarding done flag
 hooks/*.ts             useMe, useChallenges(status), useChallenge(id), useFriends, useInbox, useUnreadCount (30 s poll while foreground), mutations
 services/steps.ts      getDailySteps(days: number): Promise<{ dayKey, steps, source }[]> + syncSteps(); platform files: steps.native.ts (ios Pedometer.getStepCountAsync per day; android: try Health Connect aggregate per day, else Pedometer.watchStepCount accumulate persisted per day in AsyncStorage), steps.web.ts (returns [])
+services/screenTime.ts   getScreenTimeAvailability() / requestScreenTimePermission() / getDailyScreenMinutes(days): looks up the local Expo module `KoydumScreenTime` by name (requireOptionalNativeModule); Android + usage access → real numbers, everywhere else `available: false` with a reason (ios | web | needs-native-module | permission | error)
+services/screenTimeSync.ts syncScreenTimeNow(): POST /me/screen-time with the last 7 days when the phone can read them; twin of stepSync.ts, called from the same places
+modules/koydum-screen-time/  local Expo module (Kotlin): UsageStatsManager.queryEvents → foreground minutes per local day; app.plugin.js adds PACKAGE_USAGE_STATS (tools:ignore=ProtectedPermissions) to the manifest
 services/notifications.ts  registerForPush() → token or null (never throws; web returns null); setNotificationHandler; Android channel; response listener → router.push to challenge/inbox
 services/localNotify.ts  fireLocal(title, body, data) — used when a new inbox item arrives that was not pushed (device without push)
 services/background.ts   BackgroundTask (15 min): sync steps + fetch unread inbox → fire local notifications for new items (skip on web / Expo Go gracefully)
@@ -412,7 +420,7 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
 - checkin_deadline: big "GELDİM" button visible only today; shows deadline; after tap → success or late copy.
 - daily_boolean: two buttons "Yaptım ✅ / Yapmadım ❌" for today (and yesterday if missing).
 - manual_count: "+ Giriş" → entry modal; quick-add chips.
-- manual_lower_is_better: "Bugünkü değeri gir" → entry modal (proof photo emphasized).
+- manual_lower_is_better: for `deviceMetric: 'screen_time'` on Android with usage access → today's minutes from the phone + "Senkronla" (POST /me/screen-time), no manual button; permission missing → "Kullanım erişimi ver" (opens system usage-access page, re-checked on AppState active) + a ghost manual fallback; iPhone / Expo Go / other → "Bugünkü değeri gir" → entry modal (proof photo emphasized), and a day the phone already reported shows as locked (server 409 `device_locked`).
 
 ### 3.5 Notifications & polling
 

@@ -32,7 +32,13 @@ export type ChallengeStatus = (typeof CHALLENGE_STATUSES)[number];
 export const PARTICIPANT_STATUSES = ['invited', 'accepted', 'declined', 'left'] as const;
 export type ParticipantStatus = (typeof PARTICIPANT_STATUSES)[number];
 
-export const ENTRY_SOURCES = ['pedometer', 'health_connect', 'manual', 'focus', 'checkin'] as const;
+/**
+ * Where an entry's number came from. The three device sources (`pedometer`,
+ * `health_connect`, `usage_stats`) are written by the phone's own sensors and
+ * counters, never typed; the server treats them as trustworthy and lets them
+ * overwrite a typed value for the same day, never the other way round.
+ */
+export const ENTRY_SOURCES = ['pedometer', 'health_connect', 'manual', 'focus', 'checkin', 'usage_stats'] as const;
 export type EntrySource = (typeof ENTRY_SOURCES)[number];
 
 export const ENTRY_STATUSES = ['ok', 'disputed', 'rejected'] as const;
@@ -107,7 +113,18 @@ export interface ChallengeType {
   maxPerDay: number;
   /** lower-is-better only: value assumed for unreported days. */
   missingDayPenalty?: number;
+  /**
+   * Which phone reading fills this type in without typing, when the platform
+   * can give it: `steps` (pedometer / Health Connect, `POST /me/steps`) or
+   * `screen_time` (Android usage access, `POST /me/screen-time`). Absent means
+   * the number is always entered by hand.
+   */
+  deviceMetric?: DeviceMetric;
 }
+
+/** The phone readings the server knows how to fan out into challenges. */
+export const DEVICE_METRICS = ['steps', 'screen_time'] as const;
+export type DeviceMetric = (typeof DEVICE_METRICS)[number];
 
 // ---------------------------------------------------------------------------
 // 1.4 Taunts (types only — data + helpers live in taunts.ts)

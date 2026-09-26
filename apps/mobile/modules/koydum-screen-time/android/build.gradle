@@ -1,0 +1,18 @@
+// Local Expo module (autolinked from apps/mobile/modules). The
+// expo-module-gradle-plugin supplies Kotlin, compileSdk and the Expo module
+// classpath; nothing else to configure here.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.koydumscreentime'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.koydumscreentime"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}

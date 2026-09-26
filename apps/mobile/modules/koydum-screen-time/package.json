@@ -1,0 +1,7 @@
+{
+  "name": "koydum-screen-time",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local Expo module: Android screen time from UsageStatsManager for the Ekran Süresi çelınc.",
+  "license": "UNLICENSED"
+}

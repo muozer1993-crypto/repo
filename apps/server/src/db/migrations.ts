@@ -235,9 +235,27 @@ CREATE TABLE IF NOT EXISTS nudges_sent (
 );
 `;
 
+/**
+ * Daily screen time as the phone reported it, the way `steps_daily` keeps steps:
+ * one row per person per local day, overwritten on every sync. The challenge
+ * entries are derived from this (`POST /me/screen-time`), so a çelınc that
+ * starts tomorrow still finds today's reading here.
+ */
+const SCREEN_TIME_DAILY = `
+CREATE TABLE IF NOT EXISTS screen_time_daily (
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day_key    TEXT NOT NULL,
+  minutes    INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, day_key)
+);
+CREATE INDEX IF NOT EXISTS idx_screen_time_daily_user ON screen_time_daily(user_id, day_key);
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
   { id: '003_participant_timezone', sql: PARTICIPANT_TIMEZONE },
   { id: '004_nudges_sent', sql: NUDGES_SENT },
+  { id: '005_screen_time_daily', sql: SCREEN_TIME_DAILY },
 ];
