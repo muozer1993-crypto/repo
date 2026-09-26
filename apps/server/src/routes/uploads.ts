@@ -12,8 +12,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { badRequest } from '../errors.js';
+import { badRequest, tooMany } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
+import { AttemptLimiter } from '../services/throttle.js';
 
 /** Accepted image mimetypes → the extension we store them under. */
 const EXTENSIONS: Record<string, string> = {
@@ -23,11 +24,25 @@ const EXTENSIONS: Record<string, string> = {
   'image/webp': 'webp',
 };
 
+/**
+ * Per-account ceiling on uploads. Nothing in the game needs more than a handful
+ * of proof photos an hour; without a cap one account could fill the data volume
+ * (files are never reclaimed) with a loop.
+ */
+export const UPLOADS_PER_USER = { max: 60, windowMs: 60 * 60 * 1000 } as const;
+
 export default async function uploadRoutes(app: FastifyInstance): Promise<void> {
   const uploadDir = path.resolve(app.config.uploadDir);
+  const perUser = new AttemptLimiter(UPLOADS_PER_USER.max, UPLOADS_PER_USER.windowMs);
 
   app.post('/uploads', { preHandler: app.authenticate }, async (request, reply) => {
-    requireUser(request);
+    const { row } = requireUser(request);
+    const now = app.now();
+    const wait = perUser.retryAfterMs(row.id, now);
+    if (wait > 0) {
+      const minutes = Math.max(1, Math.ceil(wait / 60_000));
+      throw tooMany('upload_limit', `Bu saatlik fotoğraf hakkın doldu. ${minutes} dakika sonra tekrar dene.`);
+    }
 
     if (!request.isMultipart()) {
       throw badRequest('invalid_multipart', 'Dosya yüklemek için multipart form gerekli.');
@@ -53,6 +68,7 @@ export default async function uploadRoutes(app: FastifyInstance): Promise<void> 
     const filename = `${randomUUID()}.${extension}`;
     await fs.promises.mkdir(uploadDir, { recursive: true });
     await fs.promises.writeFile(path.join(uploadDir, filename), buffer);
+    perUser.record(row.id, now);
 
     return reply.code(201).send({ url: `${app.config.publicUrl}/uploads/${filename}` });
   });

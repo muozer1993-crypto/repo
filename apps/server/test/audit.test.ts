@@ -409,6 +409,38 @@ describe('appended entries are replay-safe', () => {
   });
 });
 
+describe('POST /uploads per-account cap', () => {
+  const boundary = 'koydumaudit';
+  const body = [
+    `--${boundary}`,
+    'Content-Disposition: form-data; name="file"; filename="proof.jpg"',
+    'Content-Type: image/jpeg',
+    '',
+    'x'.repeat(64),
+    `--${boundary}--`,
+    '',
+  ].join('\r\n');
+
+  it('stops the 61st photo in an hour and opens again once the window has passed', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+    const upload = () =>
+      authed(harness!.app, ali.token)({
+        method: 'POST',
+        url: '/uploads',
+        headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+        payload: body,
+      });
+    for (let i = 0; i < 60; i += 1) expect((await upload()).statusCode).toBe(201);
+    const blocked = await upload();
+    expect(blocked.statusCode).toBe(429);
+    expect(errorCode(blocked)).toBe('upload_limit');
+
+    harness.advance(61 * 60_000);
+    expect((await upload()).statusCode).toBe(201);
+  });
+});
+
 describe('proxy trust', () => {
   it('is off unless TRUST_PROXY says otherwise', () => {
     const previous = process.env.TRUST_PROXY;

@@ -288,6 +288,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | GET /leaderboard | friends + me ranked by wins, then tauntsSent |
 | POST /uploads | multipart field `file`; returns `{ url: PUBLIC_URL + '/uploads/<uuid>.<ext>' }` |
 | GET /uploads/* | static |
+| POST /uploads | one image per request (jpg/png/webp, ≤ 5 MB); at most 60 per account per hour (429 `upload_limit`) |
 
 ### 2.3 Entry validation (`services/entries.ts`)
 
