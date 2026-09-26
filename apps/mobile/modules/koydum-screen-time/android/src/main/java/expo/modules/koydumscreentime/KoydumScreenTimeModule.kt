@@ -151,7 +151,12 @@ class KoydumScreenTimeModule : Module() {
         if (at > since) intervals.getOrPut(pkg) { ArrayList() }.add(longArrayOf(since, at))
       }
 
-      val events = usage.queryEvents(starts[0], now)
+      // Start one local day early: a session that began before the first
+      // midnight has its RESUMED event there, and without it the part after
+      // midnight would be lost (and dailyMinutes(1) would disagree with
+      // dailyMinutes(7) about today). addInterval clips the early part away.
+      val queryFrom = startOfDay(now, days).timeInMillis
+      val events = usage.queryEvents(queryFrom, now)
       val event = UsageEvents.Event()
       while (events.hasNextEvent()) {
         events.getNextEvent(event)

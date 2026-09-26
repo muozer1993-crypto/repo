@@ -121,9 +121,13 @@ export async function getDailyScreenMinutes(days: number): Promise<DailyScreenTi
   }
 }
 
-/** Today's foreground minutes, or null when the phone will not say. */
+/**
+ * Today's foreground minutes, or null when the phone will not say. Read from
+ * the same week-long call the sync makes, so the number on the screen and the
+ * one sent to the server are computed identically.
+ */
 export async function getTodayScreenMinutes(): Promise<number | null> {
-  const days = await getDailyScreenMinutes(1);
+  const days = await getDailyScreenMinutes(7);
   return days.length > 0 ? days[0].minutes : null;
 }
 

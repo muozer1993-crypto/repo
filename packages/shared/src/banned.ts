@@ -9,10 +9,12 @@
  *
  * Every pattern is written against NORMALIZED text (see `normalizeForBanned`):
  *   1. invisible characters removed (zero-width, soft hyphen, variation selectors...),
+ *      and Cyrillic/Greek lookalike letters folded to Latin ("аnаn" with Cyrillic а),
  *   2. lowercased with Turkish rules (I→ı, İ→i) and light leet-speak folded,
  *   3. two ambiguous Turkish stems marked (see below),
  *   4. Turkish letters folded to ASCII (ı→i, ş→s, ğ→g, ü→u, ö→o, ç→c), diacritics stripped,
  *   5. leftover digits and underscores turned into spaces so `\b` fires around "2ibne" / "_ibne",
+ *      and a single symbol squeezed between two letters removed ("a.n.a.n", "i-b-n-e"),
  *   6. whitespace collapsed.
  * Because the text is ASCII by then, `\b` behaves. Compound patterns use `\W*` / `\W+`
  * between words so "göt-veren", "göt veren" and "götveren" are the same thing.
@@ -52,6 +54,18 @@ const LEET_FOLD: Record<string, string> = {
   '5': 's',
 };
 
+/**
+ * Cyrillic and Greek letters that look exactly like Latin ones. Typing "ibne"
+ * with a Cyrillic і is the oldest trick against a word filter.
+ */
+const CONFUSABLE_FOLD: Record<string, string> = {
+  а: 'a', е: 'e', о: 'o', р: 'p', с: 'c', у: 'y', х: 'x', і: 'i', ѕ: 's', ј: 'j', к: 'k', м: 'm', т: 't', н: 'h', в: 'b',
+  А: 'a', Е: 'e', О: 'o', Р: 'p', С: 'c', У: 'y', Х: 'x', І: 'i', Ѕ: 's', Ј: 'j', К: 'k', М: 'm', Т: 't', Н: 'h', В: 'b',
+  α: 'a', ο: 'o', ε: 'e', ι: 'i', κ: 'k', ν: 'v', τ: 't', υ: 'u', ρ: 'p', χ: 'x',
+  Α: 'a', Ο: 'o', Ε: 'e', Ι: 'i', Κ: 'k', Ν: 'n', Τ: 't', Υ: 'y', Ρ: 'p', Χ: 'x',
+};
+const CONFUSABLE_REGEX = new RegExp(`[${Object.keys(CONFUSABLE_FOLD).join('')}]`, 'g');
+
 /** ZWJ and emoji variation selectors — glue for emoji, noise for word matching. */
 const EMOJI_GLUE_REGEX = new RegExp('[\\u200D\\uFE00-\\uFE0F]', 'g');
 
@@ -68,6 +82,7 @@ export function normalizeForBanned(text: string): string {
   return text
     .replace(INVISIBLE_CHARS_REGEX, '')
     .replace(EMOJI_GLUE_REGEX, '')
+    .replace(CONFUSABLE_REGEX, (ch) => CONFUSABLE_FOLD[ch] ?? ch)
     .replace(/İ/g, 'i') // Turkish casing first: toLowerCase() would turn İ into "i̇" and I into "i"
     .replace(/I/g, 'ı')
     .toLowerCase()
@@ -78,6 +93,9 @@ export function normalizeForBanned(text: string): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // strip any remaining diacritics
     .replace(/[0-9_]/g, ' ') // not folded by leet → word separators, so \b works
+    // "a.n.a.n", "i-b-n-e": one symbol between two letters is not a word break.
+    // Capture + lookahead only (no lookbehind, no \p{}) so Hermes runs it.
+    .replace(/([a-z])[^a-z0-9\s](?=[a-z])/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
 }

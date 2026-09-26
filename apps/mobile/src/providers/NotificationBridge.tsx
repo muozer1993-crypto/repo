@@ -53,12 +53,19 @@ export function NotificationBridge() {
       return;
     }
     let cancelled = false;
+    let busy = false;
     installNotificationHandler();
-    (async () => {
-      const registration = await registerForPush();
-      if (cancelled || !registration.token) return;
-      if (pushTokenSent.current === registration.token) return;
+    // A phone that booted without signal (or reached the server a second too
+    // late) used to stay without push for the whole session: the POST ran once.
+    // It now runs again every time the app comes to the foreground until the
+    // server has the token; once it does, it never repeats.
+    const register = async () => {
+      if (busy || cancelled) return;
+      busy = true;
       try {
+        const registration = await registerForPush();
+        if (cancelled || !registration.token) return;
+        if (pushTokenSent.current === registration.token) return;
         await makeClient().setPushToken({
           token: registration.token,
           platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
@@ -66,11 +73,18 @@ export function NotificationBridge() {
         pushTokenSent.current = registration.token;
         await setItem(StorageKeys.pushToken, registration.token);
       } catch {
-        // the inbox poll below keeps the app usable without push
+        // the inbox poll below keeps the app usable without push; next foreground retries
+      } finally {
+        busy = false;
       }
-    })();
+    };
+    void register();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && pushTokenSent.current === null) void register();
+    });
     return () => {
       cancelled = true;
+      sub.remove();
     };
   }, [token, serverUrl, makeClient]);
 
@@ -194,9 +208,12 @@ export function NotificationBridge() {
           void queryClient.invalidateQueries({ queryKey: ['challenges'] });
           void queryClient.invalidateQueries({ queryKey: ['challenge'] });
         }
-        if (result.dropped > 0) {
+        // Read the queue, not this pass's counter: an entry can be refused by a
+        // flush this code did not start (the one after a successful write, or the
+        // headless background task), and the user still has to hear about it.
+        const failed = (await readQueue()).filter((item) => item.failedReason);
+        if (failed.length > 0) {
           // the server refused these for good; say so once, then stop holding them
-          const failed = (await readQueue()).filter((item) => item.failedReason);
           const reason = failed[0]?.failedReason ?? 'Sunucu kabul etmedi.';
           await clearFailed();
           toast({

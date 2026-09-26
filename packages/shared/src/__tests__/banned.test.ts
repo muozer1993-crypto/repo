@@ -69,6 +69,13 @@ describe('containsBanned', () => {
     for (const text of ['_ibne', '2ibne', '9ibne', 'anan2', 'anan9', 'ibne_', 'göt-veren', 'göt_veren', 'göt.veren', 'geri-zekalı', 'orospu-çocuğu', 'kız-kardeşin', 'engelli-mi', 'down_sendromlu', 'K1R0', 'p1ç']) {
       expect(containsBanned(text), text).toBe(true);
     }
+    // Cyrillic lookalikes and a symbol between every letter
+    for (const text of ['\u0430nanı sikerim', 'a.n.a.n.ı', 'a-n-a-n-ı', 'i.b.n.e', '\u0456bne', '\u0406BNE']) {
+      expect(containsBanned(text), text).toBe(true);
+    }
+    for (const text of ['e-posta', 'pic.jpg', 'ana.ne', 'x.com', 'koydum-mu', 'kalk bi su iç']) {
+      expect(containsBanned(text), text).toBe(false);
+    }
   });
 
   it('still blocks the sik / piç / threat forms it must, in every spelling', () => {

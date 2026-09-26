@@ -163,6 +163,39 @@ describe('taunts', () => {
   });
 });
 
+describe('taunts fit the çelınc they land on', () => {
+  const WALKING = /yürü|koştur|dolaş|telefonu (evde|buzdolabına)|geziyor|koltuğa|kanepe/i;
+  const CONTEXTS: TauntContext[] = ['win', 'win_big', 'win_close', 'tie', 'poke', 'streak', 'revenge'];
+  const OTHER_METRICS = ['focus_minutes', 'checkin_deadline', 'daily_boolean', 'manual_count', 'manual_lower_is_better'] as const;
+
+  it('never offers a walking line on a çelınc that is not about steps', () => {
+    for (const metric of OTHER_METRICS) {
+      for (const context of CONTEXTS) {
+        for (const template of tauntsFor(context, 3, metric)) {
+          expect(WALKING.test(`${template.title} ${template.body}`), `${metric}/${template.id}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('still leaves every pool non-empty for every metric and level', () => {
+    for (const metric of [...OTHER_METRICS, 'auto_steps'] as const) {
+      for (const context of CONTEXTS) {
+        for (const level of [1, 2, 3] as VulgarityLevel[]) {
+          expect(tauntsFor(context, level, metric).length, `${metric}/${context}/${level}`).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it('swaps a requested walking line for one that fits', () => {
+    const swapped = resolveTauntForRecipient('l3_poke_07', 'poke', 3, 1, 'manual_lower_is_better');
+    expect(swapped.id).not.toBe('l3_poke_07');
+    expect(swapped.context).toBe('poke');
+    expect(resolveTauntForRecipient('l3_poke_07', 'poke', 3, 1, 'auto_steps').id).toBe('l3_poke_07');
+  });
+});
+
 describe('copy and badges', () => {
   it('defines all microcopy keys at three levels', () => {
     for (const key of MICROCOPY_KEYS) {
