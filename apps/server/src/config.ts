@@ -37,6 +37,12 @@ export interface Config {
   expoAccessToken?: string;
   /** ENABLE_DEV_ROUTES=1 mounts the test-only /dev/* endpoints. */
   enableDevRoutes: boolean;
+  /**
+   * TRUST_PROXY=1 when a reverse proxy (nginx, Caddy, Fly) sits in front and
+   * sets X-Forwarded-For. Off by default: on a server reached directly, trusting
+   * that header lets any client pick its own IP and walk past every login throttle.
+   */
+  trustProxy: boolean;
   /** Reported by GET /health. */
   version: string;
 }
@@ -129,6 +135,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     overrides.expoAccessToken ?? (env.EXPO_ACCESS_TOKEN && env.EXPO_ACCESS_TOKEN.trim() !== '' ? env.EXPO_ACCESS_TOKEN.trim() : undefined);
 
   const enableDevRoutes = overrides.enableDevRoutes ?? env.ENABLE_DEV_ROUTES === '1';
+  const trustProxy = overrides.trustProxy ?? (env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true');
 
   const version = overrides.version ?? readString(env.npm_package_version, DEFAULTS.version);
 
@@ -143,6 +150,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     jwtSecret,
     expoAccessToken,
     enableDevRoutes,
+    trustProxy,
     version,
   };
 }

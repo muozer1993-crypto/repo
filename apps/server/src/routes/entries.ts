@@ -32,6 +32,7 @@ import {
   requireMembership,
 } from '../services/challengeViews.js';
 import { getEntryRow, recordDispute, validateAndUpsertEntry } from '../services/entries.js';
+import { assertNotBlocked } from '../services/friends.js';
 import { toDispute, toEntry } from '../serialize.js';
 
 interface IdParams {
@@ -81,7 +82,7 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
     awardBadges(db, me.id, app.now());
 
     void reply.code(created ? 201 : 200);
-    return { entry: toEntry(entry), standings: computeStandings(db, challenge) };
+    return { entry: toEntry(entry), standings: computeStandings(db, challenge, app.now()) };
   });
 
   // -------------------------------------------------------------------------
@@ -111,7 +112,7 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       }
 
       db.prepare('DELETE FROM entries WHERE id = ?').run(entry.id);
-      return { ok: true, standings: computeStandings(db, challenge) };
+      return { ok: true, standings: computeStandings(db, challenge, app.now()) };
     },
   );
 
@@ -129,9 +130,16 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
 
       const challenge = requireChallengeRow(db, id);
       requireAcceptedMembership(db, challenge, me.id);
+      // A dispute after the whistle would reject a row the final score already
+      // counted — the result would not move, only the owner's inbox would.
+      if (challenge.status !== 'active') {
+        throw badRequest('challenge_not_active', 'Bu çelınc bitti, artık itiraz edilemez.');
+      }
 
       const entry = getEntryRow(db, entryId);
       if (!entry || entry.challenge_id !== challenge.id) throw notFound('entry_not_found', 'Böyle bir giriş yok.');
+      // a blocked pair must not reach each other through an old participant list
+      assertNotBlocked(db, me.id, entry.user_id);
 
       // The owner is looked up BEFORE the write: `recordDispute` commits its own
       // transaction, so a throw afterwards (an owner who deleted their account) would
@@ -176,7 +184,7 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
         dispute: toDispute(outcome.dispute),
         entry: toEntry(outcome.entry),
         upheld: outcome.upheld,
-        standings: computeStandings(db, challenge),
+        standings: computeStandings(db, challenge, now),
       };
     },
   );

@@ -25,6 +25,7 @@ import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
 import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { formatNumber } from '@/utils/format';
+import { uuidV4 } from '@/utils/ids';
 
 /* ------------------------------------------------------------------ utils */
 
@@ -92,7 +93,7 @@ export default function EntryModalScreen() {
   const requestedDay = typeof params.day === 'string' ? params.day : '';
   const initialDay = requestedDay === yesterday && yesterdayAllowed ? yesterday : today;
 
-  const addEntry = useAddEntry(id);
+  const addEntry = useAddEntry(id, { append: type?.metricType === 'manual_count' });
   const [dayKey, setDayKey] = useState<string | null>(null);
   const [raw, setRaw] = useState('');
   const [note, setNote] = useState('');
@@ -143,7 +144,9 @@ export default function EntryModalScreen() {
 
   const { challenge } = detail;
   const selectedDay = dayKey ?? initialDay;
-  const proofRequired = challenge.proofRequired || type.proofRequired;
+  // the creator's switch is the rule (the server enforces exactly this); the
+  // catalog flag only seeded that switch in the wizard
+  const proofRequired = challenge.proofRequired;
   const emphasiseProof = proofRequired || params.proof === '1' || type.metricType === 'manual_lower_is_better';
   const value = parseValue(raw);
   const chips = quickAdds(type.maxPerEntry);
@@ -246,6 +249,9 @@ export default function EntryModalScreen() {
         note: note.trim() ? note.trim() : undefined,
         proofUrl: proofUrl ?? undefined,
         clientTime: new Date().toISOString(),
+        // append metrics get an idempotency key: a request that timed out on the
+        // way back and is replayed from the queue must not count twice
+        sessionId: appends ? uuidV4() : undefined,
       });
       toast(
         response.queued

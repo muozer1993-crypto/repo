@@ -103,6 +103,12 @@ export interface ChallengeType {
   defaultDurationDays: number;
   /** "HH:mm" local time — only meaningful for `checkin_deadline`. */
   defaultDeadlineTime?: string;
+  /**
+   * "HH:mm" local time — `checkin_deadline` only: a check-in before this hour is
+   * refused. Without it a "yattım" at 02:00 counts as an on-time bedtime and
+   * blocks the real one that evening.
+   */
+  checkinWindowStart?: string;
   suggestedRewardTr: string;
   antiCheatTr: string;
   proofRequired: boolean;
@@ -136,6 +142,12 @@ export interface TauntTemplate {
   context: TauntContext;
   title: string;
   body: string;
+  /**
+   * Only for çelınclar of these metrics. A line about walking ("kalk da iki
+   * dolaş", "10 bin adım at") lands wrong on a screen-time or bedtime çelınc, so
+   * such templates name the metrics they make sense for. Absent = any çelınc.
+   */
+  metrics?: readonly MetricType[];
 }
 
 /** Placeholder values for `renderTaunt`. Numbers are pre-formatted strings (tr-TR). */

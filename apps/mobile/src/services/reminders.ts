@@ -104,9 +104,34 @@ export async function syncReminders(
 
   let scheduled = 0;
   for (const challenge of challenges) {
-    if (challenge.metricType === 'checkin_deadline' && challenge.deadlineTime && !challenge.doneToday) {
+    if (challenge.metricType === 'checkin_deadline' && challenge.deadlineTime) {
       const at = minusMinutes(challenge.deadlineTime, MINUTES_BEFORE_DEADLINE);
-      if (at) {
+      // Today's check-in is done: a daily trigger would still ring today, but
+      // dropping the reminder altogether left tomorrow silent unless the app was
+      // opened first. So: repeat daily when today is still open, otherwise one
+      // shot for tomorrow's slot (as long as the çelınc runs that long).
+      let trigger: NotificationRequest['trigger'] | null = null;
+      if (at && !challenge.doneToday) {
+        trigger = {
+          type: api.SchedulableTriggerInputTypes.DAILY,
+          hour: at.hour,
+          minute: at.minute,
+          ...(Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : {}),
+        };
+      } else if (at) {
+        const next = new Date(now);
+        next.setDate(next.getDate() + 1);
+        next.setHours(at.hour, at.minute, 0, 0);
+        const endsAt = Date.parse(challenge.endsAt);
+        if (Number.isFinite(endsAt) && next.getTime() < endsAt) {
+          trigger = {
+            type: api.SchedulableTriggerInputTypes.DATE,
+            date: next,
+            ...(Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : {}),
+          };
+        }
+      }
+      if (trigger) {
         const ok = await schedule(api, {
           content: {
             title:
@@ -118,12 +143,7 @@ export async function syncReminders(
             data: { kind: REMINDER_KIND, reminder: 'checkin', challengeId: challenge.id, type: 'reminder' },
             sound: true,
           },
-          trigger: {
-            type: api.SchedulableTriggerInputTypes.DAILY,
-            hour: at.hour,
-            minute: at.minute,
-            ...(Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : {}),
-          },
+          trigger,
         });
         if (ok) scheduled += 1;
       }

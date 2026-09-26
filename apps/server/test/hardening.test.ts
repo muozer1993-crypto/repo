@@ -494,12 +494,14 @@ describe('manual_lower_is_better across timezones', () => {
     const advanced = await harness.app.inject({ method: 'POST', url: '/dev/advance' });
     expect(advanced.json<{ finalized: number }>().finalized).toBe(1);
 
-    // ...so it must not cost him the 1440 minute missing-day penalty either.
+    // ...so it must not cost him the 1440 minute missing-day penalty either. The
+    // score is the DAILY AVERAGE over each player's own window, which is what
+    // makes a two-day and a three-day window comparable at all.
     const results = await authed(harness.app, veli.token)({ method: 'GET', url: `/challenges/${challengeId}/results` });
     const standings = results.json<ChallengeResults>().standings;
     expect(standings.map((p) => [p.user.username, p.score, p.rank])).toEqual([
-      ['veli', 2, 1],
-      ['ali', 300, 2],
+      ['veli', 1, 1],
+      ['ali', 100, 2],
     ]);
     expect(standings[0]?.isWinner).toBe(true);
   });
@@ -669,26 +671,46 @@ describe('daily reminder', () => {
 // ---------------------------------------------------------------------------
 
 describe('entry sessionId', () => {
-  it('does not swallow a second manual_count entry that reuses one', async () => {
+  it('treats a manual_count request that reuses a sessionId as a replay, and a fresh id as a new glass', async () => {
+    // The app sends a fresh UUID with every tap, so a request that timed out on
+    // the way back and is replayed from the offline queue must not add the glass
+    // twice — the key is the same, the answer is the row already written.
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await livePair(harness, 'su_bardak', {}, 3);
     const sessionId = randomUUID();
     const call = authed(harness.app, ali.token);
-    const glass = (value: number) =>
+    const glass = (value: number, key: string) =>
       call({
         method: 'POST',
         url: `/challenges/${challengeId}/entries`,
-        payload: { dayKey: today(harness!), value, source: 'manual', clientTime: iso(harness!), sessionId },
+        payload: { dayKey: today(harness!), value, source: 'manual', clientTime: iso(harness!), sessionId: key },
       });
 
-    expect((await glass(2)).statusCode).toBe(201);
-    const second = await glass(3);
+    expect((await glass(2, sessionId)).statusCode).toBe(201);
+    const replay = await glass(2, sessionId);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json<{ standings: ParticipantView[] }>().standings.find((p) => p.user.id === ali.me.id)?.score).toBe(2);
+
+    const second = await glass(3, randomUUID());
     expect(second.statusCode).toBe(201);
     expect(second.json<{ standings: ParticipantView[] }>().standings.find((p) => p.user.id === ali.me.id)?.score).toBe(5);
 
     const rows = entries(harness, challengeId, ali.me.id);
     expect(rows).toHaveLength(2);
-    expect(rows.every((row) => row.session_id === null)).toBe(true);
+    expect(rows.every((row) => row.session_id !== null)).toBe(true);
+  });
+
+  it('ignores the field on an upsert metric', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await livePair(harness, 'sosyal_medya_orucu', {}, 3);
+    const call = authed(harness.app, ali.token);
+    const mark = await call({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: today(harness), value: 1, source: 'manual', clientTime: iso(harness), sessionId: randomUUID() },
+    });
+    expect(mark.statusCode).toBe(201);
+    expect(entries(harness, challengeId, ali.me.id)[0]?.session_id).toBeNull();
   });
 });
 

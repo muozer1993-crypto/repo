@@ -52,16 +52,12 @@ export async function enqueueEntry(
 ): Promise<PendingEntry> {
   const queue = await readQueue();
   const item: PendingEntry = { id, challengeId, body, queuedAt: new Date().toISOString(), attempts: 0 };
-  // a repeated write for the same day and challenge replaces the older one
-  const deduped = queue.filter(
-    (existing) =>
-      !(
-        existing.challengeId === challengeId &&
-        existing.body.dayKey === body.dayKey &&
-        existing.body.source === body.source &&
-        existing.body.sessionId === body.sessionId
-      )
-  );
+  // A repeated write with the same id replaces the older one. The caller builds
+  // the id: for upsert metrics it names the challenge, day and source (so a
+  // corrected value supersedes the first), for append metrics (manual_count) it
+  // also carries the client time, because two glasses of water on one day are
+  // two entries, not a correction.
+  const deduped = queue.filter((existing) => existing.id !== id);
   await writeQueue([...deduped, item]);
   return item;
 }

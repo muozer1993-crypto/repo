@@ -24,7 +24,12 @@ const MEDALS = ['🥇', '🥈', '🥉'];
 /** Ranked bar chart of everyone's score — the heart of every challenge screen. */
 export function Standings({ participants, type, meId, limit, finished, style }: StandingsProps) {
   const playing = participants.filter((p) => p.status === 'accepted' || p.status === 'invited');
-  const ranked = [...playing].sort((a, b) => a.rank - b.rank);
+  // rank 0 means "not ranked" (still invited), not "above first place"
+  const ranked = [...playing].sort((a, b) => {
+    const ra = a.rank > 0 ? a.rank : Number.MAX_SAFE_INTEGER;
+    const rb = b.rank > 0 ? b.rank : Number.MAX_SAFE_INTEGER;
+    return ra - rb;
+  });
   const shown = limit ? takeWithMe(ranked, limit, meId) : ranked;
 
   // In a lower-is-better çelınc rank 1 holds the SMALLEST number, so a raw
@@ -53,7 +58,11 @@ export function Standings({ participants, type, meId, limit, finished, style }: 
         return (
           <View key={participant.user.id} style={[styles.row, isMe && styles.rowMe]}>
             <Text variant="tiny" style={styles.rank} muted={!leading}>
-              {finished && participant.rank <= 3 ? MEDALS[participant.rank - 1] : `${participant.rank}.`}
+              {pending || participant.rank <= 0
+                ? '—'
+                : finished && participant.rank <= 3
+                  ? MEDALS[participant.rank - 1]
+                  : `${participant.rank}.`}
             </Text>
             <Avatar
               emoji={participant.user.avatarEmoji}

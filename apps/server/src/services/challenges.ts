@@ -16,6 +16,7 @@
  */
 import {
   DEFAULT_TIMEZONE,
+  compareDayKeys,
   computeScore,
   formatScore,
   dayKeysBetween,
@@ -171,20 +172,37 @@ function rankAccepted(
   accepted: ParticipantRow[],
   users: Map<string, UserRow>,
   entriesByUser: Map<string, ScoreInput['entries']>,
+  now: Date,
 ): { ranking: RankingResult; days: Map<string, number> } {
   const perUserWindow = type.metricType === 'manual_lower_is_better';
   const days = new Map<string, number>();
 
   const inputs: ScoreInput[] = accepted.map((participant) => {
     const entries = entriesByUser.get(participant.user_id) ?? [];
-    const window = perUserWindow
-      ? challengeWindow(challenge, participantTimezone(participant, users.get(participant.user_id)))
-      : [];
+    let window: string[] = [];
+    if (perUserWindow) {
+      const tz = participantTimezone(participant, users.get(participant.user_id));
+      window = challengeWindow(challenge, tz);
+      // While the çelınc runs, only the days that have started count as
+      // "missing": day 2 of 7 shows the average of two days, not five days of
+      // penalty for a future nobody has lived yet. Once it is over the clip is
+      // a no-op and the full window applies.
+      if (challenge.status !== 'finished') {
+        let today: string;
+        try {
+          today = todayKey(tz, now);
+        } catch {
+          today = todayKey(DEFAULT_TIMEZONE, now);
+        }
+        window = window.filter((key) => compareDayKeys(key, today) <= 0);
+      }
+    }
     const scored = computeScore(type, window, entries);
     days.set(participant.user_id, scored.days);
     if (!perUserWindow) return { userId: participant.user_id, entries };
-    // Lower-is-better is a sum metric, so one entry carrying the finished score
-    // reproduces it exactly while keeping the window out of `rankParticipants`.
+    // Lower-is-better is scored here (per-participant window), so one entry
+    // carrying the finished score reproduces it exactly while keeping the window
+    // out of `rankParticipants`. `dayKeys` is empty there, so no second averaging.
     return { userId: participant.user_id, entries: [{ dayKey: 'total', value: scored.score, status: 'ok' }] };
   });
 
@@ -199,7 +217,7 @@ function rankAccepted(
  * can still show them. A finished challenge reports the scores stored at
  * finalization time, so results never drift.
  */
-export function computeStandings(db: Database, challenge: ChallengeRow): ParticipantView[] {
+export function computeStandings(db: Database, challenge: ChallengeRow, now: Date = new Date()): ParticipantView[] {
   const type = typeForChallenge(challenge);
   const participants = participantRows(db, challenge.id);
   const users = userMap(db, participants.map((p) => p.user_id));
@@ -219,7 +237,7 @@ export function computeStandings(db: Database, challenge: ChallengeRow): Partici
   }
 
   const accepted = participants.filter((p) => p.status === 'accepted');
-  const { ranking, days } = rankAccepted(db, challenge, type, accepted, users, byUser);
+  const { ranking, days } = rankAccepted(db, challenge, type, accepted, users, byUser, now);
   const byUserResult = new Map(ranking.results.map((r) => [r.userId, r]));
 
   const finished = challenge.status === 'finished';
@@ -462,7 +480,7 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
       }
     });
     run();
-    return computeStandings(db, getChallengeRow(db, challenge.id) ?? challenge);
+    return computeStandings(db, getChallengeRow(db, challenge.id) ?? challenge, now);
   }
 
   const entries = db.prepare('SELECT * FROM entries WHERE challenge_id = ?').all(challenge.id) as EntryRow[];
@@ -473,7 +491,7 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
     byUser.set(entry.user_id, list);
   }
 
-  const { ranking } = rankAccepted(db, challenge, type, accepted, users, byUser);
+  const { ranking } = rankAccepted(db, challenge, type, accepted, users, byUser, now);
 
   const winnerId = ranking.winnerId;
   const isTie = ranking.isTie;
@@ -542,7 +560,7 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
   }
 
   const updated = getChallengeRow(db, challenge.id) ?? challenge;
-  return computeStandings(db, updated);
+  return computeStandings(db, updated, now);
 }
 
 /** Step 2 — every `active` challenge whose end time has passed. */
@@ -577,6 +595,12 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
     .all() as UserRow[];
 
   const claim = db.prepare('INSERT OR IGNORE INTO reminders_sent (user_id, day_key) VALUES (?, ?)');
+  // the reminder says "you have nothing today" — so it only goes to people for
+  // whom that is true in at least... none of their live çelınclar has a row today
+  const loggedToday = db.prepare(
+    `SELECT 1 FROM entries e JOIN challenges c ON c.id = e.challenge_id
+      WHERE e.user_id = ? AND e.day_key = ? AND c.status = 'active' AND e.status <> 'rejected' LIMIT 1`,
+  );
   let sent = 0;
 
   for (const user of candidates) {
@@ -590,6 +614,7 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
       continue;
     }
     if (hour < Number(user.reminder_hour)) continue;
+    if (loggedToday.get(user.id, dayKey)) continue;
     if (claim.run(user.id, dayKey).changes === 0) continue;
 
     const level = levelOf(user);
@@ -641,7 +666,7 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
     // the final hour has its own warning on the device; do not pile on
     if (Date.parse(challenge.ends_at) - now.getTime() < 60 * 60_000) continue;
 
-    const standings = computeStandings(db, challenge);
+    const standings = computeStandings(db, challenge, now);
     if (standings.length < 2) continue;
     const leader = standings[0];
 
@@ -652,6 +677,8 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
 
     for (const view of standings) {
       if (view.user.id === leader.user.id) continue;
+      // invited / declined / left rows ride along at rank 0 — not players to nudge
+      if (view.status !== 'accepted') continue;
       const gap = Math.abs(leader.score - view.score);
       if (gap <= 0) continue;
       // a gap only counts when it is big next to what the leader has

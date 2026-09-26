@@ -325,3 +325,47 @@ describe('unusable server data', () => {
     expect(rendered(tree)).toContain('Haftalık Adım');
   });
 });
+
+describe('standings verdict', () => {
+  function withRival(score: number, rank: number) {
+    const detail = challengeDetail();
+    detail.participants = [
+      detail.me!,
+      {
+        user: { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' },
+        status: 'accepted' as const,
+        score,
+        days: 2,
+        rank,
+        lastEntryAt: '2026-09-08T09:00:00.000Z',
+        isWinner: false,
+      },
+    ];
+    return detail;
+  }
+
+  it('calls a shared first place "başa baş", never "öndesin"', async () => {
+    // both on 12.430 with rank 1: the server shares the rank on equal scores
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => withRival(12430, 1));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Başa baş');
+    expect(text).not.toContain('Aferin lan koçum');
+  });
+
+  it('says "aferin" only when the lead is real', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => withRival(4201, 2));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Aferin lan koçum');
+    expect(text).not.toContain('Başa baş');
+  });
+});

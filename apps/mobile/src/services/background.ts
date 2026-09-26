@@ -2,13 +2,18 @@ import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 
+import { runBackgroundWork } from '@/services/backgroundWork';
+
 /**
  * Periodic background work: push the last few days of steps to the server so a
  * challenge keeps scoring even when nobody opens the app, and pull the unread
  * inbox count so a device without push still finds out it got dunked on.
  *
- * The actual work is injected by the app layer (`setBackgroundHandler`) because
- * the task body has to be defined at module scope, before React runs.
+ * The app layer injects a richer handler while it is alive
+ * (`setBackgroundHandler`); when the task fires headless — the app was swiped
+ * away and React never mounted — `runBackgroundWork` does the same job from the
+ * stored session. The task body itself has to be defined at module scope,
+ * before React runs, which is why this file knows nothing about providers.
  */
 
 export const BACKGROUND_TASK_NAME = 'koydum-sync';
@@ -24,8 +29,8 @@ export function setBackgroundHandler(next: Handler | null): void {
 if (Platform.OS !== 'web' && !TaskManager.isTaskDefined(BACKGROUND_TASK_NAME)) {
   TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
     try {
-      if (!handler) return BackgroundTask.BackgroundTaskResult.Success;
-      await handler();
+      if (handler) await handler();
+      else await runBackgroundWork();
       return BackgroundTask.BackgroundTaskResult.Success;
     } catch {
       return BackgroundTask.BackgroundTaskResult.Failed;

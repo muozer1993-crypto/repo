@@ -124,6 +124,13 @@ class KoydumScreenTimeModule : Module() {
      * Foreground minutes per local day for the last `days` days (today first).
      * Days with nothing recorded are reported as 0 rather than omitted, so the
      * server can tell "the phone says zero" from "the phone said nothing".
+     *
+     * Intervals are tracked per ACTIVITY (package + class), not per package: when
+     * an app moves from one screen to another, Android reports the new screen's
+     * ACTIVITY_RESUMED before the old one's ACTIVITY_STOPPED, so a per-package
+     * bookkeeping would close the app's interval on that STOPPED and lose all the
+     * time until the next switch. The per-activity intervals of one package are
+     * merged afterwards, so the brief overlap during a switch is counted once.
      */
     fun dailyForegroundMinutes(context: Context, days: Int): List<Map<String, Any>> {
       val usage = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
@@ -134,42 +141,60 @@ class KoydumScreenTimeModule : Module() {
       val starts = LongArray(days + 1)
       for (i in 0 until days) starts[i] = startOfDay(now, days - 1 - i).timeInMillis
       starts[days] = now
-      val totals = LongArray(days)
-
-      fun addInterval(from: Long, to: Long) {
-        if (to <= from) return
-        for (i in 0 until days) {
-          val bucketStart = starts[i]
-          val bucketEnd = starts[i + 1]
-          val lo = maxOf(from, bucketStart)
-          val hi = minOf(to, bucketEnd)
-          if (hi > lo) totals[i] += hi - lo
-        }
-      }
 
       val ignored = ignoredPackages(context)
-      val open = HashMap<String, Long>()
+      val open = HashMap<String, Long>() // "pkg/activity" → foreground since
+      val intervals = HashMap<String, MutableList<LongArray>>() // pkg → [start, end]
+
+      fun close(key: String, pkg: String, at: Long) {
+        val since = open.remove(key) ?: return
+        if (at > since) intervals.getOrPut(pkg) { ArrayList() }.add(longArrayOf(since, at))
+      }
+
       val events = usage.queryEvents(starts[0], now)
       val event = UsageEvents.Event()
       while (events.hasNextEvent()) {
         events.getNextEvent(event)
         val pkg = event.packageName ?: continue
+        val key = pkg + "/" + (event.className ?: "")
         when (event.eventType) {
           EVENT_RESUMED -> {
-            if (pkg !in ignored && !open.containsKey(pkg)) open[pkg] = event.timeStamp
+            if (pkg !in ignored && !open.containsKey(key)) open[key] = event.timeStamp
           }
-          EVENT_PAUSED, EVENT_STOPPED -> {
-            val since = open.remove(pkg)
-            if (since != null) addInterval(since, event.timeStamp)
-          }
+          EVENT_PAUSED, EVENT_STOPPED -> close(key, pkg, event.timeStamp)
           EVENT_SCREEN_OFF, EVENT_SHUTDOWN -> {
-            for ((_, since) in open) addInterval(since, event.timeStamp)
-            open.clear()
+            for (k in ArrayList(open.keys)) close(k, k.substringBefore('/'), event.timeStamp)
           }
         }
       }
       // whatever is still in the foreground counts up to this moment
-      for ((_, since) in open) addInterval(since, now)
+      for (k in ArrayList(open.keys)) close(k, k.substringBefore('/'), now)
+
+      val totals = LongArray(days)
+      fun addInterval(from: Long, to: Long) {
+        for (i in 0 until days) {
+          val lo = maxOf(from, starts[i])
+          val hi = minOf(to, starts[i + 1])
+          if (hi > lo) totals[i] += hi - lo
+        }
+      }
+      for (list in intervals.values) {
+        // merge overlapping intervals of the same package before counting
+        list.sortBy { it[0] }
+        var curStart = -1L
+        var curEnd = -1L
+        for (iv in list) {
+          if (curStart < 0) {
+            curStart = iv[0]; curEnd = iv[1]
+          } else if (iv[0] <= curEnd) {
+            if (iv[1] > curEnd) curEnd = iv[1]
+          } else {
+            addInterval(curStart, curEnd)
+            curStart = iv[0]; curEnd = iv[1]
+          }
+        }
+        if (curStart >= 0) addInterval(curStart, curEnd)
+      }
 
       val out = ArrayList<Map<String, Any>>(days)
       for (i in days - 1 downTo 0) {

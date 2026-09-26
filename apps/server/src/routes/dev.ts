@@ -57,7 +57,7 @@ export default async function devRoutes(app: FastifyInstance): Promise<void> {
     if (!challenge) throw notFound('challenge_not_found', 'Böyle bir çelınc yok.');
 
     if (challenge.status === 'finished') {
-      return { ok: true, standings: computeStandings(db, challenge) };
+      return { ok: true, standings: computeStandings(db, challenge, app.now()) };
     }
     if (challenge.status === 'cancelled') {
       throw badRequest('challenge_cancelled', 'İptal edilmiş çelınc bitirilemez.');

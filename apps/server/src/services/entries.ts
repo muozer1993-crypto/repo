@@ -208,11 +208,13 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
   // be able to turn a late check-in into an on-time one.
   const tz = participantTimezone(membership, user);
 
-  // Focus sessions are idempotent on `sessionId`: a retried request (flaky network,
-  // app relaunch) returns the row that was already written instead of double counting.
-  // Only focus does this — for any other metric a repeated id must not swallow a
-  // legitimate new entry, so the field is ignored (and never stored) there.
-  const sessionId = type.metricType === 'focus_minutes' ? (body.sessionId ?? null) : null;
+  // Append metrics are idempotent on `sessionId`: a retried request (flaky network,
+  // a timeout on the way back, the offline queue replaying) returns the row that was
+  // already written instead of double counting. Focus sessions and manual counts
+  // append, so they carry one; the upsert metrics key on the day already and ignore
+  // (never store) the field.
+  const appendsWithKey = type.metricType === 'focus_minutes' || type.metricType === 'manual_count';
+  const sessionId = appendsWithKey ? (body.sessionId ?? null) : null;
   if (sessionId) {
     const replay = db
       .prepare('SELECT * FROM entries WHERE challenge_id = ? AND user_id = ? AND session_id = ?')
@@ -233,7 +235,11 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
     throw badRequest('value_too_large', `Tek girişte en fazla ${unitLabel(type, type.maxPerEntry)} girebilirsin.`);
   }
 
-  if (challenge.proof_required === 1 && body.source === 'manual' && !body.proofUrl) {
+  // A photo can back a NUMBER somebody typed. A yes/no day and a check-in have
+  // no photo step in the app, so the flag must not lock them (it once made every
+  // proof-required daily_boolean çelınc impossible to mark).
+  const photoApplies = type.metricType === 'manual_count' || type.metricType === 'manual_lower_is_better' || type.metricType === 'auto_steps';
+  if (photoApplies && challenge.proof_required === 1 && body.source === 'manual' && !body.proofUrl) {
     throw badRequest('proof_required', 'Bu çelıncta kanıt fotoğrafı zorunlu.');
   }
 
@@ -270,7 +276,13 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
       // neither a phone with its clock rolled back nor a profile timezone edited
       // mid-challenge can buy an extra hour.
       const deadline = challenge.deadline_time ?? type.defaultDeadlineTime ?? '23:59';
-      const onTime = isBeforeOrEqualHHmm(localTimeHHmm(now, tz), deadline);
+      const localNow = localTimeHHmm(now, tz);
+      // "yattım" at 02:00 is not an early bedtime, it is last night's late one:
+      // before the type's window opens the button does nothing for today.
+      if (type.checkinWindowStart && isBeforeOrEqualHHmm(localNow, type.checkinWindowStart) && localNow !== type.checkinWindowStart) {
+        throw badRequest('checkin_too_early', `Bu check-in ${type.checkinWindowStart}'den sonra sayılıyor. Biraz erken geldin.`);
+      }
+      const onTime = isBeforeOrEqualHHmm(localNow, deadline);
       return { entry: insertEntry(db, input, onTime ? 1 : 0, !onTime), created: true };
     }
 
@@ -307,7 +319,7 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
           `Günlük sınır ${unitLabel(type, type.maxPerDay)}. Bugün zaten ${unitLabel(type, sum)} girdin.`,
         );
       }
-      return { entry: insertEntry(db, input, body.value, false), created: true };
+      return { entry: insertEntry(db, input, body.value, false, sessionId), created: true };
     }
   }
 }

@@ -69,7 +69,7 @@ export function fanOutDeviceDays(
     return { challenge, tz, window: challengeWindow(challenge, tz), type };
   });
 
-  const findEntry = db.prepare('SELECT id FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ?');
+  const findEntry = db.prepare('SELECT id, value, source FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ?');
   const updateEntry = db.prepare('UPDATE entries SET value = ?, source = ?, updated_at = ? WHERE id = ?');
   const insertEntry = db.prepare(
     `INSERT INTO entries (id, challenge_id, user_id, day_key, value, source, note, proof_url, status,
@@ -82,9 +82,21 @@ export function fanOutDeviceDays(
     for (const { challenge, tz, window, type } of rules) {
       if (dayWindowIssue(window, type.metricType, tz, day.dayKey, now, day.source) !== null) continue;
       const value = Math.min(day.value, type.maxPerDay);
-      const existing = findEntry.get(challenge.id, user.id, day.dayKey) as { id: string } | undefined;
-      if (existing) updateEntry.run(value, day.source, at, existing.id);
-      else insertEntry.run(newId(), challenge.id, user.id, day.dayKey, value, day.source, at, at, at);
+      const existing = findEntry.get(challenge.id, user.id, day.dayKey) as
+        | { id: string; value: number; source: string }
+        | undefined;
+      if (existing) {
+        // Steps: an Android without Health Connect counts only while the app is
+        // open, and the user was told to declare the real number by hand. That
+        // declaration must not be shaved back down by the next partial count —
+        // the phone only ever raises a typed higher-is-better value. (Friends can
+        // still dispute a fantasy number.) Lower-is-better readings always win.
+        const keepTyped =
+          existing.source === 'manual' && type.direction === 'higher' && Number(existing.value) >= value;
+        if (!keepTyped) updateEntry.run(value, day.source, at, existing.id);
+      } else {
+        insertEntry.run(newId(), challenge.id, user.id, day.dayKey, value, day.source, at, at, at);
+      }
       updated += 1;
     }
   }

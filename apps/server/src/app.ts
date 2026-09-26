@@ -70,7 +70,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
   const app = Fastify({
     logger: config.logLevel === 'silent' ? false : { level: config.logLevel },
     bodyLimit: LIMITS.UPLOAD_MAX_BYTES + 1024 * 1024,
-    trustProxy: true,
+    trustProxy: config.trustProxy,
   });
 
   app.decorate('db', db);

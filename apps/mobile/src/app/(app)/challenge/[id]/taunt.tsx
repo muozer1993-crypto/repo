@@ -298,7 +298,7 @@ export default function TauntPickerScreen() {
 
   const theirScore = chosen?.score ?? 0;
   const context: TauntContext = chosen ? contextFor(chosen) : challenge.isTie ? 'tie' : 'win';
-  const templates = tauntsAtLevel(context, tauntLevel);
+  const templates = tauntsAtLevel(context, tauntLevel, challenge.metricType);
   const active: TauntTemplate | undefined =
     templates.find((tpl) => tpl.id === templateId) ?? templates[0];
 
@@ -311,7 +311,7 @@ export default function TauntPickerScreen() {
   const templateForRecipient = (target: ParticipantView): string => {
     const targetContext = contextFor(target);
     if (!active || targetContext === context) return active?.id ?? '';
-    const pool = tauntsAtLevel(targetContext, tauntLevel);
+    const pool = tauntsAtLevel(targetContext, tauntLevel, challenge.metricType);
     // the API needs exactly one of templateId/customBody, so never send nothing
     if (pool.length === 0) return active.id;
     const index = Math.max(0, templates.findIndex((tpl) => tpl.id === active.id));

@@ -56,7 +56,11 @@ export default function HomeScreen() {
 
   const list = challenges.data ?? [];
   const invited = list
-    .filter((s) => s.me?.status === 'invited' && s.challenge.status !== 'cancelled')
+    .filter(
+      (s) =>
+        s.me?.status === 'invited' &&
+        (s.challenge.status === 'pending' || s.challenge.status === 'active')
+    )
     .sort(byNewest);
   const active = list
     .filter((s) => s.challenge.status === 'active' && s.me?.status !== 'invited')

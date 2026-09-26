@@ -271,7 +271,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     const challenge = requireChallengeRow(db, id);
     requireMembership(db, challenge, me.id);
 
-    const summary = buildSummary(db, challenge, me.id);
+    const summary = buildSummary(db, challenge, me.id, app.now());
     const results: ChallengeResults = {
       challenge: summary.challenge,
       standings: summary.participants,
@@ -285,7 +285,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       // the whole results screen.
       const runnerUp = summary.participants.find((p) => p.status === 'accepted' && p.user.id !== me.id);
       const loser = runnerUp ? getUserRow(db, runnerUp.user.id) : undefined;
-      results.tauntTemplatesForWinner = tauntPreviewsForWinner(db, challenge, me.row, loser);
+      results.tauntTemplatesForWinner = tauntPreviewsForWinner(db, challenge, me.row, loser, app.now());
     }
 
     return results;

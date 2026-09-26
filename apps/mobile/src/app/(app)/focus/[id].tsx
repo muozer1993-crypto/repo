@@ -36,13 +36,10 @@ import { Colors, Radius, Spacing } from '@/theme';
 import { safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { formatClock, formatMinutes } from '@/utils/format';
+import { uuidV4 } from '@/utils/ids';
 
 const KEEP_AWAKE_TAG = 'koydum-focus';
 
-/** Good enough as an idempotency key; Hermes has no crypto.randomUUID. */
-function makeSessionId(): string {
-  return `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-}
 
 export default function FocusScreen() {
   const params = useLocalSearchParams<{ id: string }>();
@@ -172,7 +169,7 @@ export default function FocusScreen() {
     setSavedMinutes(null);
     setSaveError(null);
     setNow(stamp);
-    setSession(createSession(id, preset, makeSessionId(), stamp));
+    setSession(createSession(id, preset, uuidV4(), stamp));
     if (Platform.OS !== 'web') {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     }

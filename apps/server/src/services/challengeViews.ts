@@ -186,7 +186,7 @@ export function pokeTargetList(
   now: Date,
 ): CanTaunt[] {
   if (challenge.status !== 'active') return [];
-  const standings = computeStandings(db, challenge);
+  const standings = computeStandings(db, challenge, now);
   const mine = standings.find((view) => view.user.id === userId);
   if (!mine || mine.status !== 'accepted') return [];
 
@@ -212,8 +212,8 @@ export function pokeTargetList(
   return targets;
 }
 
-export function buildSummary(db: Database, challenge: ChallengeRow, userId: string): ChallengeSummary {
-  const participants: ParticipantView[] = computeStandings(db, challenge);
+export function buildSummary(db: Database, challenge: ChallengeRow, userId: string, now: Date = new Date()): ChallengeSummary {
+  const participants: ParticipantView[] = computeStandings(db, challenge, now);
   return {
     challenge: toChallenge(challenge),
     participants,
@@ -228,7 +228,7 @@ export function buildDetail(
   userId: string,
   now: Date = new Date(),
 ): ChallengeDetail {
-  const summary = buildSummary(db, challenge, userId);
+  const summary = buildSummary(db, challenge, userId, now);
   const pokeTargets = pokeTargetList(db, challenge, userId, now);
   return {
     ...summary,

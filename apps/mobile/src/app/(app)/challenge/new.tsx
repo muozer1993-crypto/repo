@@ -103,6 +103,20 @@ function clip(value: string, max: number): string {
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
+/**
+ * A photo can only back a NUMBER somebody typed: a yes/no day, a check-in or a
+ * focus session has no photo step, so the switch is not offered for them and
+ * the flag never goes out as true (the server ignores it there anyway).
+ */
+function photoApplies(type: ChallengeType | undefined): boolean {
+  return (
+    !!type &&
+    (type.metricType === 'manual_count' ||
+      type.metricType === 'manual_lower_is_better' ||
+      type.metricType === 'auto_steps')
+  );
+}
+
 /** What the settings step starts from for a given type. */
 function defaultsFor(type: ChallengeType): {
   durationChoice: DurationChoice;
@@ -117,7 +131,7 @@ function defaultsFor(type: ChallengeType): {
       : 'custom',
     customDays: String(type.defaultDurationDays),
     deadlineTime: type.defaultDeadlineTime ?? '',
-    proofRequired: type.proofRequired,
+    proofRequired: photoApplies(type) && type.proofRequired,
     stakeText: clip(type.suggestedRewardTr, LIMITS.REWARD_TEXT_MAX),
   };
 }
@@ -294,6 +308,7 @@ export default function NewChallengeScreen() {
 
   const type = typeKey ? getChallengeType(typeKey) : undefined;
   const needsDeadline = type?.metricType === 'checkin_deadline';
+  const canProof = photoApplies(type);
 
   const rawDays = durationChoice === 'custom' ? Number(customDays.replace(',', '.')) : durationChoice;
   const days = Number.isFinite(rawDays) ? rawDays : 0;
@@ -411,7 +426,7 @@ export default function NewChallengeScreen() {
         rewardText: stakeMode === 'reward' ? stakeText.trim() || undefined : undefined,
         penaltyText: stakeMode === 'penalty' ? stakeText.trim() || undefined : undefined,
         deadlineTime: needsDeadline ? deadlineTime.trim() : undefined,
-        proofRequired,
+        proofRequired: canProof && proofRequired,
       });
       router.replace({ pathname: '/challenge/[id]', params: { id: challenge.id } });
     } catch {
@@ -566,6 +581,7 @@ export default function NewChallengeScreen() {
               />
             ) : null}
 
+            {canProof ? (
             <View style={styles.switchRow}>
               <View style={styles.grow}>
                 <Text variant="body" bold>
@@ -588,6 +604,7 @@ export default function NewChallengeScreen() {
                 ios_backgroundColor={Colors.surfaceHigh}
               />
             </View>
+            ) : null}
 
             <View style={styles.field}>
               <Text variant="label">Ne üzerine oynuyoruz?</Text>
@@ -713,11 +730,13 @@ export default function NewChallengeScreen() {
                 {needsDeadline ? (
                   <SummaryRow label="Check-in" value={`Her gün ${deadlineTime.trim()} öncesi`} />
                 ) : null}
-                <SummaryRow
-                  label="Kanıt"
-                  value={proofRequired ? 'Fotoğraf zorunlu 📸' : 'Fotoğraf şart değil'}
-                  color={proofRequired ? Colors.yellow : undefined}
-                />
+                {canProof ? (
+                  <SummaryRow
+                    label="Kanıt"
+                    value={proofRequired ? 'Fotoğraf zorunlu 📸' : 'Fotoğraf şart değil'}
+                    color={proofRequired ? Colors.yellow : undefined}
+                  />
+                ) : null}
                 <SummaryRow
                   label={stakeMode === 'reward' ? 'Ödül' : 'Ceza'}
                   value={stakeText.trim() || 'Yazılmamış, sadece laf hakkı var'}

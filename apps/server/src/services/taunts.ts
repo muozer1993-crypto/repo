@@ -69,15 +69,29 @@ export function tauntVars(
   };
 }
 
-/** `win_big` / `win_close` / `win`, or `revenge` when this challenge is a rematch. */
+/**
+ * `win_big` / `win_close` / `win`, or `revenge` when this is a rematch AND the
+ * winner is the one who lost the original — a repeat winner has nothing to avenge.
+ */
 export function tauntContextFor(
   type: ChallengeType,
   challenge: ChallengeRow,
   winnerScore: number,
   loserScore: number,
+  originalWinnerId?: string | null,
+  winnerId?: string,
 ): TauntContext {
-  if (challenge.rematch_of_id) return 'revenge';
+  if (challenge.rematch_of_id && originalWinnerId && winnerId && originalWinnerId !== winnerId) return 'revenge';
   return tauntContextForMargin(winMargin(type, winnerScore, loserScore));
+}
+
+/** The winner of the çelınc this one is a rematch of, when there was one. */
+function originalWinnerOf(db: Database, challenge: ChallengeRow): string | null {
+  if (!challenge.rematch_of_id) return null;
+  const row = db.prepare('SELECT winner_id FROM challenges WHERE id = ?').get(challenge.rematch_of_id) as
+    | { winner_id: string | null }
+    | undefined;
+  return row?.winner_id ?? null;
 }
 
 function customTitle(level: VulgarityLevel, winner: string): string {
@@ -113,10 +127,17 @@ export function sendTaunt(db: Database, input: SendTauntInput): SendTauntResult 
   if (already) throw conflict('already_taunted', 'Bu kankaya zaten koydun.');
 
   const type = typeForChallenge(challenge);
-  const standings = computeStandings(db, challenge);
+  const standings = computeStandings(db, challenge, now);
   const vars = tauntVars(type, challenge, from, to, standings);
   const recipientMax = levelOf(to);
-  const context = tauntContextFor(type, challenge, scoreOf(standings, from.id), scoreOf(standings, to.id));
+  const context = tauntContextFor(
+    type,
+    challenge,
+    scoreOf(standings, from.id),
+    scoreOf(standings, to.id),
+    originalWinnerOf(db, challenge),
+    from.id,
+  );
   const seed = seedFrom(challenge.id, from.id, to.id);
 
   let level: VulgarityLevel;
@@ -130,10 +151,15 @@ export function sendTaunt(db: Database, input: SendTauntInput): SendTauntResult 
     }
     level = clampLevel(levelOf(from), recipientMax);
     const rendered = renderTaunt({ title: customTitle(level, from.display_name), body: customBody }, vars);
+    // the placeholders expand to names and titles other people typed; the
+    // finished sentence is what the recipient reads, so it is checked too
+    if (containsBanned(rendered.body) || containsBanned(rendered.title)) {
+      throw badRequest('banned_content', 'Bu laf fazla ağır. Aile, tehdit ve nefret içeren sözler yasak.');
+    }
     title = rendered.title;
     body = rendered.body;
   } else {
-    template = resolveTauntForRecipient(templateId, context, recipientMax, seed);
+    template = resolveTauntForRecipient(templateId, context, recipientMax, seed, type.metricType);
     level = clampLevel(template.level, recipientMax);
     const rendered = renderTaunt(template, vars);
     title = rendered.title;
@@ -183,13 +209,21 @@ export function tauntPreviewsForWinner(
   challenge: ChallengeRow,
   winner: UserRow,
   loser: UserRow | undefined,
+  now: Date = new Date(),
 ): TauntTemplate[] {
   const type = typeForChallenge(challenge);
-  const standings = computeStandings(db, challenge);
+  const standings = computeStandings(db, challenge, now);
   if (!loser) return [];
   const vars = tauntVars(type, challenge, winner, loser, standings);
-  const context = tauntContextFor(type, challenge, scoreOf(standings, winner.id), scoreOf(standings, loser.id));
-  return tauntsFor(context, 3).map((template) => ({
+  const context = tauntContextFor(
+    type,
+    challenge,
+    scoreOf(standings, winner.id),
+    scoreOf(standings, loser.id),
+    originalWinnerOf(db, challenge),
+    winner.id,
+  );
+  return tauntsFor(context, 3, type.metricType).map((template) => ({
     ...template,
     ...renderTaunt(template, vars),
   }));
@@ -241,10 +275,16 @@ export function sendPoke(db: Database, input: SendPokeInput): SendPokeResult {
   }
 
   const type = typeForChallenge(challenge);
-  const standings = computeStandings(db, challenge);
+  const standings = computeStandings(db, challenge, now);
   const vars = tauntVars(type, challenge, from, to, standings);
   const recipientMax = levelOf(to);
-  const template = resolveTauntForRecipient(templateId, 'poke', recipientMax, seedFrom(challenge.id, from.id, to.id, last?.id ?? ''));
+  const template = resolveTauntForRecipient(
+    templateId,
+    'poke',
+    recipientMax,
+    seedFrom(challenge.id, from.id, to.id, last?.id ?? ''),
+    type.metricType,
+  );
   const level = clampLevel(template.level, recipientMax);
   const { title, body } = renderTaunt(template, vars);
 

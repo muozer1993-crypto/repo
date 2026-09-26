@@ -291,6 +291,7 @@ yedeklemek için o dosyayı kopyalaman yeterli.
 | `JWT_SECRET` | otomatik üretilir | Elle vermek istersen |
 | `EXPO_ACCESS_TOKEN` | boş | Expo push için isteğe bağlı |
 | `ENABLE_DEV_ROUTES` | `0` | `1` yaparsan test uçları açılır (üretimde açma) |
+| `TRUST_PROXY` | `0` | Önünde nginx/Caddy/Fly gibi bir ters vekil varsa `1` yap; `X-Forwarded-For` başlığına o zaman güvenilir. Doğrudan erişilen bir sunucuda kapalı kalmalı, yoksa herkes kendi IP'sini seçip giriş denemesi sınırlarını aşar. |
 
 ---
 
@@ -331,11 +332,12 @@ bu filtre çalışır. Ayrıca herkes birbirini engelleyebilir ve şikayet edebi
 * **Odak dakikası** — uygulama içi sayaç; uygulamadan çıkarsan seans yanar.
 * **Saatli check-in** — belirlenen saatten önce "GELDİM" demen gerekir, saati sunucu doğrular.
 * **Sayı girişi** — bardak, sayfa, km, tekrar. İsteğe bağlı fotoğraf kanıtı.
-* **Az olan kazanır** — ekran süresi gibi; girmediğin gün en kötü değerden sayılır.
+* **Az olan kazanır** — ekran süresi gibi; günlük ortalama yarışır, girmediğin gün en kötü değerden (1440 dk) sayılır.
 * **Günlük evet/hayır** — sigara içmedim, şeker yemedim. Gün sayısı yarışır.
 
-Her türün "hile olur mu?" notu uygulamanın içinde yazılı. Şüpheli girişlere arkadaşlar **itiraz**
-edebilir; yeterli itiraz gelirse o giriş silinir.
+Şüpheli girişlere arkadaşlar **itiraz** edebilir; diğer oyuncuların çoğunluğu itiraz ederse o giriş
+düşer. İtiraz sadece çelınc sürerken açılır. Fotoğraf kanıtı, bir sayı yazılan türlerde çelıncı açan
+kişi isterse zorunlu olur; evet/hayır günleri ve check-in'lerde fotoğraf yok.
 
 ---
 

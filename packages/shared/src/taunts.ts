@@ -7,7 +7,7 @@
  * template (see `clampLevel` and the server's taunt route).
  */
 import { clampLevel } from './levels';
-import type { TauntContext, TauntTemplate, TauntVars, VulgarityLevel } from './types';
+import type { MetricType, TauntContext, TauntTemplate, TauntVars, VulgarityLevel } from './types';
 
 export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l1_win_01", level: 1, context: "win", title: "Sonuç geldi", body: "{winner} kazandı. {winnerScore} - {loserScore} {unit}. Rövanş düğmesi hemen altta." },
@@ -21,7 +21,7 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l1_winbig_01", level: 1, context: "win_big", title: "Fark biraz açıldı", body: "{winner} {winnerScore}, sen {loserScore}. Aradaki {diff} {unit} tek başına bir çelınc olurdu." },
   { id: "l1_winbig_02", level: 1, context: "win_big", title: "Fark büyük", body: "{winner} {challenge} çelıncını {winnerScore} - {loserScore} kazandı." },
   { id: "l1_winbig_03", level: 1, context: "win_big", title: "Ayrı liglerdesiniz", body: "Sen {loserScore} {unit}, {winner} {winnerScore}. {metric} konusunda ondan bir iki tüyo alsan iyi olur." },
-  { id: "l1_winbig_04", level: 1, context: "win_big", title: "Tribünden izledin", body: "{challenge} çelıncında {winner} {winnerScore} yaptı, sen {loserScore}." },
+  { id: "l1_winbig_04", level: 1, context: "win_big", title: "Fark açıldı", body: "{challenge} çelıncında {winner} {winnerScore} yaptı, sen {loserScore}." },
   { id: "l1_winclose_01", level: 1, context: "win_close", title: "Kıl payı", body: "{winner} seni sadece {diff} {unit} ile geçti. Bir dahakine senindir." },
   { id: "l1_winclose_02", level: 1, context: "win_close", title: "Fotofiniş", body: "{winnerScore} - {loserScore}. {winner} son metrelerde öne geçti." },
   { id: "l1_winclose_03", level: 1, context: "win_close", title: "Az kaldı {loser}", body: "{diff} {unit} fark var. {winner} zor kazandı." },
@@ -29,11 +29,11 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l1_tie_01", level: 1, context: "tie", title: "Berabere", body: "{winner} ve {loser} tam {winnerScore} {unit} ile eşit bitirdi. Kimsenin diyeceği bir şey yok." },
   { id: "l1_tie_02", level: 1, context: "tie", title: "Eşitlik", body: "{challenge} berabere bitti: {winnerScore} - {loserScore}. İsterseniz rövanş açın." },
   { id: "l1_poke_01", level: 1, context: "poke", title: "Küçük bir dürtme", body: "{winner} seni dürttü. {challenge} devam ediyor, sen {loserScore} {unit} seviyesindesin." },
-  { id: "l1_poke_02", level: 1, context: "poke", title: "Koltuk rahat mı?", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore}. Biraz kıpırdanmanın vakti geldi." },
+  { id: "l1_poke_02", level: 1, context: "poke", title: "Hareket zamanı", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore}. Bugün biraz eklemenin vakti." },
   { id: "l1_poke_03", level: 1, context: "poke", title: "Hatırlatma", body: "{challenge} hâlâ açık. {winner} bugün çalıştı, sıra sende." },
   { id: "l1_poke_04", level: 1, context: "poke", title: "İyi misin?", body: "{loser}, {metric} tablosunda uzun süredir hareket yok. {winner} merak etti." },
   { id: "l1_poke_05", level: 1, context: "poke", title: "Arayı kapat", body: "{winner} ile aranda {diff} {unit} var. Bugün biraz gayret edersen kapanır." },
-  { id: "l1_poke_06", level: 1, context: "poke", title: "Bakan var", body: "{winner} skoruna baktı: {loserScore} {unit}. Yorum yok." },
+  { id: "l1_poke_06", level: 1, context: "poke", title: "Skor güncellendi", body: "{winner} skoruna baktı: {loserScore} {unit}. Bugün biraz ekleyebilirsin." },
   { id: "l1_poke_07", level: 1, context: "poke", title: "Bir öneri", body: "{winner} {diff} {unit} önde. Kalk bi su iç bence, sonra da biraz yürü." },
   { id: "l1_streak_01", level: 1, context: "streak", title: "Seri devam ediyor", body: "{winner} {challenge} çelıncını yine kazandı. {loser}, bu artık alışkanlık oldu." },
   { id: "l1_streak_02", level: 1, context: "streak", title: "Yine {winner}", body: "{winner} üst üste kazanıyor. {winnerScore} - {loserScore}." },
@@ -57,7 +57,7 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l2_winclose_04", level: 2, context: "win_close", title: "Burun farkı", body: "{winner} {winnerScore}, sen {loserScore}. Fark burun kadar ama burnun sürtüldü {loser}." },
   { id: "l2_tie_01", level: 2, context: "tie", title: "Kimse koyamadı", body: "{winnerScore} - {loserScore}. Berabere. Bir daha oynayın." },
   { id: "l2_tie_02", level: 2, context: "tie", title: "Sıkıcı oldu", body: "{winner} ve {loser} eşit bitirdi. Bu uygulama bunun için yapılmadı lan." },
-  { id: "l2_poke_01", level: 2, context: "poke", title: "Kalk yürü", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore} ile yatıyorsun. Koltuğa yapıştın." },
+  { id: "l2_poke_01", level: 2, context: "poke", title: "Kalk yürü", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore} ile yatıyorsun. Koltuğa yapıştın.", metrics: ["auto_steps"] },
   { id: "l2_poke_02", level: 2, context: "poke", title: "Dürtüldün", body: "{winner} seni dürttü. {challenge} bitmedi, {metric} tarafında bir hareket göreyim." },
   { id: "l2_poke_03", level: 2, context: "poke", title: "Hayatta mısın {loser}?", body: "Sabahtan beri {loserScore} {unit}. {winner} soruyor: nabız var mı lan?" },
   { id: "l2_poke_04", level: 2, context: "poke", title: "Aradaki fark {diff}", body: "{winner} ile aranda {diff} {unit} var. Böyle giderse akşam {winner} imzalı bir bildirim gelir." },
@@ -74,7 +74,7 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l3_win_03", level: 3, context: "win", title: "Sapır sapır", body: "{winner} sana {diff} {unit} fark attı. Sapır sapır {loser}." },
   { id: "l3_win_04", level: 3, context: "win", title: "Yattın kaldın", body: "{winner} {winnerScore} {unit} yaptı, sen {loserScore}. Bütün grup izledi." },
   { id: "l3_win_05", level: 3, context: "win", title: "Girdi çıktı", body: "{winner} {challenge} çelıncına girip koydu. Sen hâlâ {loserScore} {unit} ile yatıyorsun {loser}." },
-  { id: "l3_win_06", level: 3, context: "win", title: "Paytak paytak", body: "{winnerScore} - {loserScore}. {winner} yürüdü, sen paytak paytak dolaştın." },
+  { id: "l3_win_06", level: 3, context: "win", title: "Paytak paytak", body: "{winnerScore} - {loserScore}. {winner} yürüdü, sen paytak paytak dolaştın.", metrics: ["auto_steps"] },
   { id: "l3_win_07", level: 3, context: "win", title: "Kıvran biraz", body: "{winner} sana {diff} {unit} fark attı. Yut bakalım {loser} 🍆" },
   { id: "l3_win_08", level: 3, context: "win", title: "Yastık ister misin?", body: "{winner} {winnerScore} {unit} yaptı, sen {loserScore} ile altta kaldın. Rahat mısın {loser}?" },
   { id: "l3_winbig_01", level: 3, context: "win_big", title: "Dibine kadar", body: "{winner} {winnerScore}, sen {loserScore}. {diff} {unit} fark lan. Yedin {loser}, dibine kadar." },
@@ -87,13 +87,13 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l3_winclose_04", level: 3, context: "win_close", title: "90+5", body: "{winner} son dakikada koydu: {winnerScore} - {loserScore}. Erken sevinmiştin {loser}." },
   { id: "l3_tie_01", level: 3, context: "tie", title: "Kimse koyamadı", body: "{winnerScore} - {loserScore}. Berabere lan. Ortadaki 🍆 sahipsiz kaldı." },
   { id: "l3_tie_02", level: 3, context: "tie", title: "Eşit bitti", body: "{winner} ve {loser} aynı skorda kaldı. Rövanş açın." },
-  { id: "l3_poke_01", level: 3, context: "poke", title: "Kalk yürü lan!", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore}. Koltuğa yapıştın, akşama yersin." },
+  { id: "l3_poke_01", level: 3, context: "poke", title: "Kalk yürü lan!", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore}. Koltuğa yapıştın, akşama yersin.", metrics: ["auto_steps"] },
   { id: "l3_poke_02", level: 3, context: "poke", title: "Dürtüldün {loser}", body: "{winner} seni dürttü. {diff} {unit} geride yatıyorsun. Gece bildirim gelir 🍆" },
   { id: "l3_poke_03", level: 3, context: "poke", title: "Donmuşsun", body: "{loser}, {loserScore} {unit} ile donup kalmışsın. {winner} çoktan gitti." },
-  { id: "l3_poke_04", level: 3, context: "poke", title: "Kanepe sana koydu", body: "{winner} {winnerScore} ile geziyor, sen {loserScore} ile yatıyorsun. Sırada {winner} var." },
+  { id: "l3_poke_04", level: 3, context: "poke", title: "Kanepe sana koydu", body: "{winner} {winnerScore} ile geziyor, sen {loserScore} ile yatıyorsun. Sırada {winner} var.", metrics: ["auto_steps"] },
   { id: "l3_poke_05", level: 3, context: "poke", title: "Arayı kapat", body: "{diff} {unit} geridesin. {winner} şimdiden bildirimi yazıyor, kalk da silsin." },
   { id: "l3_poke_06", level: 3, context: "poke", title: "Son şans", body: "{metric} çelıncında sabahtan beri {loserScore} yaptın {loser}. {winner} diyor ki kıpırda, son şans 🍆" },
-  { id: "l3_poke_07", level: 3, context: "poke", title: "Eşek gibi anırırım", body: "Sen bugün {winnerScore} {unit} yap, eşek gibi anırmazsam adam değilim {loser}." },
+  { id: "l3_poke_07", level: 3, context: "poke", title: "Eşek gibi anırırım", body: "Sen bugün {winnerScore} {unit} at, eşek gibi anırmazsam adam değilim {loser}.", metrics: ["auto_steps"] },
   { id: "l3_poke_08", level: 3, context: "poke", title: "Zokayı yiyeceksin", body: "Kanka sen bugün zokayı yiyeceksin, yine belli oldu 🍆 {diff} {unit} geridesin." },
   { id: "l3_streak_01", level: 3, context: "streak", title: "Yine sapladı 🍆", body: "{winner} üst üste kazandı: {winnerScore} - {loserScore}. {loser} yine yedi." },
   { id: "l3_streak_02", level: 3, context: "streak", title: "Gelenek oldu", body: "{winner} bir daha koydu. {loser} kaçıncı olduğunu unuttu bile." },
@@ -119,15 +119,21 @@ export function renderTaunt(
   return { title: fill(template.title), body: fill(template.body) };
 }
 
-/** Every template at or below `maxLevel` for the given context. */
-export function tauntsFor(context: TauntContext, maxLevel: VulgarityLevel): TauntTemplate[] {
-  return TAUNTS.filter((t) => t.context === context && t.level <= maxLevel);
+/** True when the template may be used on a çelınc of this metric (or on any, when unknown). */
+export function tauntFitsMetric(template: TauntTemplate, metric?: MetricType): boolean {
+  if (!template.metrics || metric === undefined) return true;
+  return template.metrics.includes(metric);
+}
+
+/** Every template at or below `maxLevel` for the given context (and metric, when given). */
+export function tauntsFor(context: TauntContext, maxLevel: VulgarityLevel, metric?: MetricType): TauntTemplate[] {
+  return TAUNTS.filter((t) => t.context === context && t.level <= maxLevel && tauntFitsMetric(t, metric));
 }
 
 /** Templates exactly at one level, falling back to lower levels when empty. */
-export function tauntsAtLevel(context: TauntContext, level: VulgarityLevel): TauntTemplate[] {
-  const exact = TAUNTS.filter((t) => t.context === context && t.level === level);
-  return exact.length > 0 ? exact : tauntsFor(context, level);
+export function tauntsAtLevel(context: TauntContext, level: VulgarityLevel, metric?: MetricType): TauntTemplate[] {
+  const exact = TAUNTS.filter((t) => t.context === context && t.level === level && tauntFitsMetric(t, metric));
+  return exact.length > 0 ? exact : tauntsFor(context, level, metric);
 }
 
 export function getTaunt(id: string): TauntTemplate | undefined {
@@ -141,9 +147,10 @@ export function getTaunt(id: string): TauntTemplate | undefined {
 export function pickTaunt(
   context: TauntContext,
   level: VulgarityLevel,
-  seed?: number
+  seed?: number,
+  metric?: MetricType
 ): TauntTemplate {
-  const pool = tauntsAtLevel(context, level);
+  const pool = tauntsAtLevel(context, level, metric);
   if (pool.length === 0) {
     // every context has at least one level 1 template, but never crash on the
     // hot path: fall back to the first template of any context
@@ -163,12 +170,14 @@ export function resolveTauntForRecipient(
   requestedId: string | undefined,
   context: TauntContext,
   recipientMax: VulgarityLevel,
-  seed?: number
+  seed?: number,
+  metric?: MetricType
 ): TauntTemplate {
   const requested = requestedId ? getTaunt(requestedId) : undefined;
-  if (requested && requested.level <= recipientMax) return requested;
+  // a line written for another kind of çelınc is swapped like an over-level one
+  if (requested && requested.level <= recipientMax && tauntFitsMetric(requested, metric)) return requested;
   const level = requested ? clampLevel(requested.level, recipientMax) : recipientMax;
-  return pickTaunt(requested?.context ?? context, level, seed);
+  return pickTaunt(requested?.context ?? context, level, seed, metric);
 }
 
 /** Formats a score the way the taunt copy expects: 12.430 in tr-TR. */

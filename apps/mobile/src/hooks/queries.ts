@@ -166,9 +166,15 @@ export function useChallengeAction(id: string) {
  * in `services/offlineQueue` and replayed later, and the mutation resolves as if
  * it had worked so the screen can close.
  */
-export function useAddEntry(id: string) {
+/**
+ * `append` says the metric adds entries up (manual_count) instead of keeping one
+ * per day: an offline write then queues as its own item rather than replacing the
+ * one already waiting for the same day.
+ */
+export function useAddEntry(id: string, options: { append?: boolean } = {}) {
   const api = useApi();
   const invalidate = useInvalidator();
+  const { append = false } = options;
   return useMutation<AddEntryResult, Error, Parameters<typeof api.addEntry>[1]>({
     mutationFn: async (body) => {
       try {
@@ -178,7 +184,8 @@ export function useAddEntry(id: string) {
         return { ...result, queued: false };
       } catch (error) {
         if (error instanceof ApiError && (error.isNetwork || error.status >= 500)) {
-          await enqueueEntry(id, body, `${id}:${body.dayKey}:${body.source}:${body.sessionId ?? ''}`);
+          const key = `${id}:${body.dayKey}:${body.source}:${body.sessionId ?? ''}${append ? `:${body.clientTime}` : ''}`;
+          await enqueueEntry(id, body, key);
           return { entry: null, standings: null, queued: true };
         }
         throw error;

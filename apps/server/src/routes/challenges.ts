@@ -34,6 +34,7 @@ import {
   requireMembership,
   requireUserRow,
 } from '../services/challengeViews.js';
+import { assertNotBlocked } from '../services/friends.js';
 
 interface IdParams {
   id: string;
@@ -100,7 +101,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       )
       .all(...(params as never[])) as ChallengeRow[];
 
-    return rows.map((row) => buildSummary(db, row, me.id));
+    return rows.map((row) => buildSummary(db, row, me.id, app.now()));
   });
 
   // -------------------------------------------------------------------------
@@ -222,6 +223,8 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     if (challenge.status !== 'pending' && challenge.status !== 'active') {
       throw badRequest('challenge_closed', 'Bu çelınc kapandı, artık katılamazsın.');
     }
+    // the invite predates the block; the block wins
+    assertNotBlocked(db, me.id, challenge.creator_id);
     // Joining in the last hour would be a free ride, so the door closes early —
     // but never earlier than a quarter of the way in, or a challenge of the
     // minimum length (one hour) could never be accepted at all.

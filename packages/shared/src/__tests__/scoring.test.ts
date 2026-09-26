@@ -70,16 +70,21 @@ describe('computeScore', () => {
     expect(r).toEqual({ score: 1, days: 2 });
   });
 
-  it('lower-is-better adds the missing-day penalty', () => {
+  it('lower-is-better averages the reported values and the missing-day penalty over the window', () => {
     const type = makeType({ metricType: 'manual_lower_is_better', direction: 'lower', missingDayPenalty: 8 });
     const r = computeScore(type, DAYS, [{ dayKey: '2024-05-01', value: 2, status: 'ok' }]);
-    expect(r).toEqual({ score: 2 + 2 * 8, days: 1 });
+    expect(r).toEqual({ score: (2 + 2 * 8) / 3, days: 1 });
+  });
+
+  it('lower-is-better with no window at all is the plain sum', () => {
+    const type = makeType({ metricType: 'manual_lower_is_better', direction: 'lower', missingDayPenalty: 8 });
+    expect(computeScore(type, [], [{ dayKey: '2024-05-01', value: 5, status: 'ok' }])).toEqual({ score: 5, days: 1 });
   });
 
   it('lower-is-better falls back to maxPerDay when no penalty is configured', () => {
     const type = makeType({ metricType: 'manual_lower_is_better', direction: 'lower', maxPerDay: 24 });
     const r = computeScore(type, DAYS, []);
-    expect(r).toEqual({ score: 72, days: 0 });
+    expect(r).toEqual({ score: 24, days: 0 });
   });
 
   it('counts an out-of-window entry in the sum but never as a reported window day', () => {
@@ -100,8 +105,8 @@ describe('computeScore', () => {
     const type = makeType({ metricType: 'manual_lower_is_better', direction: 'lower', missingDayPenalty: 8 });
     const entry = (dayKey: string) => ({ dayKey, value: 1, status: 'ok' as const });
     const outsideOnly = ['2024-04-28', '2024-04-29', '2024-04-30'].map(entry);
-    expect(computeScore(type, DAYS, outsideOnly)).toEqual({ score: 3 + 3 * 8, days: 3 });
-    expect(computeScore(type, DAYS, DAYS.map(entry))).toEqual({ score: 3, days: 3 });
+    expect(computeScore(type, DAYS, outsideOnly)).toEqual({ score: (3 + 3 * 8) / 3, days: 3 });
+    expect(computeScore(type, DAYS, DAYS.map(entry))).toEqual({ score: 1, days: 3 });
     const r = rankParticipants(type, DAYS, [
       { userId: 'ghost', entries: outsideOnly },
       { userId: 'honest', entries: DAYS.map(entry) },
@@ -151,8 +156,8 @@ describe('rankParticipants', () => {
       },
       { userId: 'slacker', entries: [{ dayKey: '2024-05-01', value: 1, status: 'ok' }] },
     ]);
-    expect(r.results[0]).toMatchObject({ userId: 'reporter', score: 9, rank: 1, isWinner: true });
-    expect(r.results[1]).toMatchObject({ userId: 'slacker', score: 17, rank: 2, isWinner: false });
+    expect(r.results[0]).toMatchObject({ userId: 'reporter', score: 3, rank: 1, isWinner: true });
+    expect(r.results[1]).toMatchObject({ userId: 'slacker', score: 5.667, rank: 2, isWinner: false });
     expect(r.winnerId).toBe('reporter');
   });
 

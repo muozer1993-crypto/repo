@@ -33,12 +33,21 @@ describe('offline entry queue', () => {
     expect((await pendingForChallenge('c1')).map((item) => item.id)).toEqual(['a']);
   });
 
-  it('replaces an earlier write for the same day and source', async () => {
-    await enqueueEntry('c1', body('2026-09-08', 3), 'a');
-    await enqueueEntry('c1', body('2026-09-08', 7), 'b');
+  it('a corrected value for the same day (same id) replaces the one still waiting', async () => {
+    // the id is how the caller says "this is the same write": upsert metrics key it
+    // by challenge, day and source
+    await enqueueEntry('c1', body('2026-09-08', 3), 'c1:2026-09-08:manual:');
+    await enqueueEntry('c1', body('2026-09-08', 7), 'c1:2026-09-08:manual:');
     const queue = await readQueue();
     expect(queue).toHaveLength(1);
     expect(queue[0].body.value).toBe(7);
+  });
+
+  it('two appended entries for the same day (different ids) both survive', async () => {
+    // manual_count adds up: a second glass of water is not a correction of the first
+    await enqueueEntry('c1', body('2026-09-08', 1), 'c1:2026-09-08:manual::2026-09-08T10:00:00.000Z');
+    await enqueueEntry('c1', body('2026-09-08', 1), 'c1:2026-09-08:manual::2026-09-08T10:20:00.000Z');
+    expect(await readQueue()).toHaveLength(2);
   });
 
   it('sends everything when the server is reachable', async () => {

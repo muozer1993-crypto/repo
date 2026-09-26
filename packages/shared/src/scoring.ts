@@ -109,9 +109,13 @@ function isCountedEntry(e: ScoreEntry): boolean {
  * - Boolean types (`checkin_deadline`, `daily_boolean`) score the number of distinct
  *   days with a positive value, so duplicate rows for one day cannot double count.
  * - Sum types (`auto_steps`, `focus_minutes`, `manual_count`) score the plain sum.
- * - `manual_lower_is_better` scores sum + missingDays × penalty, where penalty is
+ * - `manual_lower_is_better` scores the DAILY AVERAGE over the window:
+ *   (sum + missingDays × penalty) / windowDays, where penalty is
  *   `type.missingDayPenalty` (falls back to `type.maxPerDay` — an unreported day is
- *   treated as the worst case so not reporting never wins).
+ *   treated as the worst case so not reporting never wins). An average rather than
+ *   a sum because two players' windows can differ by a day across timezones, and
+ *   because the catalog promises "ortalaması en düşük olan kazanır". With an empty
+ *   window (nothing has started) the plain sum is returned.
  */
 export function computeScore(
   type: ChallengeType,
@@ -140,11 +144,13 @@ export function computeScore(
       let sum = 0;
       for (const e of counted) sum += e.value;
       const penalty = type.missingDayPenalty ?? type.maxPerDay;
+      const window = new Set(dayKeys);
       let missingDays = 0;
-      for (const key of new Set(dayKeys)) {
+      for (const key of window) {
         if (!dayValues.has(key)) missingDays += 1;
       }
-      return { score: roundScore(sum + missingDays * penalty), days };
+      const total = sum + missingDays * penalty;
+      return { score: roundScore(window.size > 0 ? total / window.size : total), days };
     }
     case 'auto_steps':
     case 'focus_minutes':

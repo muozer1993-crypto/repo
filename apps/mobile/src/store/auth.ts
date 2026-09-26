@@ -3,7 +3,7 @@ import type { Me } from '@koydum/shared';
 import { create } from 'zustand';
 
 import { ApiClient } from '@/lib/api';
-import { guessServerUrl } from '@/lib/config';
+import { guessServerUrl, serverUrlIsEditable } from '@/lib/config';
 import { queryClient } from '@/lib/query';
 import { StorageKeys, getJson, removeItem, setItem, setJson } from '@/lib/storage';
 
@@ -60,7 +60,10 @@ export const useAuth = create<AuthState>((set, get) => ({
     set({
       token,
       me: me ?? null,
-      serverUrl: typeof storedUrl === 'string' && storedUrl ? storedUrl : guessServerUrl(),
+      // a URL typed into an earlier (editable) build must not shadow the one a
+      // production build has baked in — there would be no screen to change it
+      serverUrl:
+        serverUrlIsEditable() && typeof storedUrl === 'string' && storedUrl ? storedUrl : guessServerUrl(),
       hydrated: true,
     });
     if (token) void get().refreshMe();

@@ -263,6 +263,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | POST /me/screen-time | upsert screen_time_daily; same fan-out for `deviceMetric: 'screen_time'` types, entries written with source `usage_stats` (7-day device backfill window, capped at maxPerDay). A device reading overwrites a typed value for that day. Returns `{ updated: number }` |
 | GET /me/inbox?before=<iso>&limit=30 | newest first |
 | POST /me/inbox/read | `{ ids }` or `{ all: true }` |
+| (scheduler) reminders | daily reminder only to users with no non-rejected entry today in any active challenge; nudges only to `accepted` participants |
 | GET /me/inbox/unread | `{ count, latestId }` |
 | GET /users/search?q= | prefix match on username or display_name, excludes self, blocked; max 20 |
 | GET /users/:id | `PublicUser` + public stats (wins/losses/challengesPlayed) + badges |
@@ -293,15 +294,18 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 Common: user must be `accepted` participant; challenge `active`; `dayKey` must be in
 `dayKeysBetween(startsAt, endsAt, user.tz)`; `dayKey <= todayKey(user.tz)`; `dayKey >= todayKey − 2 days`
 (manual types) / `− 7 days` (steps); value ≤ `type.maxPerEntry`; proof required when
-`challenge.proofRequired` and source is manual (400 `proof_required`). Device sources (`pedometer`, `health_connect`, `usage_stats`) never need proof; `usage_stats` gets the 7-day device backfill window.
+`challenge.proofRequired` and source is manual (400 `proof_required`) — and only for metrics where a photo can back a typed number (`manual_count`, `manual_lower_is_better`, `auto_steps`); a `daily_boolean` mark or a `checkin` has no photo step and ignores the flag. Device sources (`pedometer`, `health_connect`, `usage_stats`) never need proof; `usage_stats` gets the 7-day device backfill window.
 
 Per type:
 - `auto_steps`: source `manual` allowed (marks entry as beyan). Upsert by (challenge,user,day). Value ≤ maxPerDay.
-- `focus_minutes`: source must be `focus`; `sessionId` required; duplicate sessionId → idempotent return of existing entry; value 1..180.
-- `checkin_deadline`: source `checkin`; dayKey must equal user's local today; server computes `localTimeHHmm(now, tz)`; if ≤ deadlineTime → value 1 else value 0 and `late: true`. One per day (409 `already_checked_in`).
+- `focus_minutes`: source must be `focus`; `sessionId` (a real v4 UUID — `z.uuid()`; the app generates it with `utils/ids.ts`, Hermes has no `crypto.randomUUID`) required; duplicate sessionId → idempotent return of existing entry; value 1..180.
+- `checkin_deadline`: source `checkin`; dayKey must equal user's local today; server computes `localTimeHHmm(now, tz)`; before `type.checkinWindowStart` → 400 `checkin_too_early` (a "yattım" at 02:00 is not an early night); if ≤ deadlineTime → value 1 else value 0 and `late: true`. One per day (409 `already_checked_in`).
 - `daily_boolean`: value 0 or 1; upsert per day.
-- `manual_count`: append; daily sum must stay ≤ maxPerDay (400 `daily_cap`).
-- `manual_lower_is_better`: upsert per day; value ≤ maxPerEntry. Sources `manual` and `usage_stats`; once the day's row has a device source, a `manual` write is refused (409 `device_locked`) — the phone may keep correcting itself.
+- `manual_count`: append; daily sum must stay ≤ maxPerDay (400 `daily_cap`). Optional `sessionId` (UUID) is stored and makes the write idempotent — the app sends a fresh one per tap so a timed-out request replayed from the offline queue cannot count twice. Upsert metrics ignore the field.
+- `manual_lower_is_better`: upsert per day; value ≤ maxPerEntry. Sources `manual` and `usage_stats`; once the day's row has a device source, a `manual` write is refused (409 `device_locked`) — the phone may keep correcting itself. Scored as the DAILY AVERAGE over the participant's own window (sum + missing days × penalty) / window days; while the çelınc is active the window is clipped to today, so day 2 of 7 shows two days' average, not five days of penalty.
+- Device fan-out (`POST /me/steps`) never lowers a typed `manual` value on a higher-is-better metric: the Android foreground counter is partial by design and the user was told to declare the real number; a device value ≥ the typed one replaces it (source becomes the device's).
+- Disputes: only while the challenge is `active` (400 `challenge_not_active`) and never across a block (403 `blocked`). Accepting an invite from someone who blocked you or whom you blocked → 403 `blocked`.
+- Taunt context `revenge` only when the çelınc is a rematch AND the taunting winner lost the original; templates carry an optional `metrics` list and are filtered by the challenge's metric (a "kalk yürü" line stays on step çelınclar).
 
 After every write: recompute standings (in memory via shared `rankParticipants`) and return.
 

@@ -64,6 +64,7 @@ import { confirmTr } from '@/utils/confirm';
 import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { formatDayKeyFriendly, formatMinutes, formatNumber, formatTime, relativeTime } from '@/utils/format';
+import { uuidV4 } from '@/utils/ids';
 
 /* ------------------------------------------------------------------ utils */
 
@@ -189,7 +190,13 @@ export default function ChallengeDetailScreen() {
   const today = safeTodayKey(tz);
   const yesterday = addDays(today, -1);
   const isPlayer = mine?.status === 'accepted';
-  const leading = (mine?.rank ?? 0) === 1;
+  // rank 1 is shared on equal scores (0-0 included), so "öndesin" needs the
+  // second check — the same rule the list card applies
+  const topShared =
+    !!mine &&
+    accepted.some((p) => p.user.id !== mine.user.id && p.score === mine.score && p.rank === mine.rank);
+  const tied = (mine?.rank ?? 0) === 1 && topShared;
+  const leading = (mine?.rank ?? 0) === 1 && !topShared;
   /**
    * Who the reader may talk to right now. The server decides — it is the only
    * side that knows the standings AND the cooldowns — and an older server that
@@ -309,9 +316,12 @@ export default function ChallengeDetailScreen() {
           <Text
             variant="small"
             bold
-            color={leading ? Colors.success : Colors.accent}
+            color={leading ? Colors.success : tied ? Colors.info : Colors.accent}
             style={styles.verdict}>
-            {t(leading ? 'challenge_active_leading' : 'challenge_active_losing', level)}
+            {t(
+              leading ? 'challenge_active_leading' : tied ? 'challenge_active_tie' : 'challenge_active_losing',
+              level
+            )}
           </Text>
         ) : null}
         {challenge.status === 'pending' && mine?.status === 'invited' ? (
@@ -838,7 +848,7 @@ function BooleanRow({
 /* manual_count ----------------------------------------------------------- */
 
 function CountAction({ id, detail, type, today }: ActionProps) {
-  const addEntry = useAddEntry(id);
+  const addEntry = useAddEntry(id, { append: true });
   const toast = useToast();
   const [busy, setBusy] = useState<number | null>(null);
 
@@ -856,6 +866,8 @@ function CountAction({ id, detail, type, today }: ActionProps) {
         value,
         source: 'manual',
         clientTime: nowIso(),
+        // replay-safe: the queue may resend this exact tap after a timeout
+        sessionId: uuidV4(),
       });
       toast(
         response.queued
@@ -884,7 +896,7 @@ function CountAction({ id, detail, type, today }: ActionProps) {
         </Text>
       </View>
 
-      {type.proofRequired || detail.challenge.proofRequired ? (
+      {detail.challenge.proofRequired ? (
         <Text variant="tiny" faint>
           Bu çelıncta kanıt fotoğrafı isteniyor. Hızlı ekleme yerine “+ Giriş” kullan.
         </Text>
@@ -983,6 +995,8 @@ function LowerAction({ id, detail, type, level, today }: ActionProps) {
         toast({ title: 'Telefon değer vermedi', body: 'Kullanım erişimi açık mı diye bir bak.', kind: 'info' });
         return;
       }
+      // the number on this screen and the one just sent should agree from here on
+      setDeviceMinutes(await getTodayScreenMinutes());
       toast({ title: 'Ekran süresi gitti', body: `${formatNumber(result.updated)} gün güncellendi.`, kind: 'success' });
     } catch (error) {
       toast({ title: 'Senkron olmadı', body: errorText(error, 'Ekran süresi gönderilemedi.'), kind: 'danger' });
@@ -1057,9 +1071,11 @@ function LowerAction({ id, detail, type, level, today }: ActionProps) {
         </>
       ) : (
         <>
-          <Text variant="tiny" color={Colors.yellow}>
-            📸 {t('proof_needed', level)}
-          </Text>
+          {detail.challenge.proofRequired ? (
+            <Text variant="tiny" color={Colors.yellow}>
+              📸 {t('proof_needed', level)}
+            </Text>
+          ) : null}
           {locked ? (
             <Text variant="tiny" faint>
               Bugünün değerini telefon okudu, elle değiştirilemez.
@@ -1408,7 +1424,7 @@ function PokeSection({
       unit: challenge.unit,
       challenge: challenge.title,
     };
-    return tauntsAtLevel('poke', level).map((template) => ({
+    return tauntsAtLevel('poke', level, challenge.metricType).map((template) => ({
       id: template.id,
       ...renderTaunt(template, vars),
     }));
