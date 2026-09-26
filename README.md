@@ -330,8 +330,8 @@ bu filtre çalışır. Ayrıca herkes birbirini engelleyebilir ve şikayet edebi
 
 * **Otomatik adım** — telefonun adım sayacı, elle giriş yok.
 * **Odak dakikası** — uygulama içi sayaç; uygulamadan çıkarsan seans yanar.
-* **Saatli check-in** — belirlenen saatten önce "GELDİM" demen gerekir, saati sunucu doğrular.
-* **Sayı girişi** — bardak, sayfa, km, tekrar. İsteğe bağlı fotoğraf kanıtı.
+* **Saatli check-in** — belirlenen saatten önce "GELDİM" demen gerekir, saati sunucu doğrular. Her türün bir de açılış saati var (uyanma 04:00, yatma 19:00, yatak 05:00); ondan önce basılan check-in sayılmaz, yoksa gece ikideki "yattım" erken yatma sayılırdı.
+* **Sayı girişi** — bardak, sayfa, km, tekrar. Çelıncı açan isterse fotoğraf kanıtı zorunlu olur; fotoğraf sadece bu tür girişlerde vardır.
 * **Az olan kazanır** — ekran süresi gibi; günlük ortalama yarışır, girmediğin gün en kötü değerden (1440 dk) sayılır.
 * **Günlük evet/hayır** — sigara içmedim, şeker yemedim. Gün sayısı yarışır.
 

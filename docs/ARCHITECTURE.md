@@ -62,6 +62,16 @@ Altı metrik türü vardır ve hepsi aynı arayüze oturur: `auto_steps`, `focus
 `checkin_deadline`, `daily_boolean`, `manual_count`, `manual_lower_is_better`. Yeni bir çelınc
 türü eklemek katalogda bir satır demektir — sunucu ve uygulama kodu değişmez.
 
+İki istisna bilinsin. `manual_lower_is_better` (ekran süresi) toplam değil **günlük ortalama**
+ile yarışır: girilmeyen gün en kötü değerden sayılır, toplam pencere gün sayısına bölünür. Böylece
+saat dilimi yüzünden bir gün fazla penceresi olan oyuncu cezalandırılmaz ve katalogdaki "ortalaması
+en düşük olan kazanır" cümlesi doğru olur. Çelınc sürerken pencere bugüne kadar kırpılır; ikinci
+günde beş günlük "girilmedi" cezası gösterilmez, çelınc bitince tam pencere uygulanır (o an zaten
+aynı şeydir). İkincisi: `manual_count` ve `focus_minutes` girişleri bir `sessionId` taşır ve aynı
+kimlikle gelen ikinci istek yeni bir satır değil, ilk satırın kendisidir. Telefon her dokunuşta
+yeni bir kimlik üretir; zaman aşımına uğrayıp çevrimdışı kuyruğundan tekrar gönderilen istek
+böylece bir bardak suyu iki kez saymaz.
+
 ## Laf sokma zinciri
 
 1. Çelınc biter, `winner_id` yazılır.
@@ -159,6 +169,15 @@ modülüdür (Kotlin, `UsageStatsManager.queryEvents`). Uygulama onu adıyla ara
 (`requireOptionalNativeModule('KoydumScreenTime')`), yoksa ya da izin verilmemişse sebebiyle
 birlikte "okuyamıyorum" der ve ekran elle girişe döner. iPhone'da bu veri hiçbir uygulamaya
 açık değildir; orada elle giriş kalıcıdır.
+
+## Arka planda ne çalışır
+
+`services/background.ts` on beş dakikada bir uyanan sistem görevini tanımlar. Uygulama açıkken
+`NotificationBridge` bu göreve kendi işleyicisini verir; uygulama kaydırılıp kapatıldıktan sonra
+görev **başsız** çalışır: JS paketi yüklenir ama React hiç kurulmaz, dolayısıyla hiçbir provider
+yoktur. Bu durumda `services/backgroundWork.ts` oturumu doğrudan depodan okur ve aynı üç işi
+yapar: adım ve ekran süresi okumalarını gönderir, çevrimdışı kuyruğunu boşaltır, gelen kutusu
+sayısını rozete yazar. "Kimse uygulamayı açmasa da çelınc puan toplar" sözü buna dayanır.
 
 ## Neden SQLite
 
