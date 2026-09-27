@@ -52,6 +52,12 @@ export const LIMITS = {
    * would score whatever the phones happened to send last.
    */
   DEVICE_SETTLE_MS: 60 * 60 * 1000,
+  /**
+   * How long the owner of an entry the majority disputed has to answer with a
+   * photo before it is thrown out. Long enough to sleep through a night and
+   * still answer; a çelınc waiting on one past its end finishes when it runs out.
+   */
+  DISPUTE_ANSWER_MS: 12 * 60 * 60 * 1000,
   REMATCH_START_DELAY_MS: 5 * 60 * 1000,
   INBOX_PAGE_DEFAULT: 30,
   INBOX_PAGE_MAX: 100,

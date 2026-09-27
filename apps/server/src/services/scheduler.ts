@@ -51,6 +51,7 @@ export function startScheduler(
       });
       if (
         summary.activated ||
+        summary.disputes ||
         summary.finalized ||
         summary.cancelled ||
         summary.reminders ||

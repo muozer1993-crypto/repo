@@ -388,6 +388,11 @@ export interface FeedItem {
   status: EntryStatus;
   createdAt: string;
   proofUrl: string | null;
+  /**
+   * Set while a majority disputes this entry: the moment it is thrown out
+   * unless its owner adds a photo first. Older servers leave it out.
+   */
+  answerBy?: string | null;
 }
 
 export interface Dispute {

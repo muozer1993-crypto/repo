@@ -6,6 +6,7 @@ import {
   DayKeySchema,
   DisputeBodySchema,
   EntryBodySchema,
+  EntryProofBodySchema,
   FriendRequestBodySchema,
   InboxQuerySchema,
   InboxReadBodySchema,
@@ -264,6 +265,13 @@ describe('small bodies', () => {
     expect(DisputeBodySchema.safeParse({ reason: 'x'.repeat(141) }).success).toBe(false);
     expect(ReportBodySchema.safeParse({ reason: 'x'.repeat(300) }).success).toBe(true);
     expect(ReportBodySchema.safeParse({ reason: 'x'.repeat(301) }).success).toBe(false);
+  });
+
+  it('EntryProofBody takes the same addresses an entry photo does', () => {
+    expect(EntryProofBodySchema.safeParse({ proofUrl: ' /uploads/a.jpg ' }).data).toEqual({ proofUrl: '/uploads/a.jpg' });
+    expect(EntryProofBodySchema.safeParse({ proofUrl: 'https://koydum.example/uploads/a.jpg' }).success).toBe(true);
+    expect(issuePaths(EntryProofBodySchema.safeParse({}))).toEqual(['proofUrl']);
+    expect(issuePaths(EntryProofBodySchema.safeParse({ proofUrl: 'javascript:alert(1)' }))).toEqual(['proofUrl']);
   });
 
   it('PokeBody', () => {

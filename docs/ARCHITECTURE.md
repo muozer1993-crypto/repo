@@ -59,6 +59,15 @@ bitişten itibaren kabul edilmez (`challenge_ended`). Herkesin telefonu son gün
 gönderdiyse beklemeden kapanır. Sunucu bitişte kapalıysa bir saat açıldığı andan sayılır
 (`bootAt`). Elle girilen çelınclar tam bitişte kapanır.
 
+İtiraz tek başına bir girişi silmez. Diğer oyuncuların çoğunluğu itiraz edince girişin sahibine
+12 saat (`LIMITS.DISPUTE_ANSWER_MS`) tanınır ve giriş bu sürede sayılmaya devam eder; yoksa teke tek
+çelıncta kaybeden taraf rakibinin her gününü tek dokunuşla sıfırlayabilirdi. Sahibi fotoğraf eklerse
+itirazlar `dismissed` olur. Eklemezse zamanlayıcının `resolveDisputes` adımı (bitirmeden hemen önce
+çalışır) girişi `rejected` yapar ve itiraz edenlerin `disputesWon` sayısı artar. Süre çoğunluğun
+oluştuğu andan başlar, ilk itirazdan değil (`disputeDeadlines`). Bitişte süresi dolmamış bir itiraz
+varsa çelınc o süre boyunca `active` kalır; yoksa son dakika gelen bir itiraz, sahibine söz verilen
+12 saati yerdi.
+
 ## Puanlama
 
 `packages/shared/src/scoring.ts` saf bir fonksiyondur: girdi olarak çelınc tipi, gün listesi ve

@@ -149,8 +149,12 @@ export function toEntry(row: EntryRow): Entry {
   };
 }
 
-/** Feed rows carry the author's display name so the app does not have to join. */
-export function toFeedItem(row: EntryRow, displayName: string): FeedItem {
+/**
+ * Feed rows carry the author's display name so the app does not have to join,
+ * and the answer deadline of a majority itiraz (`disputeDeadlines`) so it does
+ * not have to know the threshold rule.
+ */
+export function toFeedItem(row: EntryRow, displayName: string, answerBy: string | null = null): FeedItem {
   return {
     id: row.id,
     userId: row.user_id,
@@ -161,6 +165,7 @@ export function toFeedItem(row: EntryRow, displayName: string): FeedItem {
     status: asEntryStatus(row.status),
     createdAt: row.created_at,
     proofUrl: row.proof_url,
+    answerBy,
   };
 }
 

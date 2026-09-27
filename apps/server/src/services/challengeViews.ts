@@ -24,6 +24,7 @@ import { countOf, type ChallengeRow, type Database, type DisputeRow, type EntryR
 import { badRequest, forbidden, notFound } from '../errors.js';
 import { asVulgarityLevel, toChallenge, toDispute, toEntry, toFeedItem, toTaunt } from '../serialize.js';
 import { computeStandings, getChallengeRow } from './challenges.js';
+import { disputeDeadlines } from './entries.js';
 
 /** How many recent entries the detail feed carries (SPEC 2.2). */
 export const FEED_LIMIT = 40;
@@ -108,17 +109,27 @@ export function myEntries(db: Database, challengeId: string, userId: string): En
   return rows.map(toEntry);
 }
 
+/**
+ * The most recent entries, plus every one still under dispute however old: the
+ * feed is where its owner answers with a photo and where everybody reads why,
+ * so a busy week of focus sessions must not push it out of reach.
+ */
 export function challengeFeed(db: Database, challengeId: string, limit = FEED_LIMIT): FeedItem[] {
   const rows = db
     .prepare(
       `SELECT e.*, u.display_name AS display_name FROM entries e
          JOIN users u ON u.id = e.user_id
         WHERE e.challenge_id = ?
-        ORDER BY e.created_at DESC, e.id DESC
-        LIMIT ?`,
+          AND (e.status = 'disputed'
+               OR e.id IN (SELECT id FROM entries WHERE challenge_id = ? ORDER BY created_at DESC, id DESC LIMIT ?))
+        ORDER BY e.created_at DESC, e.id DESC`,
     )
-    .all(challengeId, limit) as (EntryRow & { display_name: string })[];
-  return rows.map((row) => toFeedItem(row, row.display_name));
+    .all(challengeId, challengeId, limit) as (EntryRow & { display_name: string })[];
+  const deadlines = disputeDeadlines(db, challengeId);
+  return rows.map((row) => {
+    const answerBy = deadlines.get(row.id);
+    return toFeedItem(row, row.display_name, answerBy === undefined ? null : new Date(answerBy).toISOString());
+  });
 }
 
 export function challengeDisputes(db: Database, challengeId: string): Dispute[] {
@@ -287,24 +298,58 @@ export function cancelledByCreatorCopy(level: VulgarityLevel, creator: string, t
   return { title: 'Çelınc iptal oldu', body: `${creator} "${title}" çelıncını iptal etti.` };
 }
 
-export function disputeCopy(level: VulgarityLevel, by: string, title: string, dayKey: string): CopyText {
+/** "12 saat": the answer window as the owner reads it. */
+const ANSWER_HOURS = `${Math.round(LIMITS.DISPUTE_ANSWER_MS / 3_600_000)} saat`;
+
+/**
+ * To the owner of a disputed entry. `onTheClock` is the itiraz that made it a
+ * majority: from now on the entry goes unless a photo comes in, so the copy
+ * says so. Before that (or after, from yet another friend) it only asks.
+ */
+export function disputeCopy(level: VulgarityLevel, by: string, title: string, dayKey: string, onTheClock = false): CopyText {
   if (level === 1) {
-    return { title: 'Girişine itiraz var', body: `${by}, "${title}" çelıncında ${dayKey} tarihli girişine itiraz etti. Kanıtını paylaşabilirsin.` };
+    return {
+      title: 'Girişine itiraz var',
+      body: onTheClock
+        ? `${by}, "${title}" çelıncında ${dayKey} tarihli girişine itiraz etti. ${ANSWER_HOURS} içinde fotoğraf eklersen giriş kalır, eklemezsen iptal olur.`
+        : `${by}, "${title}" çelıncında ${dayKey} tarihli girişine itiraz etti. Kanıtını paylaşabilirsin.`,
+    };
   }
   if (level === 3) {
-    return { title: 'PALAVRA DEDİ 🍆', body: `${by}, "${title}" çelıncında ${dayKey} tarihli girişine palavra dedi. Kanıtlayamazsan o gün gider.` };
+    return {
+      title: 'PALAVRA DEDİ 🍆',
+      body: onTheClock
+        ? `${by}, "${title}" çelıncında ${dayKey} tarihli girişine palavra dedi. ${ANSWER_HOURS} içinde fotoğrafı koy, yoksa o gün yanar.`
+        : `${by}, "${title}" çelıncında ${dayKey} tarihli girişine palavra dedi. Kanıtlayamazsan o gün gider.`,
+    };
   }
-  return { title: 'İtiraz yedin', body: `${by}, "${title}" çelıncında ${dayKey} tarihli girişine yalan dedi. Kanıtını göster.` };
+  return {
+    title: 'İtiraz yedin',
+    body: onTheClock
+      ? `${by}, "${title}" çelıncında ${dayKey} tarihli girişine yalan dedi. ${ANSWER_HOURS} içinde fotoğraf ekle, yoksa bu giriş yanar.`
+      : `${by}, "${title}" çelıncında ${dayKey} tarihli girişine yalan dedi. Kanıtını göster.`,
+  };
+}
+
+/** To everybody whose itiraz a photo just answered. */
+export function disputeProofCopy(level: VulgarityLevel, owner: string, title: string, dayKey: string): CopyText {
+  if (level === 1) {
+    return { title: 'Kanıt geldi', body: `${owner}, "${title}" çelıncındaki ${dayKey} tarihli girişine fotoğraf ekledi. İtirazın kapandı, bir göz atabilirsin.` };
+  }
+  if (level === 3) {
+    return { title: 'KANITI KOYDU 🍆', body: `${owner} kanıtı koydu, bir bak. "${title}" çelıncındaki ${dayKey} girişi yine sayılıyor.` };
+  }
+  return { title: 'Kanıt geldi', body: `${owner} kanıt ekledi, bir bak. "${title}" çelıncındaki ${dayKey} girişi yine sayılıyor.` };
 }
 
 export function entryRejectedCopy(level: VulgarityLevel, title: string, dayKey: string): CopyText {
   if (level === 1) {
-    return { title: 'Girişin silindi', body: `"${title}" çelıncında ${dayKey} tarihli girişin itiraz sonucu iptal edildi. Skorundan düştü.` };
+    return { title: 'Girişin iptal oldu', body: `"${title}" çelıncında ${dayKey} tarihli girişine itiraz vardı, ${ANSWER_HOURS} içinde kanıt gelmedi. Giriş skorundan düştü.` };
   }
   if (level === 3) {
-    return { title: 'GİRİŞİN ÇÖPE GİTTİ 🍆', body: `"${title}" çelıncında çoğunluk ${dayKey} tarihli girişine hile dedi. Silindi, skorundan düştü.` };
+    return { title: 'GİRİŞİN ÇÖPE GİTTİ 🍆', body: `"${title}" çelıncında ${dayKey} tarihli girişine hile dendi, sen de kanıtı koyamadın. Yandı, skorundan düştü.` };
   }
-  return { title: 'Girişin gitti', body: `"${title}" çelıncında çoğunluk ${dayKey} tarihli girişine yalan dedi. Giriş silindi.` };
+  return { title: 'Girişin yandı', body: `"${title}" çelıncında ${dayKey} tarihli girişine yalan dendi, kanıt da gelmedi. Giriş skorundan düştü.` };
 }
 
 export function rematchCopy(level: VulgarityLevel, by: string, title: string): CopyText {

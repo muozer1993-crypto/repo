@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_TIMEZONE,
+  LIMITS,
   addDays,
   t,
   todayKey,
@@ -27,6 +28,7 @@ import {
 } from '@koydum/shared';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
+import { runSchedulerOnce } from '../src/services/challenges.js';
 import { notify } from '../src/services/notifications.js';
 import { computeUserStats } from '../src/services/stats.js';
 import { AttemptLimiter } from '../src/services/throttle.js';
@@ -215,11 +217,12 @@ describe('DELETE /challenges/:id/entries/:entryId', () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await livePair(harness, 'sigara_yok', {}, 5);
     const aliCall = authed(harness.app, ali.token);
+    const day = today(harness);
 
     const created = await aliCall({
       method: 'POST',
       url: `/challenges/${challengeId}/entries`,
-      payload: { dayKey: today(harness), value: 1, source: 'manual', clientTime: iso(harness) },
+      payload: { dayKey: day, value: 1, source: 'manual', clientTime: iso(harness) },
     });
     const entryId = created.json<{ entry: Entry }>().entry.id;
 
@@ -229,7 +232,9 @@ describe('DELETE /challenges/:id/entries/:entryId', () => {
       payload: { reason: 'Dün seni sigara içerken gördüm' },
     });
     expect(disputed.statusCode).toBe(201);
-    expect(disputed.json<{ upheld: boolean; entry: Entry }>().upheld).toBe(true);
+    // no photo within the answer window: the scheduler throws it out
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS);
+    expect(runSchedulerOnce(harness.db, harness.now()).disputes).toBe(1);
     expect(computeUserStats(harness.db, veli.me.id, harness.now()).disputesWon).toBe(1);
 
     const removed = await aliCall({ method: 'DELETE', url: `/challenges/${challengeId}/entries/${entryId}` });
@@ -240,7 +245,7 @@ describe('DELETE /challenges/:id/entries/:entryId', () => {
     const again = await aliCall({
       method: 'POST',
       url: `/challenges/${challengeId}/entries`,
-      payload: { dayKey: today(harness), value: 1, source: 'manual', clientTime: iso(harness) },
+      payload: { dayKey: day, value: 1, source: 'manual', clientTime: iso(harness) },
     });
     expect(again.json<{ entry: Entry }>().entry.status).toBe('rejected');
     expect(again.json<{ standings: ParticipantView[] }>().standings.find((p) => p.user.id === ali.me.id)?.score).toBe(0);
@@ -287,7 +292,7 @@ describe('DELETE /challenges/:id/entries/:entryId', () => {
       url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
       payload: { reason: 'Dumanı üstünde gördüm' },
     });
-    expect(disputed.json<{ upheld: boolean; entry: Entry }>().upheld).toBe(false);
+    expect(disputed.json<{ answerBy: string | null }>().answerBy).toBeNull();
     expect(disputed.json<{ entry: Entry }>().entry.status).toBe('disputed');
 
     const removed = await authed(harness.app, ali.token)({ method: 'DELETE', url: `/challenges/${challengeId}/entries/${entryId}` });
@@ -575,11 +580,12 @@ describe('a participant who deleted their account', () => {
       payload: { reason: 'Kanıt yok' },
     });
     expect(disputed.statusCode).toBe(201);
-    expect(disputed.json<{ upheld: boolean }>().upheld).toBe(true);
-    expect(harness.db.prepare('SELECT status FROM entries WHERE id = ?').get(entryId)).toEqual({ status: 'rejected' });
-    expect(computeUserStats(harness.db, ali.me.id, harness.now()).disputesWon).toBe(1);
+    expect(harness.db.prepare('SELECT status FROM entries WHERE id = ?').get(entryId)).toEqual({ status: 'disputed' });
+    // Veli left the race with the account, so his row scores nothing and no
+    // answer window holds the çelınc up for it.
+    expect(disputed.json<{ answerBy: string | null }>().answerBy).toBeNull();
     // The deleted owner is simply not notified — nothing throws after the write.
-    expect(harness.db.prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND type = 'entry_rejected'").get(veli.me.id)).toEqual({ n: 0 });
+    expect(harness.db.prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND type = 'dispute'").get(veli.me.id)).toEqual({ n: 0 });
   });
 });
 

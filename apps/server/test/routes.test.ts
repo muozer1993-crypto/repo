@@ -111,6 +111,8 @@ const SPEC_ENDPOINTS: [SpecMethod, string][] = [
   ['POST', '/challenges/:id/entries'],
   ['DELETE', '/challenges/:id/entries/:entryId'],
   ['POST', '/challenges/:id/entries/:entryId/dispute'],
+  ['DELETE', '/challenges/:id/entries/:entryId/dispute'],
+  ['POST', '/challenges/:id/entries/:entryId/proof'],
   ['POST', '/challenges/:id/poke'],
   ['POST', '/challenges/:id/taunt'],
   ['POST', '/challenges/:id/rematch'],

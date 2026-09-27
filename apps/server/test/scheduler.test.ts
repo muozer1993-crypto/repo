@@ -6,10 +6,12 @@
  * its 30-second timer — so the test covers exactly what the running server does:
  * a challenge going live at its start time, finishing at its end time (a step
  * çelınc once the phones have had their hour) with the right winner (or no winner
- * at all), telling every participant, handing out badges, and cancelling a pending
- * challenge nobody joined. The last block is
+ * at all), telling every participant, handing out badges, throwing out a disputed
+ * entry whose owner never answered (and holding the result for one who still may),
+ * and cancelling a pending challenge nobody joined. The last block is
  * `startScheduler`'s stop, which a clean shutdown awaits before closing the database.
  */
+import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TIMEZONE, LIMITS, todayKey, type Challenge } from '@koydum/shared';
 import { runSchedulerOnce } from '../src/services/challenges.js';
@@ -368,6 +370,145 @@ describe('scheduler: the hour the phones get after a step çelınc ends', () => 
       (row) => dataOf(row).dayKey === '2026-01-07',
     );
     expect(newDay).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The hours the owner of a disputed entry gets to answer
+// ---------------------------------------------------------------------------
+
+async function logWater(h: TestApp, user: RegisteredUser, challengeId: string, value: number): Promise<string> {
+  const response = await authed(h.app, user.token)({
+    method: 'POST',
+    url: `/challenges/${challengeId}/entries`,
+    payload: { dayKey: today(h), value, source: 'manual', clientTime: iso(h), sessionId: randomUUID() },
+  });
+  expect(response.statusCode).toBe(201);
+  return response.json<{ entry: { id: string } }>().entry.id;
+}
+
+async function dispute(h: TestApp, user: RegisteredUser, challengeId: string, entryId: string) {
+  const response = await authed(h.app, user.token)({
+    method: 'POST',
+    url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+    payload: { reason: 'içmedi o kadar' },
+  });
+  expect(response.statusCode).toBe(201);
+  return response.json<{ answerBy: string | null }>();
+}
+
+function entryStatus(h: TestApp, entryId: string): string {
+  return (h.db.prepare('SELECT status FROM entries WHERE id = ?').get(entryId) as { status: string }).status;
+}
+
+describe('scheduler: an itiraz nobody answers', () => {
+  it('throws the entry out after the answer window, tells the owner and counts the win for the disputer', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'su_bardak');
+    const day = today(harness);
+    const entries = [
+      await logWater(harness, ali, challengeId, 3),
+      await logWater(harness, ali, challengeId, 4),
+      await logWater(harness, ali, challengeId, 2),
+    ];
+    for (const entryId of entries) await dispute(harness, veli, challengeId, entryId);
+
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS - MINUTE);
+    expect(tick(harness)).toMatchObject({ disputes: 0 });
+    expect(entries.map((id) => entryStatus(harness!, id))).toEqual(['disputed', 'disputed', 'disputed']);
+
+    harness.advance(MINUTE);
+    expect(tick(harness)).toMatchObject({ disputes: 3 });
+    expect(entries.map((id) => entryStatus(harness!, id))).toEqual(['rejected', 'rejected', 'rejected']);
+    const upheld = harness.db.prepare("SELECT COUNT(*) AS n FROM disputes WHERE status = 'upheld'").get();
+    expect(upheld).toEqual({ n: 3 });
+
+    const rejected = listByType(harness.db, ali.me.id, 'entry_rejected');
+    expect(rejected).toHaveLength(3);
+    expect(dataOf(rejected[0])).toMatchObject({ challengeId, dayKey: day });
+    // three upheld itiraz is the first rung of the ladder
+    expect(getBadges(harness.db, veli.me.id)).toContain('itiraz_1');
+
+    // done is done: the next pass has nothing left to throw out
+    expect(tick(harness)).toMatchObject({ disputes: 0 });
+    expect(listByType(harness.db, ali.me.id, 'entry_rejected')).toHaveLength(3);
+  });
+
+  it('still needs two of the four rivals in a five-player çelınc', async () => {
+    harness = await makeApp({ now: NOW });
+    const players: RegisteredUser[] = [];
+    for (const name of ['ali', 'veli', 'ayse', 'mert', 'cem']) players.push(await registerUser(harness.app, name));
+    const [ali, veli, ayse] = players as [RegisteredUser, RegisteredUser, RegisteredUser];
+    for (const friend of players.slice(1)) befriend(harness.app, ali.me.id, friend.me.id);
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'su_bardak', startsAt: iso(harness), endsAt: MIDNIGHT_END, participantIds: players.slice(1).map((u) => u.me.id) },
+    });
+    const challengeId = created.json<Challenge>().id;
+    for (const friend of players.slice(1)) {
+      await authed(harness.app, friend.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    }
+    tick(harness);
+    const entryId = await logWater(harness, ali, challengeId, 5);
+
+    // one of four is not a majority: no clock, however long it sits
+    expect((await dispute(harness, veli, challengeId, entryId)).answerBy).toBeNull();
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS + HOUR);
+    expect(tick(harness)).toMatchObject({ disputes: 0 });
+    expect(entryStatus(harness, entryId)).toBe('disputed');
+
+    const second = await dispute(harness, ayse, challengeId, entryId);
+    expect(second.answerBy).toBe(iso(harness, LIMITS.DISPUTE_ANSWER_MS));
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS);
+    expect(tick(harness)).toMatchObject({ disputes: 1 });
+    expect(entryStatus(harness, entryId)).toBe('rejected');
+  });
+
+  it('holds the result for an itiraz still inside its window, then finishes without the entry', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'su_bardak');
+    at(harness, MIDNIGHT_END, -2 * HOUR);
+    const aliEntry = await logWater(harness, ali, challengeId, 8);
+    await logWater(harness, veli, challengeId, 5);
+    // an hour before the end Veli calls it: Ali is owed twelve hours to answer
+    at(harness, MIDNIGHT_END, -HOUR);
+    await dispute(harness, veli, challengeId, aliEntry);
+
+    at(harness, MIDNIGHT_END, MINUTE);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    expect(challengeRow(harness, challengeId).status).toBe('active');
+
+    at(harness, MIDNIGHT_END, LIMITS.DISPUTE_ANSWER_MS - HOUR - MINUTE);
+    expect(tick(harness)).toMatchObject({ disputes: 0, finalized: 0 });
+
+    at(harness, MIDNIGHT_END, LIMITS.DISPUTE_ANSWER_MS - HOUR);
+    expect(tick(harness)).toMatchObject({ disputes: 1, finalized: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: veli.me.id });
+    expect(participant(harness, challengeId, ali.me.id).final_score).toBe(0);
+  });
+
+  it('finishes on the next pass once the owner answers during the wait', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'su_bardak');
+    at(harness, MIDNIGHT_END, -2 * HOUR);
+    const aliEntry = await logWater(harness, ali, challengeId, 8);
+    await logWater(harness, veli, challengeId, 5);
+    at(harness, MIDNIGHT_END, -HOUR);
+    await dispute(harness, veli, challengeId, aliEntry);
+
+    at(harness, MIDNIGHT_END, 3 * HOUR);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    const answered = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${aliEntry}/proof`,
+      payload: { proofUrl: '/uploads/bardaklar.jpg' },
+    });
+    expect(answered.statusCode).toBe(200);
+
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+    expect(participant(harness, challengeId, ali.me.id).final_score).toBe(8);
   });
 });
 

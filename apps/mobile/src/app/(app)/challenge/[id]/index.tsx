@@ -2,6 +2,8 @@ import type {
   Challenge,
   ChallengeDetail,
   ChallengeType,
+  Dispute,
+  DisputeStatus,
   EntrySource,
   FeedItem,
   ParticipantView,
@@ -20,8 +22,8 @@ import {
 } from '@koydum/shared';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { AppState, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { AppState, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
@@ -38,13 +40,16 @@ import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import {
   useAddEntry,
+  useAddEntryProof,
   useChallenge,
   useChallengeAction,
   useDeleteEntry,
   useDispute,
   usePoke,
+  useWithdrawDispute,
 } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
+import { useProofPhoto } from '@/hooks/useProofPhoto';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { useTimezone } from '@/hooks/useTimezone';
@@ -105,8 +110,14 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-/** What the server is still waiting for once the time is up (`settling`). */
-function settlingNote(type: ChallengeType | undefined): string {
+/**
+ * What the server is still waiting for once the time is up (`settling`). An
+ * itiraz inside its answer window holds the result longer than any phone.
+ */
+function settlingNote(type: ChallengeType | undefined, awaitingProof: boolean): string {
+  if (awaitingProof) {
+    return 'Bir girişe itiraz var, sahibinin fotoğraf eklemesi bekleniyor. Kanıt gelince ya da süresi dolunca kazanan belli olur.';
+  }
   switch (type?.deviceMetric) {
     case 'steps':
       return 'Telefonların saydığı son adımlar toplanıyor. Herkesinki gelince, en fazla da bir saat içinde kazanan belli olur.';
@@ -250,6 +261,12 @@ export default function ChallengeDetailScreen() {
   const startPassed = Number.isFinite(startsAtMs) ? startsAtMs <= renderedAt : false;
   const waitingForAccepts = challenge.status === 'pending' && startPassed;
   const isCreator = challenge.creatorId === meId;
+  // The last fetch is a fresh enough clock for an answer window counted in
+  // hours, and unlike `Date.now()` it is a pure read.
+  const clock = Math.max(renderedAt, query.dataUpdatedAt);
+  const awaitingProof = detail.feed.some(
+    (item) => item.status === 'disputed' && !!item.answerBy && Date.parse(item.answerBy) > clock
+  );
 
   return (
     <Screen
@@ -300,9 +317,9 @@ export default function ChallengeDetailScreen() {
           ) : settling ? (
             <>
               <Text variant="label">Süre bitti</Text>
-              <Text variant="big">Sonuç birazdan</Text>
+              <Text variant="big">{awaitingProof ? 'Kanıt bekleniyor' : 'Sonuç birazdan'}</Text>
               <Text variant="tiny" faint>
-                {settlingNote(type)}
+                {settlingNote(type, awaitingProof)}
               </Text>
             </>
           ) : challenge.status === 'active' ? (
@@ -404,6 +421,7 @@ export default function ChallengeDetailScreen() {
         level={level}
         baseUrl={serverUrl}
         challengeId={id}
+        now={clock}
         onProof={setProofUrl}
       />
 
@@ -1161,6 +1179,22 @@ function screenTimeReason(availability: ScreenTimeAvailability): string {
 
 /* ------------------------------------------------------------------- feed */
 
+/** "12": the hours an entry's owner gets to answer a majority itiraz. */
+const ANSWER_HOURS = Math.round(LIMITS.DISPUTE_ANSWER_MS / 3_600_000);
+
+/** What a disputed row says under its source line. */
+function disputeStatusText(item: FeedItem, isMine: boolean, active: boolean, now: number): string {
+  if (!active) return 'İtiraz çoğunluğu bulamadı, giriş sayıldı.';
+  const answerBy = item.answerBy ? Date.parse(item.answerBy) : Number.NaN;
+  // below the majority there is no clock yet (and an older server sends none)
+  if (!Number.isFinite(answerBy)) return 'İtiraz var ama henüz çoğunluk değil.';
+  const left = answerBy - now;
+  if (left <= 0) return 'Kanıt gelmedi, birazdan yanar.';
+  return isMine
+    ? `İtiraz var. ${formatRemaining(left)} içinde kanıt eklemezsen yanar.`
+    : `İtiraz var. ${formatRemaining(left)} içinde kanıt gelmezse yanar.`;
+}
+
 function Feed({
   detail,
   type,
@@ -1170,6 +1204,7 @@ function Feed({
   level,
   baseUrl,
   challengeId,
+  now,
   onProof,
 }: {
   detail: ChallengeDetail;
@@ -1180,15 +1215,23 @@ function Feed({
   level: VulgarityLevel;
   baseUrl: string;
   challengeId: string;
+  /** one clock reading for every row's "x içinde" */
+  now: number;
   onProof: (url: string) => void;
 }) {
   const dispute = useDispute(challengeId);
+  const withdraw = useWithdrawDispute(challengeId);
+  const addProof = useAddEntryProof(challengeId);
+  const photo = useProofPhoto();
   const removeEntry = useDeleteEntry(challengeId);
   const toast = useToast();
   const [target, setTarget] = useState<FeedItem | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+  const [answering, setAnswering] = useState<FeedItem | null>(null);
+  const [pickedUrl, setPickedUrl] = useState<string | null>(null);
 
   // Only a friend's itiraz could undo a mistyped value before this: the server
   // lets you delete your own manual rows while the çelınc is running.
@@ -1215,8 +1258,17 @@ function Feed({
     }
   };
 
-  const myDisputes = new Set(
-    detail.disputes.filter((d) => d.byUserId === meId).map((d) => d.entryId)
+  // Who said what, per entry: the reason is the whole point of an itiraz, and
+  // the owner cannot answer an accusation they cannot read.
+  const names = new Map(detail.participants.map((p) => [p.user.id, p.user.displayName]));
+  const disputesByEntry = new Map<string, Dispute[]>();
+  for (const row of detail.disputes) {
+    const list = disputesByEntry.get(row.entryId) ?? [];
+    list.push(row);
+    disputesByEntry.set(row.entryId, list);
+  }
+  const myDisputes = new Map(
+    detail.disputes.filter((d) => d.byUserId === meId).map((d) => [d.entryId, d.status])
   );
 
   const submit = async () => {
@@ -1237,6 +1289,54 @@ function Feed({
     }
   };
 
+  const takeBack = async (item: FeedItem) => {
+    const ok = await confirmTr(
+      'İtirazı geri çek',
+      `${item.displayName} · ${formatDayKeyFriendly(item.dayKey, today, yesterday)} girişine itirazın kalkar. Bu girişe bir daha itiraz edemezsin.`,
+      'Geri çek'
+    );
+    if (!ok) return;
+    setWithdrawingId(item.id);
+    try {
+      await withdraw.mutateAsync(item.id);
+      toast({
+        title: 'Geri çektin',
+        body: byLevel(level, 'İtirazın kalktı.', 'İtirazın kalktı, helal.', 'İtirazın kalktı. Adamlık sende 🍆'),
+        kind: 'info',
+      });
+    } catch (err) {
+      toast({ title: 'Geri çekilemedi', body: errorText(err, 'İtiraz geri çekilemedi.'), kind: 'danger' });
+    } finally {
+      setWithdrawingId(null);
+    }
+  };
+
+  const openAnswer = (item: FeedItem) => {
+    setAnswering(item);
+    setPickedUrl(null);
+  };
+
+  const pickProof = async (from: 'camera' | 'library') => {
+    const url = await photo.pick(from);
+    if (url) setPickedUrl(url);
+  };
+
+  const sendProof = async () => {
+    if (!answering || !pickedUrl) return;
+    try {
+      await addProof.mutateAsync({ entryId: answering.id, proofUrl: pickedUrl });
+      toast({
+        title: byLevel(level, 'Kanıt eklendi', 'Kanıt gitti', 'Kanıtı koydun 🍆'),
+        body: 'İtiraz kapandı, giriş sayılmaya devam ediyor.',
+        kind: 'success',
+      });
+      setAnswering(null);
+      setPickedUrl(null);
+    } catch (err) {
+      toast({ title: 'Kanıt gitmedi', body: errorText(err, 'Kanıt eklenemedi.'), kind: 'danger' });
+    }
+  };
+
   return (
     <Card>
       <Text variant="label" style={styles.sectionLabel}>
@@ -1249,28 +1349,42 @@ function Feed({
         </Text>
       ) : (
         <View style={styles.feedList}>
-          {detail.feed.map((item) => (
-            <FeedRow
-              key={item.id}
-              item={item}
-              type={type}
-              isMine={item.userId === meId}
-              alreadyDisputed={myDisputes.has(item.id)}
-              today={today}
-              yesterday={yesterday}
-              level={level}
-              baseUrl={baseUrl}
-              onProof={onProof}
-              canDelete={canDelete(item)}
-              deleting={removingId === item.id}
-              onDelete={() => void remove(item)}
-              onDispute={() => {
-                setTarget(item);
-                setReason('');
-                setError(null);
-              }}
-            />
-          ))}
+          {detail.feed.map((item) => {
+            const isMine = item.userId === meId;
+            // an open itiraz explains a disputed row, an upheld one a rejected row
+            const shown = item.status === 'disputed' ? 'open' : item.status === 'rejected' ? 'upheld' : null;
+            const reasons = (disputesByEntry.get(item.id) ?? [])
+              .filter((row) => row.status === shown)
+              .map((row) => ({ id: row.id, name: names.get(row.byUserId) ?? 'Biri', reason: row.reason }));
+            return (
+              <FeedRow
+                key={item.id}
+                item={item}
+                type={type}
+                isMine={isMine}
+                myDispute={myDisputes.get(item.id) ?? null}
+                reasons={reasons}
+                statusText={item.status === 'disputed' ? disputeStatusText(item, isMine, active, now) : null}
+                active={active}
+                today={today}
+                yesterday={yesterday}
+                level={level}
+                baseUrl={baseUrl}
+                onProof={onProof}
+                canDelete={canDelete(item)}
+                deleting={removingId === item.id}
+                withdrawing={withdrawingId === item.id}
+                onDelete={() => void remove(item)}
+                onWithdraw={() => void takeBack(item)}
+                onAnswer={() => openAnswer(item)}
+                onDispute={() => {
+                  setTarget(item);
+                  setReason('');
+                  setError(null);
+                }}
+              />
+            );
+          })}
         </View>
       )}
 
@@ -1292,6 +1406,9 @@ function Feed({
           error={error}
           hint={`${reason.length}/${LIMITS.DISPUTE_REASON_MAX}`}
         />
+        <Text variant="tiny" faint>
+          Çoğunluk itiraz ederse sahibinin {ANSWER_HOURS} saati olur: fotoğraf eklemezse giriş yanar.
+        </Text>
         <Button
           title="İtirazı gönder"
           fullWidth
@@ -1299,6 +1416,66 @@ function Feed({
           onPress={() => void submit()}
         />
         <Button title="Vazgeç" variant="ghost" fullWidth onPress={() => setTarget(null)} />
+      </Sheet>
+
+      <Sheet visible={!!answering} onClose={() => setAnswering(null)} title="Kanıt ekle">
+        <Text variant="small" muted>
+          {answering ? `${formatDayKeyFriendly(answering.dayKey, today, yesterday)} · ` : ''}
+          {answering && type ? scoreLabel(type, answering.value) : ''}
+        </Text>
+        <Text variant="small">
+          {byLevel(
+            level,
+            'Bir fotoğraf ekle, itiraz kapansın. Giriş sayılmaya devam eder, itiraz edenlere de haber gider.',
+            'Fotoğrafı koy, itiraz kapansın. Giriş sayılmaya devam eder, itiraz edenler de bir baksın.',
+            'Fotoğrafı koy da ağızlar kapansın 🍆 Giriş sayılmaya devam eder, itiraz edenlere de haber gider.'
+          )}
+        </Text>
+        {pickedUrl ? (
+          <>
+            <Image
+              source={{ uri: resolveServerUrl(pickedUrl, baseUrl) }}
+              style={styles.proofPreview}
+              contentFit="cover"
+              transition={120}
+            />
+            <Button
+              title="Kanıtı gönder"
+              fullWidth
+              loading={addProof.isPending}
+              onPress={() => void sendProof()}
+            />
+            <Button
+              title="Başka fotoğraf seç"
+              variant="ghost"
+              fullWidth
+              disabled={addProof.isPending}
+              onPress={() => setPickedUrl(null)}
+            />
+          </>
+        ) : (
+          <View style={styles.proofButtons}>
+            {Platform.OS !== 'web' ? (
+              <Button
+                title="Kamera"
+                icon="📷"
+                variant="secondary"
+                style={styles.grow}
+                loading={photo.uploading}
+                onPress={() => void pickProof('camera')}
+              />
+            ) : null}
+            <Button
+              title="Galeri"
+              icon="🖼️"
+              variant="secondary"
+              style={styles.grow}
+              loading={photo.uploading}
+              onPress={() => void pickProof('library')}
+            />
+          </View>
+        )}
+        <Button title="Vazgeç" variant="ghost" fullWidth onPress={() => setAnswering(null)} />
       </Sheet>
     </Card>
   );
@@ -1308,33 +1485,81 @@ function FeedRow({
   item,
   type,
   isMine,
-  alreadyDisputed,
+  myDispute,
+  reasons,
+  statusText,
+  active,
   today,
   yesterday,
   level,
   baseUrl,
   onProof,
   onDispute,
+  onWithdraw,
+  onAnswer,
   canDelete,
   deleting,
+  withdrawing,
   onDelete,
 }: {
   item: FeedItem;
   type: ChallengeType | undefined;
   isMine: boolean;
-  alreadyDisputed: boolean;
+  /** where the reader's own itiraz on this entry stands, if they filed one */
+  myDispute: DisputeStatus | null;
+  reasons: { id: string; name: string; reason: string }[];
+  statusText: string | null;
+  active: boolean;
   today: string;
   yesterday: string;
   level: VulgarityLevel;
   baseUrl: string;
   onProof: (url: string) => void;
   onDispute: () => void;
+  onWithdraw: () => void;
+  onAnswer: () => void;
   canDelete: boolean;
   deleting: boolean;
+  withdrawing: boolean;
   onDelete: () => void;
 }) {
   const rejected = item.status === 'rejected';
   const disputed = item.status === 'disputed';
+
+  let chip: ReactNode = null;
+  if (!isMine && !rejected) {
+    if (active && myDispute === 'open') {
+      chip = (
+        <Chip
+          label={withdrawing ? 'Çekiliyor…' : 'Geri çek'}
+          color={Colors.textMuted}
+          size="sm"
+          onPress={withdrawing ? undefined : onWithdraw}
+        />
+      );
+    } else {
+      chip = (
+        <Chip
+          label={myDispute ? 'İtiraz ettin' : t('dispute_button', level)}
+          color={myDispute ? Colors.textFaint : Colors.danger}
+          size="sm"
+          onPress={myDispute ? undefined : onDispute}
+        />
+      );
+    }
+  } else if (isMine && disputed && active) {
+    chip = <Chip label="Kanıt ekle" icon="📸" color={Colors.yellow} size="sm" onPress={onAnswer} />;
+  } else if (canDelete) {
+    chip = (
+      <Chip
+        label={deleting ? 'Siliniyor…' : 'Sil'}
+        icon="🗑️"
+        color={Colors.textMuted}
+        size="sm"
+        onPress={deleting ? undefined : onDelete}
+      />
+    );
+  }
 
   return (
     <View style={styles.feedRow}>
@@ -1379,29 +1604,19 @@ function FeedRow({
           <Text variant="tiny" color={Colors.danger}>
             İptal edildi, skora sayılmıyor.
           </Text>
-        ) : disputed ? (
+        ) : disputed && statusText ? (
           <Text variant="tiny" color={Colors.yellow}>
-            İtiraz var, bakılıyor.
+            {statusText}
           </Text>
         ) : null}
+        {reasons.map((row) => (
+          <Text key={row.id} variant="tiny" color={rejected ? Colors.textFaint : Colors.yellow} numberOfLines={2}>
+            {`${row.name}: “${row.reason}”`}
+          </Text>
+        ))}
       </View>
 
-      {!isMine && !rejected ? (
-        <Chip
-          label={alreadyDisputed ? 'İtiraz ettin' : t('dispute_button', level)}
-          color={alreadyDisputed ? Colors.textFaint : Colors.danger}
-          size="sm"
-          onPress={alreadyDisputed ? undefined : onDispute}
-        />
-      ) : canDelete ? (
-        <Chip
-          label={deleting ? 'Siliniyor…' : 'Sil'}
-          icon="🗑️"
-          color={Colors.textMuted}
-          size="sm"
-          onPress={deleting ? undefined : onDelete}
-        />
-      ) : null}
+      {chip}
     </View>
   );
 }
@@ -1688,6 +1903,8 @@ const styles = StyleSheet.create({
   boolHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 
   feedList: { gap: Spacing.lg },
+  proofButtons: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  proofPreview: { width: '100%', height: 220, borderRadius: Radius.md, backgroundColor: Colors.surfaceHigh },
   feedRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   feedBody: { flex: 1, gap: 2 },
   feedLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },

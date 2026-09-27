@@ -364,6 +364,23 @@ export class ApiClient {
     });
   }
 
+  /** Takes the caller's own open itiraz back; the entry is clean again once nobody else disputes it. */
+  withdrawDispute(challengeId: string, entryId: string) {
+    return this.request<{ entry: Entry; standings: ParticipantView[] }>(
+      'DELETE',
+      `/challenges/${challengeId}/entries/${entryId}/dispute`
+    );
+  }
+
+  /** The owner's answer to an itiraz: an uploaded photo (`uploadPhoto`) that closes it. */
+  addEntryProof(challengeId: string, entryId: string, proofUrl: string) {
+    return this.request<{ entry: Entry; standings: ParticipantView[] }>(
+      'POST',
+      `/challenges/${challengeId}/entries/${entryId}/proof`,
+      { body: { proofUrl } }
+    );
+  }
+
   poke(challengeId: string, body: { toUserId: string; templateId?: string }) {
     return this.request<{ ok: true }>('POST', `/challenges/${challengeId}/poke`, { body });
   }

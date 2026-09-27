@@ -44,12 +44,15 @@ import {
   type UserRow,
 } from '../db/index.js';
 import { asVulgarityLevel, toPublicUser } from '../serialize.js';
+import { disputeAwaitingAnswer, resolveDisputes } from './entries.js';
 import { notify } from './notifications.js';
 import { sendWeeklyRecaps } from './recap.js';
 import { awardBadges } from './stats.js';
 
 export interface SchedulerSummary {
   activated: number;
+  /** Disputed entries thrown out because their owner never answered. */
+  disputes: number;
   finalized: number;
   cancelled: number;
   reminders: number;
@@ -623,9 +626,12 @@ function stillSettling(db: Database, challenge: ChallengeRow, now: Date, bootAt?
 
 /**
  * Step 2 — every `active` challenge whose end time has passed, once the phones
- * have had their chance to report (`stillSettling`). Until then it stays `active`,
- * so a late device sync still fans out into it; typed entries are refused from
- * `ends_at` on (`challenge_ended` in `validateAndUpsertEntry`).
+ * have had their chance to report (`stillSettling`) and no disputed entry is
+ * still inside its answer window (`disputeAwaitingAnswer`): an owner told "12 saat
+ * içinde fotoğraf ekle" keeps those hours even when the itiraz came at the last
+ * minute. Until then it stays `active`, so a late device sync still fans out into
+ * it and a photo can still land; typed entries are refused from `ends_at` on
+ * (`challenge_ended` in `validateAndUpsertEntry`).
  */
 export function finalizeEndedChallenges(
   db: Database,
@@ -638,6 +644,7 @@ export function finalizeEndedChallenges(
   let finalized = 0;
   for (const challenge of ended) {
     if (stillSettling(db, challenge, now, options.bootAt)) continue;
+    if (disputeAwaitingAnswer(db, challenge.id, now)) continue;
     finalizeChallenge(db, challenge, now);
     finalized += 1;
   }
@@ -801,7 +808,15 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
  * `deps.onError` and the others still run.
  */
 export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: SchedulerDeps = {}): SchedulerSummary {
-  const summary: SchedulerSummary = { activated: 0, finalized: 0, cancelled: 0, reminders: 0, nudges: 0, recaps: 0 };
+  const summary: SchedulerSummary = {
+    activated: 0,
+    disputes: 0,
+    finalized: 0,
+    cancelled: 0,
+    reminders: 0,
+    nudges: 0,
+    recaps: 0,
+  };
   const step = <T>(name: string, fn: () => T, apply: (value: T) => void): void => {
     try {
       apply(fn());
@@ -811,6 +826,8 @@ export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: Sch
   };
 
   step('activate', () => activateDueChallenges(db, now), (n) => (summary.activated = n));
+  // before finalize, so a çelınc that only waited on an unanswered itiraz ends without that entry
+  step('disputes', () => resolveDisputes(db, now), (n) => (summary.disputes = n));
   step('finalize', () => finalizeEndedChallenges(db, now, { bootAt: deps.bootAt }), (n) => (summary.finalized = n));
   step('cancel', () => cancelUnderfilled(db, now), (n) => (summary.cancelled = n));
   step('reminders', () => sendReminders(db, now), (n) => (summary.reminders = n));

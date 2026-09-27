@@ -278,18 +278,20 @@ export function createChallengeBodySchema(opts: ChallengeSchemaOptions = {}) {
 export const CreateChallengeBodySchema = createChallengeBodySchema();
 export type CreateChallengeBody = z.infer<typeof CreateChallengeBodySchema>;
 
+/** What `POST /uploads` answered: a server path or a full http(s) address, nothing else. */
+const ProofUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(LIMITS.PROOF_URL_MAX)
+  .refine((s) => /^(https?:\/\/|\/)/.test(s), 'Geçersiz kanıt adresi');
+
 export const EntryBodySchema = z.object({
   dayKey: DayKeySchema,
   value: z.number().finite().min(0, 'Değer negatif olamaz'),
   source: EntrySourceSchema,
   note: optionalText(LIMITS.NOTE_MAX),
-  proofUrl: z
-    .string()
-    .trim()
-    .min(1)
-    .max(LIMITS.PROOF_URL_MAX)
-    .refine((s) => /^(https?:\/\/|\/)/.test(s), 'Geçersiz kanıt adresi')
-    .optional(),
+  proofUrl: ProofUrlSchema.optional(),
   clientTime: IsoDateTimeSchema,
   /** Focus sessions: idempotency key. */
   sessionId: z.uuid('Geçersiz oturum kimliği').optional(),
@@ -300,6 +302,12 @@ export const DisputeBodySchema = z.object({
   reason: z.string().trim().min(1, 'Sebep boş olamaz').max(LIMITS.DISPUTE_REASON_MAX),
 });
 export type DisputeBody = z.infer<typeof DisputeBodySchema>;
+
+/** The owner's answer to an itiraz: the photo that backs the entry. */
+export const EntryProofBodySchema = z.object({
+  proofUrl: ProofUrlSchema,
+});
+export type EntryProofBody = z.infer<typeof EntryProofBodySchema>;
 
 export const PokeBodySchema = z.object({
   toUserId: IdSchema,

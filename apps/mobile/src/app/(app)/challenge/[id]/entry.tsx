@@ -1,7 +1,6 @@
 import type { ChallengeType } from '@koydum/shared';
 import { LIMITS, addDays, getChallengeType, t } from '@koydum/shared';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -17,8 +16,7 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import { useAddEntry, useChallenge } from '@/hooks/queries';
-import { useApi } from '@/hooks/useApi';
-import type { ApiClient } from '@/lib/api';
+import { useProofPhoto } from '@/hooks/useProofPhoto';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
@@ -45,25 +43,6 @@ function quickAdds(maxPerEntry: number): number[] {
   return presets.filter((value) => value <= cap);
 }
 
-/**
- * Native FormData takes the `{ uri, name, type }` shape `api.uploadPhoto` builds;
- * a browser needs a real Blob, so the web path fetches the picked object URL first.
- */
-async function uploadProof(api: ApiClient, asset: ImagePicker.ImagePickerAsset): Promise<string> {
-  const guessed = asset.fileName?.trim();
-  const name = guessed && /\.[a-z0-9]{3,4}$/i.test(guessed) ? guessed : 'kanit.jpg';
-  if (Platform.OS === 'web') {
-    const response = await fetch(asset.uri);
-    const blob = await response.blob();
-    const form = new FormData();
-    form.append('file', blob, name);
-    const result = await api.request<{ url: string }>('POST', '/uploads', { formData: form });
-    return result.url;
-  }
-  const result = await api.uploadPhoto(asset.uri, name);
-  return result.url;
-}
-
 /* ----------------------------------------------------------------- screen */
 
 export default function EntryModalScreen() {
@@ -72,8 +51,8 @@ export default function EntryModalScreen() {
   const level = useLevel();
   const tz = useTimezone();
   const serverUrl = useAuth((s) => s.serverUrl);
-  const api = useApi();
   const toast = useToast();
+  const photo = useProofPhoto();
 
   const query = useChallenge(id);
   const detail = query.data;
@@ -94,8 +73,8 @@ export default function EntryModalScreen() {
   const [raw, setRaw] = useState('');
   const [note, setNote] = useState('');
   const [proofUrl, setProofUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const uploading = photo.uploading;
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)'));
 
@@ -176,38 +155,10 @@ export default function EntryModalScreen() {
 
   const pick = async (from: 'camera' | 'library') => {
     setError(null);
-    try {
-      if (from === 'camera') {
-        const permission = await ImagePicker.requestCameraPermissionsAsync();
-        if (!permission.granted) {
-          toast({ title: 'Kamera izni yok', body: 'Ayarlardan kamerayı aç, sonra dene.', kind: 'danger' });
-          return;
-        }
-      } else if (Platform.OS !== 'web') {
-        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!permission.granted) {
-          toast({ title: 'Galeri izni yok', body: 'Ayarlardan fotoğraf iznini aç.', kind: 'danger' });
-          return;
-        }
-      }
-
-      const result =
-        from === 'camera'
-          ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 })
-          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
-      if (result.canceled) return;
-      const asset = result.assets[0];
-      if (!asset) return;
-
-      setUploading(true);
-      const url = await uploadProof(api, asset);
-      setProofUrl(url);
-      toast({ title: 'Kanıt yüklendi', body: 'Fotoğraf girişe eklendi.', kind: 'success' });
-    } catch (err) {
-      toast({ title: 'Fotoğraf gitmedi', body: errorText(err, 'Yükleme başarısız.'), kind: 'danger' });
-    } finally {
-      setUploading(false);
-    }
+    const url = await photo.pick(from);
+    if (!url) return;
+    setProofUrl(url);
+    toast({ title: 'Kanıt yüklendi', body: 'Fotoğraf girişe eklendi.', kind: 'success' });
   };
 
   const submit = async () => {

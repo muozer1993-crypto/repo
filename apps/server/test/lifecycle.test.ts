@@ -217,7 +217,7 @@ describe('challenge lifecycle', () => {
     });
 
     const summary = runSchedulerOnce(db, app.now());
-    expect(summary).toEqual({ activated: 1, finalized: 0, cancelled: 1, reminders: 0, nudges: 0, recaps: 0 });
+    expect(summary).toEqual({ activated: 1, disputes: 0, finalized: 0, cancelled: 1, reminders: 0, nudges: 0, recaps: 0 });
 
     // the end plus the hour a step çelınc gives the phones
     harness.setNow('2026-01-06T09:00:00.000Z');

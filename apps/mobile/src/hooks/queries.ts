@@ -256,6 +256,24 @@ export function useDispute(id: string) {
   });
 }
 
+export function useWithdrawDispute(id: string) {
+  const api = useApi();
+  const invalidate = useInvalidator();
+  return useMutation<unknown, Error, string>({
+    mutationFn: (entryId) => api.withdrawDispute(id, entryId),
+    onSuccess: () => invalidate.challenge(id),
+  });
+}
+
+export function useAddEntryProof(id: string) {
+  const api = useApi();
+  const invalidate = useInvalidator();
+  return useMutation<unknown, Error, { entryId: string; proofUrl: string }>({
+    mutationFn: ({ entryId, proofUrl }) => api.addEntryProof(id, entryId, proofUrl),
+    onSuccess: () => invalidate.challenge(id),
+  });
+}
+
 export function usePoke(id: string) {
   const api = useApi();
   const invalidate = useInvalidator();

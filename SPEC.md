@@ -104,7 +104,8 @@ export function computeScore(type: ChallengeType, dayKeys: string[], entries: Sc
 export function rankParticipants(type: ChallengeType, dayKeys: string[], inputs: ScoreInput[]): { results: ScoreResult[]; winnerId: string | null; isTie: boolean }
 ```
 - Entries with `status === 'ok'` and `status === 'disputed'` count; a dispute only removes an entry once it is
-  upheld, at which point the entry becomes `rejected` and stops counting.
+  upheld — a majority disputed it and its owner added no photo within `LIMITS.DISPUTE_ANSWER_MS` (12 h, 2.4) —
+  at which point the entry becomes `rejected` and stops counting.
 - Ranking: sort by score (desc for higher, asc for lower). Rank 1 shared on equal score.
   `isTie` = top score shared by ≥2 participants → `winnerId = null`.
 - `winMargin(type, winnerScore, loserScore)` returns `'big' | 'close' | 'normal'`:
@@ -158,6 +159,7 @@ CreateChallengeBody {
 }
 EntryBody { dayKey: 'YYYY-MM-DD'; value: number >= 0; source: EntrySource; note?: string(max 120); proofUrl?: string; clientTime: ISO; sessionId?: string (uuid, focus idempotency) }
 DisputeBody { reason: string 1..140 }
+EntryProofBody { proofUrl: string } (same rules as EntryBody.proofUrl: http(s) address or a server path, max 500)
 PokeBody { toUserId: string; templateId?: string }
 TauntBody { toUserId: string; templateId?: string; customBody?: string (max 140) } (one of)
 ReportBody { reason: string 1..300 }
@@ -178,7 +180,9 @@ ChallengeDetail extends ChallengeSummary { myEntries: Entry[], feed: FeedItem[],
      and only for the rivals they are strictly ahead of (a tie earns nothing). `done` = still
      inside the 2h cooldown, so canPoke = pokeTargets.some(t => !t.done).
 Entry { id, challengeId, userId, dayKey, value, source, note, proofUrl, status, createdAt, late?: boolean }
-FeedItem { id, userId, displayName, dayKey, value, source, status, createdAt, proofUrl }
+FeedItem { id, userId, displayName, dayKey, value, source, status, createdAt, proofUrl, answerBy?: string | null }
+  -- feed: the 40 most recent entries plus every `disputed` one, however old (it is where the owner answers).
+     answerBy: set while a majority disputes the entry — the instant it is thrown out unless its owner adds a photo.
 Dispute { id, entryId, byUserId, reason, status: 'open'|'upheld'|'dismissed', createdAt }
 Taunt { id, challengeId, fromUserId, toUserId, level, title, body, createdAt }
 Notification { id, type, title, body, data: Record<string, unknown>, readAt, createdAt }
@@ -298,7 +302,9 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | POST /challenges/:id/cancel | creator, only pending; notifies. Returns the refreshed `ChallengeDetail` |
 | POST /challenges/:id/entries | see 2.3; returns `{ entry, standings }` |
 | DELETE /challenges/:id/entries/:entryId | own manual entries only, while active |
-| POST /challenges/:id/entries/:entryId/dispute | not own; one per user per entry; threshold rule → entry `rejected` + `entry_rejected` notification to owner; disputers get `disputesWon` |
+| POST /challenges/:id/entries/:entryId/dispute | 201 `{ dispute, entry, answerBy, standings }`. Not own (403 `own_entry`); one per user per entry, whatever became of it (409 `already_disputed`); a `rejected` entry → 409 `already_rejected`. The entry becomes `disputed` and keeps counting. Threshold = a majority of the OTHER accepted players, `max(1, ceil((accepted − 1) / 2))`. Once the open disputes reach it, the owner has `LIMITS.DISPUTE_ANSWER_MS` (12 h) from the dispute that made the majority to add a photo; `answerBy` says until when (null below the threshold). Notification `dispute` to the owner (data `{ challengeId, entryId, disputeId, answerBy }`); the one that makes the majority says "12 saat içinde fotoğraf ekle, yoksa bu giriş yanar" at the owner's level. Upholding happens in the scheduler (2.4) |
+| DELETE /challenges/:id/entries/:entryId/dispute | the caller takes back their own OPEN dispute (404 `dispute_not_found` otherwise): it becomes `dismissed`, and the entry goes back to `ok` when no open dispute is left. Active only (the settle wait included). Returns `{ dispute, entry, standings }`. A withdrawn dispute cannot be filed again |
+| POST /challenges/:id/entries/:entryId/proof | `EntryProofBody`. Entry owner only (403 `not_your_entry`), entry `disputed` (409 `not_disputed`, 409 `already_rejected`), çelınc `active` (the settle wait included, 400 `challenge_not_active`). Sets `proof_url`, marks every open dispute `dismissed`, entry back to `ok`; each disputer (not deleted, not blocked) gets a `dispute` notification with data `{ challengeId, entryId, kind: 'proof' }` ("{ad} kanıt ekledi, bir bak."). Returns `{ entry, standings }` |
 | POST /challenges/:id/poke | active only; target must be a participant the sender is strictly AHEAD of, else 403 `not_ahead`; rate limit 1 per (from,to,challenge) per 2h → 429 `poke_cooldown`. Template from `poke` context clamped to target's level (or default pick). Notification type `poke` |
 | POST /challenges/:id/taunt | finished only; sender must be winner (`winnerId`), target must be a loser (accepted, not winner); one per target (409 `already_taunted`); template clamped to target's `vulgarity_max` — if requested template level > target max, pick deterministic template same context at target max; `customBody` allowed (level = sender-chosen ≤ target max, checked by `containsBanned` → 400 `banned_content`). Notification type `taunt` with data `{ challengeId, tauntId }` |
 | POST /challenges/:id/rematch | 201, returns the new bare `Challenge`. Finished only, any accepted participant; clones settings (same type, duration, reward), startsAt = now + 5 min, invites all previous accepted participants, `rematch_of_id`; notification `rematch` |
@@ -330,7 +336,7 @@ Per type:
 - `manual_count`: append; daily sum must stay ≤ maxPerDay (400 `daily_cap`). Optional `sessionId` (UUID) is stored and makes the write idempotent — the app sends a fresh one per tap so a timed-out request replayed from the offline queue cannot count twice. Upsert metrics ignore the field.
 - `manual_lower_is_better`: upsert per day; value ≤ maxPerEntry. Sources `manual` and `usage_stats`; once the day's row has a device source, a `manual` write is refused (409 `device_locked`) — the phone may keep correcting itself. Scored as the DAILY AVERAGE over the participant's own window (sum + missing days × penalty) / window days; while the çelınc is active the window is clipped to today, so day 2 of 7 shows two days' average, not five days of penalty.
 - Device fan-out (`POST /me/steps`) never lowers a typed `manual` value on a higher-is-better metric: the Android foreground counter is partial by design and the user was told to declare the real number; a device value ≥ the typed one replaces it (source becomes the device's).
-- Disputes: only while the challenge is `active` (400 `challenge_not_active`) and never across a block (403 `blocked`). Accepting an invite from someone who blocked you or whom you blocked → 403 `blocked`.
+- Disputes: only while the challenge is `active` (400 `challenge_not_active`) and never across a block (403 `blocked`). Phone-counted entries may be disputed too. A dispute never rejects anything by itself: a majority starts the owner's 12-hour answer window (2.2), and only an unanswered one is upheld (2.4). Accepting an invite from someone who blocked you or whom you blocked → 403 `blocked`.
 - Taunt context `revenge` only when the çelınc is a rematch AND the taunting winner lost the original; templates carry an optional `metrics` list and are filtered by the challenge's metric (a "kalk yürü" line stays on step çelınclar).
 
 After every write: recompute standings (in memory via shared `rankParticipants`) and return.
@@ -339,6 +345,12 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
 
 1. `pending` with `starts_at <= now`: if accepted count ≥ 2 → `active` + `challenge_started` notification to accepted;
    else if `ends_at <= now` → `cancelled` (`challenge_cancelled`). (Single-participant challenges wait; others can still accept.)
+1b. Disputes (`resolveDisputes`, before finalize): in every `active` çelınc, a `disputed` entry of an accepted player
+   whose open disputes reached the threshold (2.2) and whose answer window ran out — `now >=` the created_at of the
+   threshold-th oldest open dispute `+ LIMITS.DISPUTE_ANSWER_MS` — is upheld: open disputes → `upheld`, entry →
+   `rejected`, `entry_rejected` to the owner (not when deleted), badges recomputed for the disputers (`disputesWon`).
+   The window runs from the moment the majority was reached, so a second dispute ten hours after the first still
+   gives the owner the full 12 hours. Below the threshold nothing is ever upheld.
 2. `active` with `ends_at <= now` → finalize. A type with a `deviceMetric` (steps, screen time) first **settles**: the
    phone's last evening usually arrives with the next background sync (15+ minutes, longer under Doze), so it
    stays `active` until `now >= max(ends_at, bootAt) + LIMITS.DEVICE_SETTLE_MS` (1 h), or earlier once every
@@ -347,7 +359,10 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    `startScheduler` started, so a server that was off at the end gives the phones the full hour after boot. While
    settling, device syncs still fan out into the last day and typed entries get `challenge_ended` (2.3); the
    app shows "Sonuç birazdan" instead of the countdown, hides the entry buttons and sends its own count once.
-   Every other type finalizes right at `ends_at`. Finalize: accepted participants with `rankParticipants`; write final_score/rank,
+   Every other type finalizes right at `ends_at` — unless, whatever the type, one of its entries is inside a
+   dispute answer window (1b): the owner was promised those hours even when the dispute came a minute before the
+   end, so it stays `active` (the same wait) until a photo (2.2) or the window running out; the app says it is
+   waiting for proof. Finalize: accepted participants with `rankParticipants`; write final_score/rank,
    winner_id/is_tie, `finished`, `finalized_at`; notifications: winner → `challenge_finished` with data
    `{ role: 'winner' }`, losers → `{ role: 'loser', winnerId }`, tie → `{ role: 'tie' }`. The TITLE is a short
    lock-screen phrase per level ("Kazandın 🏆" / "KOYDUN! 👑" / "KOYDUN! 👑🍆", and "Bu tur bitti" / "Yedin lan" /
@@ -462,7 +477,12 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             2) ayarlar (title, start now / tomorrow, duration days 1/3/7/14/30 or custom, deadline time for checkin, proof toggle, reward, penalty)
                             3) kankalar seç (multi-select friends) 4) özet + "KOY BAKALIM" create
 (app)/challenge/[id].tsx    detail: hero (emoji, title, status/countdown, reward), standings (ranked bars with scores + "koyuyor/yiyor" labels),
-                            my action area per metric type (see 3.4), feed of recent entries with dispute button,
+                            my action area per metric type (see 3.4), feed of recent entries with dispute button
+                            (every open dispute's `{ad}: “{reason}”` under a disputed row, an upheld one's under a rejected
+                            row; a disputed row says "İtiraz var. {kalan} içinde kanıt gelmezse yanar." from `answerBy`,
+                            or "henüz çoğunluk değil" without one; my own open dispute's chip is "Geri çek" (confirm →
+                            DELETE); the owner's disputed row gets "Kanıt ekle", a sheet with the entry modal's camera /
+                            gallery pick → /uploads → POST .../proof),
                             past `endsAt` but still `active` (settling, 2.4) → "Süre bitti / Sonuç birazdan" instead of the
                             countdown, no action area or "böyle devam" verdict, one device sync on open (the list card
                             says "Sonuç bekleniyor"),

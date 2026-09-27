@@ -102,7 +102,9 @@ function renderScreen(element: ReactElement): ReactTestRenderer {
     defaultOptions: {
       // a test must not wait on retry backoff, and nothing here should poll
       queries: { retry: false, gcTime: 0, refetchInterval: false, refetchOnWindowFocus: false },
-      mutations: { retry: false },
+      // a finished mutation otherwise sits in the cache on a five-minute timer
+      // that keeps jest from exiting
+      mutations: { retry: false, gcTime: 0 },
     },
   });
   let tree!: ReactTestRenderer;
@@ -489,6 +491,107 @@ describe('a step çelınc past its end, still active on the server', () => {
     const tree = renderScreen(<HomeScreen />);
     await settle();
     expect(rendered(tree)).toContain('Sonuç bekleniyor');
+  });
+});
+
+describe('an itiraz on the feed', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** Mustafa (the reader) and Ali, one entry each; `disputedBy` disputes the other one's entry. */
+  function withDispute(disputedBy: 'me' | 'ali') {
+    const detail = challengeDetail();
+    const rival = { ...detail.me!, user: ALI, score: 9000, rank: 2 };
+    detail.participants = [detail.me!, rival];
+    const owner = disputedBy === 'me' ? ALI : detail.me!.user;
+    // half a minute of slack so the rendered "5sa 20dk" does not depend on how fast the suite runs
+    const answerBy = new Date(Date.now() + 5 * 3_600_000 + 20 * 60_000 + 30_000).toISOString();
+    return {
+      ...detail,
+      feed: [
+        {
+          id: 'e-1',
+          userId: owner.id,
+          displayName: owner.displayName,
+          dayKey: '2026-09-08',
+          value: 25000,
+          source: 'manual' as const,
+          status: 'disputed' as const,
+          createdAt: new Date(Date.now() - 60 * 60_000).toISOString(),
+          proofUrl: null,
+          answerBy,
+        },
+      ],
+      disputes: [
+        {
+          id: 'd-1',
+          entryId: 'e-1',
+          byUserId: disputedBy === 'me' ? 'me-1' : ALI.id,
+          reason: disputedBy === 'me' ? 'Telefonu köpeğe bağlamış' : 'Bütün gün koltuktaydı',
+          status: 'open' as const,
+          createdAt: new Date(Date.now() - 30 * 60_000).toISOString(),
+        },
+      ],
+    };
+  }
+
+  it('shows the disputer the reason, the clock, and a "Geri çek" chip that takes it back', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => withDispute('me'));
+    api.withdrawDispute = jest.fn(async () => ({ entry: {}, standings: [] }));
+    const { Alert } = require('react-native') as typeof import('react-native');
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
+      buttons?.[1]?.onPress?.();
+    });
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Mustafa: “Telefonu köpeğe bağlamış”');
+    expect(text).toContain('5sa 20dk içinde kanıt gelmezse yanar');
+    expect(text).not.toContain('İtiraz var, bakılıyor');
+    expect(text).not.toContain('İtiraz ettin');
+
+    await act(async () => {
+      findWith(tree, 'label', 'Geri çek', 'onPress').props.onPress();
+    });
+    await settle();
+    expect(api.withdrawDispute).toHaveBeenCalledWith('c-1', 'e-1');
+    alert.mockRestore();
+  });
+
+  it('shows the owner who said what, and a "Kanıt ekle" chip that opens the photo sheet', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => withDispute('ali'));
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Ali: “Bütün gün koltuktaydı”');
+    expect(text).toContain('içinde kanıt eklemezsen yanar');
+    expect(text).not.toContain('Geri çek');
+
+    act(() => {
+      findWith(tree, 'label', 'Kanıt ekle', 'onPress').props.onPress();
+    });
+    const sheet = rendered(tree);
+    expect(sheet).toContain('Fotoğrafı koy, itiraz kapansın');
+    expect(sheet).toContain('GALERİ'); // button titles render in Turkish capitals
+  });
+
+  it('says no majority yet instead of a clock when nobody is on one', async () => {
+    searchParams.id = 'c-1';
+    const detail = withDispute('ali');
+    detail.feed[0]!.answerBy = null as unknown as string;
+    api.challenge = jest.fn(async () => detail);
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('İtiraz var ama henüz çoğunluk değil.');
   });
 });
 

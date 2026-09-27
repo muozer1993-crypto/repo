@@ -1,5 +1,5 @@
 /**
- * Entry validation and writing (SPEC 2.3) plus the dispute rule.
+ * Entry validation and writing (SPEC 2.3) plus the dispute rule and its answer window.
  *
  * Everything the client sends is advisory: the day window, the caps, the check-in
  * verdict and the entry `late` flag are all decided here from the SERVER clock and
@@ -33,9 +33,11 @@ import {
   type EntryRow,
   type UserRow,
 } from '../db/index.js';
-import { badRequest, conflict, forbidden, type HttpError } from '../errors.js';
+import { badRequest, conflict, forbidden, notFound, type HttpError } from '../errors.js';
 import { challengeWindow, participantTimezone, typeForChallenge } from './challenges.js';
-import { getParticipant } from './challengeViews.js';
+import { acceptedCount, entryRejectedCopy, getParticipant, getUserRow, levelOf } from './challengeViews.js';
+import { notify } from './notifications.js';
+import { awardBadges } from './stats.js';
 
 export interface EntryWriteInput {
   challenge: ChallengeRow;
@@ -343,12 +345,13 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
   }
 }
 
+
 // ---------------------------------------------------------------------------
 // Disputes
 // ---------------------------------------------------------------------------
 
 /**
- * How many open disputes it takes to throw an entry out.
+ * How many open disputes it takes to put an entry on the clock.
  *
  * A simple majority of the OTHER accepted participants: `ceil((accepted - 1) / 2)`,
  * never below 1. Head to head (2 accepted) the single rival decides; with 3 or 4
@@ -359,20 +362,69 @@ export function disputeThreshold(acceptedParticipants: number): number {
   return Math.max(1, Math.ceil((acceptedParticipants - 1) / 2));
 }
 
+/**
+ * When each entry a majority disputes is thrown out unless its owner adds a photo
+ * first (epoch ms, by entry id).
+ *
+ * The clock starts when the open disputes REACHED the threshold — the threshold-th
+ * oldest one — not at the first itiraz: in a five-player çelınc the second one may
+ * come ten hours after the first, and the owner was promised the full
+ * `DISPUTE_ANSWER_MS` from the moment the entry was actually at risk. Only players
+ * still in the race count; a row of somebody who left scores nothing, so nothing
+ * waits on it.
+ */
+export function disputeDeadlines(db: Database, challengeId: string): Map<string, number> {
+  const threshold = disputeThreshold(acceptedCount(db, challengeId));
+  const rows = db
+    .prepare(
+      `SELECT d.entry_id, d.created_at FROM disputes d
+         JOIN entries e ON e.id = d.entry_id
+         JOIN challenge_participants p ON p.challenge_id = e.challenge_id AND p.user_id = e.user_id AND p.status = 'accepted'
+        WHERE e.challenge_id = ? AND e.status = 'disputed' AND d.status = 'open'
+        ORDER BY d.entry_id ASC, d.created_at ASC, d.id ASC`,
+    )
+    .all(challengeId) as { entry_id: string; created_at: string }[];
+
+  const openByEntry = new Map<string, string[]>();
+  for (const row of rows) {
+    const list = openByEntry.get(row.entry_id) ?? [];
+    list.push(row.created_at);
+    openByEntry.set(row.entry_id, list);
+  }
+
+  const deadlines = new Map<string, number>();
+  for (const [entryId, createdAt] of openByEntry) {
+    const reached = createdAt[threshold - 1];
+    if (reached !== undefined) deadlines.set(entryId, Date.parse(reached) + LIMITS.DISPUTE_ANSWER_MS);
+  }
+  return deadlines;
+}
+
+/** True while an entry of this çelınc is inside its answer window — its result must wait. */
+export function disputeAwaitingAnswer(db: Database, challengeId: string, now: Date): boolean {
+  for (const deadline of disputeDeadlines(db, challengeId).values()) {
+    if (now.getTime() < deadline) return true;
+  }
+  return false;
+}
+
 export interface DisputeOutcome {
   dispute: DisputeRow;
   entry: EntryRow;
-  /** True when this dispute reached the threshold and the entry was rejected. */
-  upheld: boolean;
   openCount: number;
   threshold: number;
-  /** Everyone whose dispute was upheld (their `disputesWon` just went up). */
-  disputerIds: string[];
+  /** Set once the open disputes are a majority: when the entry goes unless its owner answers. */
+  answerBy: string | null;
+  /** True when THIS dispute made it a majority, so the owner's clock starts now. */
+  reachedThreshold: boolean;
 }
 
 /**
- * Records one dispute and applies the threshold rule. Callers are responsible for
- * the notifications (they need the recipients' vulgarity levels) and badges.
+ * Records one dispute. Nothing is thrown out here: an entry the majority disputes
+ * stays `disputed` — and keeps counting (SPEC 1.3) — for `DISPUTE_ANSWER_MS`,
+ * so a losing rival cannot zero a day with one tap; its owner can answer with a
+ * photo (`answerDisputeWithProof`) and only silence gets it rejected
+ * (`resolveDisputes`). Callers send the notification (they need the owner's level).
  */
 export function recordDispute(
   db: Database,
@@ -386,6 +438,8 @@ export function recordDispute(
   if (entry.status === 'rejected') {
     throw conflict('already_rejected', 'Bu giriş zaten iptal edilmiş.');
   }
+  // One per person per entry, whatever became of it: an itiraz taken back or
+  // answered with a photo is not filed again.
   const existing = db
     .prepare('SELECT id FROM disputes WHERE entry_id = ? AND by_user_id = ?')
     .get(entry.id, byUserId) as { id: string } | undefined;
@@ -402,47 +456,161 @@ export function recordDispute(
     status: 'open',
     created_at: iso,
   };
-
-  const accepted = countOf(
-    db,
-    "SELECT COUNT(*) AS n FROM challenge_participants WHERE challenge_id = ? AND status = 'accepted'",
-    challenge.id,
-  );
-  const threshold = disputeThreshold(accepted);
+  const threshold = disputeThreshold(acceptedCount(db, challenge.id));
 
   let openCount = 0;
-  let upheld = false;
-  let disputerIds: string[] = [];
-
   const run = db.transaction(() => {
     db.prepare(
       'INSERT INTO disputes (id, entry_id, by_user_id, reason, status, created_at) VALUES (@id, @entry_id, @by_user_id, @reason, @status, @created_at)',
     ).run(dispute);
-
-    openCount = countOf(db, "SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ? AND status = 'open'", entry.id);
-
-    if (openCount >= threshold) {
-      db.prepare("UPDATE disputes SET status = 'upheld' WHERE entry_id = ? AND status = 'open'").run(entry.id);
-      db.prepare("UPDATE entries SET status = 'rejected', updated_at = ? WHERE id = ?").run(iso, entry.id);
-      upheld = true;
-      disputerIds = (
-        db.prepare("SELECT by_user_id FROM disputes WHERE entry_id = ? AND status = 'upheld'").all(entry.id) as {
-          by_user_id: string;
-        }[]
-      ).map((row) => row.by_user_id);
-    } else if (entry.status === 'ok') {
+    if (entry.status === 'ok') {
       db.prepare("UPDATE entries SET status = 'disputed', updated_at = ? WHERE id = ?").run(iso, entry.id);
+    }
+    openCount = countOf(db, "SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ? AND status = 'open'", entry.id);
+  });
+  run();
+
+  const deadline = disputeDeadlines(db, challenge.id).get(entry.id);
+  return {
+    dispute,
+    entry: getEntryRow(db, entry.id) ?? entry,
+    openCount,
+    threshold,
+    answerBy: deadline === undefined ? null : new Date(deadline).toISOString(),
+    reachedThreshold: openCount === threshold,
+  };
+}
+
+/**
+ * The disputer takes their itiraz back: it becomes `dismissed`, and once no open
+ * dispute is left the entry is a plain `ok` row again. Only an OPEN one can be
+ * taken back — an upheld itiraz already did its job.
+ */
+export function withdrawDispute(
+  db: Database,
+  input: { entry: EntryRow; byUserId: string; now: Date },
+): { dispute: DisputeRow; entry: EntryRow } {
+  const { entry, byUserId, now } = input;
+  const dispute = db
+    .prepare("SELECT * FROM disputes WHERE entry_id = ? AND by_user_id = ? AND status = 'open'")
+    .get(entry.id, byUserId) as DisputeRow | undefined;
+  if (!dispute) throw notFound('dispute_not_found', 'Bu girişte açık bir itirazın yok.');
+
+  const run = db.transaction(() => {
+    db.prepare("UPDATE disputes SET status = 'dismissed' WHERE id = ?").run(dispute.id);
+    const open = countOf(db, "SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ? AND status = 'open'", entry.id);
+    if (open === 0 && entry.status === 'disputed') {
+      db.prepare("UPDATE entries SET status = 'ok', updated_at = ? WHERE id = ?").run(nowIso(now), entry.id);
     }
   });
   run();
 
-  const updated = getEntryRow(db, entry.id) ?? entry;
-  return {
-    dispute: upheld ? { ...dispute, status: 'upheld' } : dispute,
-    entry: updated,
-    upheld,
-    openCount,
-    threshold,
-    disputerIds,
-  };
+  return { dispute: { ...dispute, status: 'dismissed' }, entry: getEntryRow(db, entry.id) ?? entry };
+}
+
+/**
+ * The owner answers with a photo: it goes on the entry, every open itiraz is
+ * `dismissed` and the entry counts as `ok` again. The disputers cannot file the
+ * same itiraz twice; they get told to have a look (by the caller, which knows
+ * their levels), so a fake photo is still between friends.
+ *
+ * Returns who disputed.
+ */
+export function answerDisputeWithProof(
+  db: Database,
+  input: { entry: EntryRow; byUserId: string; proofUrl: string; now: Date },
+): { entry: EntryRow; disputerIds: string[] } {
+  const { entry, byUserId, proofUrl, now } = input;
+  if (entry.user_id !== byUserId) {
+    throw forbidden('not_your_entry', 'Kanıtı sadece girişin sahibi ekleyebilir.');
+  }
+  if (entry.status === 'rejected') {
+    throw conflict('already_rejected', 'Bu giriş zaten iptal edilmiş.');
+  }
+  if (entry.status !== 'disputed') {
+    throw conflict('not_disputed', 'Bu girişe itiraz yok, kanıta gerek yok.');
+  }
+
+  let disputerIds: string[] = [];
+  const run = db.transaction(() => {
+    disputerIds = (
+      db.prepare("SELECT by_user_id FROM disputes WHERE entry_id = ? AND status = 'open'").all(entry.id) as {
+        by_user_id: string;
+      }[]
+    ).map((row) => row.by_user_id);
+    db.prepare("UPDATE disputes SET status = 'dismissed' WHERE entry_id = ? AND status = 'open'").run(entry.id);
+    db.prepare("UPDATE entries SET proof_url = ?, status = 'ok', updated_at = ? WHERE id = ?").run(
+      proofUrl,
+      nowIso(now),
+      entry.id,
+    );
+  });
+  run();
+
+  return { entry: getEntryRow(db, entry.id) ?? entry, disputerIds };
+}
+
+/**
+ * Throws out an entry whose owner let the answer window run out: the open
+ * disputes become `upheld` (that is what `disputesWon` counts), the entry
+ * `rejected`, the owner hears about it and every disputer's badges are
+ * recounted (Yalan Dedektörü, Savcı).
+ */
+export function upholdDisputes(db: Database, challenge: ChallengeRow, entry: EntryRow, now: Date): string[] {
+  const iso = nowIso(now);
+  let disputerIds: string[] = [];
+  const run = db.transaction(() => {
+    disputerIds = (
+      db.prepare("SELECT by_user_id FROM disputes WHERE entry_id = ? AND status = 'open'").all(entry.id) as {
+        by_user_id: string;
+      }[]
+    ).map((row) => row.by_user_id);
+    db.prepare("UPDATE disputes SET status = 'upheld' WHERE entry_id = ? AND status = 'open'").run(entry.id);
+    db.prepare("UPDATE entries SET status = 'rejected', updated_at = ? WHERE id = ?").run(iso, entry.id);
+
+    // an owner who deleted their account is simply not told
+    const owner = getUserRow(db, entry.user_id);
+    if (owner && owner.deleted_at === null) {
+      const copy = entryRejectedCopy(levelOf(owner), challenge.title, entry.day_key);
+      notify(db, {
+        userId: owner.id,
+        type: 'entry_rejected',
+        title: copy.title,
+        body: copy.body,
+        data: { challengeId: challenge.id, entryId: entry.id, dayKey: entry.day_key },
+        createdAt: iso,
+      });
+    }
+  });
+  run();
+
+  for (const disputerId of disputerIds) awardBadges(db, disputerId, now);
+  return disputerIds;
+}
+
+/**
+ * Scheduler step: every disputed entry whose answer window ran out without a
+ * photo is thrown out (`upholdDisputes`). It runs right before `finalize` in the
+ * same pass, so a çelınc that was only waiting on this entry finishes without it.
+ */
+export function resolveDisputes(db: Database, now: Date = new Date()): number {
+  const challenges = db
+    .prepare(
+      `SELECT DISTINCT c.* FROM challenges c
+         JOIN entries e ON e.challenge_id = c.id AND e.status = 'disputed'
+        WHERE c.status = 'active'`,
+    )
+    .all() as ChallengeRow[];
+
+  let upheld = 0;
+  for (const challenge of challenges) {
+    for (const [entryId, deadline] of disputeDeadlines(db, challenge.id)) {
+      if (now.getTime() < deadline) continue;
+      const entry = getEntryRow(db, entryId);
+      if (!entry || entry.status !== 'disputed') continue;
+      upholdDisputes(db, challenge, entry, now);
+      upheld += 1;
+    }
+  }
+  return upheld;
 }

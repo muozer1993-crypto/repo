@@ -4,15 +4,18 @@
  *   POST   /challenges/:id/entries
  *   DELETE /challenges/:id/entries/:entryId
  *   POST   /challenges/:id/entries/:entryId/dispute
+ *   DELETE /challenges/:id/entries/:entryId/dispute   (the disputer takes it back)
+ *   POST   /challenges/:id/entries/:entryId/proof     (the owner answers with a photo)
  *
  * The heavy lifting — per-metric rules, caps, backfill windows, the check-in verdict
- * and the dispute threshold — lives in `services/entries.ts`; these handlers only do
- * access control, notifications and the response shape.
+ * and the dispute threshold with its answer window — lives in `services/entries.ts`;
+ * these handlers only do access control, notifications and the response shape.
  */
 import type { FastifyInstance } from 'fastify';
 import {
   DisputeBodySchema,
   EntryBodySchema,
+  EntryProofBodySchema,
   type Dispute,
   type Entry,
   type ParticipantView,
@@ -24,15 +27,21 @@ import { notify } from '../services/notifications.js';
 import { awardBadges } from '../services/stats.js';
 import {
   disputeCopy,
-  entryRejectedCopy,
+  disputeProofCopy,
   getUserRow,
   levelOf,
   requireAcceptedMembership,
   requireChallengeRow,
   requireMembership,
 } from '../services/challengeViews.js';
-import { getEntryRow, recordDispute, validateAndUpsertEntry } from '../services/entries.js';
-import { assertNotBlocked } from '../services/friends.js';
+import {
+  answerDisputeWithProof,
+  getEntryRow,
+  recordDispute,
+  validateAndUpsertEntry,
+  withdrawDispute,
+} from '../services/entries.js';
+import { assertNotBlocked, isBlockedBetween } from '../services/friends.js';
 import { toDispute, toEntry } from '../serialize.js';
 
 interface IdParams {
@@ -50,8 +59,11 @@ export interface EntryResponse {
 export interface DisputeResponse {
   dispute: Dispute;
   entry: Entry;
-  /** True when this dispute reached the threshold and killed the entry. */
-  upheld: boolean;
+  /**
+   * Set once the open disputes are a majority: the entry is thrown out at this
+   * instant unless its owner adds a photo first (`resolveDisputes`).
+   */
+  answerBy: string | null;
   standings: ParticipantView[];
 }
 
@@ -150,32 +162,16 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       const notifyOwner = owner.deleted_at === null;
 
       const outcome = recordDispute(db, { challenge, entry, byUserId: me.id, reason: body.reason, now });
-      const iso = nowIso(now);
 
-      if (outcome.upheld) {
-        if (notifyOwner) {
-          const copy = entryRejectedCopy(levelOf(owner), challenge.title, entry.day_key);
-          notify(db, {
-            userId: owner.id,
-            type: 'entry_rejected',
-            title: copy.title,
-            body: copy.body,
-            data: { challengeId: challenge.id, entryId: entry.id, dayKey: entry.day_key },
-            createdAt: iso,
-          });
-        }
-        // `disputesWon` is derived from upheld disputes, so this recount is the bump
-        // (and hands out the lie_detector badge).
-        for (const disputerId of outcome.disputerIds) awardBadges(db, disputerId, now);
-      } else if (notifyOwner) {
-        const copy = disputeCopy(levelOf(owner), me.row.display_name, challenge.title, entry.day_key);
+      if (notifyOwner) {
+        const copy = disputeCopy(levelOf(owner), me.row.display_name, challenge.title, entry.day_key, outcome.reachedThreshold);
         notify(db, {
           userId: owner.id,
           type: 'dispute',
           title: copy.title,
           body: copy.body,
-          data: { challengeId: challenge.id, entryId: entry.id, disputeId: outcome.dispute.id },
-          createdAt: iso,
+          data: { challengeId: challenge.id, entryId: entry.id, disputeId: outcome.dispute.id, answerBy: outcome.answerBy },
+          createdAt: nowIso(now),
         });
       }
 
@@ -183,9 +179,85 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       return {
         dispute: toDispute(outcome.dispute),
         entry: toEntry(outcome.entry),
-        upheld: outcome.upheld,
+        answerBy: outcome.answerBy,
         standings: computeStandings(db, challenge, now),
       };
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // DELETE /challenges/:id/entries/:entryId/dispute
+  // -------------------------------------------------------------------------
+  app.delete(
+    '/challenges/:id/entries/:entryId/dispute',
+    { preHandler: app.authenticate },
+    async (request): Promise<{ dispute: Dispute; entry: Entry; standings: ParticipantView[] }> => {
+      const me = request.user;
+      const now = app.now();
+      const { id, entryId } = request.params as EntryParams;
+
+      const challenge = requireChallengeRow(db, id);
+      // somebody who has since left may still take back what they said
+      requireMembership(db, challenge, me.id);
+      if (challenge.status !== 'active') {
+        throw badRequest('challenge_not_active', 'Bu çelınc bitti, itiraz artık geri çekilemez.');
+      }
+
+      const entry = getEntryRow(db, entryId);
+      if (!entry || entry.challenge_id !== challenge.id) throw notFound('entry_not_found', 'Böyle bir giriş yok.');
+
+      const outcome = withdrawDispute(db, { entry, byUserId: me.id, now });
+      return {
+        dispute: toDispute(outcome.dispute),
+        entry: toEntry(outcome.entry),
+        standings: computeStandings(db, challenge, now),
+      };
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // POST /challenges/:id/entries/:entryId/proof
+  // -------------------------------------------------------------------------
+  app.post(
+    '/challenges/:id/entries/:entryId/proof',
+    { preHandler: app.authenticate },
+    async (request): Promise<EntryResponse> => {
+      const me = request.user;
+      const now = app.now();
+      const { id, entryId } = request.params as EntryParams;
+      const body = parseBody(EntryProofBodySchema, request.body);
+
+      const challenge = requireChallengeRow(db, id);
+      requireMembership(db, challenge, me.id);
+      // `active` covers the wait past the end too: a çelınc with an entry on the
+      // clock does not finish before its owner has had the promised hours
+      if (challenge.status !== 'active') {
+        throw badRequest('challenge_not_active', 'Bu çelınc bitti, artık kanıt eklenemez.');
+      }
+
+      const entry = getEntryRow(db, entryId);
+      if (!entry || entry.challenge_id !== challenge.id) throw notFound('entry_not_found', 'Böyle bir giriş yok.');
+
+      const outcome = answerDisputeWithProof(db, { entry, byUserId: me.id, proofUrl: body.proofUrl, now });
+
+      const iso = nowIso(now);
+      for (const disputerId of outcome.disputerIds) {
+        const disputer = getUserRow(db, disputerId);
+        if (!disputer || disputer.deleted_at !== null) continue;
+        // a block since the itiraz closes this door too
+        if (isBlockedBetween(db, me.id, disputerId)) continue;
+        const copy = disputeProofCopy(levelOf(disputer), me.row.display_name, challenge.title, entry.day_key);
+        notify(db, {
+          userId: disputer.id,
+          type: 'dispute',
+          title: copy.title,
+          body: copy.body,
+          data: { challengeId: challenge.id, entryId: entry.id, kind: 'proof' },
+          createdAt: iso,
+        });
+      }
+
+      return { entry: toEntry(outcome.entry), standings: computeStandings(db, challenge, now) };
     },
   );
 }

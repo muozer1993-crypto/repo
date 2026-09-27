@@ -1,9 +1,23 @@
 /**
- * Entry validation per metric type (SPEC 2.3), deletion and the dispute threshold.
+ * Entry validation per metric type (SPEC 2.3), deletion, the dispute threshold and
+ * the owner's answer to it (a photo, or the disputer taking it back).
  */
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_TIMEZONE, addDays, todayKey, type ChallengeDetail, type Entry, type ParticipantView, type Challenge } from '@koydum/shared';
+import {
+  DEFAULT_TIMEZONE,
+  LIMITS,
+  addDays,
+  todayKey,
+  type ChallengeDetail,
+  type Dispute,
+  type Entry,
+  type ParticipantView,
+  type Challenge,
+} from '@koydum/shared';
+import { runSchedulerOnce } from '../src/services/challenges.js';
+import { challengeFeed } from '../src/services/challengeViews.js';
+import { getEntryRow } from '../src/services/entries.js';
 import { computeUserStats } from '../src/services/stats.js';
 import { listByType } from '../src/services/notifications.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
@@ -575,7 +589,7 @@ describe('DELETE /challenges/:id/entries/:entryId', () => {
 // ---------------------------------------------------------------------------
 
 describe('POST /challenges/:id/entries/:entryId/dispute', () => {
-  it('rejects the entry as soon as the threshold is reached (head to head: one rival)', async () => {
+  it('head to head one itiraz puts the entry on the clock, and it keeps counting until then', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await liveChallenge(harness, 'adim_yarisi');
     const day = today(harness);
@@ -597,14 +611,22 @@ describe('POST /challenges/:id/entries/:entryId/dispute', () => {
       payload: { reason: 'telefonu köpeğe bağlamış' },
     });
     expect(disputed.statusCode).toBe(201);
-    const outcome = disputed.json<{ upheld: boolean; entry: Entry; standings: ParticipantView[] }>();
-    expect(outcome.upheld).toBe(true);
-    expect(outcome.entry.status).toBe('rejected');
-    expect(outcome.standings.find((p) => p.user.id === ali.me.id)?.score).toBe(0);
+    const outcome = disputed.json<{ answerBy: string | null; entry: Entry; dispute: Dispute; standings: ParticipantView[] }>();
+    // the one rival is the majority, but a tap is not a verdict: the owner gets the hours to answer
+    expect(outcome.entry.status).toBe('disputed');
+    expect(outcome.dispute.status).toBe('open');
+    expect(outcome.answerBy).toBe(iso(harness, LIMITS.DISPUTE_ANSWER_MS));
+    expect(outcome.standings.find((p) => p.user.id === ali.me.id)?.score).toBe(60000);
 
-    const inbox = listByType(harness.db, ali.me.id, 'entry_rejected');
-    expect(inbox).toHaveLength(1);
-    expect(computeUserStats(harness.db, veli.me.id, harness.now()).disputesWon).toBe(1);
+    expect(listByType(harness.db, ali.me.id, 'entry_rejected')).toHaveLength(0);
+    const [warning] = listByType(harness.db, ali.me.id, 'dispute');
+    expect(warning?.body).toContain('12 saat içinde fotoğraf ekle, yoksa bu giriş yanar');
+    expect(computeUserStats(harness.db, veli.me.id, harness.now()).disputesWon).toBe(0);
+
+    // everybody reads the reason and the deadline on the feed
+    const detail = (await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>();
+    expect(detail.disputes).toEqual([expect.objectContaining({ entryId, byUserId: veli.me.id, reason: 'telefonu köpeğe bağlamış', status: 'open' })]);
+    expect(detail.feed.find((item) => item.id === entryId)).toMatchObject({ status: 'disputed', answerBy: outcome.answerBy });
 
     const again = await authed(harness.app, veli.token)({
       method: 'POST',
@@ -612,10 +634,10 @@ describe('POST /challenges/:id/entries/:entryId/dispute', () => {
       payload: { reason: 'yine' },
     });
     expect(again.statusCode).toBe(409);
-    expect(errorCode(again)).toBe('already_rejected');
+    expect(errorCode(again)).toBe('already_disputed');
   });
 
-  it('needs a majority of the other players when there are four', async () => {
+  it('needs a majority of the other players when there are four, and the clock starts at the majority', async () => {
     harness = await makeApp({ now: NOW });
     const ali = await registerUser(harness.app, 'ali');
     const veli = await registerUser(harness.app, 'veli');
@@ -653,12 +675,13 @@ describe('POST /challenges/:id/entries/:entryId/dispute', () => {
       payload: { reason: 'olmaz böyle bir şey' },
     });
     expect(first.statusCode).toBe(201);
-    const afterFirst = first.json<{ upheld: boolean; entry: Entry; standings: ParticipantView[] }>();
-    expect(afterFirst.upheld).toBe(false);
+    const afterFirst = first.json<{ answerBy: string | null; entry: Entry; standings: ParticipantView[] }>();
+    expect(afterFirst.answerBy).toBeNull();
     expect(afterFirst.entry.status).toBe('disputed');
     // A pending dispute must not zero the rival out yet (SPEC 1.3).
     expect(afterFirst.standings.find((p) => p.user.id === ali.me.id)?.score).toBe(55000);
     expect(listByType(harness.db, ali.me.id, 'dispute')).toHaveLength(1);
+    expect(listByType(harness.db, ali.me.id, 'dispute')[0]?.body).not.toContain('12 saat');
 
     const duplicate = await authed(harness.app, veli.token)({
       method: 'POST',
@@ -668,21 +691,43 @@ describe('POST /challenges/:id/entries/:entryId/dispute', () => {
     expect(duplicate.statusCode).toBe(409);
     expect(errorCode(duplicate)).toBe('already_disputed');
 
+    harness.advance(3 * 60 * 60 * 1000);
     const second = await authed(harness.app, ayse.token)({
       method: 'POST',
       url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
       payload: { reason: 'ben de görmedim' },
     });
     expect(second.statusCode).toBe(201);
-    const afterSecond = second.json<{ upheld: boolean; entry: Entry; standings: ParticipantView[] }>();
-    expect(afterSecond.upheld).toBe(true);
-    expect(afterSecond.entry.status).toBe('rejected');
-    expect(afterSecond.standings.find((p) => p.user.id === ali.me.id)?.score).toBe(0);
+    const afterSecond = second.json<{ answerBy: string | null; entry: Entry; standings: ParticipantView[] }>();
+    // the full window runs from the second itiraz, not from the first one three hours ago
+    expect(afterSecond.answerBy).toBe(iso(harness, LIMITS.DISPUTE_ANSWER_MS));
+    expect(afterSecond.entry.status).toBe('disputed');
+    expect(afterSecond.standings.find((p) => p.user.id === ali.me.id)?.score).toBe(55000);
 
-    // Both disputers now have a win on record.
-    expect(computeUserStats(harness.db, veli.me.id, harness.now()).disputesWon).toBe(1);
-    expect(computeUserStats(harness.db, ayse.me.id, harness.now()).disputesWon).toBe(1);
-    expect(listByType(harness.db, ali.me.id, 'entry_rejected')).toHaveLength(1);
+    const warnings = listByType(harness.db, ali.me.id, 'dispute');
+    expect(warnings).toHaveLength(2);
+    expect(warnings.some((row) => row.body.includes('12 saat içinde'))).toBe(true);
+    expect(computeUserStats(harness.db, veli.me.id, harness.now()).disputesWon).toBe(0);
+    expect(listByType(harness.db, ali.me.id, 'entry_rejected')).toHaveLength(0);
+  });
+
+  it('keeps a disputed entry in the feed however many came after it', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await liveChallenge(harness, 'su_bardak');
+    const older = await post(harness, ali, challengeId, { dayKey: today(harness), value: 3, source: 'manual', clientTime: iso(harness) });
+    const olderId = older.json<{ entry: Entry }>().entry.id;
+    harness.advance(60_000);
+    await post(harness, veli, challengeId, { dayKey: today(harness), value: 2, source: 'manual', clientTime: iso(harness) });
+    await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${olderId}/dispute`,
+      payload: { reason: 'üç bardak mı, hadi oradan' },
+    });
+
+    // a feed of one still carries the row that has to be answered
+    const feed = challengeFeed(harness.db, challengeId, 1);
+    expect(feed.map((item) => item.id)).toContain(olderId);
+    expect(feed).toHaveLength(2);
   });
 
   it('needs an existing entry, a reason and membership', async () => {
@@ -718,5 +763,167 @@ describe('POST /challenges/:id/entries/:entryId/dispute', () => {
       payload: { reason: 'ben de varım' },
     });
     expect(denied.statusCode).toBe(404);
+  });
+});
+
+describe('DELETE /challenges/:id/entries/:entryId/dispute', () => {
+  it('lets the disputer take it back: dismissed, and the entry is clean again', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await liveChallenge(harness, 'adim_yarisi');
+    const created = await post(harness, ali, challengeId, { dayKey: today(harness), value: 20000, source: 'manual', clientTime: iso(harness) });
+    const entryId = created.json<{ entry: Entry }>().entry.id;
+    const url = `/challenges/${challengeId}/entries/${entryId}/dispute`;
+
+    await authed(harness.app, veli.token)({ method: 'POST', url, payload: { reason: 'yok artık' } });
+
+    // only an itiraz of your own can be taken back
+    const notMine = await authed(harness.app, ali.token)({ method: 'DELETE', url });
+    expect(notMine.statusCode).toBe(404);
+    expect(errorCode(notMine)).toBe('dispute_not_found');
+
+    const withdrawn = await authed(harness.app, veli.token)({ method: 'DELETE', url });
+    expect(withdrawn.statusCode).toBe(200);
+    const body = withdrawn.json<{ dispute: Dispute; entry: Entry }>();
+    expect(body.dispute.status).toBe('dismissed');
+    expect(body.entry.status).toBe('ok');
+
+    const detail = (await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>();
+    expect(detail.feed.find((item) => item.id === entryId)).toMatchObject({ status: 'ok', answerBy: null });
+
+    // nothing is waiting any more: twelve hours later the entry still stands
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS);
+    expect(runSchedulerOnce(harness.db, harness.now()).disputes).toBe(0);
+    expect(getEntryRow(harness.db, entryId)?.status).toBe('ok');
+
+    // taken back is final
+    const twice = await authed(harness.app, veli.token)({ method: 'DELETE', url });
+    expect(twice.statusCode).toBe(404);
+    const refile = await authed(harness.app, veli.token)({ method: 'POST', url, payload: { reason: 'yine de' } });
+    expect(refile.statusCode).toBe(409);
+    expect(errorCode(refile)).toBe('already_disputed');
+  });
+
+  it('keeps the entry disputed while somebody else still disputes it', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+    const veli = await registerUser(harness.app, 'veli');
+    const ayse = await registerUser(harness.app, 'ayse');
+    for (const friend of [veli, ayse]) befriend(harness.app, ali.me.id, friend.me.id);
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'su_bardak', startsAt: iso(harness), endsAt: iso(harness, 3 * DAY_MS), participantIds: [veli.me.id, ayse.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    for (const friend of [veli, ayse]) {
+      await authed(harness.app, friend.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    }
+    const entry = await post(harness, ali, challengeId, { dayKey: today(harness), value: 8, source: 'manual', clientTime: iso(harness) });
+    const url = `/challenges/${challengeId}/entries/${entry.json<{ entry: Entry }>().entry.id}/dispute`;
+
+    await authed(harness.app, veli.token)({ method: 'POST', url, payload: { reason: 'sekiz bardak mı' } });
+    await authed(harness.app, ayse.token)({ method: 'POST', url, payload: { reason: 'bence de fazla' } });
+    const withdrawn = await authed(harness.app, veli.token)({ method: 'DELETE', url });
+    expect(withdrawn.json<{ entry: Entry }>().entry.status).toBe('disputed');
+  });
+});
+
+describe('POST /challenges/:id/entries/:entryId/proof', () => {
+  it('lets the owner answer with a photo: the itiraz closes and the disputers are told to look', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli');
+    const ayse = await registerUser(harness.app, 'ayse', { vulgarityMax: 1 });
+    const mert = await registerUser(harness.app, 'mert');
+    for (const friend of [veli, ayse, mert]) befriend(harness.app, ali.me.id, friend.me.id);
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: {
+        typeKey: 'adim_yarisi',
+        startsAt: iso(harness),
+        endsAt: iso(harness, 3 * DAY_MS),
+        participantIds: [veli.me.id, ayse.me.id, mert.me.id],
+      },
+    });
+    const challengeId = created.json<Challenge>().id;
+    for (const friend of [veli, ayse, mert]) {
+      await authed(harness.app, friend.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    }
+    const entry = await post(harness, ali, challengeId, { dayKey: today(harness), value: 30000, source: 'manual', clientTime: iso(harness) });
+    const entryId = entry.json<{ entry: Entry }>().entry.id;
+    const disputeUrl = `/challenges/${challengeId}/entries/${entryId}/dispute`;
+    const proofUrl = `/challenges/${challengeId}/entries/${entryId}/proof`;
+
+    // an entry nobody disputes needs no answer
+    const early = await authed(harness.app, ali.token)({ method: 'POST', url: proofUrl, payload: { proofUrl: '/uploads/adim.jpg' } });
+    expect(early.statusCode).toBe(409);
+    expect(errorCode(early)).toBe('not_disputed');
+
+    await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'otuz bin mi' } });
+    await authed(harness.app, ayse.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'bütün gün oturdu' } });
+
+    // only the owner answers
+    const stranger = await authed(harness.app, mert.token)({ method: 'POST', url: proofUrl, payload: { proofUrl: '/uploads/sahte.jpg' } });
+    expect(stranger.statusCode).toBe(403);
+    expect(errorCode(stranger)).toBe('not_your_entry');
+
+    const bad = await authed(harness.app, ali.token)({ method: 'POST', url: proofUrl, payload: { proofUrl: 'javascript:alert(1)' } });
+    expect(bad.statusCode).toBe(400);
+
+    const answered = await authed(harness.app, ali.token)({ method: 'POST', url: proofUrl, payload: { proofUrl: '/uploads/adim.jpg' } });
+    expect(answered.statusCode).toBe(200);
+    const body = answered.json<{ entry: Entry; standings: ParticipantView[] }>();
+    expect(body.entry).toMatchObject({ status: 'ok', proofUrl: '/uploads/adim.jpg' });
+    expect(body.standings.find((p) => p.user.id === ali.me.id)?.score).toBe(30000);
+
+    const statuses = harness.db.prepare('SELECT status FROM disputes WHERE entry_id = ?').all(entryId) as { status: string }[];
+    expect(statuses.map((row) => row.status)).toEqual(['dismissed', 'dismissed']);
+
+    for (const disputer of [veli, ayse]) {
+      const told = listByType(harness.db, disputer.me.id, 'dispute');
+      expect(told, disputer.me.username).toHaveLength(1);
+      expect(JSON.parse(told[0]!.data)).toEqual({ challengeId, entryId, kind: 'proof' });
+    }
+    expect(listByType(harness.db, veli.me.id, 'dispute')[0]?.body).toContain('Ali kanıt ekledi, bir bak.');
+    expect(listByType(harness.db, ayse.me.id, 'dispute')[0]?.body).toContain('fotoğraf ekledi');
+    expect(listByType(harness.db, mert.me.id, 'dispute')).toHaveLength(0);
+
+    // the same itiraz is not filed twice; the clock never runs out on it
+    const again = await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'foto da sahte' } });
+    expect(again.statusCode).toBe(409);
+    expect(errorCode(again)).toBe('already_disputed');
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS);
+    expect(runSchedulerOnce(harness.db, harness.now()).disputes).toBe(0);
+    expect(getEntryRow(harness.db, entryId)?.status).toBe('ok');
+    expect(listByType(harness.db, ali.me.id, 'entry_rejected')).toHaveLength(0);
+  });
+
+  it('is closed once the çelınc is over', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await liveChallenge(harness, 'su_bardak', {}, 1);
+    const entry = await post(harness, ali, challengeId, { dayKey: today(harness), value: 4, source: 'manual', clientTime: iso(harness) });
+    const entryId = entry.json<{ entry: Entry }>().entry.id;
+    await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'dört bardak mı' },
+    });
+
+    harness.advance(DAY_MS + LIMITS.DISPUTE_ANSWER_MS);
+    runSchedulerOnce(harness.db, harness.now());
+    const late = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/proof`,
+      payload: { proofUrl: '/uploads/bardak.jpg' },
+    });
+    expect(late.statusCode).toBe(400);
+    expect(errorCode(late)).toBe('challenge_not_active');
+    const withdraw = await authed(harness.app, veli.token)({
+      method: 'DELETE',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+    });
+    expect(withdraw.statusCode).toBe(400);
+    expect(errorCode(withdraw)).toBe('challenge_not_active');
   });
 });

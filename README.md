@@ -511,9 +511,14 @@ sunucuyu açana gider ([Yönetim komutları](#yönetim-komutları)).
 * **Az olan kazanır** — ekran süresi gibi; günlük ortalama yarışır, girmediğin gün en kötü değerden (1440 dk) sayılır.
 * **Günlük evet/hayır** — sigara içmedim, şeker yemedim. Gün sayısı yarışır.
 
-Şüpheli girişlere arkadaşlar **itiraz** edebilir; diğer oyuncuların çoğunluğu itiraz ederse o giriş
-düşer. İtiraz sadece çelınc sürerken açılır. Fotoğraf kanıtı, bir sayı yazılan türlerde çelıncı açan
-kişi isterse zorunlu olur; evet/hayır günleri ve check-in'lerde fotoğraf yok.
+Şüpheli girişlere arkadaşlar **itiraz** edebilir; itirazın sebebi akışta o girişin altında herkese
+görünür. İtiraz tek başına girişi silmez: diğer oyuncuların çoğunluğu itiraz edince girişin sahibinin
+**12 saati** olur. O sürede "Kanıt ekle" deyip fotoğraf koyarsa itiraz kapanır, giriş sayılmaya devam
+eder ve itiraz edenlere haber gider; koymazsa giriş düşer. 12 saat dolana kadar giriş sayılır, yani teke
+tek çelıncta rakip tek dokunuşla senin gününü silemez. İtiraz eden fikrini değiştirirse "Geri çek" ile
+itirazını kaldırır (aynı girişe bir daha itiraz edemez). Bitişe yakın gelen bir itiraz yüzünden sonuç
+en fazla 12 saat bekleyebilir. İtiraz sadece çelınc sürerken açılır. Fotoğraf kanıtı, bir sayı yazılan
+türlerde çelıncı açan kişi isterse zorunlu olur; evet/hayır günleri ve check-in'lerde fotoğraf yok.
 
 ---
 
