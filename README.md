@@ -309,6 +309,13 @@ Dosya `apps/server/data/app/koydum.apk` olarak durur, sunucu yeniden başlatmada
 adresinden sunar. APK'yı başka yerde tutuyorsan (expo.dev derleme sayfası gibi) sunucuya
 `APP_DOWNLOAD_URL` ve `APP_LATEST_VERSION` ortam değişkenlerini ver, sayfa oraya yönlendirir.
 
+APK'nın boyu burada önemli: arkadaşların onu çoğu zaman mobil veriyle, senin evdeki internetinin
+yükleme hızından indiriyor ve indirme sürerken sunucu herkese ağırlaşıyor. Bu yüzden `app.json`
+derlemeye sadece telefonların kullandığı ARM kodunu koyuyor (bilgisayar emülatörlerinin x86 kodunu
+koymuyor) ve yerel kütüphaneleri sıkıştırıyor. APK 113 MB'tan 42 MB civarına indi; küçülmüş hali
+bir sonraki `eas build` ile gelir. Bilgisayardaki Android emülatöründe denemek istersen Android 11
+ya da üstü bir sistem imajı seç, eskileri ARM kodunu çalıştıramadığı için APK'yı kurmaz.
+
 Yayınladığın sürüm telefondakinden yeniyse uygulamanın ana ekranında **"Yeni sürüm var"** kartı
 çıkar ve İndir'e basınca APK iner. Böylece kimse hangi APK'da olduğunu tahmin etmek zorunda kalmaz.
 APK'yla kuranlar yenisini üstüne kurar, hesapları kalır. Play dahili testinden kuranlara APK üstüne
