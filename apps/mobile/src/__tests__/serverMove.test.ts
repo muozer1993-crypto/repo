@@ -116,6 +116,17 @@ describe('moveSession', () => {
     expect(await moveSession(NEW)).toBe('unreachable');
     expect(useAuth.getState().serverUrl).toBe(OLD);
   });
+
+  it('reports a Wi-Fi login page answering in the server’s place, without throwing or sending the token', async () => {
+    const spy = jest.fn(
+      async () => new Response('<html>Misafir Wi-Fi girişi</html>', { status: 200, headers: { 'Content-Type': 'text/html' } })
+    );
+    (global as unknown as { fetch: unknown }).fetch = spy;
+
+    await expect(moveSession(NEW)).resolves.toBe('unreachable');
+    expect(authHeaders(spy)).toEqual([undefined]);
+    expect(useAuth.getState().serverUrl).toBe(OLD);
+  });
 });
 
 describe('isOtherServer', () => {

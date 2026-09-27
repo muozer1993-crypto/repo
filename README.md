@@ -445,7 +445,8 @@ satır düşer, `npm run yonet -- sikayetler` de hepsini listeler. Gerisi sana k
 gerekirse engellemesini söylersin.
 
 Docker'da çalıştırıyorsan komutun başına `docker compose exec koydum` ekle:
-`docker compose exec koydum npm run yonet -- sifre ali`.
+`docker compose exec koydum npm run yonet -- sifre ali`. VPS'te sunucuyu `DATA_DIR` ile
+açtıysan komuta da aynısını ver: `DATA_DIR=/var/lib/koydum npm run yonet -- sifre ali`.
 
 ---
 

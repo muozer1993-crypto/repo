@@ -54,6 +54,9 @@ export async function moveSession(rawUrl: string): Promise<MoveOutcome> {
   } catch {
     return 'unreachable';
   }
+  // A hotel Wi-Fi login page (or any site) answers 200 with HTML, which the
+  // client hands back as null: that is not a KOYDUM server answering.
+  if (!health || typeof health !== 'object') return 'unreachable';
   if (isOtherServer(serverId, health.serverId)) return 'different';
 
   let who: Me;
@@ -65,6 +68,7 @@ export async function moveSession(rawUrl: string): Promise<MoveOutcome> {
     if (error instanceof ApiError && (error.isNetwork || error.status >= 500)) return 'unreachable';
     return 'different';
   }
+  if (!who || typeof who !== 'object') return 'unreachable';
   if (who.id !== me.id) return 'different';
 
   const auth = useAuth.getState();

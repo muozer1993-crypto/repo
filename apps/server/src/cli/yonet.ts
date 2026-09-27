@@ -105,7 +105,7 @@ async function printPassword(db: Database, username: string | undefined): Promis
   }
   const reset = await resetPassword(db, username);
   console.log(`${reset.displayName} (@${reset.username}) için yeni şifre:  ${reset.password}`);
-  console.log('\nBunu ona yaz, bu şifreyle girsin.');
+  console.log('\nBunu ona yaz, bu şifreyle girsin. Sonra Ayarlar → Hesap → "Şifreni değiştir"den kendi şifresini koysun.');
   return 0;
 }
 
