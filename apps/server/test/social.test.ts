@@ -679,6 +679,43 @@ describe('friends', () => {
     ).toHaveLength(1);
   });
 
+  it('never ends a friendship through "Geri çek", even one accepted while the confirm was open', async () => {
+    const h = await boot();
+    const asker = await registerUser(h.app, 'mustafa');
+    const target = await registerUser(h.app, 'mehmet');
+    const stranger = await registerUser(h.app, 'kemal');
+    const call = authed(h.app, asker.token);
+    const friendIds = async () =>
+      (await call({ method: 'GET', url: '/friends' })).json<FriendsView>().friends.map((u) => u.id);
+
+    // an unanswered request still goes
+    await call({ method: 'POST', url: '/friends/request', payload: { username: 'mehmet' } });
+    const withdrawn = await call({ method: 'DELETE', url: `/friends/${target.me.id}?only=request` });
+    expect(withdrawn.statusCode).toBe(200);
+    expect(withdrawn.json()).toEqual({ status: 'withdrawn', userId: target.me.id });
+
+    // asked again, and Mehmet says yes before the tap on "Geri çek" lands
+    const sent = await call({ method: 'POST', url: '/friends/request', payload: { username: 'mehmet' } });
+    const friendshipId = sent.json<{ friendshipId: string }>().friendshipId;
+    await authed(h.app, target.token)({ method: 'POST', url: `/friends/${friendshipId}/accept` });
+    const late = await call({ method: 'DELETE', url: `/friends/${target.me.id}?only=request` });
+    expect(late.statusCode).toBe(409);
+    expect(late.json<{ error: { code: string } }>().error.code).toBe('already_friends');
+    expect(await friendIds()).toEqual([target.me.id]);
+
+    // nothing to take back from somebody never asked
+    const none = await call({ method: 'DELETE', url: `/friends/${stranger.me.id}?only=request` });
+    expect(none.statusCode).toBe(404);
+    expect(none.json<{ error: { code: string } }>().error.code).toBe('friendship_not_found');
+
+    // "Arkadaşlıktan çıkar" is the plain DELETE, and it still ends it
+    expect((await call({ method: 'DELETE', url: `/friends/${target.me.id}` })).json()).toEqual({
+      status: 'removed',
+      userId: target.me.id,
+    });
+    expect(await friendIds()).toEqual([]);
+  });
+
   it('covers every friend-request error code', async () => {
     const h = await boot();
     const asker = await registerUser(h.app, 'mustafa');

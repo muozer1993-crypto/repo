@@ -297,7 +297,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | GET /friends | `FriendsView` |
 | POST /friends/request | by username or inviteCode; if the target already requested you → auto accept. 404 `user_not_found`, 409 `already_friends` |
 | POST /friends/:friendshipId/accept, /decline | addressee only |
-| DELETE /friends/:userId | remove an accepted friendship (`{ status: 'removed', userId }`), or withdraw my own unanswered request (`{ status: 'withdrawn', userId }`): the row goes, and so does the addressee's unread `friend_request` notification for it (a read one stays as history). A request sent to me → 404 `friendship_not_found`; that one is answered with /decline |
+| DELETE /friends/:userId | remove an accepted friendship (`{ status: 'removed', userId }`), or withdraw my own unanswered request (`{ status: 'withdrawn', userId }`): the row goes, and so does the addressee's unread `friend_request` notification for it (a read one stays as history). A request sent to me → 404 `friendship_not_found`; that one is answered with /decline. `?only=request` (the app's "Geri çek") only ever withdraws: a friendship accepted while the confirm was open → 409 `already_friends` and stays, nothing of mine pending → 404 `friendship_not_found` |
 | GET /catalog | shared catalog dump |
 | GET /challenges?status=active,pending,finished | mine (accepted or invited), `ChallengeSummary[]`, ordered: active by endsAt asc, pending by startsAt, finished by finalizedAt desc |
 | POST /challenges | 201. Returns the bare `Challenge` — the wizard navigates straight to `/challenge/<id>`. Creator auto `accepted`; others `invited` + `challenge_invite` notification. If startsAt <= now → status `active` immediately |
@@ -488,7 +488,7 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             Aktif (cards: emoji, title, countdown, mini standings, my rank; losing → red "yiyorsun" chip),
                             Bekleyen, Biten (last 5); FAB "Çelınc Aç"
 (app)/(tabs)/friends.tsx    list friends (tap → user/[id]), incoming/outgoing requests (an outgoing one has "Geri çek":
-                            confirm → DELETE /friends/:userId), search by username, my invite code (copy/share)
+                            confirm → DELETE /friends/:userId?only=request), search by username, my invite code (copy/share)
 (app)/(tabs)/inbox.tsx      inbox list grouped by day; taunt items rendered as TauntBubble (big, red, shame); tap → challenge or friends; "Hepsini okundu yap"
 (app)/(tabs)/profile.tsx    me: avatar emoji picker, stats grid (Koydum / Yedin / Berabere / Kankalar), badges, leaderboard preview, settings link, logout
 (app)/challenge/new.tsx     4-step wizard: 1) tip seç (grouped by category, each shows emoji + name + desc at my level)
@@ -523,7 +523,8 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             "X bunu kaldıramaz" note), custom text field (banned-word check client side), preview, "GÖNDER" → success animation
 (app)/challenge/[id]/entry.tsx     modal: log manual value (numeric pad, quick +1/+5 chips per unit), note, proof photo (camera/gallery → /uploads), day selector (today/yesterday)
 (app)/focus/[id].tsx        full-screen timer (pick 15/25/45/60 min), big countdown, "elini telefondan çek" copy, leaving app → abandoned state with copy focus_abandoned; completion posts entry;
-                            while the timer runs, Android back (and any other pop: usePreventRemove) opens the same "Seansı bitirelim mi?" sheet as "Vazgeç" instead of leaving
+                            while the timer runs, Android back (and any other pop: usePreventRemove) opens the same "Seansı bitirelim mi?" sheet as "Vazgeç" instead of leaving;
+                            a failed refetch keeps the last detail and the timer (the "Seans açılmadı" screen is only for a çelınc never loaded)
 (app)/user/[id].tsx         public profile + head-to-head record vs me + "Çelınc aç" shortcut; not friends yet →
                             "Kanka isteği gönder", "Kanka isteğini kabul et" for an incoming one, "İsteği geri çek"
                             (confirm) for my own; "Diğer seçenekler": copy username, remove friend, report, block

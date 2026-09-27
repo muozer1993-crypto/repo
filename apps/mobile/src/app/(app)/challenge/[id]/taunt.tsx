@@ -463,7 +463,7 @@ export default function TauntPickerScreen() {
         {allMode ? (
           <Text variant="tiny" faint style={styles.gap}>
             {mixedContexts
-              ? `Herkese ayrı ayrı gider ve laf herkesin kendi hesabına göre seçilir. Aşağıdaki önizleme ${chosen?.user.displayName ?? 'ilk kişi'} için.`
+              ? `Herkese ayrı ayrı gider, laf da herkesin kendi durumuna göre seçilir. Aşağıdaki önizleme ${chosen?.user.displayName ?? 'ilk kişi'} için.`
               : `Aynı laf hepsine ayrı ayrı gider, skorlar herkesin kendi skoruyla yazılır. Önizleme ${chosen?.user.displayName ?? 'ilk kişi'} için.`}
           </Text>
         ) : null}

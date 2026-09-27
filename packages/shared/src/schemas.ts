@@ -198,6 +198,16 @@ export const FriendRequestBodySchema = z
   });
 export type FriendRequestBody = z.infer<typeof FriendRequestBodySchema>;
 
+/**
+ * `DELETE /friends/:userId?only=request`: the app's "Geri çek". It only ever takes
+ * back my own unanswered request; one accepted while the confirm was open stays a
+ * friendship instead of silently ending as a plain DELETE would end it.
+ */
+export const FriendDeleteQuerySchema = z.object({
+  only: z.literal('request').optional(),
+});
+export type FriendDeleteQuery = z.infer<typeof FriendDeleteQuerySchema>;
+
 // ---------------------------------------------------------------------------
 // Challenges
 // ---------------------------------------------------------------------------

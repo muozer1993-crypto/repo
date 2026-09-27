@@ -291,6 +291,16 @@ export class ApiClient {
     return this.request<{ status: 'removed' | 'withdrawn'; userId: string }>('DELETE', `/friends/${userId}`);
   }
 
+  /**
+   * "Geri çek": takes back my own unanswered request and nothing else. Accepted
+   * while the confirm was open, it stays a friendship (409 `already_friends`).
+   */
+  withdrawFriendRequest(userId: string) {
+    return this.request<{ status: 'withdrawn'; userId: string }>('DELETE', `/friends/${userId}`, {
+      query: { only: 'request' },
+    });
+  }
+
   /* ------------------------------------------------------------ catalog */
 
   catalog() {

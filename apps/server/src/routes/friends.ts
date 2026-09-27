@@ -10,13 +10,14 @@
  */
 import type { FastifyInstance } from 'fastify';
 import {
+  FriendDeleteQuerySchema,
   FriendRequestBodySchema,
   type FriendsView,
   type PublicUser,
   type VulgarityLevel,
 } from '@koydum/shared';
 import { newId, nowIso, type Database, type FriendshipRow, type UserRow } from '../db/index.js';
-import { badRequest, conflict, forbidden, notFound, parseBody } from '../errors.js';
+import { badRequest, conflict, forbidden, notFound, parseBody, parseQuery } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { asVulgarityLevel, toPublicUser } from '../serialize.js';
 import { friendRows, friendshipBetween, incomingRequests, outgoingRequests } from '../services/friends.js';
@@ -153,6 +154,7 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
 
   app.delete<{ Params: { userId: string } }>('/friends/:userId', auth, async (request) => {
     const me = requireUser(request);
+    const { only } = parseQuery(FriendDeleteQuerySchema, request.query ?? {});
     const existing = friendshipBetween(db, me.id, request.params.userId);
 
     // My own unanswered request: a request sent to the wrong "mehmet" used to sit
@@ -170,6 +172,13 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
         ).run(existing.addressee_id, existing.id);
       })();
       return { status: 'withdrawn' as const, userId: request.params.userId };
+    }
+
+    // "Geri çek" (`?only=request`) on a request that was accepted while the confirm
+    // was open: the plain path below would end the new friendship without a word.
+    if (only === 'request') {
+      if (existing?.status === 'accepted') throw conflict('already_friends', 'İsteğini kabul etmiş, artık kankasınız.');
+      throw notFound('friendship_not_found', 'Geri çekilecek bir istek yok.');
     }
 
     if (!existing || existing.status !== 'accepted') {

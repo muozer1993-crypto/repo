@@ -381,19 +381,24 @@ export function useFriendAction() {
     | { kind: 'request'; username?: string; inviteCode?: string }
     | { kind: 'accept' | 'decline'; friendshipId: string }
     | { kind: 'remove'; userId: string }
-    // my own unanswered request; the same DELETE, the server tells the two apart
+    // my own unanswered request, and only that: one accepted meanwhile stays a friendship
     | { kind: 'withdraw'; userId: string }
   >({
     mutationFn: (action) => {
       if (action.kind === 'request')
         return api.requestFriend({ username: action.username, inviteCode: action.inviteCode });
-      if (action.kind === 'remove' || action.kind === 'withdraw') return api.removeFriend(action.userId);
+      if (action.kind === 'remove') return api.removeFriend(action.userId);
+      if (action.kind === 'withdraw') return api.withdrawFriendRequest(action.userId);
       if (action.kind === 'accept') return api.acceptFriend(action.friendshipId);
       return api.declineFriend(action.friendshipId);
     },
     onSuccess: () => {
       void invalidate.friends();
       void invalidate.inbox();
+    },
+    onError: (_error, action) => {
+      // refused because it was accepted or declined meanwhile: the row on screen is stale
+      if (action.kind === 'withdraw') void invalidate.friends();
     },
   });
 }

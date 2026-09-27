@@ -1266,6 +1266,40 @@ describe('the Android back button', () => {
       await saveSession(null);
     });
   });
+
+  it('keeps the running timer, and its guard, when a refetch of the çelınc fails', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge: { ...detail.challenge, typeKey: 'odak_seansi', metricType: 'focus_minutes' as const, unit: 'dk' },
+    }));
+    const FocusScreen = require('@/app/(app)/focus/[id]').default;
+    const tree = renderScreen(<FocusScreen />);
+    await settle();
+    press(tree, 'Başlat');
+
+    // the 45 s refetch hits a dead tunnel (or airplane mode, for focus)
+    api.challenge = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    await act(async () => {
+      await clientOf(tree).refetchQueries({ queryKey: ['challenge', 'c-1'] });
+    });
+    await settle();
+
+    // it used to become "Seans açılmadı" with an unguarded back and a "Geri dön" that dropped the session
+    expect(rendered(tree)).toContain('Elini telefondan çek');
+    expect(rendered(tree)).not.toContain('Seans açılmadı');
+    expect(mockPreventRemove.prevent).toBe(true);
+    expect(pressBack()).toBe(true);
+    expect(rendered(tree)).toContain('Seansı bitirelim mi?');
+
+    const { saveSession } = require('@/services/focus') as typeof import('@/services/focus');
+    await act(async () => {
+      await saveSession(null);
+    });
+  });
 });
 
 describe('saying no to a çelınc', () => {
@@ -1431,7 +1465,8 @@ describe('taking a social mistake back', () => {
 
   it('a sent request has "Geri çek" instead of a BEKLİYOR chip, and it asks first', async () => {
     api.friends = jest.fn(async () => ({ friends: [], incoming: [], outgoing: [{ id: 'f-9', user: MEHMET }] }));
-    api.removeFriend = jest.fn(async () => ({ status: 'withdrawn', userId: MEHMET.id }));
+    api.withdrawFriendRequest = jest.fn(async () => ({ status: 'withdrawn', userId: MEHMET.id }));
+    api.removeFriend = jest.fn(async () => ({ status: 'removed', userId: MEHMET.id }));
     const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
     const tree = renderScreen(<FriendsScreen />);
     await settle();
@@ -1442,12 +1477,35 @@ describe('taking a social mistake back', () => {
     expect(alert.mock.calls[0]![0]).toBe('İsteği geri çek');
     expect(alert.mock.calls[0]![1]).toBe('Mehmet isteğini artık görmeyecek.');
     await answerAlert('Vazgeç');
-    expect(api.removeFriend).not.toHaveBeenCalled();
+    expect(api.withdrawFriendRequest).not.toHaveBeenCalled();
 
     press(tree, 'Geri çek');
     await settle();
     await answerAlert('Geri çek');
-    expect(api.removeFriend).toHaveBeenCalledWith('u-4');
+    expect(api.withdrawFriendRequest).toHaveBeenCalledWith('u-4');
+    // never the plain DELETE, which would end a friendship accepted meanwhile
+    expect(api.removeFriend).not.toHaveBeenCalled();
+  });
+
+  it('a "Geri çek" that lands after the request was accepted keeps the friendship', async () => {
+    api.friends = jest.fn(async () => ({ friends: [], incoming: [], outgoing: [{ id: 'f-9', user: MEHMET }] }));
+    api.withdrawFriendRequest = jest.fn(async () => {
+      throw new ApiError('already_friends', 'İsteğini kabul etmiş, artık kankasınız.', 409);
+    });
+    const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
+    const tree = renderScreen(<FriendsScreen />);
+    await settle();
+
+    // Mehmet says yes while the confirm is open
+    api.friends = jest.fn(async () => ({ friends: [MEHMET], incoming: [], outgoing: [] }));
+    press(tree, 'Geri çek');
+    await settle();
+    await answerAlert('Geri çek');
+
+    expect(rendered(tree)).toContain('İsteğini kabul etmiş, artık kankasınız.');
+    // the stale row goes: the list is read again and Mehmet is a kanka now
+    expect(api.friends).toHaveBeenCalled();
+    expect(rendered(tree)).not.toContain('Geri çek');
   });
 
   it('the profile of someone I asked offers "İsteği geri çek" instead of a dead button', async () => {
@@ -1458,7 +1516,7 @@ describe('taking a social mistake back', () => {
       badges: [],
     }));
     api.friends = jest.fn(async () => ({ friends: [], incoming: [], outgoing: [{ id: 'f-9', user: MEHMET }] }));
-    api.removeFriend = jest.fn(async () => ({ status: 'withdrawn', userId: MEHMET.id }));
+    api.withdrawFriendRequest = jest.fn(async () => ({ status: 'withdrawn', userId: MEHMET.id }));
     const UserScreen = require('@/app/(app)/user/[id]').default;
     const tree = renderScreen(<UserScreen />);
     await settle();
@@ -1467,6 +1525,6 @@ describe('taking a social mistake back', () => {
     press(tree, 'İsteği geri çek');
     await settle();
     await answerAlert('Geri çek');
-    expect(api.removeFriend).toHaveBeenCalledWith('u-4');
+    expect(api.withdrawFriendRequest).toHaveBeenCalledWith('u-4');
   });
 });

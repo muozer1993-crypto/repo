@@ -124,10 +124,9 @@ export default function FocusScreen() {
   // next loadSession turns that into 'abandoned': a 45-minute session gone
   // without a question. While the timer is on screen every way out opens the
   // same "Seansı bitirelim mi?" sheet instead. quit() makes the session
-  // 'abandoned', so leave() goes through afterwards. The gates below (a failed
-  // fetch, a non-focus çelınc) have no sheet to open, so they are not held.
-  const timerShown =
-    live && !!detail && type?.metricType === 'focus_minutes' && !query.isError;
+  // 'abandoned', so leave() goes through afterwards. The gates below (no
+  // çelınc loaded, a non-focus one) have no sheet to open, so they are not held.
+  const timerShown = live && !!detail && type?.metricType === 'focus_minutes';
   useFocusEffect(() => {
     if (!timerShown) return;
     // also covers a timer with no screen under it, where back would put the
@@ -246,13 +245,16 @@ export default function FocusScreen() {
     );
   }
 
-  if (query.isError || !detail || !type) {
+  // Only when nothing was ever loaded: the 45 s refetch failing mid-session
+  // (a tunnel blip, airplane mode for focus) used to swap the running timer for
+  // this screen, where back and "Geri dön" dropped the session without a word.
+  if (!detail || !type) {
     return (
       <Screen scroll contentStyle={styles.center}>
         <EmptyState
           emoji="🫥"
           title="Seans açılmadı"
-          subtitle={query.isError ? errorText(query.error, 'Çelınc bilgisi gelmedi.') : 'Çelınc tipi tanınmadı.'}
+          subtitle={!detail ? errorText(query.error, 'Çelınc bilgisi gelmedi.') : 'Çelınc tipi tanınmadı.'}
           actionLabel="Geri dön"
           onAction={leave}
         />
