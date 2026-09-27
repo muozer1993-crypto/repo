@@ -444,7 +444,9 @@ name `KOYDUM`, slug `koydum`, scheme `koydum`, `ios.bundleIdentifier` `com.koydu
 `userInterfaceStyle: 'dark'`, icons/splash generated in `assets/brand/` (dark background `#0B0B0F`, accent `#FF3D71`,
 secondary `#FFD400`). Plugins: expo-router, expo-splash-screen, expo-notifications (icon, color, defaultChannel `koydum`),
 expo-secure-store, expo-image-picker (camera + photos Turkish permission strings), expo-sensors (`motionPermission` Turkish),
-expo-background-task, expo-localization, expo-build-properties (android minSdkVersion 26, compile/target 36),
+expo-background-task, expo-localization, expo-build-properties (android minSdkVersion 26, compile/target 36,
+`buildArchs` armeabi-v7a + arm64-v8a only and `useLegacyPackaging` for compressed native libs: the APK friends download
+through the owner's tunnel drops from ~113 MB to ~42 MB; `__tests__/appConfig.test.ts` guards both),
 react-native-health-connect. iOS `infoPlist.NSMotionUsageDescription` Turkish; Android permissions include
 `ACTIVITY_RECOGNITION`, `android.permission.health.READ_STEPS`, `SCHEDULE_EXACT_ALARM` and
 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (Ayarlar → Arka plan; never `USE_EXACT_ALARM`, which is for alarm-clock apps). `extra.eas.projectId` placeholder documented in README

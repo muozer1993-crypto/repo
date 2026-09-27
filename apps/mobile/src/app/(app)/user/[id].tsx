@@ -63,7 +63,9 @@ export default function UserProfileScreen() {
 
   // Head-to-head: in every finished challenge we both played, whoever ranked
   // higher took that round. Works for 1v1 and for crowded çelınclar alike.
-  // Tapping the card lists exactly these, so both count the same rounds.
+  // Tapping the card opens the history on the çelınclar we both played: these
+  // rounds, plus the cancelled ones. Its chips count who won each çelınc, not
+  // who ranked higher of us two, so a crowded one can sit under a different chip.
   const head: HeadToHead = { mine: 0, theirs: 0, ties: 0, total: 0 };
   for (const summary of finished.data ?? []) {
     if (summary.challenge.status !== 'finished') continue;

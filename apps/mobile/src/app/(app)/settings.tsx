@@ -874,7 +874,7 @@ export default function SettingsScreen() {
           title="Geride kalınca dürt beni"
           detail={byLevel(
             level,
-            'Bir çelıncda geride kaldığında öğleden sonra bir kez haber veririz.',
+            'Bir çelıncta geride kaldığında öğleden sonra bir kez haber veririz.',
             'Biri sana fark atınca öğleden sonra bir kere dürteriz, çelınc başına günde bir tane.',
             'Biri sana fark koyunca öğleden sonra bir kere “o ne lan” deriz 🍆'
           )}
