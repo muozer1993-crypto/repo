@@ -167,17 +167,20 @@ export function NotificationBridge() {
 
     const poll = async () => {
       try {
-        const onScreen = AppState.currentState === 'active';
-        const shown = await deliverNewInbox(makeClient(), onScreen ? 'in-app' : 'system');
-        if (cancelled || !onScreen) return;
-        for (const item of shown) {
-          toast({
-            title: item.title,
-            body: item.body,
-            kind: item.type === 'taunt' ? 'taunt' : 'info',
-            onPress: () => router.push('/(app)/(tabs)/inbox'),
-          });
-        }
+        // decided after the fetch: the user may leave the app while it runs
+        const delivery = await deliverNewInbox(makeClient(), () =>
+          AppState.currentState === 'active' ? 'in-app' : 'system'
+        );
+        const [newest] = delivery.items;
+        if (cancelled || delivery.surface !== 'in-app' || !newest) return;
+        // one toast at a time: a second one would only replace the first
+        const more = delivery.items.length - 1;
+        toast({
+          title: newest.title,
+          body: more > 0 ? `${newest.body}\nGelen kutunda ${more} bildirim daha var.` : newest.body,
+          kind: newest.type === 'taunt' ? 'taunt' : 'info',
+          onPress: () => router.push('/(app)/(tabs)/inbox'),
+        });
       } catch {
         // offline: try again on the next tick
       }

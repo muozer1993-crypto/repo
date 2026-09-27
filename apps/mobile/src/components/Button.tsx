@@ -12,6 +12,7 @@ import {
 
 import { Text } from '@/components/Text';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
+import { upperTr } from '@/utils/turkish';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'yellow';
 type Size = 'sm' | 'md' | 'lg' | 'xl';
@@ -114,7 +115,7 @@ export function Button({
               letterSpacing: 0.6,
               textTransform: 'uppercase',
             }}>
-            {title}
+            {upperTr(title)}
           </Text>
         </View>
       )}

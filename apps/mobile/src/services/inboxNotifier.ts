@@ -1,4 +1,4 @@
-import type { Notification } from '@koydum/shared';
+import { LIMITS, type Notification } from '@koydum/shared';
 
 import type { ApiClient } from '@/lib/api';
 import { StorageKeys, getItem, getJson, setItem, setJson } from '@/lib/storage';
@@ -16,18 +16,38 @@ import { fireLocal, setBadgeCount } from '@/services/notifications';
  * itself. When the app is on screen the items come back to the caller to show
  * as an in-app toast instead.
  *
- * Delivered ids are remembered, so the poll, the background task and a second
- * run racing either of them never show the same item twice.
+ * A phone that registered a push token gets every row from the server's push
+ * (and its in-app toast from the received listener), so it only keeps the
+ * badge in step here: the server marks a row pushed up to one scheduler tick
+ * after writing it, and anything shown locally in that gap would ring twice.
+ *
+ * Only rows newer than the last one this install saw count, and delivered ids
+ * are remembered, so the poll, the background task and a second run racing
+ * either of them never show the same item twice.
  */
 export type Surface = 'system' | 'in-app';
 
-/** At most this many notifications per check; an inbox that piled up is summarised. */
+export interface Delivery {
+  /** where the items went — decided after the fetch, when it is still true */
+  surface: Surface;
+  /** newest first; for 'in-app' every fresh item, the caller decides how to show them */
+  items: Notification[];
+}
+
+/** At most this many phone notifications per check; a pile-up is summarised. */
 const MAX_PER_CHECK = 3;
-const DELIVERED_KEPT = 60;
+/** Covers one full inbox page, so a remembered id never falls off while it is still listed. */
+const DELIVERED_KEPT = LIMITS.INBOX_PAGE_MAX;
+/**
+ * Stored as the last seen id after a first check that found an empty inbox: the
+ * first check is done, so the very first row that ever arrives is news. Never a
+ * real id (ids are UUIDs).
+ */
+const EMPTY_INBOX = '-';
 
 let queue: Promise<unknown> = Promise.resolve();
 
-export function deliverNewInbox(client: ApiClient, surface: Surface): Promise<Notification[]> {
+export function deliverNewInbox(client: ApiClient, surface: Surface | (() => Surface)): Promise<Delivery> {
   // one check at a time in this JS context: two overlapping checks would read
   // the same "delivered" list and both show the item
   const run = queue.then(() => check(client, surface));
@@ -35,13 +55,25 @@ export function deliverNewInbox(client: ApiClient, surface: Surface): Promise<No
   return run;
 }
 
-async function check(client: ApiClient, surface: Surface): Promise<Notification[]> {
+async function check(client: ApiClient, surfaceOf: Surface | (() => Surface)): Promise<Delivery> {
   const unread = await client.unreadCount();
   await setBadgeCount(unread.count);
   const lastSeen = await getItem(StorageKeys.lastInboxId);
-  if (!unread.latestId || unread.latestId === lastSeen) return [];
+  const resolve = (): Surface => (typeof surfaceOf === 'function' ? surfaceOf() : surfaceOf);
+  const nothing = (): Delivery => ({ surface: resolve(), items: [] });
 
-  const items = await client.inbox({ limit: 10 });
+  if (!unread.latestId) {
+    if (lastSeen === null) await setItem(StorageKeys.lastInboxId, EMPTY_INBOX);
+    return nothing();
+  }
+  if (unread.latestId === lastSeen) return nothing();
+  // push delivers these; see the note at the top
+  if (await getItem(StorageKeys.pushToken)) {
+    await setItem(StorageKeys.lastInboxId, unread.latestId);
+    return nothing();
+  }
+
+  const items = await client.inbox({ limit: LIMITS.INBOX_PAGE_MAX });
   await setItem(StorageKeys.lastInboxId, unread.latestId);
 
   const stored = await getJson<string[]>(StorageKeys.deliveredInboxIds);
@@ -50,15 +82,19 @@ async function check(client: ApiClient, surface: Surface): Promise<Notification[
   // first check on this install: whatever is there is history, not news
   if (lastSeen === null) {
     await remember(delivered, items.map((item) => item.id));
-    return [];
+    return nothing();
   }
 
-  // newest first, as the server sends them; only what nobody showed yet
-  const fresh = items.filter((item) => !item.readAt && item.pushed !== true && !delivered.has(item.id));
-  if (fresh.length === 0) return [];
+  // newest first, as the server sends them: everything above the last row
+  // this install saw is new (all of the page when that row scrolled off it)
+  const seenAt = items.findIndex((item) => item.id === lastSeen);
+  const newer = seenAt >= 0 ? items.slice(0, seenAt) : items;
+  const fresh = newer.filter((item) => !item.readAt && item.pushed !== true && !delivered.has(item.id));
+  if (fresh.length === 0) return nothing();
   await remember(delivered, fresh.map((item) => item.id));
 
-  if (surface === 'in-app') return fresh.slice(0, MAX_PER_CHECK);
+  const surface = resolve();
+  if (surface === 'in-app') return { surface, items: fresh };
 
   const shown = fresh.slice(0, fresh.length > MAX_PER_CHECK ? MAX_PER_CHECK - 1 : MAX_PER_CHECK);
   // oldest of the batch first, so the newest ends up on top of the shade
@@ -69,7 +105,7 @@ async function check(client: ApiClient, surface: Surface): Promise<Notification[
   if (rest > 0) {
     await fireLocal('KOYDUM', `${rest} bildirim daha var, gelen kutuna bak.`, { type: 'inbox' });
   }
-  return shown;
+  return { surface, items: shown };
 }
 
 async function remember(delivered: Set<string>, ids: string[]): Promise<void> {

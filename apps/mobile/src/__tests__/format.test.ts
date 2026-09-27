@@ -8,6 +8,7 @@ import {
   relativeTime,
   withUnit,
 } from '@/utils/format';
+import { upperTr } from '@/utils/turkish';
 
 describe('Turkish formatting', () => {
   it('groups thousands the Turkish way', () => {
@@ -74,5 +75,13 @@ describe('Turkish formatting', () => {
 
   it('joins a value with its unit', () => {
     expect(withUnit(12430, 'adım')).toBe('12.430 adım');
+  });
+});
+
+describe('upperTr', () => {
+  it('capitalises the Turkish way on any engine', () => {
+    expect(upperTr('Yedin')).toBe('YEDİN');
+    expect(upperTr('Hepsini okundu yap')).toBe('HEPSİNİ OKUNDU YAP');
+    expect(upperTr('çelınc ığdır')).toBe('ÇELINC IĞDIR');
   });
 });

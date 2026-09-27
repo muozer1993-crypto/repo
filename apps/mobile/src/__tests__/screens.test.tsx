@@ -206,7 +206,8 @@ describe('empty lists', () => {
     await settle();
     const text = rendered(tree);
     expect(text).toContain('5 – 11 Ocak');
-    expect(text).toContain('Koydun');
+    expect(text).toContain('KOYDUN');
+    expect(text).toContain('YEDİN'); // Turkish capitals, not "YEDIN"
     expect(text).toContain('22.200');
     expect(text).toContain('Haftanın kralı sensin');
     expect(text).toContain('çelınc hâlâ sürüyor');
@@ -232,7 +233,7 @@ describe('API errors', () => {
     const HomeScreen = require('@/app/(app)/(tabs)/index').default;
     const tree = renderScreen(<HomeScreen />);
     await settle();
-    expect(rendered(tree)).toContain('Tekrar dene');
+    expect(rendered(tree)).toContain('TEKRAR DENE');
   });
 
   it('inbox renders the error state when the fetch fails', async () => {
@@ -252,7 +253,7 @@ describe('API errors', () => {
     const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
     const tree = renderScreen(<FriendsScreen />);
     await settle();
-    expect(rendered(tree)).toContain('Tekrar dene');
+    expect(rendered(tree)).toContain('TEKRAR DENE');
   });
 });
 

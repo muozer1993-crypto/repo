@@ -212,6 +212,64 @@ describe('weekly recap', () => {
     expect(dataOf(latest)).toMatchObject({ weekKey: '2026-01-18', wins: 0, losses: 1 });
   });
 
+  it('does not lose a çelınc between an on-time recap and a Monday make-up', async () => {
+    const { app, ali, veli } = await gang();
+    seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: ali.me.id, finalizedAt: '2026-01-09T10:00:00.000Z' });
+    sendWeeklyRecaps(app.db, app.now()); // Sunday 20:30
+
+    // Sunday 00:00 local — after the recap, before the next week starts
+    seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: veli.me.id, finalizedAt: '2026-01-11T21:00:30.000Z' });
+
+    // the server was off all next Sunday evening: Monday 09:00 makes it up
+    expect(sendWeeklyRecaps(app.db, new Date('2026-01-19T06:00:00.000Z'))).toBe(2);
+    const [latest] = recapsOf(ali.me.id);
+    expect(dataOf(latest)).toMatchObject({ weekKey: '2026-01-18', wins: 0, losses: 1 });
+  });
+
+  it('keeps the window whole across the night the clocks go back', async () => {
+    harness = await makeApp({ now: '2026-10-18T18:00:10.000Z' }); // Sunday 20:00 in Berlin (CEST)
+    const app = harness.app;
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali', timezone: 'Europe/Berlin' });
+    const veli = await registerUser(app, 'veli', { displayName: 'Veli', timezone: 'Europe/Berlin' });
+    befriend(app, ali.me.id, veli.me.id);
+    seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: ali.me.id, finalizedAt: '2026-10-16T10:00:00.000Z' });
+    sendWeeklyRecaps(app.db, app.now());
+
+    seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: veli.me.id, finalizedAt: '2026-10-18T18:30:00.000Z' });
+
+    // one week on, 20:00 CET is 19:00Z: 7 days and 59 minutes after the last one
+    expect(sendWeeklyRecaps(app.db, new Date('2026-10-25T19:00:10.000Z'))).toBe(2);
+    expect(dataOf(recapsOf(ali.me.id)[0])).toMatchObject({ weekKey: '2026-10-25', losses: 1 });
+  });
+
+  it('talks about "geçen hafta" when it arrives on Monday', async () => {
+    const { app, ali, veli } = await gang('2026-01-12T06:00:00.000Z'); // Monday 09:00
+    seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: veli.me.id, finalizedAt: '2026-01-09T10:00:00.000Z' });
+
+    sendWeeklyRecaps(app.db, app.now());
+
+    const [forAli] = recapsOf(ali.me.id);
+    expect(forAli.body).toContain('Geçen hafta 1 kere yedin, bir kere bile koyamadın.');
+    expect(forAli.body).toContain('Bu hafta rövanş.');
+    expect(forAli.body).not.toContain('Haftaya');
+  });
+
+  it('does not call somebody who walked all week lazy', async () => {
+    harness = await makeApp({ now: SUNDAY_EVENING });
+    const app = harness.app;
+    const walker = await registerUser(app, 'yuruyen', { vulgarityMax: 3 });
+    const sleeper = await registerUser(app, 'uyuyan', { vulgarityMax: 3 });
+    befriend(app, walker.me.id, sleeper.me.id);
+    setSteps(app, walker.me.id, '2026-01-07', 25_000);
+
+    sendWeeklyRecaps(app.db, app.now());
+
+    expect(recapsOf(walker.me.id)[0].body).toContain('ne koydun ne yedin, sadece yürüdün 🍆');
+    expect(recapsOf(walker.me.id)[0].body).not.toContain('yattın');
+    // the friend who did nothing hears who walked, and that they did not
+    expect(recapsOf(sleeper.me.id)[0].body).toContain('yattın 🍆');
+  });
+
   it('stays quiet for somebody with nothing to tell', async () => {
     harness = await makeApp({ now: SUNDAY_EVENING });
     const app = harness.app;

@@ -113,8 +113,12 @@ pazartesi sabahki laf atışmasını pazar akşamı başlatan kısım.
 * `recaps_sent (user_id, week_key)` hız sınırıdır; `week_key` haftayı bitiren yerel pazardır.
 * Sunucu bütün pazar akşamı kapalı kaldıysa özet pazartesi öğlene kadar yine gider, sonrasında
   gitmez — çarşamba gelen bir özet hiçbir şey anlatmaz.
-* Sonuç penceresi bir önceki özetten şimdiye kadardır (en fazla 7 gün). Pazar 23:59'da biten bir
+* Sonuç penceresi bir önceki özetin gönderildiği andan şimdiye kadardır. Pazar 23:59'da biten bir
   çelınc bu yüzden ya bu haftaya ya da bir sonrakine girer, ikisine birden ya da hiçbirine değil.
+  Önceki özet 7 günden biraz eskiyse de (pazartesi telafisi, saatlerin geri alındığı gece) pencere
+  oradan başlar; ancak 9 günden eskiyse, yani bir hafta tamamen atlanmışsa, son 7 güne bakılır.
+* Pazartesi sabahı giden telafi özeti yeni haftada okunur, o yüzden "bu hafta" yerine "geçen
+  hafta", "haftaya rövanş" yerine "bu hafta rövanş" der.
 * Kral önce galibiyete, eşitse haftalık adıma bakar; ikisi de birebir eşitse taht paylaşılır.
   En çok yürüyen ise sadece tek başına öndeyse söylenir.
 * Anlatacak bir şey yoksa (biten çelınc yok, adım yok, süren çelınc yok, kankalardan kimse bir şey

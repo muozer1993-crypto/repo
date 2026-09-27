@@ -260,6 +260,17 @@ async function submitForm(page) {
   await button.click();
 }
 
+const TR_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+
+/** "21 – 27 Eylül": the Monday–Sunday the recap card prints for a Sunday-evening recap. */
+function weekRangeOf(sunday) {
+  const monday = new Date(sunday.getTime() - 6 * 24 * 60 * 60_000);
+  const end = `${sunday.getUTCDate()} ${TR_MONTHS[sunday.getUTCMonth()]}`;
+  return monday.getUTCMonth() === sunday.getUTCMonth()
+    ? `${monday.getUTCDate()} – ${end}`
+    : `${monday.getUTCDate()} ${TR_MONTHS[monday.getUTCMonth()]} – ${end}`;
+}
+
 /** 20:30 in Istanbul (UTC+3 all year) on the coming Sunday — recap time for the story's players. */
 function nextSundayEvening(from) {
   const midnightUtc = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
@@ -484,9 +495,13 @@ async function main() {
     }).then((response) => response.json());
     if (!pass.recaps) fail(`the Sunday scheduler pass sent no recap: ${JSON.stringify(pass)}`);
     await seedSession(page, statics.url, { token: story.mustafa.api.token, me: story.mustafa.me });
+    // the page lives on Sunday evening too, so the card reads "az önce", not "8 saat sonra"
+    await page.clock.setFixedTime(recapAt);
     await page.goto(`${statics.url}/inbox`, { waitUntil: 'domcontentloaded' });
-    await expectText(page, ['HAFTANIN HESABI'], 'weekly recap card in the inbox');
-    await expectText(page, ['KOYDUN', 'Koydun'], 'weekly recap tiles');
+    // only the card draws the week range and the tile labels; the plain-text
+    // fallback row would show the title alone
+    await expectText(page, [weekRangeOf(recapAt)], 'weekly recap card in the inbox');
+    await expectText(page, ['YEDİN'], 'weekly recap tiles, in Turkish capitals');
     await page.screenshot({ path: join(SHOT_DIR, '09-weekly-recap.png'), fullPage: true });
 
     const realErrors = consoleErrors.filter(

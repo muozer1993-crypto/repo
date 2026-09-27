@@ -13,9 +13,12 @@
  *     up on Wednesday is about nothing;
  *   - once per person per week: `recaps_sent (user_id, week_key)` is the claim,
  *     `week_key` being the local Sunday that ends the week;
- *   - the results window runs from the previous recap to now (at most 7 days),
- *     so a çelınc finalised on Sunday at 23:59 is counted next week instead of
- *     never;
+ *   - the results window runs from the previous recap to now, so a çelınc
+ *     finalised on Sunday at 23:59 is counted next week instead of never — also
+ *     when one of the two recaps was a Monday make-up or a DST night sits in
+ *     between; only after a skipped week does it shrink to the last 7 days;
+ *   - a Monday make-up says "geçen hafta" and "bu hafta rövanş", because by
+ *     then it is read in the new week;
  *   - nobody gets an empty recap: no finished çelınc, no steps, nothing running
  *     and no friend who did anything means no row.
  */
@@ -39,7 +42,14 @@ export const RECAP_HOUR = 20;
 /** A missed Sunday evening is made up on Monday morning, not later. */
 export const RECAP_LATE_UNTIL_HOUR = 12;
 
-const WEEK_MS = 7 * 24 * 60 * 60_000;
+const DAY_MS = 24 * 60 * 60_000;
+const WEEK_MS = 7 * DAY_MS;
+/**
+ * How far back the previous recap still counts as "the last one": a week, plus
+ * a Monday make-up (16 h), plus a DST hour, plus slack. A recap further back
+ * than this means a week was skipped, and the window is just the last 7 days.
+ */
+const PREVIOUS_RECAP_REACH_MS = 9 * DAY_MS;
 
 const WEEKDAY_TR = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 
@@ -200,34 +210,50 @@ function recapTitle(level: VulgarityLevel): string {
   return '📊 Haftanın hesabı';
 }
 
+/**
+ * How the copy points at weeks. On Sunday evening the week being summed up is
+ * "bu hafta" and the next one "haftaya"; a recap that goes out on Monday
+ * morning is read in the NEW week, where the same words point one week off.
+ */
+interface WeekWords {
+  /** the week being summed up */
+  summed: string;
+  /** the week the reader can still do something about */
+  coming: string;
+}
+
+function weekWords(late: boolean): WeekWords {
+  return late ? { summed: 'Geçen hafta', coming: 'Bu hafta' } : { summed: 'Bu hafta', coming: 'Haftaya' };
+}
+
 /** "Bu hafta 2 kere koydun, 1 kere yedin." at the reader's level. */
-function recordLine(recap: WeeklyRecap, level: VulgarityLevel): string {
+function recordLine(recap: WeeklyRecap, level: VulgarityLevel, week: WeekWords): string {
   const { wins, losses, ties, active } = recap;
   const finished = wins + losses + ties;
   const running = active > 0 ? ` ${active} çelınc hâlâ sürüyor.` : '';
+  const when = week.summed;
 
   if (finished === 0) {
     if (active > 0) {
-      return level === 1
-        ? `Bu hafta biten çelınc olmadı.${running}`
-        : `Bu hafta daha bir şey bitmedi.${running}`;
+      return level === 1 ? `${when} biten çelınc olmadı.${running}` : `${when} bir şey bitmedi.${running}`;
     }
-    if (level === 1) return 'Bu hafta çelınc yoktu.';
-    if (level === 3) return 'Bu hafta ne koydun ne yedin, yattın 🍆';
-    return 'Bu hafta ne koydun ne yedin.';
+    if (level === 1) return `${when} çelınc yoktu.`;
+    // "yattın" next to the reader's own step count would be the bot contradicting itself
+    if (level === 3) return recap.steps > 0 ? `${when} ne koydun ne yedin, sadece yürüdün 🍆` : `${when} ne koydun ne yedin, yattın 🍆`;
+    return `${when} ne koydun ne yedin.`;
   }
 
   if (level === 1) {
     const parts = [`${wins} galibiyet`, `${losses} mağlubiyet`];
     if (ties > 0) parts.push(`${ties} berabere`);
-    return `Bu hafta ${finished} çelınc bitti: ${parts.join(', ')}.${running}`;
+    return `${when} ${finished} çelınc bitti: ${parts.join(', ')}.${running}`;
   }
 
   let line: string;
-  if (wins > 0 && losses === 0) line = `Bu hafta ${wins} kere koydun, bir kere bile yemedin`;
-  else if (wins === 0 && losses > 0) line = `Bu hafta ${losses} kere yedin, bir kere bile koyamadın`;
-  else if (wins > 0) line = `Bu hafta ${wins} kere koydun, ${losses} kere yedin`;
-  else line = `Bu hafta ${ties} çelınc berabere bitti`;
+  if (wins > 0 && losses === 0) line = `${when} ${wins} kere koydun, bir kere bile yemedin`;
+  else if (wins === 0 && losses > 0) line = `${when} ${losses} kere yedin, bir kere bile koyamadın`;
+  else if (wins > 0) line = `${when} ${wins} kere koydun, ${losses} kere yedin`;
+  else line = `${when} ${ties} çelınc berabere bitti`;
   if (ties > 0 && (wins > 0 || losses > 0)) line += `, ${ties} berabere`;
   return `${line}${level === 3 ? ' 🍆' : '.'}${running}`;
 }
@@ -240,7 +266,7 @@ function stepsLine(recap: WeeklyRecap, level: VulgarityLevel): string | null {
   return `${total} adım yürümüşsün${best ? `, en iyi günün ${best}` : ''}.`;
 }
 
-function kingLine(recap: WeeklyRecap, readerId: string, level: VulgarityLevel): string | null {
+function kingLine(recap: WeeklyRecap, readerId: string, level: VulgarityLevel, week: WeekWords): string | null {
   if (recap.kings.length === 0) return null;
   const wins = `${recap.kingWins} galibiyet`;
   const mine = recap.kings.some((king) => king.id === readerId);
@@ -254,7 +280,7 @@ function kingLine(recap: WeeklyRecap, readerId: string, level: VulgarityLevel): 
   if (mine) return `👑 Tahtı ${joinNames(others)} ile paylaşıyorsun (${wins}).`;
   if (others.length > 1) return `👑 Taht paylaşıldı: ${joinNames(others)} (${wins}).`;
   if (level === 1) return `👑 Haftanın kralı: ${others[0]} (${wins}).`;
-  if (level === 3) return `👑 Haftanın kralı ${others[0]}, ${recap.kingWins} kere koydu 🍆 Haftaya tahtı sen al.`;
+  if (level === 3) return `👑 Haftanın kralı ${others[0]}, ${recap.kingWins} kere koydu 🍆 ${week.coming} tahtı sen al.`;
   return `👑 Haftanın kralı ${others[0]}, ${recap.kingWins} kere koydu.`;
 }
 
@@ -267,23 +293,32 @@ function walkerLine(recap: WeeklyRecap, readerId: string, level: VulgarityLevel)
 }
 
 /** The last word, only when the week had a verdict and the reader likes a push. */
-function closerLine(recap: WeeklyRecap, level: VulgarityLevel): string | null {
+function closerLine(recap: WeeklyRecap, level: VulgarityLevel, week: WeekWords): string | null {
   if (level === 1) return null;
   if (recap.wins > recap.losses) return level === 3 ? 'Böyle devam, koymaya doyma 🍆' : 'Böyle devam.';
-  if (recap.losses > recap.wins) return level === 3 ? 'Haftaya rövanşını al, yoksa yine yersin 🍆' : 'Haftaya rövanş.';
+  if (recap.losses > recap.wins) {
+    return level === 3 ? `${week.coming} rövanşını al, yoksa yine yersin 🍆` : `${week.coming} rövanş.`;
+  }
   return null;
 }
 
-/** Title, body and the inbox card's data, all at the reader's level. */
+/**
+ * Title, body and the inbox card's data, all at the reader's level. `late`
+ * means the recap goes out on Monday morning, after the week it sums up.
+ */
 export function recapCopy(
   recap: WeeklyRecap,
   readerId: string,
   level: VulgarityLevel,
+  late = false,
 ): { title: string; body: string; data: RecapData } {
-  const record = recordLine(recap, level);
-  const highlights = [kingLine(recap, readerId, level), walkerLine(recap, readerId, level), closerLine(recap, level)].filter(
-    (line): line is string => line !== null,
-  );
+  const week = weekWords(late);
+  const record = recordLine(recap, level, week);
+  const highlights = [
+    kingLine(recap, readerId, level, week),
+    walkerLine(recap, readerId, level),
+    closerLine(recap, level, week),
+  ].filter((line): line is string => line !== null);
   const lines = [record, stepsLine(recap, level), ...highlights].filter((line): line is string => line !== null);
   return {
     title: recapTitle(level),
@@ -308,6 +343,7 @@ export function recapCopy(
 export function sendWeeklyRecaps(db: Database, now: Date = new Date()): number {
   const until = nowIso(now);
   const floor = new Date(now.getTime() - WEEK_MS).toISOString();
+  const reach = new Date(now.getTime() - PREVIOUS_RECAP_REACH_MS).toISOString();
   const users = db.prepare('SELECT * FROM users WHERE deleted_at IS NULL').all() as UserRow[];
 
   const alreadySent = db.prepare('SELECT 1 FROM recaps_sent WHERE user_id = ? AND week_key = ?');
@@ -325,15 +361,19 @@ export function sendWeeklyRecaps(db: Database, now: Date = new Date()): number {
     }
     if (!weekKey || alreadySent.get(user.id, weekKey)) continue;
 
+    // Normally the previous recap: its moment is where this window starts, even
+    // when it is a little over 7 days back (a Monday make-up, the hour lost to
+    // DST, a later scheduler tick). Only a skipped week falls back to 7 days.
     const last = (previous.get(user.id) as { at: string | null }).at;
-    const since = last && last > floor ? last : floor;
+    const since = last && last > reach ? last : floor;
+    const late = weekKey !== todayKey(timezone, now);
 
     // claim and write together: a failure half-way must not burn the week
     const delivered = db.transaction(() => {
       if (claim.run(user.id, weekKey, until).changes === 0) return false;
       const recap = buildWeeklyRecap(db, user, weekKey, since, until);
       if (isEmpty(recap)) return false;
-      const copy = recapCopy(recap, user.id, asVulgarityLevel(user.vulgarity_max));
+      const copy = recapCopy(recap, user.id, asVulgarityLevel(user.vulgarity_max), late);
       notify(db, {
         userId: user.id,
         type: 'recap',

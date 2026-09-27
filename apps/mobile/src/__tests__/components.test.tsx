@@ -45,7 +45,7 @@ describe('TauntBubble', () => {
     act(() => {
       tree = create(<TauntBubble title="Sonuç geldi!" body="Rövanş?" />);
     });
-    expect(textIn(tree!.toJSON()).join(' ')).toContain('Sonuç geldi!');
+    expect(textIn(tree!.toJSON()).join(' ')).toContain('SONUÇ GELDİ!');
   });
 });
 

@@ -5,7 +5,10 @@ import {
   type TextStyle,
 } from 'react-native';
 
+import type { ReactNode } from 'react';
+
 import { Colors, FontSize, FontWeight } from '@/theme';
+import { upperTr } from '@/utils/turkish';
 
 export type TextVariant =
   | 'giant'
@@ -45,6 +48,13 @@ function fittedLineHeight(style: TextProps['style']): TextStyle | null {
   return { lineHeight: Math.round(flat.fontSize * 1.25) };
 }
 
+/** Plain strings are capitalised here, the Turkish way; elements keep `textTransform`. */
+function capitalised(children: ReactNode): ReactNode {
+  if (typeof children === 'string') return upperTr(children);
+  if (Array.isArray(children)) return children.map((child) => capitalised(child as ReactNode));
+  return children;
+}
+
 export function Text({
   variant = 'body',
   color,
@@ -55,8 +65,10 @@ export function Text({
   center,
   upper,
   style,
+  children,
   ...rest
 }: TextProps) {
+  const caps = upper || variant === 'label';
   return (
     <RNText
       {...rest}
@@ -72,8 +84,9 @@ export function Text({
         upper && { textTransform: 'uppercase' },
         color ? { color } : null,
         style,
-      ]}
-    />
+      ]}>
+      {caps ? capitalised(children) : children}
+    </RNText>
   );
 }
 

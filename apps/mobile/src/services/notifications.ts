@@ -80,6 +80,9 @@ function projectId(): string | undefined {
   return extra?.eas?.projectId ?? Constants.easConfig?.projectId ?? undefined;
 }
 
+const MISSING_FIREBASE =
+  /Default FirebaseApp is not initialized|Unable to get Firebase Messaging instance|googleServicesFile|google-services\.json/i;
+
 export async function registerForPush(): Promise<PushRegistration> {
   if (Platform.OS === 'web') return { token: null, granted: false, reason: 'web' };
 
@@ -124,9 +127,13 @@ export async function registerForPush(): Promise<PushRegistration> {
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     // An Android build made without google-services.json cannot get an FCM
-    // token: "Default FirebaseApp is not initialized...". That is a setup step,
-    // not a fault, and notifications still arrive through the background check.
-    if (Platform.OS === 'android' && /firebase|fcm|google-services/i.test(detail)) {
+    // token: "Default FirebaseApp is not initialized..." or "Unable to get
+    // Firebase Messaging instance. Did you configure googleServicesFile...".
+    // That is a setup step, not a fault, and notifications still arrive through
+    // the background check. Only those messages count: a configured build also
+    // mentions Firebase when the network is down ("Firebase Installations
+    // Service is unavailable"), and that one must stay a real error.
+    if (Platform.OS === 'android' && MISSING_FIREBASE.test(detail)) {
       return { token: null, granted: true, reason: 'no-fcm' };
     }
     return { token: null, granted: false, reason: 'error', detail };
