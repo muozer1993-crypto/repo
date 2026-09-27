@@ -92,7 +92,8 @@ describe('challenge lifecycle', () => {
       creatorId: ali.me.id,
       accepted: [ali.me.id, veli.me.id],
       startsAt: '2026-01-05T08:00:00.000Z',
-      endsAt: '2026-01-07T09:00:00.000Z',
+      // the last millisecond of 7 January in Istanbul, where the app snaps an end
+      endsAt: '2026-01-07T20:59:59.999Z',
     });
 
     expect(activateDueChallenges(db, app.now())).toBe(1);
@@ -111,16 +112,16 @@ describe('challenge lifecycle', () => {
     expect(running[0]!.isWinner).toBe(true);
 
     // at endsAt a step çelınc still waits for the phones; an hour later it is final
-    harness.setNow('2026-01-07T09:00:00.000Z');
+    harness.setNow('2026-01-07T21:00:00.000Z');
     expect(finalizeEndedChallenges(db, app.now())).toBe(0);
-    harness.setNow('2026-01-07T10:00:00.000Z');
+    harness.setNow('2026-01-07T22:00:00.000Z');
     expect(finalizeEndedChallenges(db, app.now())).toBe(1);
 
     const finished = getChallengeRow(db, challengeId) as ChallengeRow;
     expect(finished.status).toBe('finished');
     expect(finished.winner_id).toBe(ali.me.id);
     expect(finished.is_tie).toBe(0);
-    expect(finished.finalized_at).toBe('2026-01-07T10:00:00.000Z');
+    expect(finished.finalized_at).toBe('2026-01-07T22:00:00.000Z');
 
     const stored = db
       .prepare('SELECT user_id, final_score, final_rank FROM challenge_participants WHERE challenge_id = ? ORDER BY final_rank')

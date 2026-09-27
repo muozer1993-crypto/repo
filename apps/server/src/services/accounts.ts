@@ -9,6 +9,7 @@ import type { VulgarityLevel } from '@koydum/shared';
  */
 import { newId, newInviteCode, nowIso, type Database, type UserRow } from '../db/index.js';
 import { cancelIfAbandoned, getChallengeRow, stillOpen } from './challenges.js';
+import { announceDisputeClocks } from './entries.js';
 
 /** How many times we retry a random invite code before giving up (collision odds are ~0). */
 const INVITE_CODE_ATTEMPTS = 20;
@@ -124,7 +125,8 @@ export function softDeleteUser(db: Database, user: UserRow, now: Date = new Date
       // over but not yet decided: the result stands with them in it
       if (status === 'accepted' && challenge && !stillOpen(challenge, now)) continue;
       leave.run(challengeId, user.id);
-      cancelIfAbandoned(db, challengeId, now);
+      // one player fewer is a smaller itiraz majority (see the leave route)
+      if (!cancelIfAbandoned(db, challengeId, now)) announceDisputeClocks(db, challengeId, now);
     }
 
     // Pending friend requests in either direction are meaningless now.

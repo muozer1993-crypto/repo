@@ -144,13 +144,14 @@ describe('entry rules shared by every metric', () => {
     expect(errorCode(future)).toBe('day_in_future');
   });
 
-  it('after the end takes the phone\'s late count but no typed number', async () => {
+  it('after the end takes the phone\'s late count of a finished day but no typed number', async () => {
     harness = await makeApp({ now: NOW });
     // runs to 12:00 tomorrow; the scheduler has not been by yet
     const steps = await liveChallenge(harness, 'adim_yarisi', {}, 1);
     const water = await liveChallenge(harness, 'su_bardak', {}, 1, '2');
     harness.advance(DAY_MS + 60_000);
     const lastDay = today(harness);
+    const firstDay = addDays(lastDay, -1);
 
     const typed = await post(harness, steps.ali, steps.challengeId, {
       dayKey: lastDay,
@@ -163,20 +164,40 @@ describe('entry rules shared by every metric', () => {
     expect((typed.json() as { error: { message: string } }).error.message).toContain('son adımlar');
 
     const counted = await post(harness, steps.ali, steps.challengeId, {
-      dayKey: lastDay,
+      dayKey: firstDay,
       value: 9000,
       source: 'pedometer',
       clientTime: iso(harness),
     });
     expect(counted.statusCode).toBe(201);
 
+    // The end cut the last day in half at 12:00: its count now carries steps
+    // walked after the whistle, so that day keeps what it had.
+    const halfDay = await post(harness, steps.ali, steps.challengeId, {
+      dayKey: lastDay,
+      value: 9000,
+      source: 'pedometer',
+      clientTime: iso(harness),
+    });
+    expect(halfDay.statusCode).toBe(400);
+    expect(errorCode(halfDay)).toBe('challenge_ended');
+
     const synced = await authed(harness.app, steps.veli.token)({
       method: 'POST',
       url: '/me/steps',
-      payload: { days: [{ dayKey: lastDay, steps: 11000, source: 'health_connect' }] },
+      payload: {
+        days: [
+          { dayKey: firstDay, steps: 8000, source: 'health_connect' },
+          { dayKey: lastDay, steps: 11000, source: 'health_connect' },
+        ],
+      },
     });
     expect(synced.statusCode).toBe(200);
     expect(synced.json<{ updated: number }>().updated).toBe(1);
+    const veliDays = harness.db
+      .prepare('SELECT day_key, value FROM entries WHERE challenge_id = ? AND user_id = ?')
+      .all(steps.challengeId, steps.veli.me.id);
+    expect(veliDays).toEqual([{ day_key: firstDay, value: 8000 }]);
 
     // a typed çelınc has no phone to wait for, and takes nothing either
     const glass = await post(harness, water.ali, water.challengeId, {
@@ -897,6 +918,89 @@ describe('POST /challenges/:id/entries/:entryId/proof', () => {
     expect(runSchedulerOnce(harness.db, harness.now()).disputes).toBe(0);
     expect(getEntryRow(harness.db, entryId)?.status).toBe('ok');
     expect(listByType(harness.db, ali.me.id, 'entry_rejected')).toHaveLength(0);
+  });
+
+  it('takes the old app\'s answer: the day sent again with a photo closes the itiraz like "Kanıt ekle"', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await liveChallenge(harness, 'ekran_suresi_beyani');
+    const day = today(harness);
+    const first = await post(harness, ali, challengeId, { dayKey: day, value: 300, source: 'manual', proofUrl: '/uploads/ekran.jpg', clientTime: iso(harness) });
+    const entryId = first.json<{ entry: Entry }>().entry.id;
+    const disputeUrl = `/challenges/${challengeId}/entries/${entryId}/dispute`;
+    const disputed = await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'beş saat mi' } });
+    expect(disputed.json<{ answerBy: string | null }>().answerBy).not.toBeNull();
+    // the owner is told where the photo goes, and that it needs the new app
+    const warning = listByType(harness.db, ali.me.id, 'dispute')[0];
+    expect(warning?.body).toContain('"Kanıt ekle" düğmesi yoksa önce uygulamayı güncelle.');
+
+    // what the 1.0 entry modal sends: the same day, a fresh photo
+    const again = await post(harness, ali, challengeId, { dayKey: day, value: 300, source: 'manual', proofUrl: '/uploads/ekran-2.jpg', clientTime: iso(harness) });
+    expect(again.statusCode).toBe(200);
+    expect(again.json<{ entry: Entry }>().entry).toMatchObject({ id: entryId, status: 'ok', proofUrl: '/uploads/ekran-2.jpg' });
+    expect(listByType(harness.db, veli.me.id, 'dispute')[0]?.body).toContain('kanıt ekledi');
+
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS + 60_000);
+    expect(runSchedulerOnce(harness.db, harness.now()).disputes).toBe(0);
+    expect(getEntryRow(harness.db, entryId)?.status).toBe('ok');
+    expect(listByType(harness.db, ali.me.id, 'entry_rejected')).toHaveLength(0);
+  });
+
+  it('lets the disputer say "yalan" to a new number sent with the photo', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await liveChallenge(harness, 'ekran_suresi_beyani');
+    const day = today(harness);
+    const first = await post(harness, ali, challengeId, { dayKey: day, value: 300, source: 'manual', proofUrl: '/uploads/ekran.jpg', clientTime: iso(harness) });
+    const entryId = first.json<{ entry: Entry }>().entry.id;
+    const disputeUrl = `/challenges/${challengeId}/entries/${entryId}/dispute`;
+    await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'beş saat mi' } });
+
+    const changed = await post(harness, ali, challengeId, { dayKey: day, value: 5, source: 'manual', proofUrl: '/uploads/baska.jpg', clientTime: iso(harness) });
+    expect(changed.json<{ entry: Entry }>().entry).toMatchObject({ id: entryId, value: 5, status: 'ok' });
+    const second = await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'beş dakika hiç değil' } });
+    expect(second.statusCode).toBe(201);
+    expect(second.json<{ entry: Entry }>().entry.status).toBe('disputed');
+  });
+
+  it('opens the door again once an entry closed with a photo changes its number', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await liveChallenge(harness, 'ekran_suresi_beyani');
+    const day = today(harness);
+    const first = await post(harness, ali, challengeId, { dayKey: day, value: 300, source: 'manual', proofUrl: '/uploads/ekran.jpg', clientTime: iso(harness) });
+    const entryId = first.json<{ entry: Entry }>().entry.id;
+    const disputeUrl = `/challenges/${challengeId}/entries/${entryId}/dispute`;
+    await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'beş saat mi' } });
+    const answered = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/proof`,
+      payload: { proofUrl: '/uploads/ekran-2.jpg' },
+    });
+    expect(answered.statusCode).toBe(200);
+
+    // same number again: the photo already answered it, one itiraz per person stands
+    await post(harness, ali, challengeId, { dayKey: day, value: 300, source: 'manual', proofUrl: '/uploads/ekran-2.jpg', clientTime: iso(harness) });
+    const same = await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'yine de' } });
+    expect(same.statusCode).toBe(409);
+
+    // then the day drops to 5 minutes behind the photo that backed 300
+    const lowered = await post(harness, ali, challengeId, { dayKey: day, value: 5, source: 'manual', proofUrl: '/uploads/ekran-2.jpg', clientTime: iso(harness) });
+    expect(lowered.json<{ entry: Entry }>().entry).toMatchObject({ id: entryId, value: 5, status: 'ok' });
+    const fresh = await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'beş dakika mı' } });
+    expect(fresh.statusCode).toBe(201);
+  });
+
+  it('opens the door again after a withdrawn itiraz when the number changes', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await liveChallenge(harness, 'adim_yarisi');
+    const day = today(harness);
+    const first = await post(harness, ali, challengeId, { dayKey: day, value: 8000, source: 'manual', clientTime: iso(harness) });
+    const entryId = first.json<{ entry: Entry }>().entry.id;
+    const disputeUrl = `/challenges/${challengeId}/entries/${entryId}/dispute`;
+    await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'sekiz bin mi' } });
+    await authed(harness.app, veli.token)({ method: 'DELETE', url: disputeUrl });
+
+    await post(harness, ali, challengeId, { dayKey: day, value: 30000, source: 'manual', clientTime: iso(harness) });
+    const fresh = await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'otuz bin hiç değil' } });
+    expect(fresh.statusCode).toBe(201);
   });
 
   it('is closed once the çelınc is over', async () => {

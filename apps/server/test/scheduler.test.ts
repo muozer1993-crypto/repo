@@ -358,6 +358,40 @@ describe('scheduler: the hour the phones get after a step çelınc ends', () => 
     expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
   });
 
+  it('never counts steps walked after an end that cut the last day in half', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    // ends at 20:35 in Istanbul, the way a rematch used to
+    const endsAt = '2026-01-06T17:35:00.000Z';
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'adim_yarisi', startsAt: iso(harness), endsAt, participantIds: [veli.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    tick(harness);
+
+    at(harness, '2026-01-06T17:00:00.000Z');
+    await phoneSync(harness, ali, { '2026-01-06': 12_000 });
+    await phoneSync(harness, veli, { '2026-01-06': 10_000 });
+
+    // 21:25: Veli's evening walk after the whistle reaches the server
+    at(harness, endsAt, 50 * MINUTE);
+    await phoneSync(harness, ali, { '2026-01-06': 12_000 });
+    await phoneSync(harness, veli, { '2026-01-06': 15_000 });
+    const veliDay = harness.db
+      .prepare('SELECT value FROM entries WHERE challenge_id = ? AND user_id = ?')
+      .get(challengeId, veli.me.id) as { value: number };
+    expect(veliDay.value).toBe(10_000);
+
+    // nothing more can move that day, so there is nobody to wait for
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+  });
+
   it('sends no "you logged nothing today" reminder for a çelınc that is only waiting for the phones', async () => {
     harness = await makeApp({ now: NOW });
     // a reminder at 00:xx is due for anybody who has nothing on the new day
@@ -579,6 +613,142 @@ describe('scheduler: an itiraz nobody answers', () => {
     at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS);
     expect(tick(harness)).toMatchObject({ finalized: 1, cancelled: 0 });
     expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+  });
+});
+
+describe('scheduler: nobody pokes into a result that is only waiting', () => {
+  it('offers no poke past the end and refuses one, while an itiraz holds the result', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'su_bardak');
+    at(harness, MIDNIGHT_END, -2 * HOUR);
+    const aliEntry = await logWater(harness, ali, challengeId, 8);
+    await logWater(harness, veli, challengeId, 5);
+    at(harness, MIDNIGHT_END, -HOUR);
+    await dispute(harness, veli, challengeId, aliEntry);
+
+    at(harness, MIDNIGHT_END, 2 * HOUR);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    expect(challengeRow(harness, challengeId).status).toBe('active');
+
+    const detail = (await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` })).json<{
+      pokeTargets: unknown[];
+      canPoke: boolean;
+    }>();
+    expect(detail.pokeTargets).toEqual([]);
+    expect(detail.canPoke).toBe(false);
+
+    const poke = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/poke`,
+      payload: { toUserId: veli.me.id },
+    });
+    expect(poke.statusCode).toBe(400);
+    expect(poke.json<{ error: { code: string } }>().error.code).toBe('challenge_ended');
+    expect(listByType(harness.db, veli.me.id, 'poke')).toHaveLength(0);
+  });
+});
+
+/** Ali and `names` in a live water çelınc that ends at local midnight, all accepted. */
+async function waterGroup(h: TestApp, names: string[]): Promise<{ players: RegisteredUser[]; challengeId: string }> {
+  const players: RegisteredUser[] = [];
+  for (const name of ['ali', ...names]) players.push(await registerUser(h.app, name, { displayName: name }));
+  const [creator, ...friends] = players as [RegisteredUser, ...RegisteredUser[]];
+  for (const friend of friends) befriend(h.app, creator.me.id, friend.me.id);
+  const created = await authed(h.app, creator.token)({
+    method: 'POST',
+    url: '/challenges',
+    payload: { typeKey: 'su_bardak', startsAt: iso(h), endsAt: MIDNIGHT_END, participantIds: friends.map((u) => u.me.id) },
+  });
+  const challengeId = created.json<Challenge>().id;
+  for (const friend of friends) {
+    await authed(h.app, friend.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+  }
+  tick(h);
+  return { players, challengeId };
+}
+
+function answerByOf(h: TestApp, entryId: string): string | null {
+  return (h.db.prepare('SELECT answer_by FROM entries WHERE id = ?').get(entryId) as { answer_by: string | null }).answer_by;
+}
+
+describe('scheduler: the itiraz majority shrinks when somebody leaves', () => {
+  it('gives the owner the full 12 hours from the leave, and says so, instead of throwing the entry out', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId } = await waterGroup(harness, ['veli', 'can', 'mert']);
+    const [ali, veli, can] = players as [RegisteredUser, RegisteredUser, RegisteredUser];
+    const entryId = await logWater(harness, ali, challengeId, 9);
+
+    // one of three rivals is not a majority of four players
+    expect((await dispute(harness, veli, challengeId, entryId)).answerBy).toBeNull();
+    const asked = listByType(harness.db, ali.me.id, 'dispute');
+    expect(asked).toHaveLength(1);
+    expect(asked[0]?.body).not.toContain('12 saat');
+
+    // 13 hours on, Can walks out: three players, and Veli's itiraz alone is a majority now
+    harness.advance(13 * HOUR);
+    const left = await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${challengeId}/leave` });
+    expect(left.statusCode).toBe(200);
+    expect(answerByOf(harness, entryId)).toBe(iso(harness, LIMITS.DISPUTE_ANSWER_MS));
+    const warned = listByType(harness.db, ali.me.id, 'dispute');
+    expect(warned).toHaveLength(2);
+    expect(warned[0]?.body).toContain('artık çoğunlukta');
+    expect(warned[0]?.body).toContain('12 saat içinde fotoğraf ekle');
+    expect(dataOf(warned[0]!)).toMatchObject({ challengeId, entryId, answerBy: iso(harness, LIMITS.DISPUTE_ANSWER_MS) });
+
+    expect(tick(harness)).toMatchObject({ disputes: 0 });
+    expect(entryStatus(harness, entryId)).toBe('disputed');
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS - MINUTE);
+    expect(tick(harness)).toMatchObject({ disputes: 0 });
+    harness.advance(MINUTE);
+    expect(tick(harness)).toMatchObject({ disputes: 1 });
+    expect(entryStatus(harness, entryId)).toBe('rejected');
+  });
+
+  it('starts a full window on the first pass for an old database where nothing stored the clock', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId } = await waterGroup(harness, ['veli']);
+    const [ali, veli] = players as [RegisteredUser, RegisteredUser];
+    const entryId = await logWater(harness, ali, challengeId, 9);
+    await dispute(harness, veli, challengeId, entryId);
+    // what migration 009 finds: an entry a majority disputed a day ago, no clock
+    harness.db.prepare('UPDATE entries SET answer_by = NULL WHERE id = ?').run(entryId);
+    harness.db.prepare('UPDATE disputes SET created_at = ? WHERE entry_id = ?').run(iso(harness, -24 * HOUR), entryId);
+
+    expect(tick(harness)).toMatchObject({ disputes: 0 });
+    expect(entryStatus(harness, entryId)).toBe('disputed');
+    expect(answerByOf(harness, entryId)).toBe(iso(harness, LIMITS.DISPUTE_ANSWER_MS));
+    expect(listByType(harness.db, ali.me.id, 'dispute')[0]?.body).toContain('artık çoğunlukta');
+    // armed once, not every pass
+    expect(tick(harness)).toMatchObject({ disputes: 0 });
+    expect(listByType(harness.db, ali.me.id, 'dispute')).toHaveLength(2);
+  });
+
+  it('stops counting the itiraz of somebody who left, and stops the clock with it', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId } = await waterGroup(harness, ['veli', 'ayse', 'mert', 'cem']);
+    const [ali, veli, ayse] = players as [RegisteredUser, RegisteredUser, RegisteredUser];
+    const entryId = await logWater(harness, ali, challengeId, 9);
+    await dispute(harness, veli, challengeId, entryId);
+    expect((await dispute(harness, ayse, challengeId, entryId)).answerBy).not.toBeNull();
+
+    // four players left, two of three rivals needed, and only Veli's still counts
+    await authed(harness.app, ayse.token)({ method: 'POST', url: `/challenges/${challengeId}/leave` });
+    expect(answerByOf(harness, entryId)).toBeNull();
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS + HOUR);
+    expect(tick(harness)).toMatchObject({ disputes: 0 });
+    expect(entryStatus(harness, entryId)).toBe('disputed');
+  });
+
+  it('does not let somebody who walked out join again', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId } = await waterGroup(harness, ['veli', 'can']);
+    const can = players[2]!;
+    await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${challengeId}/leave` });
+
+    const back = await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    expect(back.statusCode).toBe(409);
+    expect(back.json<{ error: { code: string } }>().error.code).toBe('already_left');
+    expect(participant(harness, challengeId, can.me.id).status).toBe('left');
   });
 });
 
@@ -812,6 +982,62 @@ describe('scheduler: cancellation', () => {
     }
 
     expect(tick(harness)).toMatchObject({ cancelled: 0 });
+  });
+
+  it('says the rival walked out, not "kimse kabul etmedi", when a silent invitee kept it open to the end', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const ayse = await registerUser(harness.app, 'ayse', { displayName: 'Ayşe' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, ayse.me.id);
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'su_bardak', startsAt: iso(harness), endsAt: MIDNIGHT_END, participantIds: [veli.me.id, ayse.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    harness.advance(HOUR);
+    // Veli quits; Ayşe could still say yes, so it stays open
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/leave` });
+    expect(challengeRow(harness, challengeId).status).toBe('active');
+
+    at(harness, MIDNIGHT_END, MINUTE);
+    tick(harness);
+    expect(challengeRow(harness, challengeId).status).toBe('cancelled');
+    const [told] = listByType(harness.db, ali.me.id, 'challenge_cancelled');
+    expect(dataOf(told!)).toMatchObject({ challengeId, reason: 'everyone_left' });
+    expect(told?.body).toContain('herkes kaçtı');
+    expect(told?.body).not.toContain('kimse kabul etmedi');
+  });
+
+  it('says the same when the one who accepted left before a pending çelınc could start', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const ayse = await registerUser(harness.app, 'ayse', { displayName: 'Ayşe' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, ayse.me.id);
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: {
+        typeKey: 'su_bardak',
+        startsAt: iso(harness, 2 * HOUR),
+        endsAt: iso(harness, 4 * HOUR),
+        participantIds: [veli.me.id, ayse.me.id],
+      },
+    });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/leave` });
+
+    harness.advance(5 * HOUR);
+    expect(tick(harness)).toMatchObject({ cancelled: 1 });
+    const [told] = listByType(harness.db, ali.me.id, 'challenge_cancelled');
+    expect(dataOf(told!)).toMatchObject({ challengeId, reason: 'everyone_left' });
+    expect(told?.body).not.toContain('kimse kabul etmedi');
   });
 });
 

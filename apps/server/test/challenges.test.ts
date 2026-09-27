@@ -760,7 +760,10 @@ describe('POST /challenges/:id/rematch', () => {
     expect(rematch.status).toBe('pending');
     expect(rematch.typeKey).toBe('adim_yarisi');
     expect(Date.parse(rematch.startsAt)).toBe(harness.now().getTime() + 5 * 60 * 1000);
-    expect(Date.parse(rematch.endsAt) - Date.parse(rematch.startsAt)).toBe(3 * 24 * 60 * 60 * 1000);
+    // the original ran 3 × 24 h from noon, i.e. three whole days; the rematch
+    // gets three too, ending where the wizard ends one: the last millisecond of
+    // 7 January in Istanbul, not at whatever time the button was tapped
+    expect(rematch.endsAt).toBe('2026-01-07T20:59:59.999Z');
 
     const detail = (
       await authed(harness.app, veli.token)({ method: 'GET', url: `/challenges/${rematch.id}` })
@@ -773,6 +776,87 @@ describe('POST /challenges/:id/rematch', () => {
     const twice = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
     expect(twice.statusCode).toBe(409);
     expect(twice.json().error.code).toBe('already_rematched');
+  });
+
+  it('keeps the number of days of a snapped çelınc and still ends on a day, even when asked for at night', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    // what the wizard sends for "3 gün" from noon: to the last millisecond of 7 January
+    const created = await createChallenge(harness, ali, {
+      participantIds: [veli.me.id],
+      endsAt: '2026-01-07T20:59:59.999Z',
+    });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await harness.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` });
+
+    // 23:57 on 9 January: it starts at 00:02, so its three days are 10-12 January
+    harness.setNow('2026-01-09T20:57:00.000Z');
+    const late = (await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })).json<Challenge>();
+    expect(late.startsAt).toBe('2026-01-09T21:02:00.000Z');
+    expect(late.endsAt).toBe('2026-01-12T20:59:59.999Z');
+
+    // Veli's, at 16:00 on 10 January: three days, the first one today
+    harness.setNow('2026-01-10T13:00:00.000Z');
+    const afternoon = (
+      await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })
+    ).json<Challenge>();
+    expect(afternoon.endsAt).toBe('2026-01-12T20:59:59.999Z');
+  });
+
+  it('counts the original\'s days where it was made, even when a rival in another zone asks', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli', timezone: 'Europe/London' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    // Ali's "3 gün", snapped in Istanbul; in London it ends at 20:59 on its third day
+    const created = await createChallenge(harness, ali, { participantIds: [veli.me.id], endsAt: '2026-01-07T20:59:59.999Z' });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await harness.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` });
+
+    harness.setNow('2026-01-10T13:00:00.000Z'); // 13:00 in London
+    const rematch = (await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })).json<Challenge>();
+    // three London days, 10-12 January, ending at London midnight
+    expect(rematch.endsAt).toBe('2026-01-12T23:59:59.999Z');
+  });
+
+  it('runs a one-day rematch asked for late at night to the end of the next day, not for half an hour', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    // "1 gün" from noon
+    const created = await createChallenge(harness, ali, { participantIds: [veli.me.id], endsAt: '2026-01-05T20:59:59.999Z' });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await harness.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` });
+
+    harness.setNow('2026-01-06T20:20:00.000Z'); // 23:20
+    const rematch = (await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })).json<Challenge>();
+    expect(rematch.startsAt).toBe('2026-01-06T20:25:00.000Z');
+    expect(rematch.endsAt).toBe('2026-01-07T20:59:59.999Z');
+  });
+
+  it('lets the creator ask again after a rematch was turned down (and so cancelled)', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await finishedChallenge(harness);
+
+    const first = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(first.statusCode).toBe(201);
+    const firstId = first.json<Challenge>().id;
+    const declined = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${firstId}/decline` });
+    expect(declined.json<ChallengeDetail>().challenge.status).toBe('cancelled');
+
+    const second = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(second.statusCode).toBe(201);
+    expect(second.json<Challenge>().id).not.toBe(firstId);
+    // one that is still open does count
+    const third = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(third.statusCode).toBe(409);
+    expect(third.json().error.code).toBe('already_rematched');
   });
 
   it('refuses while the challenge is still running', async () => {

@@ -9,6 +9,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_TIMEZONE,
+  dayKeyInTz,
   todayKey,
   type Challenge,
   type ChallengeDetail,
@@ -195,7 +196,11 @@ describe('KOYDUM end to end', () => {
     expect(revenge.status).toBe('pending');
     expect(revenge.typeKey).toBe(challenge.typeKey);
     expect(revenge.rewardText).toBe('Kaybeden döner ısmarlar');
-    expect(Date.parse(revenge.endsAt) - Date.parse(revenge.startsAt)).toBe(DAY);
+    // one day like the original, ending at the last millisecond of a local day
+    expect(dayKeyInTz(new Date(revenge.endsAt), DEFAULT_TIMEZONE)).toBe(
+      dayKeyInTz(new Date(revenge.startsAt), DEFAULT_TIMEZONE),
+    );
+    expect(revenge.endsAt.endsWith('T20:59:59.999Z')).toBe(true);
 
     const rematchDetail = (await asVeli({ method: 'GET', url: `/challenges/${revenge.id}` })).json<ChallengeDetail>();
     expect(rematchDetail.me?.status).toBe('accepted');

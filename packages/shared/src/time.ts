@@ -196,6 +196,25 @@ export function dayKeysBetween(startIso: string | Date, endIso: string | Date, t
   return keys;
 }
 
+/** Milliseconds `tz` is ahead of UTC at `date` (minute resolution, like `localParts`). */
+function zoneOffsetMs(date: Date, tz: string): number {
+  const p = localParts(date, tz);
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, 0, 0);
+  return asUtc - Math.floor(date.getTime() / 60_000) * 60_000;
+}
+
+/**
+ * The instant `dayKey` starts in `tz` (local midnight). One refinement pass puts
+ * a DST change on the right side. `startOfDayInTz(addDays(k, 1), tz) - 1` is the
+ * last millisecond of `k`, which is where the app snaps a çelınc's end.
+ */
+export function startOfDayInTz(dayKey: string, tz: string): Date {
+  const [y, m, d] = parseDayKey(dayKey);
+  const wall = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
+  const first = wall - zoneOffsetMs(new Date(wall), tz);
+  return new Date(wall - zoneOffsetMs(new Date(first), tz));
+}
+
 /** Minutes since midnight for an `HH:mm` string. */
 export function hhmmToMinutes(hhmm: string): number {
   if (!HHMM_REGEX.test(hhmm)) throw new RangeError(`Invalid HH:mm: ${hhmm}`);

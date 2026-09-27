@@ -166,6 +166,8 @@ export interface EntryRow {
   late: number;
   created_at: string;
   updated_at: string;
+  /** Set while a majority disputes it: thrown out at this instant unless a photo comes (migration 009). */
+  answer_by?: string | null;
 }
 
 export interface StepsDailyRow {

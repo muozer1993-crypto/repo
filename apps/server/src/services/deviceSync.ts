@@ -8,7 +8,10 @@
  * (`dayWindowIssue`): a day outside the challenge window, in the future, or older
  * than the device backfill limit is skipped instead of banked — otherwise a phone
  * could pre-fill a whole 30-day race with the daily maximum on day one. The window
- * is read in the timezone pinned when the user joined that challenge.
+ * is read in the timezone pinned when the user joined that challenge. Past the
+ * end (the phones' hour, a dispute's wait) only days that were over by `ends_at`
+ * still move (`dayOverByEnd`): a later reading of a day the end cut in half would
+ * add the steps walked after the whistle.
  *
  * On a higher-is-better metric (steps) a device reading only ever raises a
  * day's entry; on lower-is-better (screen time) it overwrites whatever is there,
@@ -17,7 +20,7 @@
  */
 import { challengeTypesForDevice, type DeviceMetric, type EntrySource } from '@koydum/shared';
 import { newId, nowIso, type ChallengeRow, type Database, type UserRow } from '../db/index.js';
-import { challengeWindow, participantTimezone, typeForChallenge } from './challenges.js';
+import { challengeWindow, dayOverByEnd, participantTimezone, typeForChallenge } from './challenges.js';
 import { dayWindowIssue } from './entries.js';
 
 /** A challenge plus the timezone this user's days in it are measured in. */
@@ -82,6 +85,7 @@ export function fanOutDeviceDays(
   for (const day of days) {
     for (const { challenge, tz, window, type } of rules) {
       if (dayWindowIssue(window, type.metricType, tz, day.dayKey, now, day.source) !== null) continue;
+      if (now.getTime() >= Date.parse(challenge.ends_at) && !dayOverByEnd(challenge, tz, day.dayKey)) continue;
       const value = Math.min(day.value, type.maxPerDay);
       const existing = findEntry.get(challenge.id, user.id, day.dayKey) as
         | { id: string; value: number; source: string }

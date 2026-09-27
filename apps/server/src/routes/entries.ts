@@ -21,7 +21,7 @@ import {
   type ParticipantView,
 } from '@koydum/shared';
 import { badRequest, forbidden, notFound, parseBody } from '../errors.js';
-import { nowIso } from '../db/index.js';
+import { nowIso, type ChallengeRow, type EntryRow, type UserRow } from '../db/index.js';
 import { computeStandings, disputesCloseAt } from '../services/challenges.js';
 import { notify } from '../services/notifications.js';
 import { awardBadges } from '../services/stats.js';
@@ -36,6 +36,7 @@ import {
 } from '../services/challengeViews.js';
 import {
   answerDisputeWithProof,
+  forgetDismissedDisputes,
   getEntryRow,
   recordDispute,
   validateAndUpsertEntry,
@@ -70,6 +71,26 @@ export interface DisputeResponse {
 export default async function entryRoutes(app: FastifyInstance): Promise<void> {
   const { db } = app;
 
+  /** "Kanıt geldi, bir bak" to everybody whose itiraz a photo just answered. */
+  function tellDisputers(disputerIds: string[], owner: UserRow, challenge: ChallengeRow, entry: EntryRow, now: Date): void {
+    const iso = nowIso(now);
+    for (const disputerId of disputerIds) {
+      const disputer = getUserRow(db, disputerId);
+      if (!disputer || disputer.deleted_at !== null) continue;
+      // a block since the itiraz closes this door too
+      if (isBlockedBetween(db, owner.id, disputerId)) continue;
+      const copy = disputeProofCopy(levelOf(disputer), owner.display_name, challenge.title, entry.day_key);
+      notify(db, {
+        userId: disputer.id,
+        type: 'dispute',
+        title: copy.title,
+        body: copy.body,
+        data: { challengeId: challenge.id, entryId: entry.id, kind: 'proof' },
+        createdAt: iso,
+      });
+    }
+  }
+
   // -------------------------------------------------------------------------
   // POST /challenges/:id/entries
   // -------------------------------------------------------------------------
@@ -82,19 +103,35 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
     // so membership answers 404 here; `validateAndUpsertEntry` keeps the 403
     // `not_participant` for the invited / declined / left cases.
     requireMembership(db, challenge, me.id);
+    const now = app.now();
+    // the day's row as it was, for an owner answering an itiraz by re-posting
+    const before = db
+      .prepare('SELECT * FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ? ORDER BY created_at ASC, id ASC LIMIT 1')
+      .get(challenge.id, me.id, body.dayKey) as EntryRow | undefined;
 
-    const { entry, created } = validateAndUpsertEntry(db, {
+    const { created, entry: written } = validateAndUpsertEntry(db, {
       challenge,
       user: me.row,
       body,
-      now: app.now(),
+      now,
     });
+    let entry = written;
+
+    // The 1.0 app has no "Kanıt ekle": its owner answers an itiraz by sending
+    // the day again with a photo. That is a photo answer like /proof. When the
+    // number changed with it, the disputers may say "yalan" to the new one.
+    if (!created && body.proofUrl && before?.status === 'disputed' && before.id === entry.id) {
+      const outcome = answerDisputeWithProof(db, { entry, byUserId: me.id, proofUrl: body.proofUrl, now });
+      if (Number(before.value) !== Number(outcome.entry.value)) forgetDismissedDisputes(db, entry.id);
+      tellDisputers(outcome.disputerIds, me.row, challenge, entry, now);
+      entry = outcome.entry;
+    }
 
     // Badges that depend on entries (adım / odak / check-in serisi) refresh on write.
-    awardBadges(db, me.id, app.now());
+    awardBadges(db, me.id, now);
 
     void reply.code(created ? 201 : 200);
-    return { entry: toEntry(entry), standings: computeStandings(db, challenge, app.now()) };
+    return { entry: toEntry(entry), standings: computeStandings(db, challenge, now) };
   });
 
   // -------------------------------------------------------------------------
@@ -243,23 +280,7 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       if (!entry || entry.challenge_id !== challenge.id) throw notFound('entry_not_found', 'Böyle bir giriş yok.');
 
       const outcome = answerDisputeWithProof(db, { entry, byUserId: me.id, proofUrl: body.proofUrl, now });
-
-      const iso = nowIso(now);
-      for (const disputerId of outcome.disputerIds) {
-        const disputer = getUserRow(db, disputerId);
-        if (!disputer || disputer.deleted_at !== null) continue;
-        // a block since the itiraz closes this door too
-        if (isBlockedBetween(db, me.id, disputerId)) continue;
-        const copy = disputeProofCopy(levelOf(disputer), me.row.display_name, challenge.title, entry.day_key);
-        notify(db, {
-          userId: disputer.id,
-          type: 'dispute',
-          title: copy.title,
-          body: copy.body,
-          data: { challengeId: challenge.id, entryId: entry.id, kind: 'proof' },
-          createdAt: iso,
-        });
-      }
+      tellDisputers(outcome.disputerIds, me.row, challenge, entry, now);
 
       return { entry: toEntry(outcome.entry), standings: computeStandings(db, challenge, now) };
     },

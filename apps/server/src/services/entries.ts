@@ -34,8 +34,15 @@ import {
   type UserRow,
 } from '../db/index.js';
 import { badRequest, conflict, forbidden, notFound, type HttpError } from '../errors.js';
-import { challengeWindow, participantTimezone, typeForChallenge } from './challenges.js';
-import { acceptedCount, entryRejectedCopy, getParticipant, getUserRow, levelOf } from './challengeViews.js';
+import { challengeWindow, dayOverByEnd, participantTimezone, typeForChallenge } from './challenges.js';
+import {
+  acceptedCount,
+  disputeMajorityCopy,
+  entryRejectedCopy,
+  getParticipant,
+  getUserRow,
+  levelOf,
+} from './challengeViews.js';
 import { notify } from './notifications.js';
 import { awardBadges } from './stats.js';
 
@@ -125,10 +132,23 @@ function insertEntry(
 }
 
 /**
+ * Lets everybody whose itiraz on this entry was answered (a photo) or taken back
+ * file one again. Called when the entry itself changes: the photo that closed
+ * an itiraz backed the old number, and in a 1v1 the rival is the only one who
+ * could ever challenge the new one. Upheld and open rows stay; stats only
+ * count upheld ones.
+ */
+export function forgetDismissedDisputes(db: Database, entryId: string): void {
+  db.prepare("DELETE FROM disputes WHERE entry_id = ? AND status = 'dismissed'").run(entryId);
+}
+
+/**
  * One row per (challenge, user, day) for the upsert metrics.
  *
  * The stored `status` is preserved on purpose: re-posting a day must not launder a
  * `rejected` entry back into the standings after friends upheld a dispute on it.
+ * A new value or photo reopens the door for itirazlar already closed on it
+ * (`forgetDismissedDisputes`).
  */
 function upsertDayEntry(db: Database, input: EntryWriteInput, value: number, late: boolean): EntryWriteResult {
   const { challenge, user, body, now } = input;
@@ -136,10 +156,14 @@ function upsertDayEntry(db: Database, input: EntryWriteInput, value: number, lat
   if (!existing) return { entry: insertEntry(db, input, value, late), created: true };
 
   const iso = nowIso(now);
-  db.prepare(
-    `UPDATE entries SET value = ?, source = ?, note = ?, proof_url = ?, client_time = ?, late = ?, updated_at = ?
-      WHERE id = ?`,
-  ).run(value, body.source, body.note ?? null, body.proofUrl ?? null, body.clientTime, late ? 1 : 0, iso, existing.id);
+  const changed = Number(existing.value) !== value || (existing.proof_url ?? null) !== (body.proofUrl ?? null);
+  db.transaction(() => {
+    db.prepare(
+      `UPDATE entries SET value = ?, source = ?, note = ?, proof_url = ?, client_time = ?, late = ?, updated_at = ?
+        WHERE id = ?`,
+    ).run(value, body.source, body.note ?? null, body.proofUrl ?? null, body.clientTime, late ? 1 : 0, iso, existing.id);
+    if (changed) forgetDismissedDisputes(db, existing.id);
+  })();
 
   return { entry: { ...existing, value, source: body.source, note: body.note ?? null, proof_url: body.proofUrl ?? null, client_time: body.clientTime, late: late ? 1 : 0, updated_at: iso }, created: false };
 }
@@ -251,6 +275,11 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
   const window = challengeWindow(challenge, tz);
   const issue = dayWindowIssue(window, type.metricType, tz, body.dayKey, now, body.source);
   if (issue) throw dayWindowError(issue, type.metricType, body.source);
+  // the same rule as the fan-out: after the whistle a day the end cut in half
+  // keeps what it had, or steps walked after the end would count
+  if (now.getTime() >= Date.parse(challenge.ends_at) && !dayOverByEnd(challenge, tz, body.dayKey)) {
+    throw challengeEndedError(type);
+  }
 
   if (body.value > type.maxPerEntry) {
     throw badRequest('value_too_large', `Tek girişte en fazla ${unitLabel(type, type.maxPerEntry)} girebilirsin.`);
@@ -363,39 +392,108 @@ export function disputeThreshold(acceptedParticipants: number): number {
 }
 
 /**
- * When each entry a majority disputes is thrown out unless its owner adds a photo
- * first (epoch ms, by entry id).
+ * Open itirazlar on each disputed entry of an accepted player in this çelınc,
+ * counting only those filed by somebody still in the race: a row of somebody
+ * who left scores nothing, so nothing waits on it, and an itiraz of somebody
+ * who left is not a friend's vote any more.
+ */
+function disputedEntries(
+  db: Database,
+  challengeId: string,
+  entryId?: string,
+): (EntryRow & { open_count: number })[] {
+  return db
+    .prepare(
+      `SELECT e.*, (
+         SELECT COUNT(*) FROM disputes d
+           JOIN challenge_participants dp
+             ON dp.challenge_id = e.challenge_id AND dp.user_id = d.by_user_id AND dp.status = 'accepted'
+          WHERE d.entry_id = e.id AND d.status = 'open'
+       ) AS open_count
+         FROM entries e
+         JOIN challenge_participants p ON p.challenge_id = e.challenge_id AND p.user_id = e.user_id AND p.status = 'accepted'
+        WHERE e.challenge_id = ? AND e.status = 'disputed' ${entryId ? 'AND e.id = ?' : ''}
+        ORDER BY e.created_at ASC, e.id ASC`,
+    )
+    .all(...(entryId ? [challengeId, entryId] : [challengeId])) as (EntryRow & { open_count: number })[];
+}
+
+/**
+ * Starts or stops the owner's answer clock (`entries.answer_by`) on the disputed
+ * entries of one çelınc, from the majority as it stands NOW.
  *
- * The clock starts when the open disputes REACHED the threshold — the threshold-th
- * oldest one — not at the first itiraz: in a five-player çelınc the second one may
- * come ten hours after the first, and the owner was promised the full
- * `DISPUTE_ANSWER_MS` from the moment the entry was actually at risk. Only players
- * still in the race count; a row of somebody who left scores nothing, so nothing
- * waits on it.
+ * The clock starts the moment the open itirazlar make a majority, with the full
+ * `DISPUTE_ANSWER_MS` from then, and is stored: somebody leaving shrinks the
+ * majority, and deriving the start from the itiraz's own time would put an
+ * old one's clock hours in the past and throw the entry out on the next pass
+ * without a word. It stops when the majority is gone (an itiraz taken back,
+ * a disputer who left). Returns the entries whose clock started in this call;
+ * the caller tells their owners (`recordDispute`'s route, or
+ * `announceDisputeClocks`).
+ */
+export function syncDisputeClocks(db: Database, challengeId: string, now: Date, entryId?: string): EntryRow[] {
+  const threshold = disputeThreshold(acceptedCount(db, challengeId));
+  const setClock = db.prepare('UPDATE entries SET answer_by = ? WHERE id = ?');
+  const started: EntryRow[] = [];
+  for (const row of disputedEntries(db, challengeId, entryId)) {
+    const { open_count: open, ...entry } = row;
+    const onClock = entry.answer_by !== null && entry.answer_by !== undefined;
+    if (open >= threshold && !onClock) {
+      const answerBy = nowIso(new Date(now.getTime() + LIMITS.DISPUTE_ANSWER_MS));
+      setClock.run(answerBy, entry.id);
+      started.push({ ...entry, answer_by: answerBy });
+    } else if (open < threshold && onClock) {
+      setClock.run(null, entry.id);
+    }
+  }
+  return started;
+}
+
+/**
+ * `syncDisputeClocks` for a çelınc whose player count just changed (a leave,
+ * an account deletion, the scheduler's pass): every owner whose entry went on
+ * the clock hears "12 saat" at their own level. Only while it is `active`;
+ * runs inside the caller's transaction when there is one.
+ */
+export function announceDisputeClocks(db: Database, challengeId: string, now: Date): number {
+  const challenge = db.prepare('SELECT * FROM challenges WHERE id = ?').get(challengeId) as ChallengeRow | undefined;
+  if (!challenge || challenge.status !== 'active') return 0;
+  const started = syncDisputeClocks(db, challengeId, now);
+  const iso = nowIso(now);
+  for (const entry of started) {
+    const owner = getUserRow(db, entry.user_id);
+    if (!owner || owner.deleted_at !== null) continue;
+    const copy = disputeMajorityCopy(levelOf(owner), challenge.title, entry.day_key);
+    notify(db, {
+      userId: owner.id,
+      type: 'dispute',
+      title: copy.title,
+      body: copy.body,
+      data: { challengeId, entryId: entry.id, answerBy: entry.answer_by },
+      createdAt: iso,
+    });
+  }
+  return started.length;
+}
+
+/**
+ * When each entry on the clock is thrown out unless its owner adds a photo
+ * first (epoch ms, by entry id): the stored `answer_by` of disputed entries of
+ * players still in the race.
  */
 export function disputeDeadlines(db: Database, challengeId: string): Map<string, number> {
-  const threshold = disputeThreshold(acceptedCount(db, challengeId));
   const rows = db
     .prepare(
-      `SELECT d.entry_id, d.created_at FROM disputes d
-         JOIN entries e ON e.id = d.entry_id
+      `SELECT e.id, e.answer_by FROM entries e
          JOIN challenge_participants p ON p.challenge_id = e.challenge_id AND p.user_id = e.user_id AND p.status = 'accepted'
-        WHERE e.challenge_id = ? AND e.status = 'disputed' AND d.status = 'open'
-        ORDER BY d.entry_id ASC, d.created_at ASC, d.id ASC`,
+        WHERE e.challenge_id = ? AND e.status = 'disputed' AND e.answer_by IS NOT NULL`,
     )
-    .all(challengeId) as { entry_id: string; created_at: string }[];
-
-  const openByEntry = new Map<string, string[]>();
-  for (const row of rows) {
-    const list = openByEntry.get(row.entry_id) ?? [];
-    list.push(row.created_at);
-    openByEntry.set(row.entry_id, list);
-  }
+    .all(challengeId) as { id: string; answer_by: string }[];
 
   const deadlines = new Map<string, number>();
-  for (const [entryId, createdAt] of openByEntry) {
-    const reached = createdAt[threshold - 1];
-    if (reached !== undefined) deadlines.set(entryId, Date.parse(reached) + LIMITS.DISPUTE_ANSWER_MS);
+  for (const row of rows) {
+    const at = Date.parse(row.answer_by);
+    if (Number.isFinite(at)) deadlines.set(row.id, at);
   }
   return deadlines;
 }
@@ -459,6 +557,7 @@ export function recordDispute(
   const threshold = disputeThreshold(acceptedCount(db, challenge.id));
 
   let openCount = 0;
+  let reachedThreshold = false;
   const run = db.transaction(() => {
     db.prepare(
       'INSERT INTO disputes (id, entry_id, by_user_id, reason, status, created_at) VALUES (@id, @entry_id, @by_user_id, @reason, @status, @created_at)',
@@ -467,6 +566,7 @@ export function recordDispute(
       db.prepare("UPDATE entries SET status = 'disputed', updated_at = ? WHERE id = ?").run(iso, entry.id);
     }
     openCount = countOf(db, "SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ? AND status = 'open'", entry.id);
+    reachedThreshold = syncDisputeClocks(db, challenge.id, now, entry.id).length > 0;
   });
   run();
 
@@ -477,7 +577,7 @@ export function recordDispute(
     openCount,
     threshold,
     answerBy: deadline === undefined ? null : new Date(deadline).toISOString(),
-    reachedThreshold: openCount === threshold,
+    reachedThreshold,
   };
 }
 
@@ -500,7 +600,10 @@ export function withdrawDispute(
     db.prepare("UPDATE disputes SET status = 'dismissed' WHERE id = ?").run(dispute.id);
     const open = countOf(db, "SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ? AND status = 'open'", entry.id);
     if (open === 0 && entry.status === 'disputed') {
-      db.prepare("UPDATE entries SET status = 'ok', updated_at = ? WHERE id = ?").run(nowIso(now), entry.id);
+      db.prepare("UPDATE entries SET status = 'ok', answer_by = NULL, updated_at = ? WHERE id = ?").run(nowIso(now), entry.id);
+    } else {
+      // no longer a majority: the owner's clock stops
+      syncDisputeClocks(db, entry.challenge_id, now, entry.id);
     }
   });
   run();
@@ -539,7 +642,7 @@ export function answerDisputeWithProof(
       }[]
     ).map((row) => row.by_user_id);
     db.prepare("UPDATE disputes SET status = 'dismissed' WHERE entry_id = ? AND status = 'open'").run(entry.id);
-    db.prepare("UPDATE entries SET proof_url = ?, status = 'ok', updated_at = ? WHERE id = ?").run(
+    db.prepare("UPDATE entries SET proof_url = ?, status = 'ok', answer_by = NULL, updated_at = ? WHERE id = ?").run(
       proofUrl,
       nowIso(now),
       entry.id,
@@ -592,6 +695,10 @@ export function upholdDisputes(db: Database, challenge: ChallengeRow, entry: Ent
  * Scheduler step: every disputed entry whose answer window ran out without a
  * photo is thrown out (`upholdDisputes`). It runs right before `finalize` in the
  * same pass, so a çelınc that was only waiting on this entry finishes without it.
+ *
+ * First it brings every clock up to date (`announceDisputeClocks`): that is
+ * what starts one on a database written before `answer_by` existed, always with
+ * a full window from now and a word to the owner, never one already run out.
  */
 export function resolveDisputes(db: Database, now: Date = new Date()): number {
   const challenges = db
@@ -604,6 +711,7 @@ export function resolveDisputes(db: Database, now: Date = new Date()): number {
 
   let upheld = 0;
   for (const challenge of challenges) {
+    db.transaction(() => announceDisputeClocks(db, challenge.id, now))();
     for (const [entryId, deadline] of disputeDeadlines(db, challenge.id)) {
       if (now.getTime() < deadline) continue;
       const entry = getEntryRow(db, entryId);

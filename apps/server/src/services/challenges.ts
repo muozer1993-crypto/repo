@@ -20,6 +20,7 @@ import {
   compareDayKeys,
   computeScore,
   formatScore,
+  dayKeyInTz,
   dayKeysBetween,
   localHour,
   rankParticipants,
@@ -166,6 +167,26 @@ export function challengeWindow(challenge: Pick<ChallengeRow, 'starts_at' | 'end
   } catch {
     return dayKeysBetween(challenge.starts_at, challenge.ends_at, DEFAULT_TIMEZONE);
   }
+}
+
+/**
+ * Whether `dayKey` in `tz` was over by the time the çelınc ended. The app snaps
+ * an end to the last millisecond of a local day, so that millisecond counts as
+ * over: `ends_at + 1 ms` is already the next day.
+ *
+ * After the whistle only such complete days may still move (the phones' hour,
+ * a dispute's wait): a day the end cut in half keeps what it had at `ends_at`,
+ * because a later reading of it would add steps walked after the end.
+ */
+export function dayOverByEnd(challenge: Pick<ChallengeRow, 'ends_at'>, tz: string, dayKey: string): boolean {
+  const after = new Date(Date.parse(challenge.ends_at) + 1);
+  let endKey: string;
+  try {
+    endKey = dayKeyInTz(after, tz);
+  } catch {
+    endKey = dayKeyInTz(after, DEFAULT_TIMEZONE);
+  }
+  return compareDayKeys(dayKey, endKey) < 0;
 }
 
 /**
@@ -458,6 +479,18 @@ export function activateDueChallenges(db: Database, now: Date = new Date()): num
 }
 
 /**
+ * Why a çelınc ending with fewer than two players is cancelled: somebody other
+ * than `survivors` accepted at some point (and then left or deleted the
+ * account) → `everyone_left`; nobody ever did → "kimse kabul etmedi".
+ */
+function cancelReason(db: Database, challengeId: string, survivors: readonly string[]): 'everyone_left' | undefined {
+  const walkedOut = participantRows(db, challengeId).some(
+    (p) => p.joined_at !== null && !survivors.includes(p.user_id),
+  );
+  return walkedOut ? 'everyone_left' : undefined;
+}
+
+/**
  * Step 1b — a `pending` challenge that reached its end without ever starting is
  * cancelled and everyone who was invited hears about it.
  */
@@ -473,6 +506,11 @@ export function cancelUnderfilled(db: Database, now: Date = new Date()): number 
       (p) => p.status === 'accepted' || p.status === 'invited',
     );
     const users = userMap(db, participants.map((p) => p.user_id));
+    const reason = cancelReason(
+      db,
+      challenge.id,
+      participants.filter((p) => p.status === 'accepted').map((p) => p.user_id),
+    );
 
     const run = db.transaction(() => {
       db.prepare("UPDATE challenges SET status = 'cancelled', finalized_at = ? WHERE id = ? AND status = 'pending'").run(
@@ -480,13 +518,13 @@ export function cancelUnderfilled(db: Database, now: Date = new Date()): number 
         challenge.id,
       );
       for (const user of users.values()) {
-        const copy = cancelledCopy(levelOf(user), challenge.title);
+        const copy = cancelledCopy(levelOf(user), challenge.title, reason);
         notify(db, {
           userId: user.id,
           type: 'challenge_cancelled',
           title: copy.title,
           body: copy.body,
-          data: { challengeId: challenge.id },
+          data: reason ? { challengeId: challenge.id, reason } : { challengeId: challenge.id },
           createdAt: iso,
         });
       }
@@ -562,19 +600,22 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
   // challenge ends without a contest: crowning the sole survivor would hand out a
   // free win (plus badges) for logging nothing, and `winner_id = NULL, is_tie = 0`
   // would be a fourth results state the app has no screen for.
+  // A rival who accepted and walked out while a silent invitee kept it open is
+  // not "kimse kabul etmedi".
   if (accepted.length < 2) {
+    const reason = cancelReason(db, challenge.id, accepted.map((p) => p.user_id));
     const run = db.transaction(() => {
       db.prepare(
         "UPDATE challenges SET status = 'cancelled', finalized_at = ?, winner_id = NULL, is_tie = 0 WHERE id = ?",
       ).run(iso, challenge.id);
       for (const user of users.values()) {
-        const copy = cancelledCopy(levelOf(user), challenge.title);
+        const copy = cancelledCopy(levelOf(user), challenge.title, reason);
         notify(db, {
           userId: user.id,
           type: 'challenge_cancelled',
           title: copy.title,
           body: copy.body,
-          data: { challengeId: challenge.id, reason: 'not_enough_players' },
+          data: { challengeId: challenge.id, reason: reason ?? 'not_enough_players' },
           createdAt: iso,
         });
       }
@@ -676,8 +717,10 @@ const DEVICE_DAILY_TABLE: Record<DeviceMetric, string> = {
  * group wait out the rest of the hour would only delay the result.
  *
  * The day is the player's own (pinned timezone), the same window expression the
- * fan-out writes against. Somebody who declares steps by hand never syncs, so
- * with them in the race the full settle hour always runs.
+ * fan-out writes against. A player whose last day the end cut in half is not
+ * waited for: the fan-out no longer moves that day (`dayOverByEnd`). Somebody
+ * who declares steps by hand never syncs, so with them in the race the full
+ * settle hour always runs.
  */
 function everyPhoneReported(db: Database, challenge: ChallengeRow, metric: DeviceMetric): boolean {
   const accepted = acceptedParticipants(db, challenge.id);
@@ -689,6 +732,7 @@ function everyPhoneReported(db: Database, challenge: ChallengeRow, metric: Devic
     const tz = participantTimezone(participant, users.get(participant.user_id));
     const lastDay = challengeWindow(challenge, tz).at(-1);
     if (!lastDay) return false;
+    if (!dayOverByEnd(challenge, tz, lastDay)) return true;
     const row = lastSync.get(participant.user_id, lastDay) as { updated_at: string } | undefined;
     return !!row && Date.parse(row.updated_at) > endedAt;
   });

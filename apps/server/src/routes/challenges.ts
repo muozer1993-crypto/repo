@@ -38,6 +38,7 @@ import {
   requireUserRow,
 } from '../services/challengeViews.js';
 import { acceptedParticipants, cancelIfAbandoned, stillOpen } from '../services/challenges.js';
+import { announceDisputeClocks } from '../services/entries.js';
 import { assertNotBlocked, isBlockedBetween } from '../services/friends.js';
 
 interface IdParams {
@@ -255,6 +256,12 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const membership = requireMembership(db, challenge, me.id);
 
     if (membership.status === 'accepted') throw conflict('already_accepted', 'Bu çelıncı zaten kabul ettin.');
+    // An invite, or a no taken back, opens the door. Somebody who played and
+    // walked out was announced as gone and moved the itiraz majority; walking
+    // back in would undo both. ("Ayrıl" on an invite never joined: that is a no.)
+    if (membership.status === 'left' && membership.joined_at !== null) {
+      throw conflict('already_left', 'Bu çelınctan ayrıldın, geri dönemezsin.');
+    }
     if (challenge.status !== 'pending' && challenge.status !== 'active') {
       throw badRequest('challenge_closed', 'Bu çelınc kapandı, artık katılamazsın.');
     }
@@ -349,7 +356,10 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
         membership.status === 'invited' ? 'challenge_declined' : 'challenge_left',
         nowIso(now),
       );
-      cancelIfAbandoned(db, challenge.id, now);
+      if (cancelIfAbandoned(db, challenge.id, now)) return;
+      // one player fewer is a smaller itiraz majority: an entry it now reaches
+      // gets its full 12 hours from here, and its owner hears it
+      announceDisputeClocks(db, challenge.id, now);
     });
     run();
     return freshDetail(db, challenge.id, me.id, app.now());

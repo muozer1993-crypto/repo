@@ -436,7 +436,7 @@ export default function ChallengeDetailScreen() {
       />
 
       {/* --------------------------------------------------------- pokes */}
-      {challenge.status === 'active' && isPlayer && targets.length > 0 ? (
+      {challenge.status === 'active' && !settling && isPlayer && targets.length > 0 ? (
         <PokeSection
           id={id}
           challenge={challenge}

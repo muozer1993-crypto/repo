@@ -10,9 +10,14 @@
  */
 import type { FastifyInstance } from 'fastify';
 import {
+  DEFAULT_TIMEZONE,
   LIMITS,
   PokeBodySchema,
   TauntBodySchema,
+  addDays,
+  dayKeyInTz,
+  isValidTimeZone,
+  startOfDayInTz,
   type Challenge,
   type ChallengeDetail,
   type ChallengeResults,
@@ -24,12 +29,13 @@ import {
 import { badRequest, conflict, forbidden, notFound, parseBody } from '../errors.js';
 import { newId, nowIso, type ChallengeRow, type Database, type UserRow } from '../db/index.js';
 import { toPublicUser, toTaunt } from '../serialize.js';
-import { computeStandings } from '../services/challenges.js';
+import { challengeWindow, computeStandings, dayOverByEnd, participantTimezone } from '../services/challenges.js';
 import { notify } from '../services/notifications.js';
 import { toChallenge } from '../serialize.js';
 import { computeUserStats } from '../services/stats.js';
 import {
   buildSummary,
+  getParticipant,
   getUserRow,
   levelOf,
   rematchCopy,
@@ -114,6 +120,32 @@ function rematchLineUp(
   return { invitees, notFriends };
 }
 
+/**
+ * When a rematch starting at `startsAt` ends: as many local days as the
+ * original had, ending on the last millisecond of a day in the creator's zone,
+ * the way the wizard snaps an end. `startsAt + duration` used to end it at
+ * whatever time of day the button was tapped, and a phone reading of that half
+ * day after the whistle would carry steps walked after the end.
+ *
+ * The original's days are counted in the zone its own creator's wizard snapped
+ * it in (their pinned zone); a day its end cut in half (an old 24-hour-step
+ * çelınc) is not counted, so "7 gün" stays 7. A rematch opened minutes before
+ * midnight would be too short to be legal, so it runs to the end of the next
+ * day instead.
+ */
+function rematchEndsAt(challenge: ChallengeRow, originalTz: string, zone: string, startsAt: Date): string {
+  const tz = isValidTimeZone(zone) ? zone : DEFAULT_TIMEZONE;
+  const days = challengeWindow(challenge, originalTz);
+  const last = days.at(-1);
+  const complete = last !== undefined && dayOverByEnd(challenge, originalTz, last);
+  const dayCount = Math.max(1, days.length - (complete ? 0 : 1));
+  const lastKey = addDays(dayKeyInTz(startsAt, tz), dayCount - 1);
+  const endOf = (key: string) => startOfDayInTz(addDays(key, 1), tz).getTime() - 1;
+  let end = endOf(lastKey);
+  if (end - startsAt.getTime() <= LIMITS.MIN_DURATION_MS) end = endOf(addDays(lastKey, 1));
+  return new Date(end).toISOString();
+}
+
 export default async function socialRoutes(app: FastifyInstance): Promise<void> {
   const { db } = app;
 
@@ -128,6 +160,10 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     const challenge = requireChallengeRow(db, id);
     requireAcceptedMembership(db, challenge, me.id);
     if (challenge.status !== 'active') throw badRequest('challenge_not_active', 'Sadece devam eden çelıncta dürtebilirsin.');
+    // past the end an `active` çelınc only waits for its result
+    if (app.now().getTime() >= Date.parse(challenge.ends_at)) {
+      throw badRequest('challenge_ended', 'Süre bitti, artık dürtemezsin. Sonuç birazdan.');
+    }
     if (body.toUserId === me.id) throw badRequest('self_poke', 'Kendini dürtemezsin.');
 
     const target = requireTarget(db, challenge, body.toUserId);
@@ -212,15 +248,21 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       throw badRequest('challenge_not_finished', 'Rövanş sadece biten çelınc için istenir.');
     }
 
+    // A rematch that was turned down (and so cancelled) does not count: the
+    // results screen's "Rövanş" must not dead-end on one nobody can join.
     const duplicate = db
-      .prepare('SELECT id FROM challenges WHERE rematch_of_id = ? AND creator_id = ?')
+      .prepare("SELECT id FROM challenges WHERE rematch_of_id = ? AND creator_id = ? AND status <> 'cancelled'")
       .get(challenge.id, me.id) as { id: string } | undefined;
     if (duplicate) throw conflict('already_rematched', 'Bu çelınc için zaten rövanş açtın.');
 
-    // Same settings, same length; only the calendar moves.
-    const startsAt = new Date(now.getTime() + LIMITS.REMATCH_START_DELAY_MS).toISOString();
-    const durationMs = Math.max(LIMITS.MIN_DURATION_MS + 1, Date.parse(challenge.ends_at) - Date.parse(challenge.starts_at));
-    const endsAt = new Date(Date.parse(startsAt) + durationMs).toISOString();
+    // Same settings, same number of days; only the calendar moves.
+    const startsAtDate = new Date(now.getTime() + LIMITS.REMATCH_START_DELAY_MS);
+    const startsAt = startsAtDate.toISOString();
+    const originalTz = participantTimezone(
+      getParticipant(db, challenge.id, challenge.creator_id),
+      getUserRow(db, challenge.creator_id) ?? me.row,
+    );
+    const endsAt = rematchEndsAt(challenge, originalTz, me.row.timezone, startsAtDate);
     const createdAt = nowIso(now);
     const rematchId = newId();
 

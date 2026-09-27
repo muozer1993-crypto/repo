@@ -13,6 +13,7 @@ import {
   isValidTimeZone,
   localHour,
   localTimeHHmm,
+  startOfDayInTz,
   todayKey,
 } from '../time';
 
@@ -158,6 +159,27 @@ describe('day key arithmetic', () => {
     expect(compareDayKeys('2024-02-01', '2024-01-31')).toBe(1);
     expect(diffDayKeys('2024-01-01', '2024-01-11')).toBe(10);
     expect(diffDayKeys('2024-01-11', '2024-01-01')).toBe(-10);
+  });
+});
+
+describe('startOfDayInTz', () => {
+  it('is local midnight, and one millisecond before the next is the end of the day', () => {
+    expect(startOfDayInTz('2026-01-06', IST).toISOString()).toBe('2026-01-05T21:00:00.000Z');
+    const end = new Date(startOfDayInTz('2026-01-07', IST).getTime() - 1);
+    expect(end.toISOString()).toBe('2026-01-06T20:59:59.999Z');
+    expect(dayKeyInTz(end, IST)).toBe('2026-01-06');
+  });
+
+  it('lands on the right side of a DST change', () => {
+    // New York springs forward on 2026-03-08 and falls back on 2026-11-01
+    expect(startOfDayInTz('2026-03-08', NY).toISOString()).toBe('2026-03-08T05:00:00.000Z');
+    expect(startOfDayInTz('2026-03-09', NY).toISOString()).toBe('2026-03-09T04:00:00.000Z');
+    expect(startOfDayInTz('2026-11-01', NY).toISOString()).toBe('2026-11-01T04:00:00.000Z');
+    expect(startOfDayInTz('2026-11-02', NY).toISOString()).toBe('2026-11-02T05:00:00.000Z');
+  });
+
+  it('throws on an impossible day like the other day-key helpers', () => {
+    expect(() => startOfDayInTz('2026-02-30', IST)).toThrow(RangeError);
   });
 });
 

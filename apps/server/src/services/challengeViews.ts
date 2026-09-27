@@ -189,6 +189,10 @@ export function canTauntList(db: Database, challenge: ChallengeRow, userId: stri
  *
  * `done` marks a rival still inside the poke cooldown, so the client can grey
  * them out instead of letting the send fail.
+ *
+ * Only before `ends_at`: past it an `active` çelınc is only waiting for its
+ * result (the phones' hour, an itiraz's photo), entries are closed, and "hâlâ
+ * açık, sıra sende" would be a lie.
  */
 export function pokeTargetList(
   db: Database,
@@ -197,6 +201,7 @@ export function pokeTargetList(
   now: Date,
 ): CanTaunt[] {
   if (challenge.status !== 'active') return [];
+  if (now.getTime() >= Date.parse(challenge.ends_at)) return [];
   const standings = computeStandings(db, challenge, now);
   const mine = standings.find((view) => view.user.id === userId);
   if (!mine || mine.status !== 'accepted') return [];
@@ -316,6 +321,16 @@ export function leftCopy(level: VulgarityLevel, who: string, title: string): Cop
 const ANSWER_HOURS = `${Math.round(LIMITS.DISPUTE_ANSWER_MS / 3_600_000)} saat`;
 
 /**
+ * Where the photo goes. The "Kanıt ekle" chip only exists from 1.1.0 on, and a
+ * friend still on the 1.0 APK was otherwise told to do something their app
+ * cannot; the server does not know which one the reader has.
+ */
+function proofWhere(level: VulgarityLevel): string {
+  if (level === 1) return 'Girişin yanında "Kanıt ekle" düğmesi yoksa önce uygulamayı güncelle.';
+  return '"Kanıt ekle" düğmesi yoksa önce uygulamayı güncelle.';
+}
+
+/**
  * To the owner of a disputed entry. `onTheClock` is the itiraz that made it a
  * majority: from now on the entry goes unless a photo comes in, so the copy
  * says so. Before that (or after, from yet another friend) it only asks.
@@ -325,7 +340,7 @@ export function disputeCopy(level: VulgarityLevel, by: string, title: string, da
     return {
       title: 'Girişine itiraz var',
       body: onTheClock
-        ? `${by}, "${title}" çelıncında ${dayKey} tarihli girişine itiraz etti. ${ANSWER_HOURS} içinde fotoğraf eklersen giriş kalır, eklemezsen iptal olur.`
+        ? `${by}, "${title}" çelıncında ${dayKey} tarihli girişine itiraz etti. ${ANSWER_HOURS} içinde fotoğraf eklersen giriş kalır, eklemezsen iptal olur. ${proofWhere(level)}`
         : `${by}, "${title}" çelıncında ${dayKey} tarihli girişine itiraz etti. Kanıtını paylaşabilirsin.`,
     };
   }
@@ -333,15 +348,39 @@ export function disputeCopy(level: VulgarityLevel, by: string, title: string, da
     return {
       title: 'PALAVRA DEDİ 🍆',
       body: onTheClock
-        ? `${by}, "${title}" çelıncında ${dayKey} tarihli girişine palavra dedi. ${ANSWER_HOURS} içinde fotoğrafı koy, yoksa o gün yanar.`
+        ? `${by}, "${title}" çelıncında ${dayKey} tarihli girişine palavra dedi. ${ANSWER_HOURS} içinde fotoğrafı koy, yoksa o gün yanar. ${proofWhere(level)}`
         : `${by}, "${title}" çelıncında ${dayKey} tarihli girişine palavra dedi. Kanıtlayamazsan o gün gider.`,
     };
   }
   return {
     title: 'İtiraz yedin',
     body: onTheClock
-      ? `${by}, "${title}" çelıncında ${dayKey} tarihli girişine yalan dedi. ${ANSWER_HOURS} içinde fotoğraf ekle, yoksa bu giriş yanar.`
+      ? `${by}, "${title}" çelıncında ${dayKey} tarihli girişine yalan dedi. ${ANSWER_HOURS} içinde fotoğraf ekle, yoksa bu giriş yanar. ${proofWhere(level)}`
       : `${by}, "${title}" çelıncında ${dayKey} tarihli girişine yalan dedi. Kanıtını göster.`,
+  };
+}
+
+/**
+ * To the owner of an entry whose itirazlar became a majority without a new
+ * one: somebody left, so fewer votes make it. The clock starts now, and the
+ * owner hears it now instead of reading "kanıt gelmedi" twelve hours later.
+ */
+export function disputeMajorityCopy(level: VulgarityLevel, title: string, dayKey: string): CopyText {
+  if (level === 1) {
+    return {
+      title: 'Girişine itiraz var',
+      body: `"${title}" çelıncında ${dayKey} tarihli girişine yapılan itiraz artık çoğunlukta. ${ANSWER_HOURS} içinde fotoğraf eklersen giriş kalır, eklemezsen iptal olur. ${proofWhere(level)}`,
+    };
+  }
+  if (level === 3) {
+    return {
+      title: 'PALAVRA DİYENLER ÇOĞALDI 🍆',
+      body: `"${title}" çelıncında ${dayKey} tarihli girişine palavra diyenler artık çoğunlukta. ${ANSWER_HOURS} içinde fotoğrafı koy, yoksa o gün yanar. ${proofWhere(level)}`,
+    };
+  }
+  return {
+    title: 'İtiraz yedin',
+    body: `"${title}" çelıncında ${dayKey} tarihli girişine yalan diyenler artık çoğunlukta. ${ANSWER_HOURS} içinde fotoğraf ekle, yoksa bu giriş yanar. ${proofWhere(level)}`,
   };
 }
 

@@ -293,6 +293,19 @@ ALTER TABLE users ADD COLUMN nudges_enabled INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE users ADD COLUMN recap_enabled  INTEGER NOT NULL DEFAULT 1;
 `;
 
+/**
+ * When a disputed entry is thrown out unless its owner adds a photo. Set once,
+ * when the open itirazlar first make a majority; before, it was derived on
+ * every pass from the live player count, so somebody leaving shrank the
+ * majority and put an old itiraz's clock hours in the past (the entry went on
+ * the next pass, with no warning). NULL: not on the clock. Existing rows start
+ * NULL and the scheduler's first pass arms the ones a majority disputes, with
+ * a full window from then (`syncDisputeClocks`).
+ */
+const ENTRY_ANSWER_BY = `
+ALTER TABLE entries ADD COLUMN answer_by TEXT;
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -302,4 +315,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '006_recaps_sent', sql: RECAPS_SENT },
   { id: '007_taunt_followups', sql: TAUNT_FOLLOWUPS },
   { id: '008_notification_prefs', sql: NOTIFICATION_PREFS },
+  { id: '009_entry_answer_by', sql: ENTRY_ANSWER_BY },
 ];

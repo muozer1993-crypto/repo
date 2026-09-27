@@ -530,6 +530,38 @@ describe('a step çelınc past its end, still active on the server', () => {
     expect(steps.getDailySteps).toHaveBeenCalled();
   });
 
+  it('offers no "laf sok" once the time is up, even if a server still lists a rival', async () => {
+    searchParams.id = 'c-1';
+    const withRival = () => {
+      const detail = challengeDetail();
+      const rival = {
+        user: { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' },
+        status: 'accepted' as const,
+        score: 4201,
+        days: 2,
+        rank: 2,
+        lastEntryAt: '2026-09-08T09:00:00.000Z',
+        isWinner: false,
+      };
+      return { ...detail, participants: [detail.me, rival], pokeTargets: [{ toUserId: 'u-2', done: false }] };
+    };
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+
+    api.challenge = jest.fn(async () => withRival());
+    const running = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(rendered(running)).toContain('laf sokma hakkı');
+
+    const ended = withRival();
+    ended.challenge.endsAt = new Date(Date.now() - 5 * 60_000).toISOString();
+    api.challenge = jest.fn(async () => ended);
+    const settling = renderScreen(<ChallengeScreen />);
+    await settle();
+    const text = rendered(settling);
+    expect(text).toContain('Sonuç birazdan');
+    expect(text).not.toContain('laf sokma hakkı');
+  });
+
   it('counts down and offers the entry while the time is not up', async () => {
     searchParams.id = 'c-1';
     api.challenge = jest.fn(async () => challengeDetail());
