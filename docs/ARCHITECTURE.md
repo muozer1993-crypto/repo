@@ -58,7 +58,15 @@ kişi yapabilecekse bekler. Reddeden açana, ayrılan içeride kalanlara haber v
 reddetti", "Ali havlu attı"), engelli ikiliye hiçbir şey gitmez. Bitişten sonra ikisi de sessizdir
 ve iptal etmez: o bekleyişte sonuç zamanlayıcınındır, kaybeden kimse ayrılıp sonucu bozamaz.
 Reddetmek de son söz değildir: çelınc sürdükçe reddeden kabul edebilir, uygulama bunu çelınc
-ekranında "Katıl" diye sunar.
+ekranında "Katıl" diye sunar. Oynayıp ayrılan geri giremez (`already_left`): herkese "havlu attı"
+dendi, itiraz çoğunluğu da ona göre küçüldü. Sessiz bir davetli yüzünden bitişe kadar açık kalıp
+tek kişiyle biten çelınc da zamanlayıcıda "herkes kaçtı" diye kapanır, kabul edip giden biri
+varsa "kimse kabul etmedi" yazmaz.
+
+Rövanş, eskisi kaç yerel gün sürdüyse o kadar gün sürer ve sihirbaz gibi açanın saat diliminde bir
+günün son milisaniyesinde biter. Önceden "şimdi + eski süre" ile düğmeye basılan saatte bitiyordu;
+yarıda kesilen son günün sonradan gelen telefon sayısı bitişten sonra atılan adımları da taşırdı.
+Reddedilen (yani iptal olan) bir rövanş yenisini açmaya engel değildir.
 
 Adımı ya da ekran süresini telefonun kendisinin saydığı çelınclar bitişte hemen kapanmaz. Son
 akşamın adımları telefonda bir sonraki arka plan senkronunu bekler (15 dakika ve üstü), gece
@@ -66,14 +74,25 @@ yarısı kapatırsak kazananı eksik sayıyla seçeriz ve sonradan gelen adımla
 çelınc bir saat daha `active` kalır: telefonlar son günü göndermeye devam eder, elle giriş ise
 bitişten itibaren kabul edilmez (`challenge_ended`). Herkesin telefonu son günü bitişten sonra
 gönderdiyse beklemeden kapanır. Sunucu bitişte kapalıysa bir saat açıldığı andan sayılır
-(`bootAt`). Elle girilen çelınclar tam bitişte kapanır.
+(`bootAt`). Elle girilen çelınclar tam bitişte kapanır. Bitişten sonra yalnızca bitişte bitmiş
+günler değişebilir (`dayOverByEnd`): bitiş bir günü yarıda kestiyse (başka saat dilimindeki bir
+oyuncu, eski usul 24 saatlik bir çelınc) o günün sonraki okuması bitişten sonra atılan adımları
+da taşır, o yüzden gün bitişteki haliyle kalır ve o oyuncu beklenmez. Bekleyişte dürtme de yoktur:
+"hâlâ açık, sıra sende" yalan olurdu.
 
 İtiraz tek başına bir girişi silmez. Diğer oyuncuların çoğunluğu itiraz edince girişin sahibine
 12 saat (`LIMITS.DISPUTE_ANSWER_MS`) tanınır ve giriş bu sürede sayılmaya devam eder; yoksa teke tek
 çelıncta kaybeden taraf rakibinin her gününü tek dokunuşla sıfırlayabilirdi. Sahibi fotoğraf eklerse
 itirazlar `dismissed` olur. Eklemezse zamanlayıcının `resolveDisputes` adımı (bitirmeden hemen önce
 çalışır) girişi `rejected` yapar ve itiraz edenlerin `disputesWon` sayısı artar. Süre çoğunluğun
-oluştuğu andan başlar, ilk itirazdan değil (`disputeDeadlines`). Bitişte süresi dolmamış bir itiraz
+oluştuğu andan başlar, ilk itirazdan değil, ve girişin üstüne yazılır (`entries.answer_by`,
+`syncDisputeClocks`). Her geçişte oyuncu sayısından yeniden hesaplanınca biri ayrılıp çoğunluk
+küçüldüğünde eski bir itirazın süresi saatler önce dolmuş sayılıyor, giriş haber verilmeden
+atılıyordu. Artık ayrılma, hesap silme ve zamanlayıcının her turu saati o andan tam 12 saatle
+kurar ve sahibine söyler; `answer_by`'ı olmayan eski bir veritabanında da ilk tur böyle yapar.
+Ayrılan birinin itirazı sayılmaz. Eski uygulamada "Kanıt ekle" yoktur: günü fotoğrafla yeniden
+göndermek de itirazı cevaplar. Fotoğrafla kapanan ya da geri çekilen itirazın sahibi, giriş
+sayısını ya da fotoğrafını değiştirince yeniden itiraz edebilir. Bitişte süresi dolmamış bir itiraz
 varsa çelınc o süre boyunca `active` kalır; yoksa son dakika gelen bir itiraz, sahibine söz verilen
 12 saati yerdi. Bu bekleyişte yeni itiraz alınmaz (adım ve ekran süresi çelınclarının bir saati
 hariç, son akşamın sayıları o saatte gelir; `disputesCloseAt`), yoksa art arda açılan itirazlar
@@ -368,12 +387,21 @@ Uygulama kimliği girişten hemen sonra ve her `/health` okumasında saklar, sad
 açıkken ve hâlâ kullandığı adres için (`store/auth.ts`, `rememberServerId`).
 
 Geçişi `services/serverMove.ts` yapar, hep bir dokunuşla (davet ekranı ya da Ayarlar →
-Sunucu): önce yeni adresin `/health`'i. Saklı bir kimlik varsa ve sunucu onu söylemiyorsa token
-oraya hiç gitmez. Kimlik bilinmiyorsa (kimliği hiç duymamış bir telefon) `/me` token'la sorulur;
-aynı hesap dönerse aynı sunucudur. `/me` burada `onUnauthorized`'sız bir istemciyle gider:
-başka bir sunucunun 401'i "burası değil" demektir, çıkış sebebi değil. Geçiş adresi ve kimliği
-yazar, bütün sorguları tazeler, çevrimdışı kuyruğu gönderir; oturum, gelen kutusu imleci ve push
-kaydı yerinde kalır. Bağlantı herkesten gelebileceği için kendiliğinden geçiş yok.
+Sunucu): önce yeni adresin `/health`'i. Saklı kimlikten farklı bir kimlik söylüyorsa başka
+sunucudur ve oraya başka hiçbir şey gitmez. Kimliğin tutması ise bir şey kanıtlamaz: `/health`
+herkese açıktır, davet bağlantısı da gerçek sunucuyu söyler, isteyen kimliği kopyalar. Token'ı
+göndermeden önce yeni adres anahtarı bildiğini kanıtlar (`POST /auth/prove`): telefon token'ın
+yalnızca `header.payload` kısmını (gizli değil) ve rastgele bir nonce gönderir; sunucu imzayı
+JWT anahtarıyla yeniden hesaplar ve onu anahtar yaparak nonce ile kendi adresinin
+(`publicOrigin`: PUBLIC_URL) HMAC'ini döner. Telefon aynı hesabı token'daki imzayla yapar ve
+adresin taşındığı adres olduğuna bakar. Anahtarı bilmeyen bir kopya cevap veremez; soruyu gerçek
+sunucuya aktaran biri de gerçek adres için bir cevap alır, telefon onu reddeder. İmza hiçbir
+yöne gitmez. Hermes'te WebCrypto olmadığı için HMAC `utils/hmac.ts`'te düz TypeScript'tir
+(testler node:crypto ile karşılaştırır). Sonra `/me` token'la sorulur; aynı hesap dönerse
+geçilir. `/me` burada `onUnauthorized`'sız bir istemciyle gider: başka bir sunucunun 401'i
+"burası değil" demektir, çıkış sebebi değil. Geçiş adresi ve kimliği yazar, bütün sorguları
+tazeler, çevrimdışı kuyruğu gönderir; oturum, gelen kutusu imleci ve push kaydı yerinde kalır.
+Bağlantı herkesten gelebileceği için kendiliğinden geçiş yok.
 
 Adres ancak tünel yenilenince değiştiği için `npm run internet` (`scripts/internet.mjs`) tüneli
 elinde tutar. Sunucu çökerse aynı `PUBLIC_URL` ile yeniden açar (1, 5, 15 saniye sonra; on

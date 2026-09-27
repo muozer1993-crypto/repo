@@ -171,11 +171,16 @@ Bilinmesi gerekenler:
   yok)**'a basar, o kadar. Çıkış yapmaz, şifre yazmaz; hesabı, çelıncları ve bildirimleri
   yerindedir. Bağlantıyı başka yerden gören kankan **Ayarlar → Sunucu**'ya yeni adresi ya da
   bağlantının kendisini yapıştırır, aynısı olur. Uygulama adres değişse de aynı sunucu olduğunu
-  anlar: sunucu kendini JWT anahtarından (`apps/server/data/secret`) türeyen bir kimlikle
-  tanıtır. O dosyayı silmedikçe kimse dışarı atılmaz.
-* **Uygulaması eski sürüm olan** kankan bu düğmeyi görmez: bir kereliğine **Çıkış yap, orada
-  giriş yap**'a basıp aynı kullanıcı adı ve şifreyle girer. Yeni sürümü kurduktan sonra bir
-  daha gerekmez.
+  anlar: yeni adres, oturumu taşımadan önce JWT anahtarını (`apps/server/data/secret`) bildiğini
+  kanıtlamak zorundadır, kanıtlayamayan bir adrese oturum gitmez. O dosyayı silmedikçe kimse
+  dışarı atılmaz.
+* **Uygulaması eski sürüm (1.0) olan** kankanda bu ekran yok: bağlantıdaki **KOYDUM'da aç** ona
+  boş bir sayfa açar. En kolayı aynı sayfadaki **Uygulamayı indir (Android)** ile yeni sürümü
+  eskisinin üstüne kurması (hesabı kalır), sonra bağlantıya tekrar dokunup **Yeni adrese geç
+  (çıkış yok)** demesi; bir daha da gerekmez. Kurmak istemezse eski uygulamada **Ayarlar →
+  Sunucu → Çıkış yap ve değiştir** (ya da kırmızı **Adresi düzelt →** şeridi) der, sayfanın
+  **Sunucu** satırındaki adresi başına `https://` koyarak yazar (`/davet/…` kısmı olmadan) ve
+  aynı kullanıcı adı ve şifreyle girer.
 
 Sabit bir adres ve 7/24 açık bir sunucu istersen aşağıdaki
 [Sunucuyu internete açmak](#sunucuyu-internete-açmak) bölümüne bak.
@@ -318,6 +323,8 @@ ya da üstü bir sistem imajı seç, eskileri ARM kodunu çalıştıramadığı 
 
 Yayınladığın sürüm telefondakinden yeniyse uygulamanın ana ekranında **"Yeni sürüm var"** kartı
 çıkar ve İndir'e basınca APK iner. Böylece kimse hangi APK'da olduğunu tahmin etmek zorunda kalmaz.
+Bu kart 1.1 sürümüyle geldi: 1.0'daki kankalar onu görmez, yenisini bir kereliğine davet
+bağlantısındaki **Uygulamayı indir** ile ya da `…/koydum.apk` adresinden kurar.
 APK'yla kuranlar yenisini üstüne kurar, hesapları kalır. Play dahili testinden kuranlara APK üstüne
 kurulmaz (imza farklı); onlar Play'den günceller.
 
@@ -413,7 +420,9 @@ ekranında "unuttu galiba, rövanş aç" yazısını görür.
 lafları çıkar. Aynı kankayı üst üste üçüncü kez yenersen **SERİ** lafları çıkar; arada bir
 beraberlik ya da kayıp seriyi bozar. Rövanş sadece hâlâ kankan olanları çağırır, grup çelıncında
 başkası üzerinden tanıştığın biri gelmez. Sonuç ekranı bunu rövanş düğmesinin altında söyler;
-final tablosunda adına dokunup profilinden ekleyebilirsin.
+final tablosunda adına dokunup profilinden ekleyebilirsin. Rövanş eskisi kaç gün sürdüyse o kadar
+gün sürer ve açanın saatiyle gece yarısı biter; reddedilen bir rövanş iptal olur ama yenisini
+açmana engel olmaz.
 
 ---
 
@@ -457,6 +466,8 @@ Evdeki bilgisayarda bu klasör `apps/server/data`, yedekler `apps/server/data/ba
 
 Hepsi `apps/server/.env` dosyasına da yazılabilir ([Hızlı başlangıç](#hızlı-başlangıç-5-dakika)).
 Ortamda aynı isimde bir değişken varsa (Docker, PowerShell'de `$env:...`) o kazanır.
+Docker'da bu dosya okunmaz (imaja hiç girmez): orada ayarları `docker-compose.yml` içindeki
+`environment:` altına ekle (ör. `APP_DOWNLOAD_URL: ${APP_DOWNLOAD_URL:-}`).
 
 | Değişken | Varsayılan | Açıklama |
 |---|---|---|
@@ -495,7 +506,8 @@ sunucuyu açana, yani sana yazmasını söyler. `npm run yonet -- sifre ali` yen
 ekrana yazar (`uemjz5kk` gibi; birbirine benzeyen harf ve rakam yok). WhatsApp'tan gönder, o
 şifreyle girsin. Hesabı, kankaları, rozetleri ve süren çelıncları yerinde kalır. Girdikten sonra
 **Ayarlar → Hesap → Şifreni değiştir**'den kendi şifresini koyabilir; "123456" ile kaydolanlar da
-oradan değiştirir.
+oradan değiştirir. Bu düğme yeni sürümde (1.1); 1.0'daki kanka önce güncellemeli, yoksa senin
+verdiğin şifreyle kalır.
 
 * Kullanıcı adını hatırlamıyorsa önce `npm run yonet -- kullanicilar` ile bak.
 * Başka bir telefonda açık kalmış oturumu varsa o kapanmaz; şifre sıfırlamak kimseyi dışarı atmaz.
@@ -528,7 +540,8 @@ bu filtre çalışır. Ayrıca herkes birbirini engelleyebilir ve şikayet edebi
 sunucuyu açana gider ([Yönetim komutları](#yönetim-komutları)). Engel kalıcı değil: fikri
 değişen **Ayarlar → Engellediklerin**'den kaldırır; kanka olmak için yeniden istek atmak gerekir.
 Yanlış kişiye giden kanka isteği de Kankalar sekmesinde **Geri çek** ile geri alınır; karşı taraf
-daha okumadıysa gelen kutusundan da silinir.
+daha okumadıysa gelen kutusundan da silinir. Aynı kişiye günde en fazla üç istek gider, yoksa
+iste-geri çek-iste biriyle bütün gün telefonunu öttürebilirdi.
 
 ---
 
@@ -558,9 +571,14 @@ daha okumadıysa gelen kutusundan da silinir.
 Şüpheli girişlere arkadaşlar **itiraz** edebilir; itirazın sebebi akışta o girişin altında herkese
 görünür. İtiraz tek başına girişi silmez: diğer oyuncuların çoğunluğu itiraz edince girişin sahibinin
 **12 saati** olur. O sürede "Kanıt ekle" deyip fotoğraf koyarsa itiraz kapanır, giriş sayılmaya devam
-eder ve itiraz edenlere haber gider; koymazsa giriş düşer. 12 saat dolana kadar giriş sayılır, yani teke
-tek çelıncta rakip tek dokunuşla senin gününü silemez. İtiraz eden fikrini değiştirirse "Geri çek" ile
-itirazını kaldırır (aynı girişe bir daha itiraz edemez). Bitişe yakın gelen bir itiraz yüzünden sonuç
+eder ve itiraz edenlere haber gider; koymazsa giriş düşer. "Kanıt ekle" 1.1 sürümüyle geldi; 1.0'daki
+kanka o günü giriş ekranından fotoğrafıyla yeniden gönderince de itiraz kapanır (adım ve ekran
+süresi gibi günde tek sayı yazılan türlerde; diğerlerinde önce güncellemesi gerekir, bildirim de
+bunu söyler). 12 saat, çoğunluk oluştuğu anda başlar: biri çelınctan ayrılıp çoğunluk küçülünce de
+o andan başlar ve girişin sahibine haber gider. Ayrılanın itirazı sayılmaz. 12 saat dolana kadar
+giriş sayılır, yani teke tek çelıncta rakip tek dokunuşla senin gününü silemez. İtiraz eden fikrini
+değiştirirse "Geri çek" ile itirazını kaldırır (aynı girişe bir daha itiraz edemez; giriş sonradan
+sayısını ya da fotoğrafını değiştirirse edebilir). Bitişe yakın gelen bir itiraz yüzünden sonuç
 en fazla 12 saat bekleyebilir. İtiraz sadece çelınc sürerken açılır; adım ve ekran süresi çelınclarında
 son akşamın sayıları bitişten sonraki bir saatte geldiği için o saat de sayılır. Uygulama itiraz
 düğmesini de sadece bu sürede gösterir. Fotoğraf kanıtı, bir

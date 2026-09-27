@@ -247,8 +247,9 @@ challenges(id TEXT PK, creator_id TEXT, type_key TEXT, metric_type TEXT, directi
 challenge_participants(challenge_id TEXT, user_id TEXT, status TEXT, invited_at TEXT, joined_at TEXT,
       final_score REAL, final_rank INTEGER, PRIMARY KEY(challenge_id, user_id))
 entries(id TEXT PK, challenge_id TEXT, user_id TEXT, day_key TEXT, value REAL, source TEXT, note TEXT, proof_url TEXT,
-      status TEXT DEFAULT 'ok', client_time TEXT, session_id TEXT, created_at TEXT, updated_at TEXT)
+      status TEXT DEFAULT 'ok', client_time TEXT, session_id TEXT, created_at TEXT, updated_at TEXT, answer_by TEXT)
   -- indexes: (challenge_id, user_id, day_key); UNIQUE(challenge_id, user_id, session_id) WHERE session_id IS NOT NULL
+  -- answer_by: set once when a majority disputes the entry (the owner's 12 h clock, 2.4 1b), NULL otherwise
 steps_daily(user_id TEXT, day_key TEXT, steps INTEGER, source TEXT, updated_at TEXT, PRIMARY KEY(user_id, day_key))
 screen_time_daily(user_id TEXT, day_key TEXT, minutes INTEGER, updated_at TEXT, PRIMARY KEY(user_id, day_key))
 disputes(id TEXT PK, entry_id TEXT, by_user_id TEXT, reason TEXT, status TEXT, created_at TEXT, UNIQUE(entry_id, by_user_id))
@@ -279,13 +280,14 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | POST /auth/register | 409 `username_taken`. Returns `{ token, me }` |
 | POST /auth/login | 401 `bad_credentials` |
 | POST /auth/refresh | authenticated, no body. Returns `{ token }` with a fresh 90 days. An expired token gets the usual 401: renewal keeps a live session alive, it never revives a dead one. The app calls it about once a week |
+| POST /auth/prove | no auth. `ProveBody { claims, nonce }`: `claims` is a token's own `header.payload` (not secret), `nonce` 16–128 base64url chars. Returns `{ origin, proof }`: `origin` = `publicOrigin` (PUBLIC_URL when set, else the request's address), `proof` = base64url HMAC-SHA256(key = HMAC-SHA256(jwtSecret, claims), i.e. that token's signature, message = `proveMessage(nonce, origin)`). The app checks it before its token goes to a new address (services/serverMove.ts): only a holder of the secret can answer, and an answer relayed from the real server names the real address. The signature itself is never sent either way |
 | GET /me | `Me` |
 | PATCH /me | partial update |
 | DELETE /me | soft delete: anonymize username → `deleted_<id8>`, clear push token, leave active challenges (each one then goes through the abandoned check of 2.4, without a `challenge_left`) — except a çelınc that is already past `ends_at` and still waiting (settle hour, dispute window): an accepted player stays in it, as the leave route refuses, so deleting the account cannot turn a lost result into a cancellation |
-| POST /me/password | `ChangePasswordBody`. Wrong current password → **400** `wrong_password` (never 401: the app logs out on any 401), new equal to current (after NFKC) → 400 `same_password`, 8 wrong ones per account in 15 min (login's per-account budget) → 429 `too_many_attempts`. Returns `{ token, me }` like login. Tokens are stateless JWTs and nothing is revoked: other phones already signed in stay signed in |
+| POST /me/password | `ChangePasswordBody`. Wrong current password → **400** `wrong_password` (never 401: the app logs out on any 401), new equal to current (after NFKC) → 400 `same_password`, 8 wrong ones per account in 15 min (login's per-account budget) → 429 `too_many_attempts`. Every attempt is counted before the password is checked and a right one clears the count, so a burst sent at once cannot outrun the budget (login counts the same way). Returns `{ token, me }` like login. Tokens are stateless JWTs and nothing is revoked: other phones already signed in stay signed in |
 | POST /me/push-token | store |
 | DELETE /me/push-token | clear (logout) |
-| POST /me/steps | upsert steps_daily; for every active/pending challenge with `deviceMetric: 'steps'` the user has accepted and whose day range contains dayKey → upsert entry(source). Returns `{ updated: number }` (`services/deviceSync.ts`) |
+| POST /me/steps | upsert steps_daily; for every active/pending challenge with `deviceMetric: 'steps'` the user has accepted and whose day range contains dayKey → upsert entry(source). From `endsAt` on only days that were over by `endsAt` in the player's pinned zone (`dayOverByEnd`) still move: a later reading of a day the end cut in half would carry steps taken after the end. Returns `{ updated: number }` (`services/deviceSync.ts`) |
 | POST /me/screen-time | upsert screen_time_daily; same fan-out for `deviceMetric: 'screen_time'` types, entries written with source `usage_stats` (7-day device backfill window, capped at maxPerDay). A device reading overwrites a typed value for that day. Returns `{ updated: number }` |
 | GET /me/inbox?before=<iso>&limit=30 | newest first |
 | POST /me/inbox/read | `{ ids }` or `{ all: true }` |
@@ -297,23 +299,23 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | GET /users/:id | `PublicUser` + public stats (wins/losses/challengesPlayed) + badges |
 | POST /users/:id/block, /unblock, /report | block sets/creates friendship row status 'blocked' with requester = blocker; blocked users can't see or invite each other. unblock lifts only my own block (`{ status: 'none', userId, removed }`, idempotent) and does not bring a friendship back. report stores a `reports` row and logs a `warn` line (`YENİ ŞİKAYET`) for the owner; nothing in the app reads reports |
 | GET /friends | `FriendsView` |
-| POST /friends/request | by username or inviteCode; if the target already requested you → auto accept. 404 `user_not_found`, 409 `already_friends` |
+| POST /friends/request | by username or inviteCode; if the target already requested you → auto accept. 404 `user_not_found`, 409 `already_friends`. At most 3 new requests from one person to the same person per 24 h (withdrawing frees the row, not the budget) → 429 `too_many_requests` |
 | POST /friends/:friendshipId/accept, /decline | addressee only |
 | DELETE /friends/:userId | remove an accepted friendship (`{ status: 'removed', userId }`), or withdraw my own unanswered request (`{ status: 'withdrawn', userId }`): the row goes, and so does the addressee's unread `friend_request` notification for it (a read one stays as history). A request sent to me → 404 `friendship_not_found`; that one is answered with /decline. `?only=request` (the app's "Geri çek") only ever withdraws: a friendship accepted while the confirm was open → 409 `already_friends` and stays, nothing of mine pending → 404 `friendship_not_found` |
 | GET /catalog | shared catalog dump |
 | GET /challenges?status=active,pending,finished | mine (accepted or invited), `ChallengeSummary[]`, ordered: active by endsAt asc, pending by startsAt, finished by finalizedAt desc |
 | POST /challenges | 201. Returns the bare `Challenge` — the wizard navigates straight to `/challenge/<id>`. Creator auto `accepted`; others `invited` + `challenge_invite` notification. If startsAt <= now → status `active` immediately |
 | GET /challenges/:id | `ChallengeDetail`; participants only (404 otherwise) |
-| POST /challenges/:id/accept, /decline, /leave | Returns the refreshed `ChallengeDetail`. Accept while status ∈ pending/active and now is before `endsAt − cutoff`, where `cutoff = min(1h, duration/4)` so a minimum-length challenge stays joinable; leave only while pending/active (marks `left`); an accepted player cannot leave an `active` çelınc past `endsAt` (400 `challenge_ended`): it is only waiting (2.4), and head to head leaving would cancel a result already seen. A declined invite may still accept (same window): that is the app's way back from an accidental "Reddet". Before `endsAt`, a decline notifies the creator (`challenge_declined`, data `{ challengeId, fromUserId }`, "Ali tırstı, reddetti") and a leave every other accepted player (`challenge_left`, same data, "Ali havlu attı"); an invitee's leave counts as a decline. Each at the reader's level, only while they are still `accepted`, never across a block (either direction). Then the abandoned check of 2.4 runs, all in one transaction. Past `endsAt` both only change the row |
+| POST /challenges/:id/accept, /decline, /leave | Returns the refreshed `ChallengeDetail`. Accept while status ∈ pending/active and now is before `endsAt − cutoff`, where `cutoff = min(1h, duration/4)` so a minimum-length challenge stays joinable; leave only while pending/active (marks `left`); an accepted player cannot leave an `active` çelınc past `endsAt` (400 `challenge_ended`): it is only waiting (2.4), and head to head leaving would cancel a result already seen. A declined invite may still accept (same window): that is the app's way back from an accidental "Reddet". Somebody who had joined and left may not (409 `already_left`); an invitee's "Ayrıl" is a decline and may. Before `endsAt`, a decline notifies the creator (`challenge_declined`, data `{ challengeId, fromUserId }`, "Ali tırstı, reddetti") and a leave every other accepted player (`challenge_left`, same data, "Ali havlu attı"); an invitee's leave counts as a decline. Each at the reader's level, only while they are still `accepted`, never across a block (either direction). Then the abandoned check of 2.4 runs, all in one transaction. Past `endsAt` both only change the row |
 | POST /challenges/:id/cancel | creator, only pending; notifies. Returns the refreshed `ChallengeDetail` |
 | POST /challenges/:id/entries | see 2.3; returns `{ entry, standings }` |
 | DELETE /challenges/:id/entries/:entryId | own manual entries only, while active |
-| POST /challenges/:id/entries/:entryId/dispute | 201 `{ dispute, entry, answerBy, standings }`. Not own (403 `own_entry`); one per user per entry, whatever became of it (409 `already_disputed`); a `rejected` entry → 409 `already_rejected`. The entry becomes `disputed` and keeps counting. Threshold = a majority of the OTHER accepted players, `max(1, ceil((accepted − 1) / 2))`. Once the open disputes reach it, the owner has `LIMITS.DISPUTE_ANSWER_MS` (12 h) from the dispute that made the majority to add a photo; `answerBy` says until when (null below the threshold). Notification `dispute` to the owner (data `{ challengeId, entryId, disputeId, answerBy }`); the one that makes the majority says "12 saat içinde fotoğraf ekle, yoksa bu giriş yanar" at the owner's level. Upholding happens in the scheduler (2.4) |
-| DELETE /challenges/:id/entries/:entryId/dispute | the caller takes back their own OPEN dispute (404 `dispute_not_found` otherwise): it becomes `dismissed`, and the entry goes back to `ok` when no open dispute is left. Active only (the settle wait included). Returns `{ dispute, entry, standings }`. A withdrawn dispute cannot be filed again |
-| POST /challenges/:id/entries/:entryId/proof | `EntryProofBody`. Entry owner only (403 `not_your_entry`), entry `disputed` (409 `not_disputed`, 409 `already_rejected`), çelınc `active` (the settle wait included, 400 `challenge_not_active`). Sets `proof_url`, marks every open dispute `dismissed`, entry back to `ok`; each disputer (not deleted, not blocked) gets a `dispute` notification with data `{ challengeId, entryId, kind: 'proof' }` ("{ad} kanıt ekledi, bir bak."). Returns `{ entry, standings }` |
-| POST /challenges/:id/poke | active only; target must be a participant the sender is strictly AHEAD of, else 403 `not_ahead`; rate limit 1 per (from,to,challenge) per 2h → 429 `poke_cooldown`. Template from `poke` context clamped to target's level (or default pick). Notification type `poke` |
+| POST /challenges/:id/entries/:entryId/dispute | 201 `{ dispute, entry, answerBy, standings }`. Not own (403 `own_entry`); one per user per entry, whatever became of it (409 `already_disputed`) — except that a dismissed one (answered with a photo, or taken back) is forgotten when the entry's value or photo changes afterwards, so its disputer may file again; a `rejected` entry → 409 `already_rejected`. The entry becomes `disputed` and keeps counting. Threshold = a majority of the OTHER accepted players, `max(1, ceil((accepted − 1) / 2))`, counting only open disputes of players still accepted. Once they reach it, the owner has `LIMITS.DISPUTE_ANSWER_MS` (12 h) from that moment to add a photo, stored as `entries.answer_by` (`syncDisputeClocks`); `answerBy` says until when (null below the threshold). Notification `dispute` to the owner (data `{ challengeId, entryId, disputeId, answerBy }`); the one that makes the majority says "12 saat içinde fotoğraf ekle, yoksa bu giriş yanar" at the owner's level, plus "\"Kanıt ekle\" düğmesi yoksa önce uygulamayı güncelle" (1.0 has no such button). A majority reached without a new dispute (somebody left, or deleted the account) starts the clock then, with a `dispute` notification "…artık çoğunlukta. 12 saat içinde…" (data `{ challengeId, entryId, answerBy }`). Upholding happens in the scheduler (2.4) |
+| DELETE /challenges/:id/entries/:entryId/dispute | the caller takes back their own OPEN dispute (404 `dispute_not_found` otherwise): it becomes `dismissed`, and the entry goes back to `ok` when no open dispute is left; when open ones remain but no longer make a majority, the owner's clock stops. Active only (the settle wait included). Returns `{ dispute, entry, standings }`. A withdrawn dispute cannot be filed again until the entry's value or photo changes |
+| POST /challenges/:id/entries/:entryId/proof | `EntryProofBody`. Entry owner only (403 `not_your_entry`), entry `disputed` (409 `not_disputed`, 409 `already_rejected`), çelınc `active` (the settle wait included, 400 `challenge_not_active`). Sets `proof_url`, marks every open dispute `dismissed`, entry back to `ok` (clock cleared); each disputer (not deleted, not blocked) gets a `dispute` notification with data `{ challengeId, entryId, kind: 'proof' }` ("{ad} kanıt ekledi, bir bak."). Returns `{ entry, standings }`. The 1.0 app has no button for it: its owner re-posting a `disputed` upsert day through `POST /challenges/:id/entries` with a `proofUrl` is the same answer (and when the value changed with it, the disputers may file again) |
+| POST /challenges/:id/poke | active only and before `endsAt` (400 `challenge_ended` while a result waits; `pokeTargets` is empty then); target must be a participant the sender is strictly AHEAD of, else 403 `not_ahead`; rate limit 1 per (from,to,challenge) per 2h → 429 `poke_cooldown`. Template from `poke` context clamped to target's level (or default pick). Notification type `poke` |
 | POST /challenges/:id/taunt | finished only; sender must be winner (`winnerId`), target must be a loser (accepted, not winner); one per target (409 `already_taunted`); template clamped to target's `vulgarity_max` — if requested template level > target max, pick deterministic template same context at target max; `customBody` allowed (level = sender-chosen ≤ target max, checked by `containsBanned` → 400 `banned_content`). Notification type `taunt` with data `{ challengeId, tauntId }` |
-| POST /challenges/:id/rematch | 201, returns the new bare `Challenge`. Finished only, any accepted participant; clones settings (same type, duration, reward), startsAt = now + 5 min, invites the previous accepted participants who are still friends (no block either way, not deleted; nobody left → 400 `no_participants`), `rematch_of_id`; notification `rematch` |
+| POST /challenges/:id/rematch | 201, returns the new bare `Challenge`. Finished only, any accepted participant; one open (not `cancelled`) rematch per creator per çelınc (409 `already_rematched`); clones settings (same type, reward, and number of local days: the original's window in its own creator's pinned zone, where the wizard snapped it, a day its end cut in half not counted), startsAt = now + 5 min, endsAt = the last millisecond of the last of those days in the rematch creator's zone, like the wizard (when that is not more than `MIN_DURATION_MS` away, the end of the next day), invites the previous accepted participants who are still friends (no block either way, not deleted; nobody left → 400 `no_participants`), `rematch_of_id`; notification `rematch` |
 | GET /challenges/:id/results | `{ challenge, standings: ParticipantView[], taunts, tauntTemplatesForWinner?: TauntTemplate[] (rendered previews per loser), tauntContexts?: Record<userId, TauntContext> (winner only: each accepted loser's context, 2.3), rematchLeftOut?: string[] (accepted players of a finished çelınc: the others a rematch opened by the reader would skip for not being friends; deleted accounts and blocks are skipped too but never listed) }` |
 | GET /leaderboard | friends + me ranked by wins, then tauntsSent |
 | POST /uploads | multipart field `file`; returns `{ url: PUBLIC_URL + '/uploads/<uuid>.<ext>' }` |
@@ -322,14 +324,15 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | GET /indir?kod= | same page without an inviter |
 | GET /invites/:code | public JSON `{ code, inviter: { username, displayName, avatarEmoji } }`, 404 `invite_not_found`; rate-limited (429 `too_many_lookups`) |
 | GET /koydum.apk | the build published with `npm run apk:yayinla` (`<APP_DIR>/koydum.apk` + `latest.json`), `application/vnd.android.package-archive`; 404 `apk_not_found` |
-| GET /health | also `app: { latestVersion, downloadUrl, notes } \| null` — the app shows "Yeni sürüm var" when latestVersion > its native version — and `publicUrl: string \| null` (PUBLIC_URL when set and not loopback; `npm run internet` sets it to the Cloudflare quick-tunnel address). The friends tab builds invite links from `publicUrl ?? serverUrl`. And `serverId`: the first 16 hex chars of HMAC-SHA256(jwtSecret, 'koydum-server-id'), computed once per start. It stays the same across restarts and addresses and changes exactly when old tokens stop working (a new secret); it reveals nothing about the secret. The app uses it to tell "same server, new tunnel address" from "another server" (services/serverMove.ts). |
+| GET /health | also `app: { latestVersion, downloadUrl, notes } \| null` — the app shows "Yeni sürüm var" when latestVersion > its native version — and `publicUrl: string \| null` (PUBLIC_URL when set and not loopback; `npm run internet` sets it to the Cloudflare quick-tunnel address). The friends tab builds invite links from `publicUrl ?? serverUrl`. And `serverId`: the first 16 hex chars of HMAC-SHA256(jwtSecret, 'koydum-server-id'), computed once per start. It stays the same across restarts and addresses and changes exactly when old tokens stop working (a new secret); it reveals nothing about the secret. The app uses it as a quick "another server" (a different id); a matching id proves nothing, since anybody can read it, so the app moves a session only after `POST /auth/prove` (services/serverMove.ts). |
 | POST /uploads | one image per request (jpg/png/webp, ≤ 5 MB); at most 60 per account per hour (429 `upload_limit`) |
 
 ### 2.3 Entry validation (`services/entries.ts`)
 
 Common: user must be `accepted` participant; challenge `active`; from `endsAt` on only device sources
-(`pedometer`, `health_connect`, `usage_stats`) are taken — a typed entry answers 400 `challenge_ended` while a
-phone-counted çelınc waits for the last syncs (2.4); `dayKey` must be in
+(`pedometer`, `health_connect`, `usage_stats`) are taken, and only for a day that was over by `endsAt` in the
+writer's pinned zone — a typed entry, or a reading of a day the end cut in half, answers 400 `challenge_ended`
+while a phone-counted çelınc waits for the last syncs (2.4); `dayKey` must be in
 `dayKeysBetween(startsAt, endsAt, user.tz)`; `dayKey <= todayKey(user.tz)`; `dayKey >= todayKey − 2 days`
 (manual types) / `− 7 days` (steps); value ≤ `type.maxPerEntry`; proof required when
 `challenge.proofRequired` and source is manual (400 `proof_required`) — and only for metrics where a photo can back a typed number (`manual_count`, `manual_lower_is_better`, `auto_steps`); a `daily_boolean` mark or a `checkin` has no photo step and ignores the flag. Device sources (`pedometer`, `health_connect`, `usage_stats`) never need proof; `usage_stats` gets the 7-day device backfill window.
@@ -354,18 +357,28 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    Not a scheduler step but the same rule sooner: after a decline, a leave or an account deletion, a `pending`/`active`
    çelınc before its `ends_at` with fewer than two participants `accepted` or still `invited` is cancelled on the spot
    (`cancelIfAbandoned`: `finalized_at = now`, `challenge_cancelled` with data `{ challengeId, reason: 'everyone_left' }`
-   to whoever is left, "herkes kaçtı" rather than "kimse kabul etmedi"). Past `ends_at` it is left to the scheduler.
-1b. Disputes (`resolveDisputes`, before finalize): in every `active` çelınc, a `disputed` entry of an accepted player
-   whose open disputes reached the threshold (2.2) and whose answer window ran out — `now >=` the created_at of the
-   threshold-th oldest open dispute `+ LIMITS.DISPUTE_ANSWER_MS` — is upheld: open disputes → `upheld`, entry →
-   `rejected`, `entry_rejected` to the owner (not when deleted), badges recomputed for the disputers (`disputesWon`).
-   The window runs from the moment the majority was reached, so a second dispute ten hours after the first still
-   gives the owner the full 12 hours. Below the threshold nothing is ever upheld.
+   to whoever is left, "herkes kaçtı" rather than "kimse kabul etmedi"). Past `ends_at` it is left to the scheduler,
+   which says the same (`reason: 'everyone_left'`) when it cancels a çelınc with fewer than two accepted in which
+   somebody else had accepted (`joined_at` set) and left — a silent invitee can keep one open to its end;
+   only when nobody else ever accepted is it "kimse kabul etmedi" (`reason: 'not_enough_players'` from finalize).
+1b. Disputes (`resolveDisputes`, before finalize): in every `active` çelınc the clocks are brought up to date first
+   (`announceDisputeClocks`): a `disputed` entry of an accepted player whose open disputes (from accepted players)
+   reach the threshold and has no `answer_by` gets `now + LIMITS.DISPUTE_ANSWER_MS` and its owner a `dispute`
+   notification; one that no longer reaches it loses its clock. Then an entry whose `answer_by` has passed is
+   upheld: open disputes → `upheld`, entry → `rejected`, `entry_rejected` to the owner (not when deleted), badges
+   recomputed for the disputers (`disputesWon`). The window runs from the moment the majority was reached and is
+   stored then, so a second dispute ten hours after the first still gives the owner the full 12 hours, and a
+   player leaving (which shrinks the majority) starts a full window at the leave instead of putting an old
+   dispute's clock in the past; the leave and account-deletion paths arm it on the spot. A database from before
+   `answer_by` (migration 009) is armed by the first pass, always with a full window. Below the threshold nothing
+   is ever upheld.
 2. `active` with `ends_at <= now` → finalize. A type with a `deviceMetric` (steps, screen time) first **settles**: the
    phone's last evening usually arrives with the next background sync (15+ minutes, longer under Doze), so it
    stays `active` until `now >= max(ends_at, bootAt) + LIMITS.DEVICE_SETTLE_MS` (1 h), or earlier once every
    accepted participant's `steps_daily` / `screen_time_daily` row for their own last window day
-   (`challengeWindow(c, participantTimezone(p, u)).at(-1)`) has `updated_at > ends_at`. `bootAt` is when
+   (`challengeWindow(c, participantTimezone(p, u)).at(-1)`) has `updated_at > ends_at`; a participant whose last
+   day was not over by `ends_at` (another zone, an end in the middle of a day) is not waited for, because that day
+   no longer moves (2.3). `bootAt` is when
    `startScheduler` started, so a server that was off at the end gives the phones the full hour after boot. While
    settling, device syncs still fan out into the last day and typed entries get `challenge_ended` (2.3); the
    app shows "Sonuç birazdan" instead of the countdown, hides the entry buttons and sends its own count once.
@@ -518,9 +531,9 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             DELETE); the owner's disputed row gets "Kanıt ekle", a sheet with the entry modal's camera /
                             gallery pick → /uploads → POST .../proof),
                             past `endsAt` but still `active` (settling, 2.4) → "Süre bitti / Sonuç birazdan" instead of the
-                            countdown, no action area, "böyle devam" verdict or "Ayrıl", one device sync on open (the list card
-                            says "Sonuç bekleniyor"),
-                            "laf sok" per rival you lead — opens a sheet of rendered `poke` lines to choose from,
+                            countdown, no action area, "böyle devam" verdict, "laf sok" or "Ayrıl", one device sync on open
+                            (the list card says "Sonuç bekleniyor"),
+                            "laf sok" per rival you lead, before `endsAt` — opens a sheet of rendered `poke` lines to choose from,
                             invited → "Varım" / "Yokum" ("Yokum" asks first, like the home card); declined while it
                             still runs → "Reddetmiştin..." card with "Katıl" (accept),
                             leave/cancel; finished → button to results

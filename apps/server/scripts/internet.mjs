@@ -268,7 +268,8 @@ ${first}
   • Adres, pencereyi kapatıp açınca ya da internet kopup tünel
     yeniden kurulunca değişir; yenisi burada yazar. Paylaş'la
     gönderince kankan dokunup "Yeni adrese geç"e basar, çıkış
-    yapmaz. (Uygulaması eski sürümse bir kere yeniden giriş yapar.)
+    yapmaz. (Uygulaması eski sürümse bağlantının açtığı sayfadan
+    yeni sürümü kursun.)
 ────────────────────────────────────────────────────────────
 `);
 }
