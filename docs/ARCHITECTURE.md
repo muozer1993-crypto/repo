@@ -66,7 +66,10 @@ itirazlar `dismissed` olur. Eklemezse zamanlayıcının `resolveDisputes` adım�
 çalışır) girişi `rejected` yapar ve itiraz edenlerin `disputesWon` sayısı artar. Süre çoğunluğun
 oluştuğu andan başlar, ilk itirazdan değil (`disputeDeadlines`). Bitişte süresi dolmamış bir itiraz
 varsa çelınc o süre boyunca `active` kalır; yoksa son dakika gelen bir itiraz, sahibine söz verilen
-12 saati yerdi.
+12 saati yerdi. Bu bekleyişte yeni itiraz alınmaz (adım ve ekran süresi çelınclarının bir saati
+hariç, son akşamın sayıları o saatte gelir; `disputesCloseAt`), yoksa art arda açılan itirazlar
+sonucu günlerce bekletebilirdi. Bitişten sonra ayrılmak da kapalıdır: teke tek çelıncta kaybeden
+ayrılıp sonucu iptal ettirebilirdi.
 
 ## Puanlama
 

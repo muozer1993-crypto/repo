@@ -631,6 +631,18 @@ function everyPhoneReported(db: Database, challenge: ChallengeRow, metric: Devic
 }
 
 /**
+ * Until when a friend may still file an itiraz (epoch ms). Past its end a çelınc
+ * can still be `active`: the phones' hour below, or an itiraz waiting for its
+ * photo. Only the phones' hour takes new ones, because the last evening's
+ * numbers land in it; after that each new itiraz would hold the result another
+ * `DISPUTE_ANSWER_MS`, and one after another could hold it for days.
+ */
+export function disputesCloseAt(challenge: ChallengeRow): number {
+  const settle = typeForChallenge(challenge).deviceMetric ? LIMITS.DEVICE_SETTLE_MS : 0;
+  return Date.parse(challenge.ends_at) + settle;
+}
+
+/**
  * Whether an ended çelınc is still waiting for the phones.
  *
  * Only types the phone counts on its own wait: the final evening's steps sit on

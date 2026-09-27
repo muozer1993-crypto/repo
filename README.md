@@ -524,8 +524,10 @@ görünür. İtiraz tek başına girişi silmez: diğer oyuncuların çoğunluğ
 eder ve itiraz edenlere haber gider; koymazsa giriş düşer. 12 saat dolana kadar giriş sayılır, yani teke
 tek çelıncta rakip tek dokunuşla senin gününü silemez. İtiraz eden fikrini değiştirirse "Geri çek" ile
 itirazını kaldırır (aynı girişe bir daha itiraz edemez). Bitişe yakın gelen bir itiraz yüzünden sonuç
-en fazla 12 saat bekleyebilir. İtiraz sadece çelınc sürerken açılır. Fotoğraf kanıtı, bir sayı yazılan
-türlerde çelıncı açan kişi isterse zorunlu olur; evet/hayır günleri ve check-in'lerde fotoğraf yok.
+en fazla 12 saat bekleyebilir. İtiraz sadece çelınc sürerken açılır; adım ve ekran süresi çelınclarında
+son akşamın sayıları bitişten sonraki bir saatte geldiği için o saat de sayılır. Fotoğraf kanıtı, bir
+sayı yazılan türlerde çelıncı açan kişi isterse zorunlu olur; evet/hayır günleri ve check-in'lerde
+fotoğraf yok.
 
 ---
 
@@ -660,7 +662,8 @@ Sonuçlandırmayı sunucudaki zamanlayıcı yapar ve 30 saniyede bir çalışır
 çelınclarında bu bilerek bir saate kadar sürer: son akşamın adımları telefonlardan geç gelir,
 uygulama o sırada "Sonuç birazdan" yazar. Herkesin telefonu son günü gönderince hemen kapanır.
 Sunucu kapalıysa açıldığında geçmiş çelınclarını da kapatır; adım çelınclarında telefonlara
-açıldıktan sonra yine bir saat tanır.
+açıldıktan sonra yine bir saat tanır. Süre bittikten sonra kimse çelınctan ayrılamaz; yoksa
+teke tek çelıncta kaybeden ayrılıp sonucu iptal ettirebilirdi.
 
 **Kanka şifresini unuttu, giremiyor.**
 Yeni hesap açmasın, her şeyi sıfırdan başlar. Sen `npm run yonet -- sifre <kullanici-adi>`

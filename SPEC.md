@@ -300,7 +300,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | GET /challenges?status=active,pending,finished | mine (accepted or invited), `ChallengeSummary[]`, ordered: active by endsAt asc, pending by startsAt, finished by finalizedAt desc |
 | POST /challenges | 201. Returns the bare `Challenge` — the wizard navigates straight to `/challenge/<id>`. Creator auto `accepted`; others `invited` + `challenge_invite` notification. If startsAt <= now → status `active` immediately |
 | GET /challenges/:id | `ChallengeDetail`; participants only (404 otherwise) |
-| POST /challenges/:id/accept, /decline, /leave | Returns the refreshed `ChallengeDetail`. Accept while status ∈ pending/active and now is before `endsAt − cutoff`, where `cutoff = min(1h, duration/4)` so a minimum-length challenge stays joinable; leave only while pending/active (marks `left`) |
+| POST /challenges/:id/accept, /decline, /leave | Returns the refreshed `ChallengeDetail`. Accept while status ∈ pending/active and now is before `endsAt − cutoff`, where `cutoff = min(1h, duration/4)` so a minimum-length challenge stays joinable; leave only while pending/active (marks `left`); an accepted player cannot leave an `active` çelınc past `endsAt` (400 `challenge_ended`): it is only waiting (2.4), and head to head leaving would cancel a result already seen |
 | POST /challenges/:id/cancel | creator, only pending; notifies. Returns the refreshed `ChallengeDetail` |
 | POST /challenges/:id/entries | see 2.3; returns `{ entry, standings }` |
 | DELETE /challenges/:id/entries/:entryId | own manual entries only, while active |
@@ -338,7 +338,7 @@ Per type:
 - `manual_count`: append; daily sum must stay ≤ maxPerDay (400 `daily_cap`). Optional `sessionId` (UUID) is stored and makes the write idempotent — the app sends a fresh one per tap so a timed-out request replayed from the offline queue cannot count twice. Upsert metrics ignore the field.
 - `manual_lower_is_better`: upsert per day; value ≤ maxPerEntry. Sources `manual` and `usage_stats`; once the day's row has a device source, a `manual` write is refused (409 `device_locked`) — the phone may keep correcting itself. Scored as the DAILY AVERAGE over the participant's own window (sum + missing days × penalty) / window days; while the çelınc is active the window is clipped to today, so day 2 of 7 shows two days' average, not five days of penalty.
 - Device fan-out (`POST /me/steps`) never lowers a typed `manual` value on a higher-is-better metric: the Android foreground counter is partial by design and the user was told to declare the real number; a device value ≥ the typed one replaces it (source becomes the device's).
-- Disputes: only while the challenge is `active` (400 `challenge_not_active`) and never across a block (403 `blocked`). Phone-counted entries may be disputed too. A dispute never rejects anything by itself: a majority starts the owner's 12-hour answer window (2.2), and only an unanswered one is upheld (2.4). Accepting an invite from someone who blocked you or whom you blocked → 403 `blocked`.
+- Disputes: only while the challenge is `active` (400 `challenge_not_active`) and, past `endsAt`, only inside a phone-counted çelınc's settle hour (`endsAt + LIMITS.DEVICE_SETTLE_MS`, where the last evening lands; 400 `challenge_ended` otherwise — a new dispute during a wait would hold the result another 12 h, and a chain of them for days), and never across a block (403 `blocked`). Phone-counted entries may be disputed too. A dispute never rejects anything by itself: a majority starts the owner's 12-hour answer window (2.2), and only an unanswered one is upheld (2.4). Accepting an invite from someone who blocked you or whom you blocked → 403 `blocked`.
 - Taunt context `revenge` only when the çelınc is a rematch AND the taunting winner lost the original; templates carry an optional `metrics` list and are filtered by the challenge's metric (a "kalk yürü" line stays on step çelınclar).
 
 After every write: recompute standings (in memory via shared `rankParticipants`) and return.
@@ -494,7 +494,7 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             DELETE); the owner's disputed row gets "Kanıt ekle", a sheet with the entry modal's camera /
                             gallery pick → /uploads → POST .../proof),
                             past `endsAt` but still `active` (settling, 2.4) → "Süre bitti / Sonuç birazdan" instead of the
-                            countdown, no action area or "böyle devam" verdict, one device sync on open (the list card
+                            countdown, no action area, "böyle devam" verdict or "Ayrıl", one device sync on open (the list card
                             says "Sonuç bekleniyor"),
                             "laf sok" per rival you lead — opens a sheet of rendered `poke` lines to choose from,
                             leave/cancel; finished → button to results

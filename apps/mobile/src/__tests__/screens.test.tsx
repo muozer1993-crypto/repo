@@ -462,6 +462,8 @@ describe('a step çelınc past its end, still active on the server', () => {
     expect(text).not.toContain('BEYAN ET');
     // no "böyle devam" when there is nothing left to continue
     expect(text).not.toContain('Aferin lan koçum');
+    // walking out now would void the result (the server refuses it too)
+    expect(text).not.toContain('AYRIL');
     expect(steps.getDailySteps).toHaveBeenCalled();
   });
 
@@ -479,6 +481,7 @@ describe('a step çelınc past its end, still active on the server', () => {
     expect(text).toContain('BİTMESİNE');
     expect(text).toContain('SENİN SIRAN');
     expect(text).toContain('BEYAN ET');
+    expect(text).toContain('AYRIL');
     expect(text).not.toContain('Sonuç birazdan');
     expect(steps.getDailySteps).not.toHaveBeenCalled();
   });

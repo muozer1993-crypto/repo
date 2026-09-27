@@ -279,6 +279,17 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     if (membership.status !== 'accepted' && membership.status !== 'invited') {
       throw conflict('already_left', 'Bu çelıncta zaten değilsin.');
     }
+    // Past its end an `active` çelınc is only waiting (the phones' hour, an
+    // itiraz's photo). A player leaving then is not quitting a race but voiding a
+    // result they have seen: head to head the çelınc is cancelled and the winner
+    // loses the win.
+    if (
+      challenge.status === 'active' &&
+      membership.status === 'accepted' &&
+      app.now().getTime() >= Date.parse(challenge.ends_at)
+    ) {
+      throw badRequest('challenge_ended', 'Süre bitti, sonuç birazdan. Artık ayrılamazsın.');
+    }
 
     db.prepare("UPDATE challenge_participants SET status = 'left' WHERE challenge_id = ? AND user_id = ?").run(
       challenge.id,

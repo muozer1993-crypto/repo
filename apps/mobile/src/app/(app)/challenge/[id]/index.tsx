@@ -442,6 +442,7 @@ export default function ChallengeDetailScreen() {
         id={id}
         detail={detail}
         meId={meId}
+        settling={settling}
         onLeft={back}
       />
 
@@ -1789,11 +1790,14 @@ function FooterActions({
   id,
   detail,
   meId,
+  settling,
   onLeft,
 }: {
   id: string;
   detail: ChallengeDetail;
   meId: string | null;
+  /** past the end the server only waits, and leaving would void the result */
+  settling: boolean;
   onLeft: () => void;
 }) {
   const action = useChallengeAction(id);
@@ -1801,7 +1805,7 @@ function FooterActions({
   const { challenge, me: mine } = detail;
 
   const canLeave =
-    (challenge.status === 'pending' || challenge.status === 'active') &&
+    (challenge.status === 'pending' || (challenge.status === 'active' && !settling)) &&
     (mine?.status === 'accepted' || mine?.status === 'invited');
   const canCancel = challenge.status === 'pending' && challenge.creatorId === meId;
   const finished = challenge.status === 'finished';

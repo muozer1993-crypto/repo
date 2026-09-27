@@ -510,6 +510,76 @@ describe('scheduler: an itiraz nobody answers', () => {
     expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
     expect(participant(harness, challengeId, ali.me.id).final_score).toBe(8);
   });
+
+  it('takes no new itiraz during the wait, so one after another cannot hold the result for days', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'su_bardak');
+    at(harness, MIDNIGHT_END, -2 * HOUR);
+    const first = await logWater(harness, ali, challengeId, 8);
+    const second = await logWater(harness, ali, challengeId, 3);
+    at(harness, MIDNIGHT_END, -HOUR);
+    await dispute(harness, veli, challengeId, first);
+
+    // still `active`, waiting on the first one's photo
+    at(harness, MIDNIGHT_END, LIMITS.DISPUTE_ANSWER_MS - 2 * HOUR);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    const late = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${second}/dispute`,
+      payload: { reason: 'bu da yalan' },
+    });
+    expect(late.statusCode).toBe(400);
+    expect(late.json<{ error: { code: string } }>().error.code).toBe('challenge_ended');
+    expect(entryStatus(harness, second)).toBe('ok');
+
+    at(harness, MIDNIGHT_END, LIMITS.DISPUTE_ANSWER_MS - HOUR);
+    expect(tick(harness)).toMatchObject({ disputes: 1, finalized: 1 });
+    expect(participant(harness, challengeId, ali.me.id).final_score).toBe(3);
+  });
+
+  it("takes an itiraz in a step çelınc's hour, where the last evening lands, and none after it", async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+    at(harness, MIDNIGHT_END, 20 * MINUTE);
+    await phoneSync(harness, ali, { '2026-01-06': 30_000 });
+    const entryId = (
+      harness.db.prepare('SELECT id FROM entries WHERE challenge_id = ? AND user_id = ?').get(challengeId, ali.me.id) as {
+        id: string;
+      }
+    ).id;
+
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS);
+    const tooLate = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'telefonu köpeğe bağlamış' },
+    });
+    expect(tooLate.statusCode).toBe(400);
+    expect(tooLate.json<{ error: { code: string } }>().error.code).toBe('challenge_ended');
+
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS - MINUTE);
+    const inTime = await dispute(harness, veli, challengeId, entryId);
+    expect(inTime.answerBy).not.toBeNull();
+  });
+
+  it('lets nobody walk out of a çelınc that is over but still waiting, which would cancel the result', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+    at(harness, '2026-01-06T19:00:00.000Z');
+    await phoneSync(harness, ali, { '2026-01-06': 9_000 });
+    await phoneSync(harness, veli, { '2026-01-06': 10_000 });
+
+    // Ali's late evening arrives in the hour; Veli sees he lost and tries to leave
+    at(harness, MIDNIGHT_END, 20 * MINUTE);
+    await phoneSync(harness, ali, { '2026-01-06': 12_000 });
+    const left = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/leave` });
+    expect(left.statusCode).toBe(400);
+    expect(left.json<{ error: { code: string } }>().error.code).toBe('challenge_ended');
+
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS);
+    expect(tick(harness)).toMatchObject({ finalized: 1, cancelled: 0 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+  });
 });
 
 // ---------------------------------------------------------------------------
