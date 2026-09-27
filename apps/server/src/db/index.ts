@@ -98,6 +98,10 @@ export interface UserRow {
   created_at: string;
   last_seen_at: string | null;
   deleted_at: string | null;
+  /** 0 | 1 — the mid-day "sana fark koymuş" nudge */
+  nudges_enabled: number;
+  /** 0 | 1 — the Sunday evening weekly recap */
+  recap_enabled: number;
 }
 
 export interface FriendshipRow {

@@ -344,7 +344,11 @@ export function sendWeeklyRecaps(db: Database, now: Date = new Date()): number {
   const until = nowIso(now);
   const floor = new Date(now.getTime() - WEEK_MS).toISOString();
   const reach = new Date(now.getTime() - PREVIOUS_RECAP_REACH_MS).toISOString();
-  const users = db.prepare('SELECT * FROM users WHERE deleted_at IS NULL').all() as UserRow[];
+  // Switched off in Ayarlar: no recap and no `recaps_sent` row. A week missed
+  // that way is skipped like any other, so the next one looks back 7 days.
+  const users = db
+    .prepare('SELECT * FROM users WHERE deleted_at IS NULL AND recap_enabled = 1')
+    .all() as UserRow[];
 
   const alreadySent = db.prepare('SELECT 1 FROM recaps_sent WHERE user_id = ? AND week_key = ?');
   const previous = db.prepare('SELECT MAX(sent_at) AS at FROM recaps_sent WHERE user_id = ?');

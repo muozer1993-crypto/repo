@@ -169,6 +169,9 @@ Spam olmaması dört kurala bağlı:
 * fark, lideri skorunun en az onda biri kadar olmalıdır — 40 adımlık fark hikâye değildir;
 * check-in çelınclarında ve son bir saatte hiç gönderilmez, oralarda zaten kendi hatırlatması var.
 
+Bunlardan ayrı, dürtmeyi kapatan (`users.nudges_enabled = 0`) hiç almaz. Bu kontrol `nudges_sent`
+kaydından **önce** yapılır: kapatıp aynı öğleden sonra yeniden açan o günün dürtmesini kaçırmaz.
+
 Kapanış cümlesi metriğe göre değişir: "kalk da iki dolaş" odak çelıncında saçmadır, orada
 "telefonu bırak da bir seans yap" der.
 
@@ -195,6 +198,26 @@ pazartesi sabahki laf atışmasını pazar akşamı başlatan kısım.
 
 Metin sunucuda, okuyanın seviyesinde yazılır; `data` ise sayıları ve hazır satırları taşır, gelen
 kutusu bunları kutucuklu bir kart olarak çizer. `data` bozuksa kart yerine düz metin satırı çıkar.
+
+Özeti kapatan (`users.recap_enabled = 0`) satır almaz, `recaps_sent` kaydı da yazılmaz. Yeniden
+açtığında sıradaki özet, atlanmış her haftada olduğu gibi son 7 güne bakar.
+
+## Bildirim tercihleri
+
+Android'de bütün bildirimler tek bir "koydum" kanalından geçer. Telefonun kendi ayarından susturmak
+lafları da susturur, o yüzden Ayarlar → Bildirim tercihleri kimsenin istemeden aldığı üç şeyi tek
+tek kapatır:
+
+* **Geride kalınca dürt beni** → `users.nudges_enabled` (`PATCH /me { nudgesEnabled }`);
+* **Pazar akşamı haftalık özet** → `users.recap_enabled` (`PATCH /me { recapEnabled }`);
+* **Saatli çelınc uyarıları** → sadece o telefonda (`StorageKeys.deviceRemindersOff`), çünkü check-in
+  ve son saat uyarılarını sunucu değil telefon kurar. Kapalıyken `refreshReminders` sunucuya hiç
+  sormadan kurulu olanları siler; açılınca bir sonraki ön plana dönüşü beklemeden yeniden kurar.
+  Ayarlar ile köprünün çağrıları sırayla çalışır, listeyi bekleyen eski bir çağrı temizlenmiş
+  uyarıları geri kuramaz.
+
+Günlük hatırlatmanın zaten kendi "kapalı" saati var. "KOYDUM MU?", kankanın elle dürtmesi, davetler,
+sonuçlar ve laf sokmayı unutan kazanana giden hatırlatma kapatılamaz: uygulama bunlar için var.
 
 ## Rozet merdivenleri
 

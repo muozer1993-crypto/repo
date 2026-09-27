@@ -314,6 +314,10 @@ export interface Me extends PublicUser {
   vulgarityMax: VulgarityLevel;
   timezone: string;
   reminderHour: number | null;
+  /** The mid-day "sana fark koymuş" nudge; taunts, pokes, invites and results cannot be switched off. */
+  nudgesEnabled: boolean;
+  /** The Sunday evening weekly recap. */
+  recapEnabled: boolean;
   inviteCode: string;
   hasPushToken: boolean;
   stats: UserStats;

@@ -145,7 +145,7 @@ Rule grammar: `<statKey><op><number>` with op in `>=`, `>`, `==`, `<=`; multiple
 RegisterBody { username: /^[a-z0-9_]{3,20}$/ (lowercased), password: min 6 max 72, displayName: 1..30, timezone: string (default 'Europe/Istanbul') }
 LoginBody { username, password }
 ChangePasswordBody { currentPassword: 1..72 (login rule), newPassword: min 6 max 72 (sign-up rule) }
-UpdateMeBody { displayName?, avatarEmoji? (1..4 chars), vulgarityMax? (1|2|3), timezone?, reminderHour? (0..23 | null) }
+UpdateMeBody { displayName?, avatarEmoji? (1..4 chars), vulgarityMax? (1|2|3), timezone?, reminderHour? (0..23 | null), nudgesEnabled? (boolean), recapEnabled? (boolean) }
 PushTokenBody { token: string, platform: 'ios'|'android'|'web' }
 StepsSyncBody { days: { dayKey, steps: int 0..100000, source: 'pedometer'|'health_connect' }[] (max 14) }
 ScreenTimeSyncBody { days: { dayKey, minutes: int 0..1440 }[] (max 14) }   // Android usage access; entries get source 'usage_stats'
@@ -171,7 +171,7 @@ InboxReadBody { ids?: string[]; all?: boolean }
 
 ```ts
 PublicUser { id, username, displayName, avatarEmoji, createdAt }
-Me extends PublicUser { vulgarityMax, timezone, reminderHour, inviteCode, hasPushToken, stats: UserStats, badges: string[] }
+Me extends PublicUser { vulgarityMax, timezone, reminderHour, nudgesEnabled, recapEnabled, inviteCode, hasPushToken, stats: UserStats, badges: string[] }
 UserStats { wins, losses, ties, tauntsSent, tauntsReceived, stepsSingleDayMax, focusTotalMinutes, checkinsStreakMax, disputesWon, challengesPlayed, pokesSent, revengeWins, stepsToday }
 Challenge { id, creatorId, typeKey, metricType, direction, unit, title, startsAt, endsAt, status, rewardText, penaltyText, deadlineTime, dailyTarget, proofRequired, createdAt, finalizedAt, winnerId, isTie, rematchOfId }
 ParticipantView { user: PublicUser, status, score, days, rank, lastEntryAt, isWinner }
@@ -237,7 +237,9 @@ src/cli/yonet.ts            `npm run yonet -- kullanicilar | sikayetler | sifre 
 ```sql
 users(id TEXT PK, username TEXT UNIQUE, display_name TEXT, password_hash TEXT, avatar_emoji TEXT DEFAULT '🍆',
       vulgarity_max INTEGER DEFAULT 2, timezone TEXT DEFAULT 'Europe/Istanbul', invite_code TEXT UNIQUE,
-      push_token TEXT, push_platform TEXT, reminder_hour INTEGER DEFAULT 20, created_at TEXT, last_seen_at TEXT, deleted_at TEXT)
+      push_token TEXT, push_platform TEXT, reminder_hour INTEGER DEFAULT 20, created_at TEXT, last_seen_at TEXT, deleted_at TEXT,
+      nudges_enabled INTEGER DEFAULT 1, recap_enabled INTEGER DEFAULT 1)
+  -- the two notifications the reader can switch off (Ayarlar → Bildirim tercihleri); taunts, pokes, invites and results have no switch
 friendships(id TEXT PK, requester_id TEXT, addressee_id TEXT, status TEXT, created_at TEXT, updated_at TEXT, UNIQUE(requester_id, addressee_id))
 challenges(id TEXT PK, creator_id TEXT, type_key TEXT, metric_type TEXT, direction TEXT, unit TEXT, title TEXT,
       starts_at TEXT, ends_at TEXT, status TEXT, reward_text TEXT, penalty_text TEXT, deadline_time TEXT, daily_target REAL,
@@ -287,8 +289,8 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | POST /me/screen-time | upsert screen_time_daily; same fan-out for `deviceMetric: 'screen_time'` types, entries written with source `usage_stats` (7-day device backfill window, capped at maxPerDay). A device reading overwrites a typed value for that day. Returns `{ updated: number }` |
 | GET /me/inbox?before=<iso>&limit=30 | newest first |
 | POST /me/inbox/read | `{ ids }` or `{ all: true }` |
-| (scheduler) reminders | daily reminder only to users with no non-rejected entry today in any active challenge; nudges only to `accepted` participants |
-| (scheduler) recaps | weekly `recap` from Sunday 20:00 until Monday 12:00 in the reader's timezone, once per week (`recaps_sent`): wins/losses/ties of çelınclar finalized since the previous recap (that recap's `sent_at` when it is ≤ 9 days back — covers a Monday make-up and a DST night — otherwise the last 7 days), Monday–Sunday steps, the king of the week among the reader and their friends (most wins, then steps; exact ties share) and the clear step leader. A Monday make-up says "geçen hafta" / "bu hafta rövanş". Nothing to tell → no row |
+| (scheduler) reminders | daily reminder only to users with no non-rejected entry today in any active challenge; nudges only to `accepted` participants with `nudges_enabled` (checked before the `nudges_sent` claim, so switching it back on the same day still gets that day's nudge) |
+| (scheduler) recaps | weekly `recap` to users with `recap_enabled` (switched off → no row, no `recaps_sent` claim) from Sunday 20:00 until Monday 12:00 in the reader's timezone, once per week (`recaps_sent`): wins/losses/ties of çelınclar finalized since the previous recap (that recap's `sent_at` when it is ≤ 9 days back — covers a Monday make-up and a DST night — otherwise the last 7 days), Monday–Sunday steps, the king of the week among the reader and their friends (most wins, then steps; exact ties share) and the clear step leader. A Monday make-up says "geçen hafta" / "bu hafta rövanş". Nothing to tell → no row |
 | GET /me/inbox/unread | `{ count, latestId }` |
 | GET /users/search?q= | prefix match on username or display_name, excludes self, blocked; max 20 |
 | GET /users/blocked | `PublicUser[]`: the people I blocked, newest block first (Ayarlar → Engellediklerin). Only blocks I placed, never the ones placed on me; deleted accounts left out |
@@ -529,7 +531,7 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             "Kanka isteği gönder", "Kanka isteğini kabul et" for an incoming one, "İsteği geri çek"
                             (confirm) for my own; "Diğer seçenekler": copy username, remove friend, report, block
                             (the toast says it can be undone under Ayarlar → Engellediklerin)
-(app)/settings.tsx          vulgarity level (with preview), reminder hour, timezone (auto), server URL (editable builds only: a "Sunucu adresi" sheet taking a bare address or a pasted invite link — `koydum://…?server=` or `https://host/davet/CODE`, see serverFromInviteLink in services/invite.ts — and running moveSession: moved → level toast, different → confirm, logout, set the new address, login screen; unreachable → inline error), push status + "yeniden dene", "Engellediklerin" (my blocks from GET /users/blocked, "Engeli kaldır" → confirm → unblock; empty → "Kimseyi engellemedin."), "Şifreni değiştir" sheet (current / new / repeat; min length and mismatch checked inline, wrong_password and same_password shown under their field, success → setSession + level toast), delete account (double confirm), about (+ "Yeni sürümü indir" when the server offers a newer APK)
+(app)/settings.tsx          vulgarity level (with preview), "Bildirim tercihleri" (reminder hour chips; "Geride kalınca dürt beni" and "Pazar akşamı haftalık özet" switches → PATCH /me `nudgesEnabled` / `recapEnabled` with a short optimistic override; "Saatli çelınc uyarıları", phone only and hidden on web → `setDeviceRemindersEnabled` + `refreshReminders`; a note at the reader's level that "KOYDUM MU?", pokes, invites and results cannot be switched off), timezone (auto), server URL (editable builds only: a "Sunucu adresi" sheet taking a bare address or a pasted invite link — `koydum://…?server=` or `https://host/davet/CODE`, see serverFromInviteLink in services/invite.ts — and running moveSession: moved → level toast, different → confirm, logout, set the new address, login screen; unreachable → inline error), push status + "yeniden dene", "Engellediklerin" (my blocks from GET /users/blocked, "Engeli kaldır" → confirm → unblock; empty → "Kimseyi engellemedin."), "Şifreni değiştir" sheet (current / new / repeat; min length and mismatch checked inline, wrong_password and same_password shown under their field, success → setSession + level toast), delete account (double confirm), about (+ "Yeni sürümü indir" when the server offers a newer APK)
 davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), reachable signed in or not. Signed in: shows the inviter and sends the friend request only on a tap (a waiting request from that person would be ACCEPTED by it). A fresh install still on the localhost fallback adopts the link's server (after /health) without a conflict warning. Signed out: parks the code (services/invite.ts) and goes to register/login; the bridge sends it right after sign-in. A `server` differing from the current one is shown and only switched to on an explicit tap (after a /health check); builds with a baked-in URL ignore it. Signed in, the screen also asks that server's /health for its serverId: unless it is known to differ from the stored one (or a tap already found another server), the card reads "Bu davet yeni bir adresten" and its primary button "Yeni adrese geç (çıkış yok)" runs moveSession; the logout buttons stay below as secondary. On 'moved' serverUrl is the link's, so the ordinary send-request card follows.
 ```
 
@@ -554,6 +556,11 @@ davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), r
 - A tap also marks its inbox row read: the server's push and `fireLocal` both put `notificationId` in the data, the route keeps
   it, and the bridge sends `POST /me/inbox/read { ids: [id] }` (then refreshes unread + inbox) before navigating. The phone's own
   reminders carry no id.
+- The phone's own reminders (services/reminders.ts): a check-in çelınc's slot 30 minutes before its deadline and a
+  "son 1 saat" warning before every end. `refreshReminders(client, level, tz)` runs one at a time; with the
+  "Saatli çelınc uyarıları" switch off (`StorageKeys.deviceRemindersOff`, on by default, this phone only) it clears
+  every scheduled one without asking the server, otherwise it reads `GET /challenges?status=active,pending` and
+  replaces them (`syncReminders`). The bridge calls it once signed in and on every foreground, Ayarlar right after the switch.
 - New rows refresh what is on screen (`invalidateForNotifications` in hooks/queries): inbox + unread always, friends for
   friend_*, and for each `data.challengeId` the challenge lists, the detail and the results. Called by the received listener
   (push), by the inbox poll whenever it returns items (either surface) and by the background handler while the app is alive.

@@ -56,13 +56,17 @@ export function createUser(db: Database, input: CreateUserInput, now: Date = new
     created_at: createdAt,
     last_seen_at: createdAt,
     deleted_at: null,
+    nudges_enabled: 1,
+    recap_enabled: 1,
   };
 
   db.prepare(
     `INSERT INTO users (id, username, display_name, password_hash, avatar_emoji, vulgarity_max, timezone,
-                        invite_code, push_token, push_platform, reminder_hour, created_at, last_seen_at, deleted_at)
+                        invite_code, push_token, push_platform, reminder_hour, created_at, last_seen_at, deleted_at,
+                        nudges_enabled, recap_enabled)
      VALUES (@id, @username, @display_name, @password_hash, @avatar_emoji, @vulgarity_max, @timezone,
-             @invite_code, @push_token, @push_platform, @reminder_hour, @created_at, @last_seen_at, @deleted_at)`,
+             @invite_code, @push_token, @push_platform, @reminder_hour, @created_at, @last_seen_at, @deleted_at,
+             @nudges_enabled, @recap_enabled)`,
   ).run(row);
 
   return row;

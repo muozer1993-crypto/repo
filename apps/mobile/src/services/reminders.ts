@@ -1,7 +1,10 @@
 import { Platform } from 'react-native';
 
+import type { ApiClient } from '@/lib/api';
+import { StorageKeys, getItem, removeItem, setItem } from '@/lib/storage';
 import { localNotifications, type LocalNotifications } from '@/services/expoNotifications';
 import { ANDROID_CHANNEL_ID, installNotificationHandler } from '@/services/notifications';
+import { safeDayKey, safeTodayKey } from '@/utils/datetime';
 
 /**
  * Local reminders scheduled on the device itself.
@@ -17,6 +20,9 @@ import { ANDROID_CHANNEL_ID, installNotificationHandler } from '@/services/notif
  * `expo-notifications` is reached through `services/expoNotifications` rather
  * than imported: the barrel throws at import time in Expo Go on Android, and a
  * reminder is never worth taking the app down for.
+ *
+ * Ayarlar can switch them off ("Saatli çelınc uyarıları"). The switch lives on
+ * the phone, not on the account, because only the phone schedules them.
  */
 
 export const REMINDER_KIND = 'koydum.reminder' as const;
@@ -88,6 +94,56 @@ export interface ReminderChallenge {
 }
 
 const MINUTES_BEFORE_DEADLINE = 30;
+
+/** False once the reader switched the alerts off in Ayarlar; on until then. */
+export async function deviceRemindersEnabled(): Promise<boolean> {
+  return (await getItem(StorageKeys.deviceRemindersOff)) !== '1';
+}
+
+/** Stores the switch only; `refreshReminders` is what acts on it. */
+export async function setDeviceRemindersEnabled(enabled: boolean): Promise<void> {
+  if (enabled) await removeItem(StorageKeys.deviceRemindersOff);
+  else await setItem(StorageKeys.deviceRemindersOff, '1');
+}
+
+let refreshQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Asks the server for the reader's open çelınclar and schedules what they need,
+ * or clears every reminder, without asking anything, when the alerts are off.
+ *
+ * One run at a time: the bridge refreshes on every foreground and Ayarlar right
+ * after the switch flips, and a run still waiting on the list would otherwise
+ * schedule after the one that has just cleared everything.
+ */
+export function refreshReminders(
+  client: Pick<ApiClient, 'challenges'>,
+  level: 1 | 2 | 3,
+  tz: string
+): Promise<number> {
+  const run = refreshQueue.then(() => refresh(client, level, tz));
+  refreshQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function refresh(client: Pick<ApiClient, 'challenges'>, level: 1 | 2 | 3, tz: string): Promise<number> {
+  if (!(await deviceRemindersEnabled())) {
+    await cancelAllReminders();
+    return 0;
+  }
+  const summaries = await client.challenges('active,pending');
+  // day keys are counted in the ACCOUNT's zone, both here and on the server
+  const today = safeTodayKey(tz);
+  const reminders: ReminderChallenge[] = summaries.map((summary) => ({
+    id: summary.challenge.id,
+    title: summary.challenge.title,
+    endsAt: summary.challenge.endsAt,
+    metricType: summary.challenge.metricType,
+    deadlineTime: summary.challenge.deadlineTime,
+    doneToday: safeDayKey(summary.me?.lastEntryAt, tz) === today,
+  }));
+  return syncReminders(reminders, level);
+}
 
 /**
  * Replaces every scheduled reminder with the ones the given challenges need.

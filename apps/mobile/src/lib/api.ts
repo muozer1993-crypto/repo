@@ -198,6 +198,8 @@ export class ApiClient {
     vulgarityMax?: number;
     timezone?: string;
     reminderHour?: number | null;
+    nudgesEnabled?: boolean;
+    recapEnabled?: boolean;
   }) {
     return this.request<Me>('PATCH', '/me', { body });
   }

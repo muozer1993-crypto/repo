@@ -10,8 +10,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { newId, nowIso } from '../src/db/index.js';
 import { listInbox } from '../src/services/notifications.js';
 import { sendNudges } from '../src/services/challenges.js';
-import { makeApp, registerUser, type TestApp } from './helpers.js';
+import { authed, makeApp, registerUser, type TestApp } from './helpers.js';
 import type { FastifyInstance } from 'fastify';
+import type { Me } from '@koydum/shared';
 
 let harness: TestApp | null = null;
 afterEach(async () => {
@@ -152,6 +153,31 @@ describe('mid-day nudges', () => {
     // the next local day is a new nudge
     harness!.setNow('2026-01-06T12:00:00.000Z');
     expect(sendNudges(app.db, app.now())).toBe(1);
+  });
+
+  it('leaves alone somebody who switched nudges off, without using up their day', async () => {
+    const { app, ali, veli } = await twoPlayers(AFTERNOON);
+    const id = seedActive(app, {
+      creatorId: ali.me.id,
+      accepted: [ali.me.id, veli.me.id],
+      startsAt: '2026-01-05T00:00:00.000Z',
+      endsAt: '2026-01-08T00:00:00.000Z',
+    });
+    addSteps(app, id, ali.me.id, TODAY, 12_000);
+    addSteps(app, id, veli.me.id, TODAY, 2_000);
+    const settings = authed(app, veli.token);
+
+    const off = await settings({ method: 'PATCH', url: '/me', payload: { nudgesEnabled: false } });
+    expect(off.json<Me>().nudgesEnabled).toBe(false);
+
+    expect(sendNudges(app.db, app.now())).toBe(0);
+    expect(nudgesOf(harness!, veli.me.id)).toHaveLength(0);
+    expect(app.db.prepare('SELECT COUNT(*) AS n FROM nudges_sent').get()).toEqual({ n: 0 });
+
+    // changed their mind the same afternoon: today's nudge is still theirs
+    await settings({ method: 'PATCH', url: '/me', payload: { nudgesEnabled: true } });
+    expect(sendNudges(app.db, app.now())).toBe(1);
+    expect(nudgesOf(harness!, veli.me.id)).toHaveLength(1);
   });
 
   it('says nothing before noon where the reader lives', async () => {

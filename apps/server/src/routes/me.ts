@@ -119,6 +119,8 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
     if (body.vulgarityMax !== undefined) push('vulgarity_max', body.vulgarityMax);
     if (body.timezone !== undefined) push('timezone', body.timezone);
     if (body.reminderHour !== undefined) push('reminder_hour', body.reminderHour);
+    if (body.nudgesEnabled !== undefined) push('nudges_enabled', body.nudgesEnabled ? 1 : 0);
+    if (body.recapEnabled !== undefined) push('recap_enabled', body.recapEnabled ? 1 : 0);
 
     if (sets.length > 0) {
       params.push(row.id);

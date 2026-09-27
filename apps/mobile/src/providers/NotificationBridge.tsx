@@ -17,14 +17,13 @@ import {
   type NotificationRoute,
 } from '@/services/notifications';
 import { clearFailed, flushQueue, readQueue } from '@/services/offlineQueue';
-import { syncReminders, type ReminderChallenge } from '@/services/reminders';
+import { refreshReminders } from '@/services/reminders';
 import { startForegroundStepTracking } from '@/services/steps';
 import { syncStepsNow } from '@/services/stepSync';
 import { syncScreenTimeNow } from '@/services/screenTimeSync';
 import { invalidateForNotifications } from '@/hooks/queries';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
-import { safeDayKey, safeTodayKey } from '@/utils/datetime';
 import { applyPendingInvite } from '@/services/invite';
 import { deliverNewInbox } from '@/services/inboxNotifier';
 
@@ -257,20 +256,10 @@ export function NotificationBridge() {
     };
 
     // local reminders: a check-in deadline and the final hour of each challenge
+    // (or none at all, when Ayarlar switched them off)
     const scheduleReminders = async () => {
       try {
-        const summaries = await makeClient().challenges('active,pending');
-        // day keys are counted in the ACCOUNT's zone, both here and on the server
-        const todayKeyLocal = safeTodayKey(tz);
-        const reminders: ReminderChallenge[] = summaries.map((summary) => ({
-          id: summary.challenge.id,
-          title: summary.challenge.title,
-          endsAt: summary.challenge.endsAt,
-          metricType: summary.challenge.metricType,
-          deadlineTime: summary.challenge.deadlineTime,
-          doneToday: safeDayKey(summary.me?.lastEntryAt, tz) === todayKeyLocal,
-        }));
-        await syncReminders(reminders, level);
+        await refreshReminders(makeClient(), level, tz);
       } catch {
         // reminders are a nicety; never block on them
       }

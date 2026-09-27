@@ -11,7 +11,7 @@ import {
 import * as Application from 'expo-application';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
@@ -27,10 +27,12 @@ import { useToast } from '@/components/Toast';
 import { UPDATE_HOW, useAppUpdate } from '@/components/UpdateBanner';
 import { useBlocked, useUnblock, useUpdateMe } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
+import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { normalizeServerUrl, serverUrlIsEditable } from '@/lib/config';
 import { serverFromInviteLink } from '@/services/invite';
 import { registerForPush, type PushRegistration } from '@/services/notifications';
+import { deviceRemindersEnabled, refreshReminders, setDeviceRemindersEnabled } from '@/services/reminders';
 import {
   getScreenTimeAvailability,
   requestScreenTimePermission,
@@ -119,6 +121,48 @@ const PLATFORM: 'ios' | 'android' | 'web' =
   Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
 
 const HOURS: (number | null)[] = [null, ...Array.from({ length: 24 }, (_, i) => i)];
+
+/** The two server-sent extras the reader can switch off; everything else always arrives. */
+type ServerPref = 'nudgesEnabled' | 'recapEnabled';
+
+const PREF_SAVED: Record<ServerPref, { on: string; off: string }> = {
+  nudgesEnabled: { on: 'Dürtme açıldı', off: 'Dürtme kapatıldı' },
+  recapEnabled: { on: 'Haftalık özet açıldı', off: 'Haftalık özet kapatıldı' },
+};
+
+/** One switch under "Bildirim tercihleri": what it does on the left, the switch on the right. */
+function PrefRow({
+  title,
+  detail,
+  value,
+  onChange,
+}: {
+  title: string;
+  detail: string;
+  value: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <View style={styles.prefRow}>
+      <View style={styles.rowText}>
+        <Text variant="body" bold>
+          {title}
+        </Text>
+        <Text variant="tiny" muted>
+          {detail}
+        </Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        accessibilityLabel={title}
+        trackColor={{ false: Colors.surfaceHigh, true: Colors.accentDim }}
+        thumbColor={value ? Colors.accent : Colors.textFaint}
+        ios_backgroundColor={Colors.surfaceHigh}
+      />
+    </View>
+  );
+}
 
 interface PasswordErrors {
   current?: string;
@@ -418,6 +462,7 @@ export default function SettingsScreen() {
   const serverUrl = useAuth((s) => s.serverUrl);
   const serverEditable = serverUrlIsEditable();
   const level = useLevel();
+  const tz = useTimezone();
   const api = useApi();
   const toast = useToast();
   const updateMe = useUpdateMe();
@@ -430,6 +475,10 @@ export default function SettingsScreen() {
    * edited on another device.
    */
   const [levelOverride, setLevelOverride] = useState<VulgarityLevel | null>(null);
+  // the same short-lived override for the two notification switches
+  const [prefOverride, setPrefOverride] = useState<Partial<Record<ServerPref, boolean>>>({});
+  /** The phone's own deadline alerts; null until storage has answered. */
+  const [deviceAlerts, setDeviceAlerts] = useState<boolean | null>(null);
   const [push, setPush] = useState<PushRegistration | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
   const [steps, setSteps] = useState<StepAvailability | null>(null);
@@ -474,15 +523,17 @@ export default function SettingsScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [pushResult, stepResult, screenTimeResult] = await Promise.all([
+      const [pushResult, stepResult, screenTimeResult, alertsOn] = await Promise.all([
         registerForPush(),
         getStepAvailability(),
         getScreenTimeAvailability(),
+        deviceRemindersEnabled(),
       ]);
       if (cancelled) return;
       setPush(pushResult);
       setSteps(stepResult);
       setScreenTime(screenTimeResult);
+      setDeviceAlerts(alertsOn);
       if (pushResult.token) {
         try {
           await api.setPushToken({ token: pushResult.token, platform: PLATFORM });
@@ -532,6 +583,34 @@ export default function SettingsScreen() {
       { reminderHour: hour },
       hour === null ? 'Hatırlatma kapatıldı' : `Hatırlatma ${String(hour).padStart(2, '0')}:00`
     );
+  };
+
+  const choosePref = (pref: ServerPref, on: boolean) => {
+    setPrefOverride((prev) => ({ ...prev, [pref]: on }));
+    updateMe.mutate(pref === 'nudgesEnabled' ? { nudgesEnabled: on } : { recapEnabled: on }, {
+      onSuccess: () => toast({ title: PREF_SAVED[pref][on ? 'on' : 'off'], kind: 'success' }),
+      onError: (err) =>
+        toast({
+          title: 'Kaydedilemedi',
+          body: err instanceof ApiError ? err.message : undefined,
+          kind: 'danger',
+        }),
+      onSettled: () => setPrefOverride((prev) => ({ ...prev, [pref]: undefined })),
+    });
+  };
+
+  // Stored on this phone only: the server never sees these alerts.
+  const chooseDeviceAlerts = async (on: boolean) => {
+    setDeviceAlerts(on);
+    await setDeviceRemindersEnabled(on);
+    toast({ title: on ? 'Saatli uyarılar açıldı' : 'Saatli uyarılar kapatıldı', kind: 'success' });
+    try {
+      // off clears what is already scheduled; on puts it back without waiting
+      // for the app to come to the front again
+      await refreshReminders(api, level, tz);
+    } catch {
+      // offline: the bridge does it on the next foreground
+    }
   };
 
   const syncTimezone = () => {
@@ -642,6 +721,8 @@ export default function SettingsScreen() {
   };
 
   const pushStatus = pushLine();
+  const nudgesOn = prefOverride.nudgesEnabled ?? me?.nudgesEnabled ?? true;
+  const recapOn = prefOverride.recapEnabled ?? me?.recapEnabled ?? true;
 
   return (
     <Screen scroll contentStyle={styles.content}>
@@ -680,10 +761,13 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
-      {/* -------------------------------------------------------- reminder */}
+      {/* --------------------------------------------------- notifications */}
       <Card>
-        <Text variant="label">Günlük hatırlatma</Text>
-        <Text variant="tiny" muted style={styles.blockTop}>
+        <Text variant="label">Bildirim tercihleri</Text>
+        <Text variant="body" bold style={styles.blockTop}>
+          Günlük hatırlatma
+        </Text>
+        <Text variant="tiny" muted>
           Skorun sıfırsa seni dürtelim mi, kaçta?
         </Text>
         <ScrollView
@@ -703,6 +787,50 @@ export default function SettingsScreen() {
             );
           })}
         </ScrollView>
+        <PrefRow
+          title="Geride kalınca dürt beni"
+          detail={byLevel(
+            level,
+            'Bir çelıncda geride kaldığında öğleden sonra bir kez haber veririz.',
+            'Biri sana fark atınca öğleden sonra bir kere dürteriz, çelınc başına günde bir tane.',
+            'Biri sana fark koyunca öğleden sonra bir kere “o ne lan” deriz 🍆'
+          )}
+          value={nudgesOn}
+          onChange={(on) => choosePref('nudgesEnabled', on)}
+        />
+        <PrefRow
+          title="Pazar akşamı haftalık özet"
+          detail={byLevel(
+            level,
+            'Pazar akşamı haftanın özeti: galibiyetler, mağlubiyetler, adımlar.',
+            'Pazar akşamı haftanın hesabı: kaç kere koydun, kaç kere yedin, haftanın kralı kim.',
+            'Pazar akşamı haftanın hesabı: kime koydun, kimden yedin, taht kimde 🍆'
+          )}
+          value={recapOn}
+          onChange={(on) => choosePref('recapEnabled', on)}
+        />
+        {/* the web build schedules nothing, so there is nothing to switch off there */}
+        {Platform.OS !== 'web' && deviceAlerts !== null ? (
+          <PrefRow
+            title="Saatli çelınc uyarıları"
+            detail={byLevel(
+              level,
+              'Check-in saatinden yarım saat önce ve çelınc bitmeden bir saat önce hatırlatır. Sadece bu telefon için.',
+              'Check-in saatine yarım saat kala ve çelıncın son saatinde çalar. Sadece bu telefonda.',
+              'Check-in’e yarım saat kala ve son saatte “yetiştir yoksa yersin” der. Sadece bu telefonda.'
+            )}
+            value={deviceAlerts}
+            onChange={(on) => void chooseDeviceAlerts(on)}
+          />
+        ) : null}
+        <Text variant="micro" faint style={styles.blockTop}>
+          {byLevel(
+            level,
+            '“KOYDUM MU?” lafları her zaman gelir, onları kapatamazsın. Kankaların dürtmesi, davetler ve sonuçlar da öyle.',
+            '“KOYDUM MU?” her zaman gelir, onu kapatamazsın. Kankanın elle dürtmesi, davetler ve sonuçlar da gelir.',
+            '“KOYDUM MU?” her zaman gelir, onu kapatamazsın: yediysen duyacaksın 🍆 Kankanın dürtmesi, davetler ve sonuçlar da gelir.'
+          )}
+        </Text>
       </Card>
 
       {/* -------------------------------------------------------- timezone */}
@@ -939,6 +1067,15 @@ const styles = StyleSheet.create({
   },
   rowText: { flex: 1, gap: 2 },
   hours: { gap: Spacing.sm, paddingVertical: Spacing.sm, paddingRight: Spacing.lg },
+  prefRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
   selfStart: { alignSelf: 'flex-start', marginTop: Spacing.md },
   buttonRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.md, flexWrap: 'wrap' },
   about: {

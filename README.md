@@ -350,6 +350,12 @@ Android pili korumak için bu aralığı bazen uzatabilir. Telefonun bildirim ay
 **KOYDUM** kanalında durur; onu kapatan lafları da kaçırır. Eski sürümden kalma bir
 "Miscellaneous" kanalı görürsen ona artık bir şey gönderilmiyor.
 
+Bazı bildirimler fazla geliyorsa kanalı kapatma, uygulamada **Ayarlar → Bildirim tercihleri**'ne
+gir: gün ortası dürtmeyi ("sana fark koymuş"), pazar akşamı haftalık özeti ve telefonun kendi
+kurduğu saatli uyarıları (check-in'e yarım saat kala, çelıncın son saati) ayrı ayrı kapatabilirsin.
+Saatli uyarılar ayarı sadece o telefonda geçerli. "KOYDUM MU?" lafları, kankanın elle dürtmesi,
+davetler ve sonuçlar her zaman gelir.
+
 **Anlık olsun istersen** (laf atıldığı saniye telefon titresin), Android'e Google'ın push servisi
 (Firebase Cloud Messaging) gerekir. Bir kerelik iş, ücretsiz:
 

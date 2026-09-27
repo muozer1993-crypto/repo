@@ -55,6 +55,8 @@ const ME: Me = {
   // a zone the runtime cannot resolve: the screens must not throw on it
   timezone: 'Mars/Olympus',
   reminderHour: null,
+  nudgesEnabled: true,
+  recapEnabled: true,
   inviteCode: 'KOY123',
   hasPushToken: false,
   stats: {
@@ -71,6 +73,7 @@ const mockClearSessionEnded = jest.fn(() => {
   mockSession.ended = false;
 });
 const mockSetSession = jest.fn(async () => {});
+const mockSetMe = jest.fn(async () => {});
 
 jest.mock('@/store/auth', () => ({
   useAuth: (selector: (state: unknown) => unknown) =>
@@ -80,6 +83,7 @@ jest.mock('@/store/auth', () => ({
       serverUrl: 'http://localhost:4000',
       refreshMe: jest.fn(),
       setSession: mockSetSession,
+      setMe: mockSetMe,
       rememberServerId: jest.fn(async () => {}),
       sessionEnded: mockSession.ended,
       clearSessionEnded: mockClearSessionEnded,
@@ -100,6 +104,21 @@ jest.mock('@/services/steps', () => ({
 // Ayarlar asks for push on mount; the real module would load expo-notifications
 jest.mock('@/services/notifications', () => ({
   registerForPush: jest.fn(async () => ({ token: null, reason: 'web' })),
+}));
+
+/** The phone's own deadline alerts, as Ayarlar sees them (services/reminders has its own test). */
+const mockReminders = {
+  enabled: true,
+  set: jest.fn(async (on: boolean) => {
+    mockReminders.enabled = on;
+  }),
+  refresh: jest.fn(async (..._args: unknown[]) => 0),
+};
+
+jest.mock('@/services/reminders', () => ({
+  deviceRemindersEnabled: async () => mockReminders.enabled,
+  setDeviceRemindersEnabled: (on: boolean) => mockReminders.set(on),
+  refreshReminders: (...args: unknown[]) => mockReminders.refresh(...args),
 }));
 
 /* ------------------------------------------------------------------ setup */
@@ -1120,6 +1139,77 @@ describe('settings password sheet', () => {
 
     expect(mockSetSession).toHaveBeenCalledWith('yeni-token', ME);
     expect(rendered(tree)).toContain('Tamamdır, yeni şifre işlendi');
+  });
+});
+
+describe('settings notification preferences', () => {
+  function flip(tree: ReactTestRenderer, label: string, value: boolean): Promise<void> {
+    return act(async () => {
+      findWith(tree, 'accessibilityLabel', label, 'onValueChange').props.onValueChange(value);
+    });
+  }
+
+  beforeEach(() => {
+    mockReminders.enabled = true;
+    mockReminders.set.mockClear();
+    mockReminders.refresh.mockClear();
+    mockSetMe.mockClear();
+  });
+
+  it('switches the nudge and the recap off on the account, and says what never goes quiet', async () => {
+    api.updateMe = jest.fn(async (body: Partial<Me>) => ({ ...ME, ...body }));
+    const SettingsScreen = require('@/app/(app)/settings').default;
+    const tree = renderScreen(<SettingsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('BİLDİRİM TERCİHLERİ');
+    expect(text).toContain('Geride kalınca dürt beni');
+    expect(text).toContain('Pazar akşamı haftalık özet');
+    expect(text).toContain('Saatli çelınc uyarıları');
+    expect(text).toContain('“KOYDUM MU?” her zaman gelir, onu kapatamazsın.');
+
+    await flip(tree, 'Geride kalınca dürt beni', false);
+    await settle();
+    expect(api.updateMe).toHaveBeenLastCalledWith({ nudgesEnabled: false });
+    expect(mockSetMe).toHaveBeenLastCalledWith(expect.objectContaining({ nudgesEnabled: false }));
+    expect(rendered(tree)).toContain('Dürtme kapatıldı');
+
+    await flip(tree, 'Pazar akşamı haftalık özet', false);
+    await settle();
+    expect(api.updateMe).toHaveBeenLastCalledWith({ recapEnabled: false });
+    // the phone's own alerts are not the server's business
+    expect(mockReminders.set).not.toHaveBeenCalled();
+  });
+
+  it('keeps the deadline alerts on the phone: stores the switch and clears them, without the server', async () => {
+    api.updateMe = jest.fn();
+    const SettingsScreen = require('@/app/(app)/settings').default;
+    const tree = renderScreen(<SettingsScreen />);
+    await settle();
+
+    await flip(tree, 'Saatli çelınc uyarıları', false);
+    await settle();
+
+    expect(mockReminders.set).toHaveBeenCalledWith(false);
+    // stored first, then refreshed: with the switch off the refresh only clears
+    expect(mockReminders.set.mock.invocationCallOrder[0]).toBeLessThan(
+      mockReminders.refresh.mock.invocationCallOrder[0]!
+    );
+    expect(mockReminders.refresh).toHaveBeenCalledWith(api, 2, expect.any(String));
+    expect(api.updateMe).not.toHaveBeenCalled();
+    expect(rendered(tree)).toContain('Saatli uyarılar kapatıldı');
+    expect(findWith(tree, 'accessibilityLabel', 'Saatli çelınc uyarıları', 'onValueChange').props.value).toBe(false);
+  });
+
+  it('shows the alerts switch off when this phone had it off', async () => {
+    mockReminders.enabled = false;
+    const SettingsScreen = require('@/app/(app)/settings').default;
+    const tree = renderScreen(<SettingsScreen />);
+    await settle();
+
+    expect(findWith(tree, 'accessibilityLabel', 'Saatli çelınc uyarıları', 'onValueChange').props.value).toBe(false);
+    expect(findWith(tree, 'accessibilityLabel', 'Geride kalınca dürt beni', 'onValueChange').props.value).toBe(true);
   });
 });
 

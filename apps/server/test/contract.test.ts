@@ -65,6 +65,9 @@ describe('API contract as the mobile client consumes it', () => {
     expect(typeof winner.me.inviteCode).toBe('string');
     expect(typeof winner.me.stats.wins).toBe('number');
     expect(Array.isArray(winner.me.badges)).toBe(true);
+    // Ayarlar → Bildirim tercihleri draws its two switches from these
+    expect(winner.me.nudgesEnabled).toBe(true);
+    expect(winner.me.recapEnabled).toBe(true);
 
     const call = async (
       token: string,
@@ -79,6 +82,17 @@ describe('API contract as the mobile client consumes it', () => {
       // so borrowing the compile-time types would defeat the point
       return { status: response.statusCode, body: response.json() as any };
     };
+
+    /* notification preferences -------------------------------------------- */
+    const quiet = await call(winner.token, 'PATCH', '/me', { nudgesEnabled: false, recapEnabled: false });
+    expect(quiet.status).toBe(200);
+    expect(quiet.body.nudgesEnabled).toBe(false);
+    expect(quiet.body.recapEnabled).toBe(false);
+    expect((await call(winner.token, 'GET', '/me')).body).toMatchObject({ nudgesEnabled: false, recapEnabled: false });
+    // one at a time, and the other one stays where it was
+    const loud = (await call(winner.token, 'PATCH', '/me', { recapEnabled: true })).body;
+    expect(loud).toMatchObject({ nudgesEnabled: false, recapEnabled: true });
+    expect((await call(winner.token, 'PATCH', '/me', { nudgesEnabled: 'hayır' })).status).toBe(400);
 
     /* login --------------------------------------------------------------- */
     const login = await app.inject({

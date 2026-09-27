@@ -834,7 +834,8 @@ const NUDGE_MIN_RELATIVE_GAP = 0.1;
  * day (the primary key of `nudges_sent` IS the rate limit), only between noon
  * and 22:00 where that person actually lives, only when somebody is genuinely
  * ahead, and never on a check-in çelınc — those have their own deadline
- * reminder and "you are behind" means nothing there.
+ * reminder and "you are behind" means nothing there. And somebody who switched
+ * it off (`users.nudges_enabled`) gets none at all.
  */
 export function sendNudges(db: Database, now: Date = new Date()): number {
   const iso = nowIso(now);
@@ -871,6 +872,9 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
 
       const user = users.get(view.user.id);
       if (!user || user.deleted_at) continue;
+      // switched off in Ayarlar; checked before the claim, so switching it back
+      // on the same afternoon still gets today's nudge
+      if (user.nudges_enabled === 0) continue;
 
       const timezone = participantTimezone(participants.get(user.id), user);
       let hour: number;

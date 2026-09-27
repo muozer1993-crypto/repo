@@ -139,6 +139,8 @@ export const UpdateMeBodySchema = z.object({
   vulgarityMax: VulgarityLevelSchema.optional(),
   timezone: TimezoneSchema.optional(),
   reminderHour: z.number().int().min(0).max(23).nullable().optional(),
+  nudgesEnabled: z.boolean().optional(),
+  recapEnabled: z.boolean().optional(),
 });
 export type UpdateMeBody = z.infer<typeof UpdateMeBodySchema>;
 

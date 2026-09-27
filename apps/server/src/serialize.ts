@@ -83,6 +83,8 @@ export function toMe(db: Database, row: UserRow, now: Date = new Date()): Me {
     vulgarityMax: asVulgarityLevel(row.vulgarity_max),
     timezone: row.timezone,
     reminderHour: row.reminder_hour === null ? null : Number(row.reminder_hour),
+    nudgesEnabled: row.nudges_enabled !== 0,
+    recapEnabled: row.recap_enabled !== 0,
     inviteCode: row.invite_code,
     hasPushToken: Boolean(row.push_token),
     stats: computeUserStats(db, row.id, now),

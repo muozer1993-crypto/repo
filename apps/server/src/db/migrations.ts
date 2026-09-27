@@ -282,6 +282,17 @@ CREATE TABLE IF NOT EXISTS taunt_followups (
 );
 `;
 
+/**
+ * What the reader can switch off without muting the app. On Android every
+ * notification rides the one "koydum" channel, so the phone's own switch would
+ * take the taunts down with the nudges; these two are the server-sent ones
+ * nobody asked for. Taunts, pokes, invites and results have no column on purpose.
+ */
+const NOTIFICATION_PREFS = `
+ALTER TABLE users ADD COLUMN nudges_enabled INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE users ADD COLUMN recap_enabled  INTEGER NOT NULL DEFAULT 1;
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -290,4 +301,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '005_screen_time_daily', sql: SCREEN_TIME_DAILY },
   { id: '006_recaps_sent', sql: RECAPS_SENT },
   { id: '007_taunt_followups', sql: TAUNT_FOLLOWUPS },
+  { id: '008_notification_prefs', sql: NOTIFICATION_PREFS },
 ];

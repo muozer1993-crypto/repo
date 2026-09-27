@@ -3,13 +3,13 @@
  * the week's koydun / yedin, the steps and the king of the week.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import type { RecapData } from '@koydum/shared';
+import type { Me, RecapData } from '@koydum/shared';
 
 import { newId, nowIso } from '../src/db/index.js';
 import { runSchedulerOnce } from '../src/services/challenges.js';
 import { listInbox } from '../src/services/notifications.js';
 import { recapWeekFor, sendWeeklyRecaps } from '../src/services/recap.js';
-import { befriend, makeApp, registerUser, type TestApp } from './helpers.js';
+import { authed, befriend, makeApp, registerUser, type TestApp } from './helpers.js';
 import type { FastifyInstance } from 'fastify';
 
 let harness: TestApp | null = null;
@@ -318,6 +318,19 @@ describe('weekly recap', () => {
     sendWeeklyRecaps(app.db, app.now());
 
     expect(recapsOf(ali.me.id)[0].body).toContain('👑 Haftanın kralı Veli, 1 kere koydu.');
+  });
+
+  it('skips somebody who switched the recap off, and nobody else', async () => {
+    const { app, ali, veli, can } = await gang();
+    seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: ali.me.id, finalizedAt: '2026-01-09T10:00:00.000Z' });
+    const off = await authed(app, veli.token)({ method: 'PATCH', url: '/me', payload: { recapEnabled: false } });
+    expect(off.json<Me>().recapEnabled).toBe(false);
+
+    expect(sendWeeklyRecaps(app.db, app.now())).toBe(2);
+    expect(recapsOf(veli.me.id)).toHaveLength(0);
+    // the others still hear about the week Veli played in
+    expect(recapsOf(ali.me.id)[0].body).toContain('Bu hafta 1 kere koydun');
+    expect(recapsOf(can.me.id)).toHaveLength(1);
   });
 
   it('skips deleted accounts and a broken timezone without stopping the rest', async () => {

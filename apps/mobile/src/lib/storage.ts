@@ -86,4 +86,6 @@ export const StorageKeys = {
   tokenRenewedAt: 'koydum.tokenRenewedAt',
   /** /health's serverId of the server this session belongs to (see services/serverMove) */
   serverId: 'koydum.serverId',
+  /** '1' when Ayarlar switched off the phone's own deadline alerts (see services/reminders) */
+  deviceRemindersOff: 'koydum.deviceRemindersOff',
 } as const;
