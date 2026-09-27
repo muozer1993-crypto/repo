@@ -311,8 +311,8 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | POST /challenges/:id/entries/:entryId/proof | `EntryProofBody`. Entry owner only (403 `not_your_entry`), entry `disputed` (409 `not_disputed`, 409 `already_rejected`), çelınc `active` (the settle wait included, 400 `challenge_not_active`). Sets `proof_url`, marks every open dispute `dismissed`, entry back to `ok`; each disputer (not deleted, not blocked) gets a `dispute` notification with data `{ challengeId, entryId, kind: 'proof' }` ("{ad} kanıt ekledi, bir bak."). Returns `{ entry, standings }` |
 | POST /challenges/:id/poke | active only; target must be a participant the sender is strictly AHEAD of, else 403 `not_ahead`; rate limit 1 per (from,to,challenge) per 2h → 429 `poke_cooldown`. Template from `poke` context clamped to target's level (or default pick). Notification type `poke` |
 | POST /challenges/:id/taunt | finished only; sender must be winner (`winnerId`), target must be a loser (accepted, not winner); one per target (409 `already_taunted`); template clamped to target's `vulgarity_max` — if requested template level > target max, pick deterministic template same context at target max; `customBody` allowed (level = sender-chosen ≤ target max, checked by `containsBanned` → 400 `banned_content`). Notification type `taunt` with data `{ challengeId, tauntId }` |
-| POST /challenges/:id/rematch | 201, returns the new bare `Challenge`. Finished only, any accepted participant; clones settings (same type, duration, reward), startsAt = now + 5 min, invites all previous accepted participants, `rematch_of_id`; notification `rematch` |
-| GET /challenges/:id/results | `{ challenge, standings: ParticipantView[], taunts, tauntTemplatesForWinner?: TauntTemplate[] (rendered previews per loser) }` |
+| POST /challenges/:id/rematch | 201, returns the new bare `Challenge`. Finished only, any accepted participant; clones settings (same type, duration, reward), startsAt = now + 5 min, invites the previous accepted participants who are still friends (no block either way, not deleted; nobody left → 400 `no_participants`), `rematch_of_id`; notification `rematch` |
+| GET /challenges/:id/results | `{ challenge, standings: ParticipantView[], taunts, tauntTemplatesForWinner?: TauntTemplate[] (rendered previews per loser), tauntContexts?: Record<userId, TauntContext> (winner only: each accepted loser's context, 2.3), rematchLeftOut?: string[] (accepted players of a finished çelınc: the others a rematch opened by the reader would skip for not being friends; deleted accounts and blocks are skipped too but never listed) }` |
 | GET /leaderboard | friends + me ranked by wins, then tauntsSent |
 | POST /uploads | multipart field `file`; returns `{ url: PUBLIC_URL + '/uploads/<uuid>.<ext>' }` |
 | GET /uploads/* | static; `POST /uploads` answers a path (`/uploads/<uuid>.jpg`) that each phone resolves against its own server address |
@@ -341,7 +341,7 @@ Per type:
 - `manual_lower_is_better`: upsert per day; value ≤ maxPerEntry. Sources `manual` and `usage_stats`; once the day's row has a device source, a `manual` write is refused (409 `device_locked`) — the phone may keep correcting itself. Scored as the DAILY AVERAGE over the participant's own window (sum + missing days × penalty) / window days; while the çelınc is active the window is clipped to today, so day 2 of 7 shows two days' average, not five days of penalty.
 - Device fan-out (`POST /me/steps`) never lowers a typed `manual` value on a higher-is-better metric: the Android foreground counter is partial by design and the user was told to declare the real number; a device value ≥ the typed one replaces it (source becomes the device's).
 - Disputes: only while the challenge is `active` (400 `challenge_not_active`) and, past `endsAt`, only inside a phone-counted çelınc's settle hour (`endsAt + LIMITS.DEVICE_SETTLE_MS`, where the last evening lands; 400 `challenge_ended` otherwise — a new dispute during a wait would hold the result another 12 h, and a chain of them for days), and never across a block (403 `blocked`). Phone-counted entries may be disputed too. A dispute never rejects anything by itself: a majority starts the owner's 12-hour answer window (2.2), and only an unanswered one is upheld (2.4). Accepting an invite from someone who blocked you or whom you blocked → 403 `blocked`.
-- Taunt context `revenge` only when the çelınc is a rematch AND the taunting winner lost the original; templates carry an optional `metrics` list and are filtered by the challenge's metric (a "kalk yürü" line stays on step çelınclar).
+- Taunt context `revenge` only when the çelınc is a rematch AND the taunting winner lost the original; otherwise `streak` when the winner has won this çelınc and the two before it that both played (accepted, finished, newest first counting back from this one; a tie, a loss or a third player's win breaks the run), otherwise the margin. Templates carry an optional `metrics` list and are filtered by the challenge's metric (a "kalk yürü" line stays on step çelınclar).
 
 After every write: recompute standings (in memory via shared `rankParticipants`) and return.
 
@@ -496,8 +496,10 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             3) kankalar seç (multi-select friends) 4) özet + "KOY BAKALIM" create;
                             Android back steps back like "Geri"; on step 1 with a type chosen it asks before closing
                             (nothing chosen → the modal closes)
-(app)/challenge/[id].tsx    detail: hero (emoji, title, status/countdown, reward), standings (ranked bars with scores + "koyuyor/yiyor" labels),
-                            my action area per metric type (see 3.4), feed of recent entries with dispute button
+(app)/challenge/[id].tsx    detail: hero (emoji, title, status/countdown, reward), standings (ranked bars with scores + "koyuyor/yiyor" labels;
+                            every row but mine opens that player's profile),
+                            my action area per metric type (see 3.4), feed of recent entries with dispute button (only while
+                            the server takes one: `active` and before `endsAt`, plus the settle hour of a phone-counted type)
                             (every open dispute's `{ad}: “{reason}”` under a disputed row, an upheld one's under a rejected
                             row; a disputed row says "İtiraz var. {kalan} içinde kanıt gelmezse yanar." from `answerBy`,
                             or "henüz çoğunluk değil" without one; my own open dispute's chip is "Geri çek" (confirm →
@@ -512,8 +514,12 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             leave/cancel; finished → button to results
 (app)/challenge/[id]/results.tsx   winner view: podium + "KOYDUM MU?" CTA per loser (or "Hepsine koy") → taunt picker; loser view: shame screen
                             (big TauntBubble if received, else "bekliyor..." — and 24 h after `finalizedAt`, counted from the
-                            last fetch, "unuttu galiba, rövanş aç, bu sefer sen koy" instead), rewards/penalty text, "Rövanş" button; tie view
-(app)/challenge/[id]/taunt.tsx     picker: target chip(s), list of templates rendered with real names/scores (levels ≤ target max; higher ones shown locked with
+                            last fetch, "unuttu galiba, rövanş aç, bu sefer sen koy" instead; the header only says the laf is
+                            "aşağıda" once there is one), rewards/penalty text, "Rövanş" button with a note naming `rematchLeftOut`
+                            ("Veli kankan değil, rövanşa çağrılmaz. Tablodan adına dokun, ekle."; final-table rows open profiles),
+                            and a success toast naming whoever the new çelınc really invited (read back from its detail); tie view
+(app)/challenge/[id]/taunt.tsx     picker: target chip(s), a context chip per loser from `tauntContexts` (RÖVANŞ / SERİ / EZİCİ FARK / NORMAL FARK / KIL PAYI;
+                            without the field, the margin), list of templates of that context rendered with real names/scores (levels ≤ target max; higher ones shown locked with
                             "X bunu kaldıramaz" note), custom text field (banned-word check client side), preview, "GÖNDER" → success animation
 (app)/challenge/[id]/entry.tsx     modal: log manual value (numeric pad, quick +1/+5 chips per unit), note, proof photo (camera/gallery → /uploads), day selector (today/yesterday)
 (app)/focus/[id].tsx        full-screen timer (pick 15/25/45/60 min), big countdown, "elini telefondan çek" copy, leaving app → abandoned state with copy focus_abandoned; completion posts entry;

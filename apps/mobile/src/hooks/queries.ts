@@ -339,11 +339,33 @@ export function useTaunt(id: string) {
   });
 }
 
+export interface RematchResult {
+  challenge: Challenge;
+  /** who the server actually invited; null when the new çelınc could not be read back */
+  invited: PublicUser[] | null;
+}
+
 export function useRematch(id: string) {
   const api = useApi();
+  const qc = useQueryClient();
   const invalidate = useInvalidator();
-  return useMutation<Challenge, Error, void>({
-    mutationFn: () => api.rematch(id),
+  return useMutation<RematchResult, Error, void>({
+    mutationFn: async () => {
+      const challenge = await api.rematch(id);
+      // The answer is the bare Challenge, and the server leaves out anybody who
+      // is not a friend, so the line-up is read back before the toast names it.
+      // The screen opens that çelınc next, so this is the read it would make anyway.
+      try {
+        const detail = await qc.fetchQuery({
+          queryKey: qk.challenge(challenge.id),
+          queryFn: () => api.challenge(challenge.id),
+        });
+        return { challenge, invited: detail.participants.filter((p) => p.status === 'invited').map((p) => p.user) };
+      } catch {
+        // the rematch itself went through; only the names are missing
+        return { challenge, invited: null };
+      }
+    },
     onSuccess: () => {
       void invalidate.challenges();
     },

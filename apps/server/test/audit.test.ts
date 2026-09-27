@@ -4,8 +4,10 @@
  * a proof-required yes/no çelınc nobody could mark, a "yattım" at 02:00 counting
  * as an early night, nudges to people who never joined, reminders telling a
  * player who logged that their score is zero, disputes after the whistle, a
- * blocked pair reaching each other, a rematch winner "avenging" a win, a partial
- * step count shaving a typed declaration, and a proxy header nobody set.
+ * blocked pair reaching each other, a rematch winner "avenging" a win (and the
+ * picker never hearing of a real rövanş or a third win in a row), a rematch
+ * silently dropping a group rival, a partial step count shaving a typed
+ * declaration, and a proxy header nobody set.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -18,6 +20,8 @@ import {
 } from '@koydum/shared';
 import { loadConfig } from '../src/config.js';
 import { sendNudges, sendReminders } from '../src/services/challenges.js';
+import { sendTaunt } from '../src/services/taunts.js';
+import type { ChallengeRow, UserRow } from '../src/db/index.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
@@ -318,6 +322,144 @@ describe('rematch taunts', () => {
     const avengedTemplates = avenged.json<ChallengeResults>().tauntTemplatesForWinner ?? [];
     expect(avengedTemplates.length).toBeGreaterThan(0);
     expect(avengedTemplates.every((tpl) => tpl.context === 'revenge')).toBe(true);
+    // the picker gets the same word per loser, so it can offer the rövanş lines
+    expect(repeat.json<ChallengeResults>().tauntContexts).toEqual({ [veli.me.id]: 'win_big' });
+    expect(avenged.json<ChallengeResults>().tauntContexts).toEqual({ [ali.me.id]: 'revenge' });
+  });
+
+  /** Both drink the same, so it ends level. */
+  async function finishedTie(h: TestApp, a: RegisteredUser, b: RegisteredUser): Promise<string> {
+    const created = await authed(h.app, a.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'su_bardak', startsAt: iso(h), endsAt: iso(h, DAY_MS), participantIds: [b.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    expect((await authed(h.app, b.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    for (const player of [a, b]) {
+      await authed(h.app, player.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/entries`,
+        payload: { dayKey: today(h), value: 2, source: 'manual', clientTime: iso(h) },
+      });
+    }
+    h.advance(DAY_MS + 2 * 60_000);
+    await h.app.inject({ method: 'POST', url: '/dev/advance' });
+    const detail = await authed(h.app, a.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+    expect(detail.json<ChallengeDetail>().challenge.isTie).toBe(true);
+    return challengeId;
+  }
+
+  async function contextsOf(h: TestApp, winner: RegisteredUser, challengeId: string): Promise<ChallengeResults> {
+    const response = await authed(h.app, winner.token)({ method: 'GET', url: `/challenges/${challengeId}/results` });
+    expect(response.statusCode).toBe(200);
+    return response.json<ChallengeResults>();
+  }
+
+  it('calls a third straight win a streak, and two only by their margin', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali', vulgarityMax: 3 });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli', vulgarityMax: 3 });
+    befriend(harness.app, ali.me.id, veli.me.id);
+
+    await finishedWin(harness, ali, veli);
+    const second = await finishedWin(harness, ali, veli);
+    expect((await contextsOf(harness, ali, second)).tauntContexts).toEqual({ [veli.me.id]: 'win_big' });
+
+    const third = await finishedWin(harness, ali, veli);
+    const results = await contextsOf(harness, ali, third);
+    expect(results.tauntContexts).toEqual({ [veli.me.id]: 'streak' });
+    expect(results.tauntTemplatesForWinner?.length).toBeGreaterThan(0);
+    expect(results.tauntTemplatesForWinner?.every((tpl) => tpl.context === 'streak')).toBe(true);
+    // an older win looked at later does not borrow the ones that came after it
+    expect((await contextsOf(harness, ali, second)).tauntContexts).toEqual({ [veli.me.id]: 'win_big' });
+  });
+
+  it('lets a tie break the streak', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+
+    await finishedWin(harness, ali, veli);
+    await finishedTie(harness, ali, veli);
+    await finishedWin(harness, ali, veli);
+    const third = await finishedWin(harness, ali, veli);
+    // three wins, but the tie sits between the first and the other two
+    expect((await contextsOf(harness, ali, third)).tauntContexts).toEqual({ [veli.me.id]: 'win_big' });
+
+    const fourth = await finishedWin(harness, ali, veli);
+    expect((await contextsOf(harness, ali, fourth)).tauntContexts).toEqual({ [veli.me.id]: 'streak' });
+  });
+
+  it('picks a streak line on its own when no template is named', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli', vulgarityMax: 1 });
+    befriend(harness.app, ali.me.id, veli.me.id);
+
+    await finishedWin(harness, ali, veli);
+    await finishedWin(harness, ali, veli);
+    const third = await finishedWin(harness, ali, veli);
+
+    const row = (id: string) => harness!.db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow;
+    const challenge = harness.db.prepare('SELECT * FROM challenges WHERE id = ?').get(third) as ChallengeRow;
+    const { template, taunt } = sendTaunt(harness.db, {
+      challenge,
+      from: row(ali.me.id),
+      to: row(veli.me.id),
+      now: harness.now(),
+    });
+    expect(template?.context).toBe('streak');
+    // still clamped to what Veli allows
+    expect(template?.level).toBe(1);
+    expect(taunt.body).toContain('Ali');
+  });
+});
+
+describe('rematch line-up', () => {
+  it('names the rivals a rematch would leave out for not being friends, and leaves them out', async () => {
+    harness = await makeApp({ now: NOW });
+    const can = await registerUser(harness.app, 'can', { displayName: 'Can' });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    // Can knows both; Ali and Veli only met in Can's group
+    befriend(harness.app, can.me.id, ali.me.id);
+    befriend(harness.app, can.me.id, veli.me.id);
+
+    const created = await authed(harness.app, can.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'su_bardak', startsAt: iso(harness), endsAt: iso(harness, DAY_MS), participantIds: [ali.me.id, veli.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    for (const player of [ali, veli]) {
+      expect((await authed(harness.app, player.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    }
+    await authed(harness.app, can.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: today(harness), value: 4, source: 'manual', clientTime: iso(harness) },
+    });
+    harness.advance(DAY_MS + 2 * 60_000);
+    await harness.app.inject({ method: 'POST', url: '/dev/advance' });
+
+    const resultsFor = async (user: RegisteredUser) =>
+      (await authed(harness!.app, user.token)({ method: 'GET', url: `/challenges/${challengeId}/results` })).json<ChallengeResults>();
+    expect((await resultsFor(ali)).rematchLeftOut).toEqual([veli.me.id]);
+    expect((await resultsFor(can)).rematchLeftOut).toEqual([]);
+
+    const rematch = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(rematch.statusCode).toBe(201);
+    const invited = harness.db
+      .prepare("SELECT user_id FROM challenge_participants WHERE challenge_id = ? AND status = 'invited'")
+      .all(rematch.json<Challenge>().id) as { user_id: string }[];
+    expect(invited.map((row) => row.user_id)).toEqual([can.me.id]);
+
+    // a block is not something "add them" fixes, and one placed on me must not show
+    expect((await authed(harness.app, ali.token)({ method: 'POST', url: `/users/${veli.me.id}/block` })).statusCode).toBeLessThan(300);
+    expect((await resultsFor(ali)).rematchLeftOut).toEqual([]);
+    expect((await resultsFor(veli)).rematchLeftOut).toEqual([]);
   });
 });
 

@@ -32,6 +32,7 @@ import {
   TAUNT_ALL_ICON,
   TAUNT_CTA,
   TAUNT_DONE_CHIP,
+  byLevel,
 } from '@/utils/levelCopy';
 
 /* ------------------------------------------------------------------- copy */
@@ -77,6 +78,39 @@ const NO_PENALTY: Record<VulgarityLevel, string> = {
   1: 'Ceza yazılmamış. Bu sefer sadece gurur meselesi.',
   2: 'Ceza yazılmamış. Yine de yedin.',
   3: 'Ceza yazmamışlar. Yediğin yeter zaten 🍆',
+};
+
+/**
+ * The shame header's line while no taunt has arrived: "the winner's laf is
+ * below" would point at an empty card. Conditional, so it stays true after the
+ * card below gives up on the winner too.
+ */
+const SHAME_WAITING_SUB: Record<VulgarityLevel, string> = {
+  1: 'Kazanan bir not bırakırsa aşağıda görürsün.',
+  2: 'Laf gelirse aşağıda görürsün, şimdilik ses yok.',
+  3: 'Koyarsa aşağıda görürsün. Şimdilik ses yok 🍆',
+};
+
+/**
+ * Under the rematch button: the server only invites friends, so a group rival
+ * met through somebody else stays out. The final table is where they are added.
+ */
+const LEFT_OUT_NOTE = (level: VulgarityLevel, names: string[]): string => {
+  const who = names.join(', ');
+  if (names.length > 1) {
+    return byLevel(
+      level,
+      `${who} arkadaş listende değil, rövanşa davet edilmezler. Eklemek için tablodan adlarına dokun.`,
+      `${who} kankan değil, rövanşa çağrılmazlar. Tablodan adlarına dokun, ekle.`,
+      `${who} kankan değil, rövanşa çağrılmazlar. Tablodan adlarına dokun, ekle de onlar da yesin 🍆`
+    );
+  }
+  return byLevel(
+    level,
+    `${who} arkadaş listende değil, rövanşa davet edilmez. Eklemek için tablodan adına dokun.`,
+    `${who} kankan değil, rövanşa çağrılmaz. Tablodan adına dokun, ekle.`,
+    `${who} kankan değil, rövanşa çağrılmaz. Tablodan adına dokun, ekle de o da yesin 🍆`
+  );
 };
 
 /**
@@ -148,13 +182,21 @@ export default function ResultsScreen() {
     router.push({ pathname: '/challenge/[id]/taunt', params: { id, to } });
   };
 
+  const openProfile = (userId: string) => {
+    router.push({ pathname: '/user/[id]', params: { id: userId } });
+  };
+
   const startRematch = async () => {
     try {
-      const created = await rematch.mutateAsync();
+      const { challenge: created, invited } = await rematch.mutateAsync();
       if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       toast({
         title: 'Rövanş açıldı',
-        body: 'Yeni çelınc kuruldu, kankalar davet edildi.',
+        // only the people the server really invited: non-friends stay out
+        body:
+          invited && invited.length > 0
+            ? `Davet gitti: ${invited.map((user) => user.displayName).join(', ')}.`
+            : 'Yeni çelınc kuruldu, davetler gitti.',
         kind: 'success',
       });
       router.replace({ pathname: '/challenge/[id]', params: { id: created.id } });
@@ -218,7 +260,7 @@ export default function ResultsScreen() {
     );
   }
 
-  const { challenge, standings, taunts } = query.data;
+  const { challenge, standings, taunts, rematchLeftOut } = query.data;
   const type: ChallengeType | undefined = getChallengeType(challenge.typeKey);
   const scoreText = (value: number) => scoreLabel({ unitTr: challenge.unit }, value);
 
@@ -257,6 +299,8 @@ export default function ResultsScreen() {
   const pendingLosers = losers.filter((l) => !taunted.has(l.user.id));
 
   const received: Taunt | undefined = meId ? taunts.find((x) => x.toUserId === meId) : undefined;
+  // the server's list (an older one sends none, and then nothing is claimed)
+  const leftOut = ranked.filter((p) => p.user.id !== meId && (rematchLeftOut ?? []).includes(p.user.id));
   const senderOf = (taunt: Taunt): ParticipantView | undefined =>
     standings.find((p) => p.user.id === taunt.fromUserId);
 
@@ -288,7 +332,7 @@ export default function ResultsScreen() {
       ) : isTie ? (
         <NeutralHeader title={TIE_TITLE[level]} subtitle={TIE_SUB[level]} emoji="🤝" />
       ) : isPlayer ? (
-        <ShameHeader level={level} />
+        <ShameHeader level={level} waiting={!received} />
       ) : (
         <NeutralHeader
           title="ÇELINC BİTTİ"
@@ -331,7 +375,7 @@ export default function ResultsScreen() {
         <Text variant="label" style={styles.sectionLabel}>
           Final tablosu
         </Text>
-        <Standings participants={standings} type={type} meId={meId} finished />
+        <Standings participants={standings} type={type} meId={meId} finished onPressUser={openProfile} />
         {isPlayer && !iWon && !isTie && winner ? (
           <Text variant="small" bold color={Colors.accent} style={styles.gapLine}>
             {winner.user.displayName} ile aranda {scoreText(loserGap)} fark var.
@@ -486,6 +530,11 @@ export default function ResultsScreen() {
             onPress={() => void startRematch()}
           />
         ) : null}
+        {isPlayer && leftOut.length > 0 ? (
+          <Text variant="tiny" color={Colors.yellow} style={styles.gapSm}>
+            {LEFT_OUT_NOTE(level, leftOut.map((p) => p.user.displayName))}
+          </Text>
+        ) : null}
         <Button
           title="Çelınca dön"
           variant="ghost"
@@ -534,7 +583,7 @@ function WinnerHeader({ level }: { level: VulgarityLevel }) {
   );
 }
 
-function ShameHeader({ level }: { level: VulgarityLevel }) {
+function ShameHeader({ level, waiting }: { level: VulgarityLevel; waiting: boolean }) {
   const rise = useRise(0);
   return (
     <Animated.View style={[styles.headline, riseStyle(rise, 20)]}>
@@ -542,7 +591,7 @@ function ShameHeader({ level }: { level: VulgarityLevel }) {
         {t('shame_screen_title', level)}
       </Text>
       <Text variant="lead" muted center>
-        {t('shame_screen_subtitle', level)}
+        {waiting ? SHAME_WAITING_SUB[level] : t('shame_screen_subtitle', level)}
       </Text>
     </Animated.View>
   );
@@ -792,6 +841,7 @@ const styles = StyleSheet.create({
   block: { borderRadius: Radius.lg },
   grow: { flex: 1 },
   gap: { marginTop: Spacing.md },
+  gapSm: { marginTop: Spacing.sm },
 
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   backBtn: {

@@ -110,6 +110,21 @@ böylece bir bardak suyu iki kez saymaz.
 4. Metin `renderTaunt` ile gerçek isim ve skorlarla doldurulur.
 5. Bildirim satırı yazılır (inbox), sonra push kuyruğuna girer.
 
+Hangi laf havuzundan seçileceği her kaybeden için ayrı belirlenir (`tauntContextFor`). Rövanşı
+ilk çelıncı kaybeden aldıysa `revenge`. Aynı kankayı üst üste üçüncü kez yendiysen `streak`: arada
+bir beraberlik, bir kayıp ya da başkasının kazandığı ortak bir çelınc seriyi bozar ve sayım bu
+çelınctan geriye yapılır (`winStreakAgainst`). Geç atılan bir laf, sonradan gelen galibiyetleri
+de saymaz. İkisi de değilse farka bakılır: `win_big`, `win` ya da `win_close`. Sonuç ekranı bu
+kelimeyi kazanana her kaybeden için `tauntContexts` ile verir. Seçici RÖVANŞ ve SERİ laflarını
+ancak böyle gösterebilir, çünkü telefon yalnızca skorları bilir.
+
+Rövanş eski kadroyu olduğu gibi çağırmaz, `POST /challenges` ile aynı kapıdan geçer. Hâlâ kanka
+olanlar davet edilir; engelli ikili ve silinen hesaplar dışarıda kalır. Grup çelıncında başkası
+üzerinden tanıştığın biri bu yüzden rövanşa gelmez. Sonuç ekranı bunu önceden söyler
+(`rematchLeftOut`): rövanş düğmesinin altında "Veli kankan değil, rövanşa çağrılmaz" yazar ve
+final tablosundaki adına dokununca profili açılır, oradan eklenir. Engeller listede yoktur:
+eklemekle çözülmezler, sana konan bir engel de görünmemeli.
+
 Push başarısız olsa bile laf inbox'ta durur. Uygulama 45 saniyede bir okunmamışları sorar ve
 push gelmemiş bir öğe bulursa cihazın kendi yerel bildirimini üretir. Yani Expo Go'da bile
 KOYDUM ulaşır, sadece anında değil.

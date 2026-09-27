@@ -69,9 +69,14 @@ export function tauntVars(
   };
 }
 
+/** Wins in a row over the same player, this one included, that make a taunt a `streak` one. */
+const STREAK_TAUNT_MIN = 3;
+
 /**
  * `win_big` / `win_close` / `win`, or `revenge` when this is a rematch AND the
  * winner is the one who lost the original — a repeat winner has nothing to avenge.
+ * Otherwise `streak` once the winner has taken `STREAK_TAUNT_MIN` in a row off
+ * this loser: a third straight win is a better story than its margin.
  */
 export function tauntContextFor(
   type: ChallengeType,
@@ -80,9 +85,41 @@ export function tauntContextFor(
   loserScore: number,
   originalWinnerId?: string | null,
   winnerId?: string,
+  streak = 0,
 ): TauntContext {
   if (challenge.rematch_of_id && originalWinnerId && winnerId && originalWinnerId !== winnerId) return 'revenge';
+  if (streak >= STREAK_TAUNT_MIN) return 'streak';
   return tauntContextForMargin(winMargin(type, winnerScore, loserScore));
+}
+
+/**
+ * How many finished çelınclar in a row `winnerId` has won with `loserId` in the
+ * line-up (both accepted), counting back from `challenge` itself. Only an outright
+ * win counts: a tie, a loss or a third player taking it breaks the run, because
+ * every streak line says "üst üste kazandı" and has to be true when it lands.
+ *
+ * Counting back from this çelınc rather than from the newest one keeps a taunt
+ * sent late about an older win from borrowing wins that came after it.
+ */
+export function winStreakAgainst(db: Database, challenge: ChallengeRow, winnerId: string, loserId: string): number {
+  const rows = db
+    .prepare(
+      `SELECT c.winner_id, c.is_tie FROM challenges c
+         JOIN challenge_participants w ON w.challenge_id = c.id AND w.user_id = @winnerId AND w.status = 'accepted'
+         JOIN challenge_participants l ON l.challenge_id = c.id AND l.user_id = @loserId AND l.status = 'accepted'
+        WHERE c.status = 'finished' AND (@upTo IS NULL OR c.finalized_at <= @upTo)
+        ORDER BY c.id = @id DESC, c.finalized_at DESC, c.created_at DESC`,
+    )
+    .iterate({ winnerId, loserId, upTo: challenge.finalized_at, id: challenge.id }) as IterableIterator<{
+    winner_id: string | null;
+    is_tie: number;
+  }>;
+  let streak = 0;
+  for (const row of rows) {
+    if (row.is_tie || row.winner_id !== winnerId) break;
+    streak += 1;
+  }
+  return streak;
 }
 
 /** The winner of the çelınc this one is a rematch of, when there was one. */
@@ -92,6 +129,46 @@ function originalWinnerOf(db: Database, challenge: ChallengeRow): string | null 
     | { winner_id: string | null }
     | undefined;
   return row?.winner_id ?? null;
+}
+
+/** The context of the taunt `winnerId` sends `loserId`: revenge, then a streak, then the margin. */
+function contextAgainst(
+  db: Database,
+  type: ChallengeType,
+  challenge: ChallengeRow,
+  standings: ParticipantView[],
+  winnerId: string,
+  loserId: string,
+): TauntContext {
+  return tauntContextFor(
+    type,
+    challenge,
+    scoreOf(standings, winnerId),
+    scoreOf(standings, loserId),
+    originalWinnerOf(db, challenge),
+    winnerId,
+    winStreakAgainst(db, challenge, winnerId, loserId),
+  );
+}
+
+/**
+ * Per accepted loser, the context the winner's taunt will be written in. The
+ * picker shows that pool, so a rematch won back or a third win in a row offers
+ * its own lines instead of the plain margin ones.
+ */
+export function tauntContextsForWinner(
+  db: Database,
+  challenge: ChallengeRow,
+  winnerId: string,
+  standings: ParticipantView[],
+): Record<string, TauntContext> {
+  const type = typeForChallenge(challenge);
+  const contexts: Record<string, TauntContext> = {};
+  for (const participant of standings) {
+    if (participant.status !== 'accepted' || participant.user.id === winnerId) continue;
+    contexts[participant.user.id] = contextAgainst(db, type, challenge, standings, winnerId, participant.user.id);
+  }
+  return contexts;
 }
 
 function customTitle(level: VulgarityLevel, winner: string): string {
@@ -130,14 +207,7 @@ export function sendTaunt(db: Database, input: SendTauntInput): SendTauntResult 
   const standings = computeStandings(db, challenge, now);
   const vars = tauntVars(type, challenge, from, to, standings);
   const recipientMax = levelOf(to);
-  const context = tauntContextFor(
-    type,
-    challenge,
-    scoreOf(standings, from.id),
-    scoreOf(standings, to.id),
-    originalWinnerOf(db, challenge),
-    from.id,
-  );
+  const context = contextAgainst(db, type, challenge, standings, from.id, to.id);
   const seed = seedFrom(challenge.id, from.id, to.id);
 
   let level: VulgarityLevel;
@@ -215,14 +285,7 @@ export function tauntPreviewsForWinner(
   const standings = computeStandings(db, challenge, now);
   if (!loser) return [];
   const vars = tauntVars(type, challenge, winner, loser, standings);
-  const context = tauntContextFor(
-    type,
-    challenge,
-    scoreOf(standings, winner.id),
-    scoreOf(standings, loser.id),
-    originalWinnerOf(db, challenge),
-    winner.id,
-  );
+  const context = contextAgainst(db, type, challenge, standings, winner.id, loser.id);
   return tauntsFor(context, 3, type.metricType).map((template) => ({
     ...template,
     ...renderTaunt(template, vars),

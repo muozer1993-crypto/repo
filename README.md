@@ -383,6 +383,12 @@ gece yarısı biten çelıncın hatırlatması ertesi öğlen gelir. İki gün g
 Kazananın adına otomatik laf atılmaz. Kaybeden taraf bir gün boyunca laf gelmezse sonuç
 ekranında "unuttu galiba, rövanş aç" yazısını görür.
 
+**Rövanş ve seri lafları:** rövanşı ilk çelıncı kaybeden kazanırsa laf seçicide **RÖVANŞ**
+lafları çıkar. Aynı kankayı üst üste üçüncü kez yenersen **SERİ** lafları çıkar; arada bir
+beraberlik ya da kayıp seriyi bozar. Rövanş sadece hâlâ kankan olanları çağırır, grup çelıncında
+başkası üzerinden tanıştığın biri gelmez. Sonuç ekranı bunu rövanş düğmesinin altında söyler;
+final tablosunda adına dokunup profilinden ekleyebilirsin.
+
 ---
 
 ## Sunucuyu internete açmak
@@ -530,7 +536,8 @@ eder ve itiraz edenlere haber gider; koymazsa giriş düşer. 12 saat dolana kad
 tek çelıncta rakip tek dokunuşla senin gününü silemez. İtiraz eden fikrini değiştirirse "Geri çek" ile
 itirazını kaldırır (aynı girişe bir daha itiraz edemez). Bitişe yakın gelen bir itiraz yüzünden sonuç
 en fazla 12 saat bekleyebilir. İtiraz sadece çelınc sürerken açılır; adım ve ekran süresi çelınclarında
-son akşamın sayıları bitişten sonraki bir saatte geldiği için o saat de sayılır. Fotoğraf kanıtı, bir
+son akşamın sayıları bitişten sonraki bir saatte geldiği için o saat de sayılır. Uygulama itiraz
+düğmesini de sadece bu sürede gösterir. Fotoğraf kanıtı, bir
 sayı yazılan türlerde çelıncı açan kişi isterse zorunlu olur; evet/hayır günleri ve check-in'lerde
 fotoğraf yok.
 

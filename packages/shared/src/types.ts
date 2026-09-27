@@ -446,6 +446,18 @@ export interface ChallengeResults {
   taunts: Taunt[];
   /** Only for the winner: rendered previews (one list per loser is done client side). */
   tauntTemplatesForWinner?: TauntTemplate[];
+  /**
+   * Only for the winner: per loser id, what their taunt is about — `revenge`,
+   * `streak`, or the margin (`win_big` / `win` / `win_close`). The picker offers
+   * that pool; an older server leaves it out and the app falls back to the margin.
+   */
+  tauntContexts?: Record<string, TauntContext>;
+  /**
+   * Only for an accepted player: the others a rematch opened by the reader would
+   * not invite because they are not friends. Deleted accounts and blocks are
+   * left out of it too, but not listed.
+   */
+  rematchLeftOut?: string[];
 }
 
 export interface Notification {

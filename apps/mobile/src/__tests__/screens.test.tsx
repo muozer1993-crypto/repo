@@ -649,6 +649,37 @@ describe('a loser still waiting for the winner to talk', () => {
     const text = rendered(tree);
     expect(text).toContain('Ali daha ağzını açmadı. Beklemede kal.');
     expect(text).not.toContain('unuttu galiba');
+    // the header does not point at a laf that is not there
+    expect(text).toContain('Laf gelirse aşağıda görürsün, şimdilik ses yok.');
+    expect(text).not.toContain('Kazanan sana laf soktu, aşağıda.');
+  });
+
+  it('says the laf is below once it is', async () => {
+    searchParams.id = 'c-1';
+    const results = lostTo(3 * 3_600_000);
+    api.results = jest.fn(async () => ({
+      ...results,
+      taunts: [
+        {
+          id: 't-1',
+          challengeId: 'c-1',
+          fromUserId: ALI.id,
+          toUserId: 'me-1',
+          level: 2 as const,
+          title: 'Koydum',
+          body: 'Ali koydu, Mustafa yedi.',
+          createdAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+      ],
+    }));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Kazanan sana laf soktu, aşağıda.');
+    expect(text).toContain('Ali koydu, Mustafa yedi.');
+    expect(text).not.toContain('Laf gelirse aşağıda');
   });
 
   it('stops promising a laf after a day without one', async () => {
@@ -661,6 +692,211 @@ describe('a loser still waiting for the winner to talk', () => {
     const text = rendered(tree);
     expect(text).toContain('Ali unuttu galiba. Rövanş aç, bu sefer sen koy.');
     expect(text).not.toContain('Beklemede kal');
+  });
+});
+
+describe('the winner\'s taunt picker', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** The reader beat Ali 12.430 to 4.201: a big margin on its own. */
+  function wonAgainstAli(contexts?: Record<string, string>) {
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    return {
+      challenge: { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: 'me-1' },
+      standings: [
+        { ...detail.me!, isWinner: true },
+        { ...detail.me!, user: ALI, score: 4201, rank: 2 },
+      ],
+      taunts: [],
+      ...(contexts ? { tauntContexts: contexts } : {}),
+    };
+  }
+
+  it('offers the rövanş lines when the server says this one was won back', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => wonAgainstAli({ [ALI.id]: 'revenge' }));
+    const TauntScreen = require('@/app/(app)/challenge/[id]/taunt').default;
+    const tree = renderScreen(<TauntScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('RÖVANŞ');
+    expect(text).toContain('Rövanşı aldı');
+    expect(text).not.toContain('EZİCİ FARK');
+  });
+
+  it('offers the seri lines for a third win in a row', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => wonAgainstAli({ [ALI.id]: 'streak' }));
+    const TauntScreen = require('@/app/(app)/challenge/[id]/taunt').default;
+    const tree = renderScreen(<TauntScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('SERİ');
+    expect(text).toContain('Yine koydu');
+  });
+
+  it('falls back to the margin when an older server sends no contexts', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => wonAgainstAli());
+    const TauntScreen = require('@/app/(app)/challenge/[id]/taunt').default;
+    const tree = renderScreen(<TauntScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('EZİCİ FARK');
+    expect(text).not.toContain('RÖVANŞ');
+  });
+});
+
+describe('a group rival who is not a friend', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const VELI = { id: 'u-3', username: 'veli', displayName: 'Veli', avatarEmoji: '🦊', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** Ali won a three-way çelınc; the reader came second, Veli (not a friend) third. */
+  function groupResults(leftOut?: string[]) {
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    return {
+      challenge: { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: ALI.id },
+      standings: [
+        { ...detail.me!, user: ALI, score: 15000, rank: 1, isWinner: true },
+        { ...detail.me!, score: 12430, rank: 2 },
+        { ...detail.me!, user: VELI, score: 3000, rank: 3 },
+      ],
+      taunts: [],
+      ...(leftOut ? { rematchLeftOut: leftOut } : {}),
+    };
+  }
+
+  beforeEach(() => {
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.push!.mockClear();
+  });
+
+  it('says under the rematch button that they will not be invited, and how to fix it', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => groupResults([VELI.id]));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Veli kankan değil, rövanşa çağrılmaz. Tablodan adına dokun, ekle.');
+  });
+
+  it('claims nothing when the server does not say', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => groupResults());
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    expect(rendered(tree)).not.toContain('rövanşa çağrılmaz');
+  });
+
+  it('opens a rival\'s profile from the final table, but never my own row', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => groupResults([VELI.id]));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    act(() => {
+      findWith(tree, 'accessibilityLabel', 'Veli profili', 'onPress').props.onPress();
+    });
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/user/[id]', params: { id: VELI.id } });
+    expect(() => findWith(tree, 'accessibilityLabel', 'Mustafa profili', 'onPress')).toThrow();
+  });
+
+  it('names only the players the rematch really invited', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => groupResults([VELI.id]));
+    const rematch = { ...challengeDetail().challenge, id: 'c-2', status: 'pending' as const, rematchOfId: 'c-1' };
+    api.rematch = jest.fn(async () => rematch);
+    api.challenge = jest.fn(async (id: string) => {
+      if (id !== 'c-2') throw new ApiError('not_found', 'Bulunamadı.', 404);
+      const detail = challengeDetail();
+      return {
+        ...detail,
+        challenge: rematch,
+        participants: [detail.me!, { ...detail.me!, user: ALI, status: 'invited' as const, score: 0, rank: 0 }],
+      };
+    });
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    await act(async () => {
+      findWith(tree, 'title', 'Rövanş İstiyorum', 'onPress').props.onPress();
+    });
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Davet gitti: Ali.');
+    expect(text).not.toContain('kankalar davet edildi');
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    expect(router.replace).toHaveBeenCalledWith({ pathname: '/challenge/[id]', params: { id: 'c-2' } });
+  });
+});
+
+describe('the itiraz chip once the çelınc is over', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** Ali has one plain entry nobody has disputed; the step çelınc ended `endedAgo` ms ago. */
+  function withAliEntry(status: 'active' | 'finished', endedAgo: number | null) {
+    const detail = challengeDetail();
+    const rival = { ...detail.me!, user: ALI, score: 25000, rank: 1 };
+    const endsAt = endedAgo === null ? detail.challenge.endsAt : new Date(Date.now() - endedAgo).toISOString();
+    return {
+      ...detail,
+      challenge: { ...detail.challenge, status, endsAt, finalizedAt: status === 'finished' ? endsAt : null },
+      participants: [detail.me!, rival],
+      feed: [
+        {
+          id: 'e-1',
+          userId: ALI.id,
+          displayName: 'Ali',
+          dayKey: '2026-09-08',
+          value: 25000,
+          source: 'manual' as const,
+          status: 'ok' as const,
+          createdAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+          proofUrl: null,
+        },
+      ],
+    };
+  }
+
+  async function chipShown(detail: ReturnType<typeof withAliEntry>): Promise<boolean> {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => detail);
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    // level 2's "itiraz et"
+    const chips = tree.root.findAll(
+      (node) => node.props.label === 'Yalan Bu' && typeof node.props.onPress === 'function'
+    );
+    return chips.length > 0;
+  }
+
+  it('is there while the çelınc runs', async () => {
+    expect(await chipShown(withAliEntry('active', null))).toBe(true);
+  });
+
+  it('stays through the hour a step çelınc waits for the phones', async () => {
+    expect(await chipShown(withAliEntry('active', 5 * 60_000))).toBe(true);
+  });
+
+  it('goes once the server stops taking one', async () => {
+    expect(await chipShown(withAliEntry('active', 2 * 3_600_000))).toBe(false);
+  });
+
+  it('is gone on a finished çelınc', async () => {
+    expect(await chipShown(withAliEntry('finished', 3 * 3_600_000))).toBe(false);
   });
 });
 

@@ -46,6 +46,15 @@ const CONTEXT_LABEL: Record<string, string> = {
   win_big: 'EZİCİ FARK',
   win_close: 'KIL PAYI',
   tie: 'BERABERE',
+  revenge: 'RÖVANŞ',
+  streak: 'SERİ',
+};
+
+const CONTEXT_COLOR: Partial<Record<TauntContext, string>> = {
+  win_big: Colors.success,
+  win_close: Colors.yellow,
+  revenge: Colors.accent,
+  streak: Colors.yellow,
 };
 
 /**
@@ -203,7 +212,7 @@ export default function TauntPickerScreen() {
     );
   }
 
-  const { challenge, standings, taunts } = query.data;
+  const { challenge, standings, taunts, tauntContexts } = query.data;
   const type: ChallengeType | undefined = getChallengeType(challenge.typeKey);
   const scoreText = (value: number) => scoreLabel({ unitTr: challenge.unit }, value);
 
@@ -288,13 +297,19 @@ export default function TauntPickerScreen() {
     (allMode || available.length === 1 ? available[0] : undefined);
   const recipients = allMode ? available : chosen ? [chosen] : [];
 
-  /** Everybody finished with their own gap, so everybody gets their own context. */
+  /**
+   * Everybody finished with their own gap, so everybody gets their own context.
+   * The server's word comes first: only it knows a rematch was won back or that
+   * this is the third win in a row over the same friend. An older server sends
+   * none, and the gap is all there is.
+   */
   const contextFor = (participant: ParticipantView): TauntContext =>
-    challenge.isTie
+    tauntContexts?.[participant.user.id] ??
+    (challenge.isTie
       ? 'tie'
       : tauntContextForMargin(
           winMargin({ direction: challenge.direction }, myScore, participant.score)
-        );
+        ));
 
   const theirScore = chosen?.score ?? 0;
   const context: TauntContext = chosen ? contextFor(chosen) : challenge.isTie ? 'tie' : 'win';
@@ -435,7 +450,7 @@ export default function TauntPickerScreen() {
             </View>
             <Chip
               label={CONTEXT_LABEL[context] ?? 'FARK'}
-              color={context === 'win_big' ? Colors.success : context === 'win_close' ? Colors.yellow : Colors.textMuted}
+              color={CONTEXT_COLOR[context] ?? Colors.textMuted}
               size="sm"
             />
           </View>
@@ -448,7 +463,7 @@ export default function TauntPickerScreen() {
         {allMode ? (
           <Text variant="tiny" faint style={styles.gap}>
             {mixedContexts
-              ? `Herkese ayrı ayrı gider ve laf herkesin kendi farkına göre seçilir. Aşağıdaki önizleme ${chosen?.user.displayName ?? 'ilk kişi'} için.`
+              ? `Herkese ayrı ayrı gider ve laf herkesin kendi hesabına göre seçilir. Aşağıdaki önizleme ${chosen?.user.displayName ?? 'ilk kişi'} için.`
               : `Aynı laf hepsine ayrı ayrı gider, skorlar herkesin kendi skoruyla yazılır. Önizleme ${chosen?.user.displayName ?? 'ilk kişi'} için.`}
           </Text>
         ) : null}

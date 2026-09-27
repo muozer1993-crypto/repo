@@ -1,6 +1,6 @@
 import type { ChallengeType, ParticipantView } from '@koydum/shared';
 import { scoreLabel } from '@koydum/shared';
-import { StyleSheet, View, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { ProgressBar } from '@/components/ProgressBar';
@@ -16,13 +16,18 @@ export interface StandingsProps {
   limit?: number;
   /** the challenge is over: rank 1 gets the crown treatment */
   finished?: boolean;
+  /**
+   * Makes every row but mine a way to that person's profile — the only place a
+   * group-çelınc rival who is not a friend yet can be added from.
+   */
+  onPressUser?: (userId: string) => void;
   style?: ViewStyle;
 }
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 /** Ranked bar chart of everyone's score — the heart of every challenge screen. */
-export function Standings({ participants, type, meId, limit, finished, style }: StandingsProps) {
+export function Standings({ participants, type, meId, limit, finished, onPressUser, style }: StandingsProps) {
   const playing = participants.filter((p) => p.status === 'accepted' || p.status === 'invited');
   // rank 0 means "not ranked" (still invited), not "above first place"
   const ranked = [...playing].sort((a, b) => {
@@ -55,8 +60,8 @@ export function Standings({ participants, type, meId, limit, finished, style }: 
         const fill = fillFor(participant.score);
         const barColor = leading ? Colors.yellow : isMe ? Colors.accent : Colors.surfaceHigh;
 
-        return (
-          <View key={participant.user.id} style={[styles.row, isMe && styles.rowMe]}>
+        const row = (
+          <>
             <Text variant="tiny" style={styles.rank} muted={!leading}>
               {pending || participant.rank <= 0
                 ? '—'
@@ -90,6 +95,24 @@ export function Standings({ participants, type, meId, limit, finished, style }: 
               </View>
               <ProgressBar value={pending ? 0 : fill} color={barColor} height={6} />
             </View>
+          </>
+        );
+
+        if (onPressUser && !isMe) {
+          return (
+            <Pressable
+              key={participant.user.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${participant.user.displayName} profili`}
+              onPress={() => onPressUser(participant.user.id)}
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+              {row}
+            </Pressable>
+          );
+        }
+        return (
+          <View key={participant.user.id} style={[styles.row, isMe && styles.rowMe]}>
+            {row}
           </View>
         );
       })}
@@ -120,6 +143,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xs,
     paddingVertical: 2,
   },
+  rowPressed: { opacity: 0.6 },
   rank: { width: 20, textAlign: 'center' },
   body: { flex: 1, gap: 4 },
   line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },

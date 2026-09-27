@@ -371,7 +371,13 @@ export default function ChallengeDetailScreen() {
         <Text variant="label" style={styles.sectionLabel}>
           Sıralama
         </Text>
-        <Standings participants={participants} type={type} meId={meId} finished={challenge.status === 'finished'} />
+        <Standings
+          participants={participants}
+          type={type}
+          meId={meId}
+          finished={challenge.status === 'finished'}
+          onPressUser={(userId) => router.push({ pathname: '/user/[id]', params: { id: userId } })}
+        />
         {/* "küçük bir gayret yeter" is a lie once nothing more counts */}
         {challenge.status === 'active' && !settling && isPlayer ? (
           <Text
@@ -1296,6 +1302,13 @@ function Feed({
   // Only a friend's itiraz could undo a mistyped value before this: the server
   // lets you delete your own manual rows while the çelınc is running.
   const active = detail.challenge.status === 'active';
+  // A new itiraz is refused from the end on, except in the hour a phone-counted
+  // çelınc waits for the last evening's numbers (the server's disputesCloseAt):
+  // an "itiraz et" chip after that would only earn a 400.
+  const disputesCloseAt =
+    Date.parse(detail.challenge.endsAt) + (type?.deviceMetric ? LIMITS.DEVICE_SETTLE_MS : 0);
+  // a malformed end date leaves the call to the server rather than hiding the chip
+  const canDispute = active && (!Number.isFinite(disputesCloseAt) || now < disputesCloseAt);
   const canDelete = (item: FeedItem) =>
     active && item.userId === meId && item.source === 'manual' && item.status !== 'rejected';
 
@@ -1426,6 +1439,7 @@ function Feed({
                 reasons={reasons}
                 statusText={item.status === 'disputed' ? disputeStatusText(item, isMine, active, now) : null}
                 active={active}
+                canDispute={canDispute}
                 today={today}
                 yesterday={yesterday}
                 level={level}
@@ -1549,6 +1563,7 @@ function FeedRow({
   reasons,
   statusText,
   active,
+  canDispute,
   today,
   yesterday,
   level,
@@ -1570,6 +1585,8 @@ function FeedRow({
   reasons: { id: string; name: string; reason: string }[];
   statusText: string | null;
   active: boolean;
+  /** whether the server still takes a new itiraz (see Feed) */
+  canDispute: boolean;
   today: string;
   yesterday: string;
   level: VulgarityLevel;
@@ -1597,15 +1614,10 @@ function FeedRow({
           onPress={withdrawing ? undefined : onWithdraw}
         />
       );
-    } else {
-      chip = (
-        <Chip
-          label={myDispute ? 'İtiraz ettin' : t('dispute_button', level)}
-          color={myDispute ? Colors.textFaint : Colors.danger}
-          size="sm"
-          onPress={myDispute ? undefined : onDispute}
-        />
-      );
+    } else if (myDispute) {
+      chip = <Chip label="İtiraz ettin" color={Colors.textFaint} size="sm" />;
+    } else if (canDispute) {
+      chip = <Chip label={t('dispute_button', level)} color={Colors.danger} size="sm" onPress={onDispute} />;
     }
   } else if (isMine && disputed && active) {
     chip = <Chip label="Kanıt ekle" icon="📸" color={Colors.yellow} size="sm" onPress={onAnswer} />;

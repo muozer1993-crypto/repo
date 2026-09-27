@@ -40,7 +40,7 @@ import {
   tauntsForUser,
 } from '../services/challengeViews.js';
 import { areFriends, assertNotBlocked, isBlockedBetween } from '../services/friends.js';
-import { sendPoke, sendTaunt, tauntPreviewsForWinner } from '../services/taunts.js';
+import { sendPoke, sendTaunt, tauntContextsForWinner, tauntPreviewsForWinner } from '../services/taunts.js';
 
 interface IdParams {
   id: string;
@@ -75,6 +75,43 @@ function requireTarget(db: Database, challenge: ChallengeRow, userId: string): U
   const user = getUserRow(db, userId);
   if (!user) throw notFound('participant_not_found', 'Bu kişi çelıncta değil.');
   return user;
+}
+
+/**
+ * Who a rematch of `challenge` opened by `meId` invites, and who of the old
+ * line-up it leaves out for not being friends.
+ *
+ * The old line-up is not a licence to invite: a rematch goes through the same
+ * gate as POST /challenges, so somebody who blocked me (or is no longer a friend)
+ * cannot be dragged into a brand-new challenge — and pushed at — from here.
+ * `notFriends` feeds the results screen's "rövanşa çağrılmaz" note; a deleted
+ * account or a block (either way) is left out of it, since neither can be fixed
+ * by adding the person, and a block placed on me must not show.
+ */
+function rematchLineUp(
+  db: Database,
+  challenge: ChallengeRow,
+  meId: string,
+): { invitees: UserRow[]; notFriends: string[] } {
+  const previous = db
+    .prepare("SELECT user_id FROM challenge_participants WHERE challenge_id = ? AND status = 'accepted' ORDER BY user_id ASC")
+    .all(challenge.id) as { user_id: string }[];
+
+  const invitees: UserRow[] = [];
+  const notFriends: string[] = [];
+  for (const row of previous) {
+    if (row.user_id === meId) continue;
+    const user = db.prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL').get(row.user_id) as
+      | UserRow
+      | undefined;
+    if (!user || isBlockedBetween(db, meId, user.id)) continue;
+    if (!areFriends(db, meId, user.id)) {
+      notFriends.push(user.id);
+      continue;
+    }
+    invitees.push(user);
+  }
+  return { invitees, notFriends };
 }
 
 export default async function socialRoutes(app: FastifyInstance): Promise<void> {
@@ -187,23 +224,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     const createdAt = nowIso(now);
     const rematchId = newId();
 
-    const previous = db
-      .prepare("SELECT user_id FROM challenge_participants WHERE challenge_id = ? AND status = 'accepted' ORDER BY user_id ASC")
-      .all(challenge.id) as { user_id: string }[];
-
-    // The old line-up is not a licence to invite: a rematch goes through the same
-    // gate as POST /challenges, so somebody who blocked me (or is no longer a friend)
-    // cannot be dragged into a brand-new challenge — and pushed at — from here.
-    const invitees: UserRow[] = [];
-    for (const row of previous) {
-      if (row.user_id === me.id) continue;
-      const user = db.prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL').get(row.user_id) as
-        | UserRow
-        | undefined;
-      if (!user) continue;
-      if (isBlockedBetween(db, me.id, user.id) || !areFriends(db, me.id, user.id)) continue;
-      invitees.push(user);
-    }
+    const { invitees } = rematchLineUp(db, challenge, me.id);
     if (invitees.length === 0) {
       throw badRequest('no_participants', 'Rövanş için davet edilecek kimse kalmadı.');
     }
@@ -286,6 +307,11 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       const runnerUp = summary.participants.find((p) => p.status === 'accepted' && p.user.id !== me.id);
       const loser = runnerUp ? getUserRow(db, runnerUp.user.id) : undefined;
       results.tauntTemplatesForWinner = tauntPreviewsForWinner(db, challenge, me.row, loser, app.now());
+      // each loser's own context: the picker would otherwise only know the margin
+      results.tauntContexts = tauntContextsForWinner(db, challenge, me.id, summary.participants);
+    }
+    if (challenge.status === 'finished' && summary.me?.status === 'accepted') {
+      results.rematchLeftOut = rematchLineUp(db, challenge, me.id).notFriends;
     }
 
     return results;
