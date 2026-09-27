@@ -254,6 +254,15 @@ async function textOf(page) {
  * renders the app's Button as a real <button role="button">, and on the auth
  * screens the submit is the first one — the links below it are anchors.
  */
+/**
+ * The results podium rises in with a spring (the winner's column last, after a
+ * 260 ms delay); a screenshot taken the moment the text appears shows the
+ * podium without its winner.
+ */
+async function settleAnimations(page) {
+  await page.waitForTimeout(1500);
+}
+
 async function submitForm(page) {
   const button = page.locator('button[role="button"]').first();
   await button.waitFor({ state: 'visible', timeout: 15_000 });
@@ -431,6 +440,7 @@ async function main() {
     if (!shameText.includes('12.430') && !shameText.includes('12430')) {
       log(`! shame screen did not show the winning score. Body was:\n${shameText.slice(0, 800)}`);
     }
+    await settleAnimations(page);
     await page.screenshot({ path: join(SHOT_DIR, '03-shame.png'), fullPage: true });
 
     // 4. the winner's view
@@ -439,6 +449,7 @@ async function main() {
       waitUntil: 'domcontentloaded',
     });
     await expectText(page, ['LAF HAKKI', 'FINAL TABLOSU', 'KOYDUM MU'], 'winner results screen');
+    await settleAnimations(page);
     await page.screenshot({ path: join(SHOT_DIR, '04-winner.png'), fullPage: true });
 
     // 5. home as the winner
