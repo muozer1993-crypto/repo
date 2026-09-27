@@ -121,6 +121,23 @@ jest.mock('@/services/reminders', () => ({
   refreshReminders: (...args: unknown[]) => mockReminders.refresh(...args),
 }));
 
+/** Android's battery and alarm switches (services/deviceHealth has its own test); null = not Android. */
+const mockDeviceHealth: {
+  state: { batteryUnrestricted: boolean; exactAlarms: boolean; xiaomi: boolean } | null;
+  requestBattery: jest.Mock;
+  openAlarms: jest.Mock;
+} = {
+  state: null,
+  requestBattery: jest.fn(async () => true),
+  openAlarms: jest.fn(async () => true),
+};
+
+jest.mock('@/services/deviceHealth', () => ({
+  getBackgroundHealth: async () => (mockDeviceHealth.state ? { ...mockDeviceHealth.state } : null),
+  requestBatteryExemption: () => mockDeviceHealth.requestBattery(),
+  openExactAlarmSettings: () => mockDeviceHealth.openAlarms(),
+}));
+
 /* ------------------------------------------------------------------ setup */
 
 const SAFE_AREA = {
@@ -201,6 +218,7 @@ function rendered(tree: ReactTestRenderer): string {
 const NETWORK_ERROR = new ApiError('network', 'Sunucuya ulaşamadım.', 0);
 
 beforeEach(() => {
+  mockDeviceHealth.state = null;
   delete searchParams.id;
   delete searchParams.with;
   delete searchParams.show;
@@ -1212,6 +1230,188 @@ describe('settings notification preferences', () => {
 
     expect(findWith(tree, 'accessibilityLabel', 'Saatli çelınc uyarıları', 'onValueChange').props.value).toBe(false);
     expect(findWith(tree, 'accessibilityLabel', 'Geride kalınca dürt beni', 'onValueChange').props.value).toBe(true);
+  });
+});
+
+describe('settings: what Android does in the background', () => {
+  type AppStateListener = Parameters<(typeof import('react-native'))['AppState']['addEventListener']>[1];
+  let appStateListeners: AppStateListener[] = [];
+  /** The preset's own addEventListener is a jest.fn; a spy's mockRestore would leave it returning undefined. */
+  const addEventListener = () =>
+    (require('react-native') as typeof import('react-native')).AppState.addEventListener as unknown as jest.Mock;
+  let preset: ((...args: unknown[]) => unknown) | undefined;
+
+  beforeEach(() => {
+    appStateListeners = [];
+    preset = addEventListener().getMockImplementation();
+    addEventListener().mockImplementation((_event: string, handler: AppStateListener) => {
+      appStateListeners.push(handler);
+      return {
+        remove: () => {
+          appStateListeners = appStateListeners.filter((candidate) => candidate !== handler);
+        },
+      };
+    });
+    mockDeviceHealth.requestBattery.mockClear();
+    mockDeviceHealth.openAlarms.mockClear();
+    mockReminders.enabled = true;
+    mockReminders.refresh.mockClear();
+  });
+
+  afterEach(() => {
+    if (preset) addEventListener().mockImplementation(preset);
+  });
+
+  /** The user comes back from the system page. */
+  async function comeBack(): Promise<void> {
+    await act(async () => {
+      for (const listener of [...appStateListeners]) listener('active');
+    });
+    await settle();
+  }
+
+  function renderSettings(): ReactTestRenderer {
+    const SettingsScreen = require('@/app/(app)/settings').default;
+    return renderScreen(<SettingsScreen />);
+  }
+
+  it('is not there at all where Android has nothing to switch (iPhone, web, Expo Go)', async () => {
+    const tree = renderSettings();
+    await settle();
+    expect(rendered(tree)).not.toContain('ARKA PLAN');
+  });
+
+  it('shows a restricted phone both rows with their buttons, and asks Android for each', async () => {
+    mockDeviceHealth.state = { batteryUnrestricted: false, exactAlarms: false, xiaomi: false };
+    const tree = renderSettings();
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('ARKA PLAN');
+    expect(text).toContain('Pil kısıtlaması');
+    expect(text).toContain('Uygulama kapalıyken de “KOYDUM MU?” vaktinde gelsin diye pil kısıtlamasını kaldır.');
+    expect(text).toContain('Tam saatinde hatırlatma');
+    expect(text).toContain('06:30’daki uyarı 07:00’yi geçebilir');
+    expect(text).not.toContain('Otomatik başlatma');
+
+    press(tree, 'Kısıtlamayı kaldır');
+    await settle();
+    expect(mockDeviceHealth.requestBattery).toHaveBeenCalledTimes(1);
+
+    press(tree, 'Alarm izni ver');
+    await settle();
+    expect(mockDeviceHealth.openAlarms).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a phone that is already fine without buttons', async () => {
+    mockDeviceHealth.state = { batteryUnrestricted: true, exactAlarms: true, xiaomi: false };
+    const tree = renderSettings();
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Telefon KOYDUM’u arka planda uyutmuyor.');
+    expect(text).toContain('Check-in hatırlatmaları tam saatinde çalar.');
+    expect(() => findWith(tree, 'title', 'Kısıtlamayı kaldır', 'onPress')).toThrow();
+    expect(() => findWith(tree, 'title', 'Alarm izni ver', 'onPress')).toThrow();
+  });
+
+  it('reads the switch again on return and reschedules the reminders once exact alarms are allowed', async () => {
+    mockDeviceHealth.state = { batteryUnrestricted: true, exactAlarms: false, xiaomi: false };
+    const tree = renderSettings();
+    await settle();
+
+    press(tree, 'Alarm izni ver');
+    await settle();
+    // granted on the system page
+    mockDeviceHealth.state = { batteryUnrestricted: true, exactAlarms: true, xiaomi: false };
+    await comeBack();
+
+    expect(rendered(tree)).toContain('Check-in hatırlatmaları tam saatinde çalar.');
+    // the alarms already set were inexact; they are set again now
+    expect(mockReminders.refresh).toHaveBeenCalledWith(api, 2, expect.any(String));
+  });
+
+  it('leaves the reminders alone when the user came back without allowing it', async () => {
+    mockDeviceHealth.state = { batteryUnrestricted: false, exactAlarms: false, xiaomi: false };
+    const tree = renderSettings();
+    await settle();
+
+    press(tree, 'Kısıtlamayı kaldır');
+    await settle();
+    mockDeviceHealth.state = { batteryUnrestricted: true, exactAlarms: false, xiaomi: false };
+    await comeBack();
+
+    expect(rendered(tree)).toContain('Telefon KOYDUM’u arka planda uyutmuyor.');
+    expect(mockReminders.refresh).not.toHaveBeenCalled();
+  });
+
+  it('says where the switch is when the system page will not open', async () => {
+    mockDeviceHealth.state = { batteryUnrestricted: false, exactAlarms: true, xiaomi: false };
+    mockDeviceHealth.requestBattery.mockResolvedValueOnce(false);
+    const tree = renderSettings();
+    await settle();
+
+    press(tree, 'Kısıtlamayı kaldır');
+    await settle();
+    expect(rendered(tree)).toContain('Ayarlar açılamadı');
+    expect(rendered(tree)).toContain('“Kısıtlanmamış”ı seç');
+  });
+
+  it('tells a Xiaomi owner about MIUI’s own autostart switch', async () => {
+    mockDeviceHealth.state = { batteryUnrestricted: false, exactAlarms: true, xiaomi: true };
+    const tree = renderSettings();
+    await settle();
+    expect(rendered(tree)).toContain('“Otomatik başlatma”yı aç');
+  });
+});
+
+describe('the battery card on the home screen', () => {
+  const storage = () => require('@/lib/storage') as typeof import('@/lib/storage');
+
+  afterEach(async () => {
+    const { StorageKeys, removeItem } = storage();
+    await removeItem(StorageKeys.pushReason);
+    await removeItem(StorageKeys.dismissedBatteryCard);
+  });
+
+  async function renderHome(): Promise<ReactTestRenderer> {
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+    return tree;
+  }
+
+  it('shows once on a Firebase-less build that Android holds back, and "Kalsın" puts it away for good', async () => {
+    const { StorageKeys, getItem, setItem } = storage();
+    await setItem(StorageKeys.pushReason, 'no-fcm');
+    mockDeviceHealth.state = { batteryUnrestricted: false, exactAlarms: true, xiaomi: false };
+    mockDeviceHealth.requestBattery.mockClear();
+
+    const tree = await renderHome();
+    expect(rendered(tree)).toContain('Laflar sana geç gelebilir');
+
+    press(tree, 'Kısıtlamayı kaldır');
+    await settle();
+    expect(mockDeviceHealth.requestBattery).toHaveBeenCalledTimes(1);
+
+    press(tree, 'Kalsın');
+    await settle();
+    expect(rendered(tree)).not.toContain('Laflar sana geç gelebilir');
+    expect(await getItem(StorageKeys.dismissedBatteryCard)).toBe('1');
+
+    const again = await renderHome();
+    expect(rendered(again)).not.toContain('Laflar sana geç gelebilir');
+  });
+
+  it('stays away when push works or the phone is not restricted', async () => {
+    const { StorageKeys, setItem } = storage();
+    mockDeviceHealth.state = { batteryUnrestricted: false, exactAlarms: true, xiaomi: false };
+    // a token (no reason stored): push itself is not held back by battery optimisation
+    expect(rendered(await renderHome())).not.toContain('Laflar sana geç gelebilir');
+
+    await setItem(StorageKeys.pushReason, 'no-fcm');
+    mockDeviceHealth.state = { batteryUnrestricted: true, exactAlarms: true, xiaomi: false };
+    expect(rendered(await renderHome())).not.toContain('Laflar sana geç gelebilir');
   });
 });
 

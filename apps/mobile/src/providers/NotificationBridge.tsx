@@ -5,7 +5,7 @@ import { AppState, Platform } from 'react-native';
 
 import { useToast } from '@/components/Toast';
 import { qk } from '@/lib/query';
-import { StorageKeys, setItem } from '@/lib/storage';
+import { StorageKeys, removeItem, setItem } from '@/lib/storage';
 import { registerBackgroundSync, setBackgroundHandler } from '@/services/background';
 import {
   addReceivedListener,
@@ -69,7 +69,13 @@ export function NotificationBridge() {
       busy = true;
       try {
         const registration = await registerForPush();
-        if (cancelled || !registration.token) return;
+        if (cancelled) return;
+        // Home's battery card has to know this phone lives on the background
+        // check ('no-fcm'); it reads it from here, since asking again is what
+        // brings up the permission prompt.
+        if (registration.reason) void setItem(StorageKeys.pushReason, registration.reason);
+        else void removeItem(StorageKeys.pushReason);
+        if (!registration.token) return;
         if (pushTokenSent.current === registration.token) return;
         await makeClient().setPushToken({
           token: registration.token,

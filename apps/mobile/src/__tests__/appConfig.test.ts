@@ -33,3 +33,27 @@ describe('the Android build settings in app.json', () => {
     expect(androidBuildProperties()?.useLegacyPackaging).toBe(true);
   });
 });
+
+/**
+ * Ayarlar → Arka plan (modules/koydum-device) opens two system pages that do
+ * nothing for an app whose manifest lacks the permission: the battery dialog
+ * refuses to open, and the exact-alarm switch never lists KOYDUM. USE_EXACT_ALARM
+ * is the other way to get exact alarms, but it is meant for alarm-clock and
+ * calendar apps and Play turns everyone else away.
+ */
+describe('the Android permissions in app.json', () => {
+  const permissions: string[] = require('../../app.json').expo.android.permissions;
+
+  it('asks for the battery exemption and exact alarms', () => {
+    expect(permissions).toEqual(
+      expect.arrayContaining([
+        'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+        'android.permission.SCHEDULE_EXACT_ALARM',
+      ])
+    );
+  });
+
+  it('does not ask for the alarm-clock-only USE_EXACT_ALARM', () => {
+    expect(permissions).not.toContain('android.permission.USE_EXACT_ALARM');
+  });
+});

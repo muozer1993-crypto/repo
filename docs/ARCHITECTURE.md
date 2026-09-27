@@ -318,6 +318,18 @@ başsız çalışmada da hiçbir şey çizilmez. Tanımı bulamayan expo-task-ma
 siler; yani kapalı telefona "KOYDUM MU?" ve adım gönderimi, uygulama bir daha açılana kadar
 sessizce dururdu.
 
+Görev tanımlı olsa bile Android onu pil için erteleyebilir; Xiaomi ve Samsung bunu saatlere
+çıkarır. Telefonun kendi hatırlatmaları da birer alarmdır ve expo-notifications onları ancak
+uygulamanın tam saatli alarm izni varsa tam saatine kurar; yoksa 06:30'da çalması gereken
+check-in uyarısı 07:00'yi geçebilir. İki anahtar da sistem ayarlarında durur. Yerel modül
+`apps/mobile/modules/koydum-device/` ikisinin durumunu okur ve ilgili sistem sayfasını açar;
+`services/deviceHealth.ts` onu adıyla arar (`requireOptionalNativeModule('KoydumDevice')`),
+iPhone'da, web'de ve Expo Go'da cevap `null` olur ve hiçbir şey gösterilmez. Ayarlar → Arka plan
+ikisini de gösterir. İzin sonradan verilince önceden kurulmuş alarmlar kendiliğinden tam saatli
+olmaz, o yüzden hatırlatmalar o anda yeniden kurulur. Firebase'siz bir derlemede (`no-fcm`) pil
+kısıtlaması açıksa ana sayfa bunu bir kereliğine söyler: köprü her push kaydından sonra sebebi
+`StorageKeys.pushReason`'a yazar, kart oradan okur.
+
 Telefonun kendi çıkardığı bildirimler (`fireLocal`, hatırlatmalar) Android'de `koydum`
 kanalına gider. Tetikleyicisi `null` olan bir bildirim kütüphanenin İngilizce "Miscellaneous"
 kanalına düşer; orayı susturan biri bütün lafları da susturmuş olurdu. O yüzden hemen gösterilecek

@@ -30,6 +30,12 @@ import { useApi } from '@/hooks/useApi';
 import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { normalizeServerUrl, serverUrlIsEditable } from '@/lib/config';
+import {
+  getBackgroundHealth,
+  openExactAlarmSettings,
+  requestBatteryExemption,
+  type BackgroundHealth,
+} from '@/services/deviceHealth';
 import { serverFromInviteLink } from '@/services/invite';
 import { registerForPush, type PushRegistration } from '@/services/notifications';
 import { deviceRemindersEnabled, refreshReminders, setDeviceRemindersEnabled } from '@/services/reminders';
@@ -160,6 +166,44 @@ function PrefRow({
         thumbColor={value ? Colors.accent : Colors.textFaint}
         ios_backgroundColor={Colors.surfaceHigh}
       />
+    </View>
+  );
+}
+
+/** One line under "Arka plan": what it is and where it stands, and the button while it is not fine. */
+function HealthRow({
+  title,
+  ok,
+  okLabel,
+  offLabel,
+  detail,
+  action,
+  onAction,
+}: {
+  title: string;
+  ok: boolean;
+  okLabel: string;
+  offLabel: string;
+  detail: string;
+  action: string;
+  onAction: () => void;
+}) {
+  return (
+    <View style={styles.prefRow}>
+      <View style={styles.rowText}>
+        <View style={styles.rowBetween}>
+          <Text variant="body" bold>
+            {title}
+          </Text>
+          <Chip label={ok ? okLabel : offLabel} color={ok ? Colors.success : Colors.yellow} size="sm" />
+        </View>
+        <Text variant="tiny" muted>
+          {detail}
+        </Text>
+        {ok ? null : (
+          <Button title={action} variant="secondary" size="sm" style={styles.selfStart} onPress={onAction} />
+        )}
+      </View>
     </View>
   );
 }
@@ -484,6 +528,8 @@ export default function SettingsScreen() {
   const [steps, setSteps] = useState<StepAvailability | null>(null);
   const [stepsBusy, setStepsBusy] = useState(false);
   const [screenTime, setScreenTime] = useState<ScreenTimeAvailability | null>(null);
+  /** Android's battery and alarm switches; null where there are none (iOS, web, Expo Go) */
+  const [background, setBackground] = useState<BackgroundHealth | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [serverOpen, setServerOpen] = useState(false);
@@ -523,17 +569,19 @@ export default function SettingsScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [pushResult, stepResult, screenTimeResult, alertsOn] = await Promise.all([
+      const [pushResult, stepResult, screenTimeResult, alertsOn, backgroundResult] = await Promise.all([
         registerForPush(),
         getStepAvailability(),
         getScreenTimeAvailability(),
         deviceRemindersEnabled(),
+        getBackgroundHealth(),
       ]);
       if (cancelled) return;
       setPush(pushResult);
       setSteps(stepResult);
       setScreenTime(screenTimeResult);
       setDeviceAlerts(alertsOn);
+      setBackground(backgroundResult);
       if (pushResult.token) {
         try {
           await api.setPushToken({ token: pushResult.token, platform: PLATFORM });
@@ -652,6 +700,41 @@ export default function SettingsScreen() {
       if (state !== 'active') return;
       sub.remove();
       void getScreenTimeAvailability().then(setScreenTime);
+    });
+  };
+
+  // Both switches live in system pages too: open one, look again on return.
+  const fixBackground = async (which: 'battery' | 'alarms') => {
+    const before = background;
+    const opened = which === 'battery' ? await requestBatteryExemption() : await openExactAlarmSettings();
+    if (!opened) {
+      toast({
+        title: 'Ayarlar açılamadı',
+        body:
+          which === 'battery'
+            ? 'Ayarlar → Uygulamalar → KOYDUM → Pil yolundan “Kısıtlanmamış”ı seç.'
+            : 'Ayarlar → Uygulamalar → Özel uygulama erişimi → Alarmlar ve hatırlatıcılar yolunu kendin dene.',
+        kind: 'danger',
+      });
+      return;
+    }
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      sub.remove();
+      void (async () => {
+        const next = await getBackgroundHealth();
+        setBackground(next);
+        // Alarms set before the grant stay inexact until they are set again, so
+        // set them again now. Runs are queued, so this cannot race the bridge's
+        // own foreground refresh.
+        if (next?.exactAlarms && before && !before.exactAlarms) {
+          try {
+            await refreshReminders(api, level, tz);
+          } catch {
+            // offline: the bridge does it on the next foreground
+          }
+        }
+      })();
     });
   };
 
@@ -895,6 +978,45 @@ export default function SettingsScreen() {
           onPress={() => void refreshPush()}
         />
       </Card>
+
+      {/* ------------------------------------- background: Android build only */}
+      {background ? (
+        <Card>
+          <Text variant="label">Arka plan</Text>
+          <HealthRow
+            title="Pil kısıtlaması"
+            ok={background.batteryUnrestricted}
+            okLabel="Yok"
+            offLabel="Var"
+            detail={
+              background.batteryUnrestricted
+                ? 'Telefon KOYDUM’u arka planda uyutmuyor.'
+                : 'Uygulama kapalıyken de “KOYDUM MU?” vaktinde gelsin diye pil kısıtlamasını kaldır.'
+            }
+            action="Kısıtlamayı kaldır"
+            onAction={() => void fixBackground('battery')}
+          />
+          <HealthRow
+            title="Tam saatinde hatırlatma"
+            ok={background.exactAlarms}
+            okLabel="Açık"
+            offLabel="Kapalı"
+            detail={
+              background.exactAlarms
+                ? 'Check-in hatırlatmaları tam saatinde çalar.'
+                : 'İzin vermezsen telefon check-in hatırlatmasını kaydırabilir, 06:30’daki uyarı 07:00’yi geçebilir.'
+            }
+            action="Alarm izni ver"
+            onAction={() => void fixBackground('alarms')}
+          />
+          {background.xiaomi ? (
+            <Text variant="micro" faint style={styles.blockTop}>
+              Xiaomi’de bir de Ayarlar → Uygulamalar → KOYDUM → “Otomatik başlatma”yı aç, yoksa telefon KOYDUM’u
+              arka planda hiç uyandırmayabilir.
+            </Text>
+          ) : null}
+        </Card>
+      ) : null}
 
       {/* ----------------------------------------------------------- steps */}
       <Card>

@@ -357,6 +357,19 @@ Android pili korumak için bu aralığı bazen uzatabilir. Telefonun bildirim ay
 **KOYDUM** kanalında durur; onu kapatan lafları da kaçırır. Eski sürümden kalma bir
 "Miscellaneous" kanalı görürsen ona artık bir şey gönderilmiyor.
 
+**Laflar saatler sonra geliyorsa** (en çok Xiaomi ve Samsung'da olur) telefon KOYDUM'u pil için
+bekletiyordur. Uygulamada **Ayarlar → Arka plan**'a gir:
+
+* **Pil kısıtlaması** "Var" diyorsa **Kısıtlamayı kaldır**'a bas, Android'in açtığı pencerede izin ver.
+* **Tam saatinde hatırlatma** "Kapalı" diyorsa **Alarm izni ver**'e bas, açılan sayfada KOYDUM'un
+  anahtarını aç. Bu izin olmadan telefon check-in uyarısını kaydırabilir, 06:30'daki uyarı 07:00'yi
+  geçebilir. Android 14 ve üstünde bu izin kapalı gelir.
+* Xiaomi'de (Redmi ve POCO da) bir de telefonun **Ayarlar → Uygulamalar → KOYDUM → Otomatik
+  başlatma** anahtarını aç; uygulama bunu da orada yazar.
+
+Firebase'siz derlemede pil kısıtlaması açıksa ana sayfa bunu bir kere hatırlatır. Bu bölüm yerel
+kod istediği için yeni APK ile gelir; eski APK'da Ayarlar'da hiç görünmez.
+
 Bazı bildirimler fazla geliyorsa kanalı kapatma, uygulamada **Ayarlar → Bildirim tercihleri**'ne
 gir: gün ortası dürtmeyi ("sana fark koymuş"), pazar akşamı haftalık özeti ve telefonun kendi
 kurduğu saatli uyarıları (check-in'e yarım saat kala, çelıncın son saati) ayrı ayrı kapatabilirsin.
@@ -670,7 +683,9 @@ toparlar. İki sunucuyu bilerek yan yana açıyorsan ikincisine başka bir port 
 **Android'de bildirim gelmiyor.**
 Expo Go kullanıyorsan normal — yukarıdaki [Expo Go'nun sınırları](#expo-gonun-sınırları)
 bölümüne bak. Geliştirme derlemesi al ve `eas init` çalıştırdığından emin ol. Ayarlar
-ekranı hangi aşamada takıldığını Türkçe olarak söyler.
+ekranı hangi aşamada takıldığını Türkçe olarak söyler. Geliyor ama saatler sonra geliyorsa
+**Ayarlar → Arka plan**'daki iki satıra bak ([Bildirimler](#bildirimler-gecikmeli-hazır-ve-anlık-firebase-ile)
+bölümünde anlattım).
 
 **Adımlar 0 görünüyor.**
 iOS'ta hareket izni verilmemiş olabilir (Ayarlar → Gizlilik → Hareket ve Fitness). Android'de

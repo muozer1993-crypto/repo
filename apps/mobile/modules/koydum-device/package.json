@@ -1,0 +1,7 @@
+{
+  "name": "koydum-device",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local Expo module: battery-optimisation exemption and exact-alarm permission, so the background check and check-in reminders run on time.",
+  "license": "UNLICENSED"
+}

@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
+import { BatteryBanner } from '@/components/BatteryBanner';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ChallengeCard } from '@/components/ChallengeCard';
@@ -113,6 +114,7 @@ export default function HomeScreen() {
         </View>
 
         <UpdateBanner />
+        <BatteryBanner />
 
         <StepsHeader state={steps} />
 

@@ -88,4 +88,8 @@ export const StorageKeys = {
   serverId: 'koydum.serverId',
   /** '1' when Ayarlar switched off the phone's own deadline alerts (see services/reminders) */
   deviceRemindersOff: 'koydum.deviceRemindersOff',
+  /** why this phone's last push registration got no token, e.g. 'no-fcm' (written by NotificationBridge) */
+  pushReason: 'koydum.pushReason',
+  /** '1' once the home screen's battery card was closed (see components/BatteryBanner) */
+  dismissedBatteryCard: 'koydum.dismissedBatteryCard',
 } as const;
