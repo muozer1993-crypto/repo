@@ -69,11 +69,17 @@ npm run server
 ```
 
 Sunucu ilk çalıştığında `apps/server/data/` altında SQLite veritabanını ve bir JWT anahtarı
-üretir. Ayar dosyası istersen:
+üretir. Bir ayarı değiştirmek istersen (mesela portu), örnek dosyayı kopyalayıp Not Defteri'nde
+aç:
 
-```bash
-cp apps/server/.env.example apps/server/.env
+```powershell
+copy apps\server\.env.example apps\server\.env
+notepad apps\server\.env
 ```
+
+`npm run server`, `npm run internet`, `npm run yonet` ve `npm run apk:yayinla` bu dosyayı
+açılırken okur; bir şey değiştirdiysen sunucuyu kapatıp aç. PowerShell'de elle verdiğin bir
+değer (`$env:PORT=5000`) dosyadakinden önce gelir.
 
 **Ayrı bir terminalde** uygulamayı başlat:
 
@@ -146,11 +152,21 @@ Bundan sonra uygulamada **Kankalar → Paylaş** bu adresle bağlantı gönderir
 kankan bağlantıya dokunur, uygulama o adrese bağlanır, kanka isteğini gönderir. Senin telefonun
 evdeki Wi-Fi'da kalabilir; aynı sunucudur.
 
-İki şey bilinsin:
+Bilinmesi gerekenler:
 
 * **Pencere açık kaldıkça çalışır.** Bilgisayar uyursa ya da pencereyi kapatırsan kankaların
-  bağlanamaz; çelınc sonuçları sunucu tekrar açılınca hesaplanır.
-* **Adres her açılışta değişir.** Kapatıp açtıysan Paylaş'la yeni bağlantıyı gönder. Kankan
+  bağlanamaz; çelınc sonuçları sunucu tekrar açılınca hesaplanır. Kapatırken **Ctrl+C**'ye bas:
+  sunucu elindeki bildirimleri bitirip veritabanını düzgünce kapatır.
+* **Sunucu çökerse pencere onu kendisi yeniden açar.** "Sunucu düştü, yeniden açıyorum" yazar,
+  birkaç saniye sonra sunucu geri gelir. Tünel yerinde kaldığı için adres de aynıdır, kimseye
+  yeni bağlantı atmana gerek yok. On dakikada beş kere çökerse bırakır ve kapanır; sebebi hemen
+  üstündeki hatada yazar.
+* **İnternet giderse tünel kopar, sunucu kapanmaz.** Pencerede "Tünel koptu (internet gitmiş
+  olabilir), tekrar deniyorum" yazar. Evdeki Wi-Fi'dan bağlananlar oynamaya devam eder; pencere
+  internet gelene kadar tüneli yeniden dener (en seyrek dakikada bir). Tünel geri gelince adres
+  çoğu zaman değişir: pencerede yeni adres ve "Yeni adres: Kankalar > Paylaş ile gruba tekrar
+  at." yazar, dediğini yap.
+* **Pencereyi kapatıp açınca adres değişir.** Paylaş'la yeni bağlantıyı gönder. Kankan
   yeni bağlantıya dokununca uygulama "Bu davet yeni bir adresten" der; **Yeni adrese geç (çıkış
   yok)**'a basar, o kadar. Çıkış yapmaz, şifre yazmaz; hesabı, çelıncları ve bildirimleri
   yerindedir. Bağlantıyı başka yerden gören kankan **Ayarlar → Sunucu**'ya yeni adresi ya da
@@ -398,6 +414,9 @@ Evdeki bilgisayarda bu klasör `apps/server/data`, yedekler `apps/server/data/ba
 
 ### Ortam değişkenleri
 
+Hepsi `apps/server/.env` dosyasına da yazılabilir ([Hızlı başlangıç](#hızlı-başlangıç-5-dakika)).
+Ortamda aynı isimde bir değişken varsa (Docker, PowerShell'de `$env:...`) o kazanır.
+
 | Değişken | Varsayılan | Açıklama |
 |---|---|---|
 | `PORT` | `4000` | Dinlenen port |
@@ -406,6 +425,7 @@ Evdeki bilgisayarda bu klasör `apps/server/data`, yedekler `apps/server/data/ba
 | `UPLOAD_DIR` | `<DATA_DIR>/uploads` | Kanıt fotoğrafları |
 | `PUBLIC_URL` | boş | Sunucunun internetteki adresi. Boşsa davet sayfası bağlantıları gelen isteğin adresinden kurar, evde de tünelde de doğru çıkar. |
 | `JWT_SECRET` | otomatik üretilir | Elle vermek istersen |
+| `LOG_LEVEL` | `info` | Sunucu penceresine ne yazılsın. Her istek tek tek yazılmaz; açılış, hatalar, 2 saniyeden uzun süren istekler ve zamanlayıcının yaptıkları görünür. `warn` sadece sorunları gösterir. |
 | `EXPO_ACCESS_TOKEN` | boş | Expo push için isteğe bağlı |
 | `ENABLE_DEV_ROUTES` | `0` | `1` yaparsan test uçları açılır (üretimde açma) |
 | `APP_DIR` | `<DATA_DIR>/app` | `npm run apk:yayinla`'nın APK'yı koyduğu yer |
@@ -596,9 +616,17 @@ olabilir. Sunucu adresini elle yazıp "Bağlantıyı test et" ile dene.
 
 **Üstte "Adres değişmiş olabilir" yazıyor.**
 Uygulama iki dakikadır sunucuya ulaşamıyor. Çoğu zaman `npm run internet` kapanıp yeniden
-açılmıştır ve adres değişmiştir. Sunucuyu açan kişi yeni bağlantıyı Paylaş'la göndersin; kankan
-dokunup **Yeni adrese geç**'e basar ya da bağlantıyı **Ayarlar → Sunucu**'ya yapıştırır. Çıkış
-yapmadan devam eder.
+açılmıştır ya da internet gidip tünel yeniden kurulmuştur, adres de değişmiştir (pencerede yeni
+adres yazar). Sunucuyu açan kişi yeni bağlantıyı Paylaş'la göndersin; kankan dokunup **Yeni
+adrese geç**'e basar ya da bağlantıyı **Ayarlar → Sunucu**'ya yapıştırır. Çıkış yapmadan devam
+eder.
+
+**"4000 portu dolu" diyor.**
+Başka bir pencerede KOYDUM sunucusu hâlâ açık: çoğu zaman unutulmuş bir `npm run server`.
+O pencereye geçip Ctrl+C'ye bas ya da kapat, sonra tekrar dene. `npm run internet` bu arada
+sunucuyu birkaç kere kendisi yeniden dener, diğer pencereyi hemen kapatırsan kendiliğinden
+toparlar. İki sunucuyu bilerek yan yana açıyorsan ikincisine başka bir port ver:
+`$env:PORT=4001; npm run server`.
 
 **Android'de bildirim gelmiyor.**
 Expo Go kullanıyorsan normal — yukarıdaki [Expo Go'nun sınırları](#expo-gonun-sınırları)

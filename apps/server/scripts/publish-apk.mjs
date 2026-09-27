@@ -13,10 +13,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadDotEnv } from './env.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(here, '..');
 const repoRoot = path.resolve(serverRoot, '..', '..');
+
+// a DATA_DIR or APP_DIR in the server's .env must put the APK where the server looks
+loadDotEnv(path.join(serverRoot, '.env'));
 
 function fail(message) {
   console.error(`\n✗ ${message}\n`);

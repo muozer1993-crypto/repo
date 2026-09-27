@@ -195,7 +195,10 @@ statements and SQL migrations applied at boot (`migrations/001_init.sql` ... emb
 strings in `src/db/migrations.ts` — no filesystem reads for migrations so it works from any cwd).
 
 ```
-src/index.ts            boot: buildApp() + listen(PORT, HOST 0.0.0.0) + start scheduler
+src/index.ts            boot: loadDotEnv() + buildApp() + listen(PORT, HOST 0.0.0.0) + start scheduler (after listen);
+                        clean shutdown (see 2.6)
+src/env.ts              loadDotEnv(): apps/server/.env into process.env, never over a variable already set; entry
+                        points only (index.ts, cli/yonet.ts; scripts/env.mjs for the .mjs scripts), not loadConfig
 src/app.ts              buildApp(opts): registers plugins, routes, error handler; exported for tests
 src/config.ts           env: PORT=4000, HOST=0.0.0.0, DATA_DIR=./data, UPLOAD_DIR=<DATA_DIR>/uploads (so one
                         volume holds the database and the photos), JWT_SECRET (auto-generated & persisted to
@@ -217,7 +220,8 @@ src/services/entries.ts     validateAndUpsertEntry() per metric type (see 2.3)
 src/services/notifications.ts  notify(userId, type, title, body, data) → inbox insert + push queue
 src/services/push.ts        Expo push sender (batch, handles DeviceNotRegistered → clears token)
 src/services/stats.ts       computeUserStats(userId), evaluate & award badges
-src/services/scheduler.ts   setInterval 30s: activate due, finalize ended, cancel underfilled, reminders
+src/services/scheduler.ts   setInterval 30s: activate due, finalize ended, cancel underfilled, reminders; the stop
+                            function awaits a pass in flight (≤ 10 s) so a push flush marks its rows first
 src/services/taunts.ts      sendTaunt() with clamp + one-per-loser rule; sendPoke() rate limit
 src/services/admin.ts       owner tools: listUsers(), listReports(), resetPassword() (8-char readable temp password)
 src/cli/yonet.ts            `npm run yonet -- kullanicilar | sikayetler | sifre <kullanici>` on the server's own DB file
@@ -357,6 +361,22 @@ inbox read/unread, account deletion, uploads (multipart), badges awarded.
 Daily backup (`services/backup.ts`, run from the scheduler tick): `db.backup()` into `<DATA_DIR>/backups/koydum-YYYY-MM-DD.db` (Istanbul date) once per day, written aside and renamed, last 7 kept; skipped for `:memory:`.
 
 Owner CLI (`npm run yonet`, root script → workspace script, so the cwd is `apps/server` and the default `./data` is the server's database): `kullanicilar` (username, name, created, last seen in Istanbul time, accepted active çelınclar, deleted last), `sikayetler` (reporter, reported, reason, newest first), `sifre <kullanici>` (new random password from `abcdefghjkmnpqrstuvwxyz23456789`, stored as scrypt, printed once; unknown or deleted → Turkish error, exit 1). No argument → Turkish help (exit 0); unknown command → help on stderr, exit 1. Refuses when the DB file does not exist rather than creating one, and never writes a JWT secret. Safe beside a running server (WAL + busy_timeout). There is no email and no reset endpoint: a forgotten password is reset by the owner; existing tokens stay valid. A signed-in user changes their own (including the temporary one) in Ayarlar → Hesap → "Şifreni değiştir" (`POST /me/password`).
+
+Shutdown (`src/index.ts`): SIGINT, SIGTERM, SIGHUP (a closed console window, Windows too), SIGBREAK on Windows, an
+IPC message `{ type: 'shutdown' }` and a lost IPC channel all run the same path: await the scheduler stop, `app.close()`,
+`db.close()`, exit 0 (forced after 12 s). An unhandled rejection or uncaught exception is logged as fatal and takes the
+same path with exit code 1. A busy port (EADDRINUSE) prints one Turkish line (`src/listenError.ts`) and exits 1 without
+a stack; the scheduler starts only after `listen` succeeds.
+
+Logging: no per-request lines (`LogController({ disableRequestLogging: true })`); an `onResponse` hook writes one `warn`
+for a status ≥ 500 or a response slower than 2 s: method, path without the query string, status, ms.
+
+`npm run internet` (`scripts/internet.mjs`) supervises: the server runs as `node --import tsx src/index.ts` (one process,
+IPC channel). Stop = IPC shutdown, SIGKILL after 15 s. A server exit that was not asked for is restarted with the same
+PUBLIC_URL after 1 / 5 / 15 s; the 5th crash within 10 min ends the script with exit code 1. A cloudflared that exits
+after printing its address leaves the server running (LAN and scheduler still work) and is restarted with a 5 s → 60 s
+backoff, forever; a new address restarts the server with it and prints the banner again. `.env` is read first
+(`scripts/env.mjs`), so PORT from the file reaches the tunnel too.
 
 `.env.example`, `Dockerfile` (node:22-alpine, `npm ci --workspaces`, `CMD npm start -w apps/server`), `docker-compose.yml`
 (volume for data+uploads), `README` section on deploying (Railway/Fly/any VPS) and on LAN usage (`HOST=0.0.0.0`,

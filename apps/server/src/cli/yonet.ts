@@ -16,6 +16,7 @@ import path from 'node:path';
 import { DEFAULT_TIMEZONE, dayKeyInTz, localTimeHHmm } from '@koydum/shared';
 import { loadConfig } from '../config.js';
 import { openDb, type Database } from '../db/index.js';
+import { loadDotEnv } from '../env.js';
 import { listReports, listUsers, resetPassword } from '../services/admin.js';
 
 const HELP = `KOYDUM yönetim komutları (sunucuyu açan kişi için)
@@ -111,6 +112,8 @@ async function printPassword(db: Database, username: string | undefined): Promis
 
 /** The database the server uses, or null (and a hint) when there is none here. */
 function openExisting(): Database | null {
+  // the server's own .env: a DATA_DIR set there must find the same database
+  loadDotEnv();
   // This signs no tokens; a stand-in secret keeps loadConfig from writing a
   // `secret` file into what may well be the wrong folder.
   const config = loadConfig({ jwtSecret: 'yonet' });

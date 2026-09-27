@@ -802,6 +802,47 @@ describe('buildApp', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The owner's window: no line per request, one for a failure
+// ---------------------------------------------------------------------------
+
+describe('request logging', () => {
+  it('writes nothing for a good request and one line, without the query, for a 500', async () => {
+    const lines: string[] = [];
+    const built = await buildApp({
+      config: {
+        dataDir: ':memory:',
+        dbPath: ':memory:',
+        jwtSecret: 'test-secret-koydum',
+        logLevel: 'info',
+        publicUrl: 'http://test.local',
+      },
+      logStream: { write: (line) => lines.push(line) },
+    });
+    built.app.get('/patlat', async () => {
+      throw new Error('kaboom');
+    });
+    try {
+      await built.app.ready();
+      lines.length = 0;
+
+      expect((await built.app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(200);
+      expect((await built.app.inject({ method: 'GET', url: '/yok' })).statusCode).toBe(404);
+      expect(lines).toEqual([]);
+
+      expect((await built.app.inject({ method: 'GET', url: '/patlat?kod=GIZLI123' })).statusCode).toBe(500);
+      const logged = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(logged.some((entry) => entry.msg === 'unhandled error')).toBe(true);
+      expect(logged).toContainEqual(
+        expect.objectContaining({ msg: 'request failed', method: 'GET', url: '/patlat', statusCode: 500 }),
+      );
+      expect(lines.join('')).not.toContain('GIZLI123');
+    } finally {
+      await built.app.close();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Inbox paging on any ISO form of the same instant
 // ---------------------------------------------------------------------------
 

@@ -264,6 +264,16 @@ başka bir sunucunun 401'i "burası değil" demektir, çıkış sebebi değil. G
 yazar, bütün sorguları tazeler, çevrimdışı kuyruğu gönderir; oturum, gelen kutusu imleci ve push
 kaydı yerinde kalır. Bağlantı herkesten gelebileceği için kendiliğinden geçiş yok.
 
+Adres ancak tünel yenilenince değiştiği için `npm run internet` (`scripts/internet.mjs`) tüneli
+elinde tutar. Sunucu çökerse aynı `PUBLIC_URL` ile yeniden açar (1, 5, 15 saniye sonra; on
+dakikada beşinci çöküşte bırakır). cloudflared kapanırsa (çoğu zaman ev interneti gitmiştir)
+sunucuya dokunmaz, evdeki Wi-Fi ve zamanlayıcı çalışmaya devam eder; tüneli 5 saniyeden bir
+dakikaya uzayan aralıklarla yeniden dener, yeni adres gelince sunucuyu onunla yeniden başlatır.
+Sunucuyu durdurmak için sinyal değil IPC mesajı gönderir: Windows'ta bir alt sürece sinyal
+göndermek TerminateProcess demektir, ne veritabanı kapanır ne yarım kalan iş biter. Sunucu da
+kapanırken zamanlayıcının o anki turunu bekler (en çok 10 saniye): yarıda kesilen bir push
+gönderimi satıra `pushed_at` yazamaz ve bir sonraki açılışta aynı KOYDUM ikinci kez gider.
+
 ## Neden SQLite
 
 Bu uygulamanın kullanıcısı bir arkadaş grubudur, on binlerce kişi değil. Tek dosyalık bir

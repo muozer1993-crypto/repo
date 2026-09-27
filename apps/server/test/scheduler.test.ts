@@ -6,12 +6,15 @@
  * its 30-second timer — so the test covers exactly what the running server does:
  * a challenge going live at its start time, finishing at its end time with the
  * right winner (or no winner at all), telling every participant, handing out
- * badges, and cancelling a pending challenge nobody joined.
+ * badges, and cancelling a pending challenge nobody joined. The last block is
+ * `startScheduler`'s stop, which a clean shutdown awaits before closing the database.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TIMEZONE, todayKey, type Challenge } from '@koydum/shared';
 import { runSchedulerOnce } from '../src/services/challenges.js';
 import { listByType } from '../src/services/notifications.js';
+import type { FlushResult, PushSender } from '../src/services/push.js';
+import { startScheduler, STOP_WAIT_MS } from '../src/services/scheduler.js';
 import { getBadges } from '../src/services/stats.js';
 import type { ChallengeRow, ParticipantRow } from '../src/db/index.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
@@ -249,5 +252,64 @@ describe('scheduler: cancellation', () => {
     }
 
     expect(tick(harness)).toMatchObject({ cancelled: 0 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Stopping
+// ---------------------------------------------------------------------------
+
+/** A push sender whose flush stays open until the test lets it go. */
+function heldPush(): { push: PushSender; flushing: () => boolean; release: () => void } {
+  let started = false;
+  let release: () => void = () => {};
+  const push: PushSender = {
+    flush: () => {
+      started = true;
+      return new Promise<FlushResult>((resolve) => {
+        release = () => resolve({ sent: 1, failed: 0 });
+      });
+    },
+  };
+  return { push, flushing: () => started, release: () => release() };
+}
+
+describe('scheduler: stop', () => {
+  it('waits for the push flush in flight, so the database does not close under it', async () => {
+    harness = await makeApp({ now: NOW });
+    const held = heldPush();
+    const stop = startScheduler(harness.app, harness.db, harness.config, { push: held.push });
+    // the first pass runs right at start
+    expect(held.flushing()).toBe(true);
+
+    let stopped = false;
+    const stopping = stop().then(() => {
+      stopped = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(stopped).toBe(false);
+
+    held.release();
+    await stopping;
+    expect(stopped).toBe(true);
+  });
+
+  it('gives up on a flush that never answers instead of hanging the shutdown', async () => {
+    harness = await makeApp({ now: NOW });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const stop = startScheduler(harness.app, harness.db, harness.config, { push: heldPush().push });
+      let stopped = false;
+      const stopping = stop().then(() => {
+        stopped = true;
+      });
+      await vi.advanceTimersByTimeAsync(STOP_WAIT_MS - 1);
+      expect(stopped).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await stopping;
+      expect(stopped).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

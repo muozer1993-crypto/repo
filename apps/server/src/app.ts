@@ -13,7 +13,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { LogController, type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
@@ -54,7 +54,12 @@ export interface BuildAppOptions {
   db?: Database;
   /** Injectable clock. */
   now?: () => Date;
+  /** Where log lines go instead of stdout (tests read them). */
+  logStream?: { write: (line: string) => void };
 }
+
+/** A response slower than this is logged even when it succeeded. */
+const SLOW_REQUEST_MS = 2_000;
 
 export interface BuiltApp {
   app: FastifyInstance;
@@ -69,7 +74,13 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
   const now = opts.now ?? ((): Date => new Date());
 
   const app = Fastify({
-    logger: config.logLevel === 'silent' ? false : { level: config.logLevel },
+    logger:
+      config.logLevel === 'silent'
+        ? false
+        : { level: config.logLevel, ...(opts.logStream ? { stream: opts.logStream } : {}) },
+    // Two JSON lines per request buried the tunnel address and every real error in
+    // the owner's window; the hook below keeps only the requests worth a look.
+    logController: new LogController({ disableRequestLogging: true }),
     bodyLimit: LIMITS.UPLOAD_MAX_BYTES + 1024 * 1024,
     trustProxy: config.trustProxy,
   });
@@ -80,6 +91,22 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
 
   app.setErrorHandler(errorHandler);
   app.setNotFoundHandler(notFoundHandler);
+
+  // A failed or slow request, one line. The query string stays out: an invite
+  // code or a search for a friend's name has no business in the owner's window.
+  app.addHook('onResponse', async (request, reply) => {
+    const failed = reply.statusCode >= 500;
+    if (!failed && reply.elapsedTime < SLOW_REQUEST_MS) return;
+    request.log.warn(
+      {
+        method: request.method,
+        url: request.url.split('?')[0],
+        statusCode: reply.statusCode,
+        ms: Math.round(reply.elapsedTime),
+      },
+      failed ? 'request failed' : 'slow request',
+    );
+  });
 
   // `methods` is spelled out because the browser preflights PATCH (the whole
   // settings screen) and DELETE (leaving a challenge, deleting an account); the
