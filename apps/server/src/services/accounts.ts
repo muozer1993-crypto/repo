@@ -8,7 +8,7 @@ import type { VulgarityLevel } from '@koydum/shared';
  * and standings must survive so nobody's history rots when a friend leaves).
  */
 import { newId, newInviteCode, nowIso, type Database, type UserRow } from '../db/index.js';
-import { cancelIfAbandoned } from './challenges.js';
+import { cancelIfAbandoned, getChallengeRow, stillOpen } from './challenges.js';
 
 /** How many times we retry a random invite code before giving up (collision odds are ~0). */
 const INVITE_CODE_ATTEMPTS = 20;
@@ -85,7 +85,11 @@ export function anonymizedUsername(userId: string): string {
  * - every participation in a challenge that has NOT finished becomes `left`, which drops
  *   the user out of standings and stops the scheduler from waiting for them; a çelınc
  *   that leaves nobody to race is cancelled right away (`cancelIfAbandoned`). There is
- *   no "havlu attı" for it: it would come from "Silinen kanka", who cannot hear back;
+ *   no "havlu attı" for it: it would come from "Silinen kanka", who cannot hear back.
+ *   The exception is a çelınc that is already over but still waiting (the phones' hour,
+ *   a dispute's 12 hours): there an accepted player stays in, exactly as the leave route
+ *   refuses to let them out — otherwise a loser could delete the account to turn a lost
+ *   1v1 into "not enough players";
  * - finished/cancelled challenges, their entries, taunts and badges are untouched.
  *
  * Returns the anonymised row.
@@ -108,14 +112,17 @@ export function softDeleteUser(db: Database, user: UserRow, now: Date = new Date
 
     const open = db
       .prepare(
-        `SELECT challenge_id FROM challenge_participants
-          WHERE user_id = ?
-            AND status IN ('invited', 'accepted')
-            AND challenge_id IN (SELECT id FROM challenges WHERE status IN ('pending', 'active'))`,
+        `SELECT p.challenge_id, p.status FROM challenge_participants p
+          WHERE p.user_id = ?
+            AND p.status IN ('invited', 'accepted')
+            AND p.challenge_id IN (SELECT id FROM challenges WHERE status IN ('pending', 'active'))`,
       )
-      .all(user.id) as { challenge_id: string }[];
+      .all(user.id) as { challenge_id: string; status: string }[];
     const leave = db.prepare("UPDATE challenge_participants SET status = 'left' WHERE challenge_id = ? AND user_id = ?");
-    for (const { challenge_id: challengeId } of open) {
+    for (const { challenge_id: challengeId, status } of open) {
+      const challenge = getChallengeRow(db, challengeId);
+      // over but not yet decided: the result stands with them in it
+      if (status === 'accepted' && challenge && !stillOpen(challenge, now)) continue;
       leave.run(challengeId, user.id);
       cancelIfAbandoned(db, challengeId, now);
     }

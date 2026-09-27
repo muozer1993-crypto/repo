@@ -280,12 +280,28 @@ function weekRangeOf(sunday) {
     : `${monday.getUTCDate()} ${TR_MONTHS[monday.getUTCMonth()]} – ${end}`;
 }
 
-/** 20:30 in Istanbul (UTC+3 all year) on the coming Sunday — recap time for the story's players. */
-function nextSundayEvening(from) {
-  const midnightUtc = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
+const ISTANBUL_OFFSET_MS = 3 * 60 * 60_000; // UTC+3 all year
+
+/**
+ * When the story's players (Istanbul) get their weekly recap, and the Sunday it
+ * sums up (as a Date whose UTC day is that Sunday).
+ *
+ * Inside the real recap window (Sunday from 20:00 to Monday noon) the server's
+ * own scheduler may already have sent this week's recap by the time step 9 runs;
+ * advancing to the NEXT Sunday would then find nothing new to tell. So in that
+ * window the recap moment is now; otherwise it is the coming Sunday 20:30.
+ */
+function recapMoment(from) {
+  const local = new Date(from.getTime() + ISTANBUL_OFFSET_MS);
+  const day = local.getUTCDay();
+  const hour = local.getUTCHours();
+  const localMidnight = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
+  if (day === 0 && hour >= 20) return { at: from, sunday: new Date(localMidnight) };
+  if (day === 1 && hour < 12) return { at: from, sunday: new Date(localMidnight - 24 * 60 * 60_000) };
   for (let i = 0; i <= 7; i++) {
-    const candidate = new Date(midnightUtc + i * 24 * 60 * 60_000 + (17 * 60 + 30) * 60_000);
-    if (candidate > from && candidate.getUTCDay() === 0) return candidate;
+    const sunday = localMidnight + i * 24 * 60 * 60_000;
+    const at = new Date(sunday + (20 * 60 + 30) * 60_000 - ISTANBUL_OFFSET_MS);
+    if (new Date(sunday).getUTCDay() === 0 && at > from) return { at, sunday: new Date(sunday) };
   }
   throw new Error('no Sunday in the next week');
 }
@@ -498,20 +514,25 @@ async function main() {
 
     // 9. Sunday evening: the weekly recap lands in the inbox as a card. Last on
     // purpose — this scheduler pass also runs every other step at that moment.
-    const recapAt = nextSundayEvening(new Date());
-    const pass = await fetch(`${API_URL}/dev/advance`, {
+    const recap = recapMoment(new Date());
+    const recapAt = recap.at;
+    await fetch(`${API_URL}/dev/advance`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ now: recapAt.toISOString() }),
-    }).then((response) => response.json());
-    if (!pass.recaps) fail(`the Sunday scheduler pass sent no recap: ${JSON.stringify(pass)}`);
+    });
+    // this pass or the server's own scheduler, whichever came first
+    const mustafaInbox = await story.mustafa.api.call('GET', '/me/inbox');
+    if (!mustafaInbox.some((item) => item.type === 'recap')) {
+      fail(`no weekly recap reached Mustafa's inbox: ${JSON.stringify(mustafaInbox.map((item) => item.type))}`);
+    }
     await seedSession(page, statics.url, { token: story.mustafa.api.token, me: story.mustafa.me });
     // the page lives on Sunday evening too, so the card reads "az önce", not "8 saat sonra"
     await page.clock.setFixedTime(recapAt);
     await page.goto(`${statics.url}/inbox`, { waitUntil: 'domcontentloaded' });
     // only the card draws the week range and the tile labels; the plain-text
     // fallback row would show the title alone
-    await expectText(page, [weekRangeOf(recapAt)], 'weekly recap card in the inbox');
+    await expectText(page, [weekRangeOf(recap.sunday)], 'weekly recap card in the inbox');
     await expectText(page, ['YEDİN'], 'weekly recap tiles, in Turkish capitals');
     await page.screenshot({ path: join(SHOT_DIR, '09-weekly-recap.png'), fullPage: true });
 

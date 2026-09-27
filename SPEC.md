@@ -281,7 +281,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | POST /auth/refresh | authenticated, no body. Returns `{ token }` with a fresh 90 days. An expired token gets the usual 401: renewal keeps a live session alive, it never revives a dead one. The app calls it about once a week |
 | GET /me | `Me` |
 | PATCH /me | partial update |
-| DELETE /me | soft delete: anonymize username → `deleted_<id8>`, clear push token, leave active challenges (each one then goes through the abandoned check of 2.4, without a `challenge_left`) |
+| DELETE /me | soft delete: anonymize username → `deleted_<id8>`, clear push token, leave active challenges (each one then goes through the abandoned check of 2.4, without a `challenge_left`) — except a çelınc that is already past `ends_at` and still waiting (settle hour, dispute window): an accepted player stays in it, as the leave route refuses, so deleting the account cannot turn a lost result into a cancellation |
 | POST /me/password | `ChangePasswordBody`. Wrong current password → **400** `wrong_password` (never 401: the app logs out on any 401), new equal to current (after NFKC) → 400 `same_password`, 8 wrong ones per account in 15 min (login's per-account budget) → 429 `too_many_attempts`. Returns `{ token, me }` like login. Tokens are stateless JWTs and nothing is revoked: other phones already signed in stay signed in |
 | POST /me/push-token | store |
 | DELETE /me/push-token | clear (logout) |

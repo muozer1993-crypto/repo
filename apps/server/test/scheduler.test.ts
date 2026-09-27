@@ -582,6 +582,34 @@ describe('scheduler: an itiraz nobody answers', () => {
   });
 });
 
+describe('scheduler: deleting the account while a result is being decided', () => {
+  it('keeps the loser in the result instead of turning a lost 1v1 into "not enough players"', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+    at(harness, '2026-01-06T19:00:00.000Z');
+    await phoneSync(harness, ali, { '2026-01-06': 12_000 });
+    await phoneSync(harness, veli, { '2026-01-06': 9_000 });
+
+    // the hour after the end: Veli sees where this is going and deletes his account
+    at(harness, MIDNIGHT_END, 20 * MINUTE);
+    expect((await authed(harness.app, veli.token)({ method: 'DELETE', url: '/me' })).statusCode).toBe(200);
+    expect(participant(harness, challengeId, veli.me.id)).toMatchObject({ status: 'accepted' });
+
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS);
+    expect(tick(harness)).toMatchObject({ finalized: 1, cancelled: 0 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+  });
+
+  it('still lets a deletion before the end walk out and cancel a 1v1', async () => {
+    harness = await makeApp({ now: NOW });
+    const { veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+    at(harness, '2026-01-06T19:00:00.000Z');
+    expect((await authed(harness.app, veli.token)({ method: 'DELETE', url: '/me' })).statusCode).toBe(200);
+    expect(participant(harness, challengeId, veli.me.id)).toMatchObject({ status: 'left' });
+    expect(challengeRow(harness, challengeId).status).toBe('cancelled');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // The winner who never says a word
 // ---------------------------------------------------------------------------
