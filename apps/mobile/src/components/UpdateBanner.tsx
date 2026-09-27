@@ -21,6 +21,14 @@ import { compareVersions } from '@/utils/url';
  * with the installed one and offers the download. Closing it hides it until
  * the next version.
  */
+/**
+ * An APK installs over an APK built with the same key (every EAS preview build
+ * of this project is). A Play install is signed by Google's key instead, so it
+ * updates from Play and an APK will not go on top of it.
+ */
+export const UPDATE_HOW =
+  'APK’yla kurduysan indirip eskisinin üstüne kur, hesabın ve çelınclar yerinde kalır. Play’den kurduysan güncellemeyi Play’den al.';
+
 export function useAppUpdate(): { latest: string; downloadUrl: string; notes: string | null } | null {
   const api = useApi();
   const installed = Application.nativeApplicationVersion;
@@ -64,7 +72,7 @@ export function UpdateBanner() {
         Yeni sürüm var: {update.latest}
       </Text>
       <Text variant="tiny" muted style={styles.body}>
-        {update.notes ? `${update.notes} ` : ''}İndirip eskisinin üstüne kur, hesabın ve çelınclar yerinde kalır.
+        {update.notes ? `${update.notes} ` : ''}{UPDATE_HOW}
       </Text>
       <View style={styles.row}>
         <Button title="İndir" size="sm" style={styles.grow} onPress={() => void Linking.openURL(update.downloadUrl)} />

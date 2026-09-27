@@ -17,6 +17,13 @@ export function resolveServerUrl(url: string, baseUrl: string): string {
   return `${base}/${url.replace(/^\/+/, '')}`;
 }
 
+/** "http://localhost:4000" → true: an address that only means this very device. */
+export function isLoopbackUrl(url: string): boolean {
+  const rest = url.replace(/^https?:\/\//i, '');
+  const host = rest.split(/[/:]/)[0] ?? '';
+  return host === 'localhost' || host === '0.0.0.0' || /^127\./.test(host) || rest.startsWith('[::1]');
+}
+
 /** "http://192.168.1.20:4000" → true: a link only people on the same network can open. */
 export function isLocalNetworkUrl(url: string): boolean {
   const host = url.replace(/^https?:\/\//i, '').split(/[/:]/)[0] ?? '';

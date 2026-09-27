@@ -435,7 +435,7 @@ async function main() {
     await expectText(page, ["Mustafa seni KOYDUM'a çağırıyor"], 'invite page on the server');
     await page.screenshot({ path: join(SHOT_DIR, '07-invite-page.png'), fullPage: true });
 
-    // 8. a new player taps the link inside the app: the friend request goes out by itself
+    // 8. a new player taps the link inside the app, sees who invites, and sends the request
     const can = new Api(API_URL);
     const registered = await can.call('POST', '/auth/register', {
       username: 'can',
@@ -449,7 +449,14 @@ async function main() {
       `${statics.url}/davet/${story.mustafa.me.inviteCode}?server=${encodeURIComponent(API_URL)}`,
       { waitUntil: 'domcontentloaded' }
     );
-    await expectText(page, ['İstek gitti'], 'invite link inside the app');
+    await expectText(page, ['Mustafa seni çağırıyor'], 'invite screen inside the app');
+    // nothing goes out before the tap: a link can come from anywhere
+    const before = await story.mustafa.api.call('GET', '/friends');
+    if ((before.incoming ?? []).some((row) => row.user?.username === 'can')) {
+      fail('the invite screen sent a friend request before anyone tapped');
+    }
+    await submitForm(page);
+    await expectText(page, ['İstek gitti'], 'invite request sent on tap');
     await page.screenshot({ path: join(SHOT_DIR, '08-invite-app.png'), fullPage: true });
     const mustafaFriends = await story.mustafa.api.call('GET', '/friends');
     if (!(mustafaFriends.incoming ?? []).some((row) => row.user?.username === 'can')) {

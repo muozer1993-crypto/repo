@@ -420,7 +420,7 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
 (app)/focus/[id].tsx        full-screen timer (pick 15/25/45/60 min), big countdown, "elini telefondan çek" copy, leaving app → abandoned state with copy focus_abandoned; completion posts entry
 (app)/user/[id].tsx         public profile + head-to-head record vs me + "Çelınc aç" shortcut
 (app)/settings.tsx          vulgarity level (with preview), reminder hour, timezone (auto), server URL, push status + "yeniden dene", delete account (double confirm), about (+ "Yeni sürümü indir" when the server offers a newer APK)
-davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), reachable signed in or not. Signed in: sends the friend request at once. Signed out: parks the code (services/invite.ts) and goes to register/login; the bridge sends it right after sign-in. A `server` differing from the current one is shown and only switched to on an explicit tap (after a /health check); builds with a baked-in URL ignore it.
+davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), reachable signed in or not. Signed in: shows the inviter and sends the friend request only on a tap (a waiting request from that person would be ACCEPTED by it). A fresh install still on the localhost fallback adopts the link's server (after /health) without a conflict warning. Signed out: parks the code (services/invite.ts) and goes to register/login; the bridge sends it right after sign-in. A `server` differing from the current one is shown and only switched to on an explicit tap (after a /health check); builds with a baked-in URL ignore it.
 ```
 
 ### 3.4 Per-metric action area (challenge detail)

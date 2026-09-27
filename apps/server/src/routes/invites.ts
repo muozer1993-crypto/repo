@@ -53,11 +53,12 @@ interface PageInput {
 }
 
 /** Deep link into the app; on Android an intent URL so a missing app falls back to /indir. */
-function openHref(input: PageInput): string {
-  const path = input.code ? `davet/${encodeURIComponent(input.code.toUpperCase())}` : 'davet';
+function openHref(input: PageInput & { code: string }): string {
+  const code = encodeURIComponent(input.code.toUpperCase());
+  const path = `davet/${code}`;
   const query = `server=${encodeURIComponent(input.origin)}`;
   if (!input.android) return `koydum://${path}?${query}`;
-  const fallback = `${input.origin}/indir${input.code ? `?kod=${encodeURIComponent(input.code.toUpperCase())}` : ''}`;
+  const fallback = `${input.origin}/indir?kod=${code}`;
   return `intent://${path}?${query}#Intent;scheme=koydum;package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
 }
 
@@ -95,9 +96,10 @@ function renderPage(input: PageInput): string {
         <li>Seni davet eden kişinin bağlantısına tekrar dokun ya da uygulamada kodunu yaz.</li>
       </ol>`;
 
-  const open = input.unknownCode
+  // without a code there is nothing for the app to open (koydum://davet has no screen)
+  const open = input.unknownCode || !code
     ? ''
-    : `<a class="btn primary" href="${escapeHtml(openHref(input))}">KOYDUM'da aç</a>`;
+    : `<a class="btn primary" href="${escapeHtml(openHref({ ...input, code }))}">KOYDUM'da aç</a>`;
 
   const manual = code
     ? `<div class="manual">

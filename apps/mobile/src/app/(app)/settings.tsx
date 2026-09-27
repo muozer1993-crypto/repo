@@ -12,7 +12,7 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
-import { useAppUpdate } from '@/components/UpdateBanner';
+import { UPDATE_HOW, useAppUpdate } from '@/components/UpdateBanner';
 import { useUpdateMe } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { ApiError } from '@/lib/api';
@@ -589,13 +589,18 @@ export default function SettingsScreen() {
           {build ? ` (${build})` : ''} · {PLATFORM}
         </Text>
         {update ? (
-          <Button
-            title={`Yeni sürümü indir (${update.latest})`}
-            variant="secondary"
-            size="sm"
-            style={styles.selfCenter}
-            onPress={() => void Linking.openURL(update.downloadUrl)}
-          />
+          <>
+            <Button
+              title={`Yeni sürümü indir (${update.latest})`}
+              variant="secondary"
+              size="sm"
+              style={styles.selfCenter}
+              onPress={() => void Linking.openURL(update.downloadUrl)}
+            />
+            <Text variant="micro" faint center>
+              {UPDATE_HOW}
+            </Text>
+          </>
         ) : null}
         <Text variant="micro" faint center>
           Bu uygulama eğlence ve gelişim için tasarlandı. Amacının dışına çıkarmayın, kimse

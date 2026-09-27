@@ -111,6 +111,35 @@ describe('GET /davet/:code', () => {
   });
 });
 
+describe('the review round', () => {
+  it('offers no open button on /indir without a code, and keeps it with one', async () => {
+    harness = await appWith(tempAppDir());
+    const bare = await harness.app.inject({ method: 'GET', url: '/indir', headers: { host: 'x.test', 'user-agent': 'Android' } });
+    expect(bare.body).not.toContain('koydum://');
+    expect(bare.body).not.toContain('intent://');
+    const withCode = await harness.app.inject({ method: 'GET', url: '/indir?kod=abc234', headers: { host: 'x.test', 'user-agent': 'Android' } });
+    expect(withCode.body).toContain('intent://davet/ABC234');
+  });
+
+  it('treats a localhost PUBLIC_URL as no public address at all', async () => {
+    harness = await makeApp({ config: { appDir: tempAppDir(), publicUrl: 'http://localhost:4000' } });
+    const ali = await registerUser(harness.app, 'ali');
+    const page = await harness.app.inject({ method: 'GET', url: `/davet/${ali.me.inviteCode}`, headers: { host: '192.168.1.142:4000' } });
+    expect(page.body).toContain(encodeURIComponent('http://192.168.1.142:4000'));
+    expect(page.body).not.toContain(encodeURIComponent('http://localhost:4000'));
+  });
+
+  it('counts lookups per real client behind a tunnel on this machine, not one shared bucket', async () => {
+    harness = await appWith(tempAppDir());
+    const from = (ip: string) =>
+      harness!.app.inject({ method: 'GET', url: '/invites/ZZZZZZ', headers: { 'x-forwarded-for': ip } });
+    for (let i = 0; i < 120; i += 1) await from('203.0.113.7');
+    expect((await from('203.0.113.7')).statusCode).toBe(429);
+    // somebody else coming through the same tunnel is unaffected
+    expect((await from('198.51.100.9')).statusCode).toBe(404);
+  });
+});
+
 describe('GET /invites/:code', () => {
   it('returns the public face of the code owner, case-insensitively', async () => {
     harness = await appWith(tempAppDir());

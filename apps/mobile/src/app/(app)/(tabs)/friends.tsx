@@ -23,7 +23,7 @@ import { qk } from '@/lib/query';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
 import { byLevel } from '@/utils/levelCopy';
-import { isLocalNetworkUrl } from '@/utils/url';
+import { isLocalNetworkUrl, isLoopbackUrl } from '@/utils/url';
 
 const MONO = Platform.select({ ios: 'Courier', android: 'monospace', default: 'monospace' });
 
@@ -34,7 +34,8 @@ export default function FriendsScreen() {
   // the page this link opens is served by our own server: it names the
   // inviter, opens the app with the right address, and offers the APK
   const inviteLink = me?.inviteCode ? `${serverUrl.replace(/\/+$/, '')}/davet/${me.inviteCode}` : null;
-  const linkIsLocal = isLocalNetworkUrl(serverUrl);
+  const linkIsLoopback = isLoopbackUrl(serverUrl);
+  const linkIsLocal = !linkIsLoopback && isLocalNetworkUrl(serverUrl);
   const api = useApi();
   const toast = useToast();
   const friends = useFriends();
@@ -365,7 +366,11 @@ export default function FriendsScreen() {
         <Text variant="tiny" muted style={styles.codeHint}>
           Paylaş’a bas, giden bağlantıya dokunan kankan uygulamayı açar ya da indirir, istek kendiliğinden gelir. Kodu elle yazmak da olur.
         </Text>
-        {linkIsLocal ? (
+        {linkIsLoopback ? (
+          <Text variant="tiny" faint style={styles.codeHint}>
+            Uygulama sunucuya “localhost” üzerinden bağlı, bu bağlantı başka hiçbir telefonda açılmaz. Kankana kodu gönder ya da sunucu adresini bilgisayarının IP’siyle değiştir.
+          </Text>
+        ) : linkIsLocal ? (
           <Text variant="tiny" faint style={styles.codeHint}>
             Sunucu şu an evdeki bilgisayarında, bu bağlantı sadece aynı Wi-Fi’dakilerde açılır. Başka yerdeki kankalar için sunucuyu internete açmak gerekiyor.
           </Text>

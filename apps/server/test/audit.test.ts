@@ -442,12 +442,17 @@ describe('POST /uploads per-account cap', () => {
 });
 
 describe('proxy trust', () => {
-  it('is off unless TRUST_PROXY says otherwise', () => {
+  it('believes only a proxy on this machine by default, never everyone', () => {
     const previous = process.env.TRUST_PROXY;
+    const load = () => loadConfig({ dataDir: ':memory:', jwtSecret: 'x' }).trustProxy;
     delete process.env.TRUST_PROXY;
-    expect(loadConfig({ dataDir: ':memory:', jwtSecret: 'x' }).trustProxy).toBe(false);
+    expect(load()).toBe('loopback');
     process.env.TRUST_PROXY = '1';
-    expect(loadConfig({ dataDir: ':memory:', jwtSecret: 'x' }).trustProxy).toBe(true);
+    expect(load()).toBe('loopback');
+    process.env.TRUST_PROXY = '0';
+    expect(load()).toBe(false);
+    process.env.TRUST_PROXY = '10.0.0.0/8';
+    expect(load()).toBe('10.0.0.0/8');
     if (previous === undefined) delete process.env.TRUST_PROXY;
     else process.env.TRUST_PROXY = previous;
   });

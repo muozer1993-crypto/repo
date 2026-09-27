@@ -254,6 +254,12 @@ adresinden sunar. APK'yı başka yerde tutuyorsan (expo.dev derleme sayfası gib
 
 Yayınladığın sürüm telefondakinden yeniyse uygulamanın ana ekranında **"Yeni sürüm var"** kartı
 çıkar ve İndir'e basınca APK iner. Böylece kimse hangi APK'da olduğunu tahmin etmek zorunda kalmaz.
+APK'yla kuranlar yenisini üstüne kurar, hesapları kalır. Play dahili testinden kuranlara APK üstüne
+kurulmaz (imza farklı); onlar Play'den günceller.
+
+Giriş yapmış biri bağlantıya dokunursa uygulama önce kimin çağırdığını gösterir, istek ancak
+**Kanka isteği gönder**'e basınca gider. Uygulamayı yeni kurmuş biri için sunucu adresi
+bağlantıdan alınır; başka bir sunucuya bağlı olan birine ise geçmeden önce sorulur.
 
 > Bağlantının kimde açılacağı sunucunun nerede olduğuna bağlı. Sunucu evdeki bilgisayardaysa
 > (`192.168.x.x`) bağlantı sadece aynı Wi-Fi'dakilerde açılır; uygulama bunu Kankalar sekmesinde
@@ -322,7 +328,7 @@ yedeklemek için o dosyayı kopyalaman yeterli.
 | `ENABLE_DEV_ROUTES` | `0` | `1` yaparsan test uçları açılır (üretimde açma) |
 | `APP_DIR` | `<DATA_DIR>/app` | `npm run apk:yayinla`'nın APK'yı koyduğu yer |
 | `APP_DOWNLOAD_URL` / `APP_LATEST_VERSION` | boş | APK başka yerdeyse bağlantısı ve sürümü |
-| `TRUST_PROXY` | `0` | Önünde nginx/Caddy/Fly gibi bir ters vekil varsa `1` yap; `X-Forwarded-For` başlığına o zaman güvenilir. Doğrudan erişilen bir sunucuda kapalı kalmalı, yoksa herkes kendi IP'sini seçip giriş denemesi sınırlarını aşar. |
+| `TRUST_PROXY` | `loopback` | Hangi aradaki sunucunun `X-Forwarded-For` başlığına güvenileceği. Varsayılan sadece aynı bilgisayardaki tünel ya da vekil (cloudflared, nginx, Caddy); doğrudan bağlanan bir telefon kendi IP'sini seçemez. `0` hiç kimseye güvenmez; vekil başka makinedeyse adresini ya da ağını yaz (`10.0.0.0/8`). |
 
 ---
 

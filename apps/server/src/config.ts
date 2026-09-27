@@ -56,11 +56,18 @@ export interface Config {
   /** ENABLE_DEV_ROUTES=1 mounts the test-only /dev/* endpoints. */
   enableDevRoutes: boolean;
   /**
-   * TRUST_PROXY=1 when a reverse proxy (nginx, Caddy, Fly) sits in front and
-   * sets X-Forwarded-For. Off by default: on a server reached directly, trusting
-   * that header lets any client pick its own IP and walk past every login throttle.
+   * Which hops may set X-Forwarded-For (Fastify's `trustProxy`).
+   *
+   * Default `'loopback'`: a tunnel or reverse proxy on the same machine
+   * (cloudflared, localtunnel, nginx, Caddy) connects from 127.0.0.1, so its
+   * forwarded client address is believed; a phone connecting directly is never
+   * loopback, so it cannot pick its own IP and walk past the throttles. Never
+   * `true` (trust everyone): then the LEFTMOST, client-written entry wins.
+   *
+   * TRUST_PROXY=0 → trust nobody; =1 → loopback; anything else is passed on as
+   * an address / CIDR list, e.g. `10.0.0.0/8` for a proxy on another host.
    */
-  trustProxy: boolean;
+  trustProxy: false | string;
   /** Reported by GET /health. */
   version: string;
 }
@@ -169,7 +176,14 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     overrides.expoAccessToken ?? (env.EXPO_ACCESS_TOKEN && env.EXPO_ACCESS_TOKEN.trim() !== '' ? env.EXPO_ACCESS_TOKEN.trim() : undefined);
 
   const enableDevRoutes = overrides.enableDevRoutes ?? env.ENABLE_DEV_ROUTES === '1';
-  const trustProxy = overrides.trustProxy ?? (env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true');
+  const rawTrust = (env.TRUST_PROXY ?? '').trim().toLowerCase();
+  const trustProxy: false | string =
+    overrides.trustProxy ??
+    (rawTrust === '0' || rawTrust === 'false'
+      ? false
+      : rawTrust === '' || rawTrust === '1' || rawTrust === 'true'
+        ? 'loopback'
+        : (env.TRUST_PROXY ?? '').trim());
 
   const version = overrides.version ?? readString(env.npm_package_version, DEFAULTS.version);
 
