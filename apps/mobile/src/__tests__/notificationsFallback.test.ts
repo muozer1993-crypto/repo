@@ -51,7 +51,7 @@ jest.mock('expo-notifications/build/NotificationChannelManager.types', () => ({
 }));
 
 import { localNotifications, pushNotifications, resetNotificationModuleCache } from '@/services/expoNotifications';
-import { fireLocal, registerForPush } from '@/services/notifications';
+import { fireLocal, registerForPush, routeForNotificationData } from '@/services/notifications';
 import { syncReminders } from '@/services/reminders';
 
 beforeEach(() => {
@@ -101,5 +101,22 @@ describe('when expo-notifications refuses to load', () => {
     );
     expect(count).toBe(2);
     expect(mockSchedule).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('where a tapped notification goes', () => {
+  it('opens the results for the winner\'s "hâlâ bekliyor" reminder, where the laf is sent', () => {
+    expect(routeForNotificationData({ type: 'reminder', kind: 'taunt_followup', challengeId: 'c1' })).toEqual({
+      kind: 'results',
+      challengeId: 'c1',
+    });
+  });
+
+  it('keeps every other reminder on the çelınc itself', () => {
+    // the phone's own check-in / last-hour reminders carry a kind too
+    expect(
+      routeForNotificationData({ type: 'reminder', kind: 'koydum.reminder', reminder: 'checkin', challengeId: 'c1' })
+    ).toEqual({ kind: 'challenge', challengeId: 'c1' });
+    expect(routeForNotificationData({ type: 'reminder', dayKey: '2026-09-27' })).toEqual({ kind: 'inbox' });
   });
 });

@@ -260,6 +260,8 @@ reports(id TEXT PK, reporter_id TEXT, reported_id TEXT, reason TEXT, created_at 
 reminders_sent(user_id TEXT, day_key TEXT, PRIMARY KEY(user_id, day_key))
 recaps_sent(user_id TEXT, week_key TEXT, sent_at TEXT, PRIMARY KEY(user_id, week_key))
   -- one weekly recap per person; week_key = the local Sunday ending the week, sent_at = where the next window starts
+taunt_followups(challenge_id TEXT, stage INTEGER, created_at TEXT, PRIMARY KEY(challenge_id, stage))
+  -- the claim for the winner's "hâlâ bekliyor" reminder (2.4); stage 1 is the only one
 ```
 
 ### 2.2 Endpoints (all JSON; errors `{ error: { code, message } }`, message in Turkish)
@@ -370,6 +372,14 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    title to nothing useful. Award badges (stats recompute) for all participants.
 3. Reminders: for each user with `reminder_hour` not null and an active challenge whose `ends_at` is still ahead (a settling one has nothing left to type), when `localHour(now, tz) === reminder_hour`
    and no `reminders_sent` row for today → `reminder` notification with copy `notification_daily_reminder`.
+3b. Taunt follow-up (`sendTauntFollowups`): a `finished` çelınc with a winner (not a tie), finalized between 48 h and
+   2 h ago, where some accepted, non-deleted loser who is not blocked with the winner (either way) has no `taunts` row
+   from the winner → one `reminder` to the winner, data `{ challengeId, kind: 'taunt_followup' }`, at the winner's
+   level, naming only the losers still waiting ("Veli hâlâ bekliyor" / "Koymayacak mısın? Veli ağzını açmanı
+   bekliyor." / "KOYMADIN DAHA 🍆"; several → "Veli ve Ayşe …"). Only while the winner's local hour (profile
+   timezone) is within the nudge window, 12:00–22:00, and checked before the `taunt_followups (challenge_id, 1)`
+   claim, so a midnight finish is reminded at noon instead of losing its slot. Once per çelınc; nothing is ever sent
+   in the winner's name.
 4. Push queue: every notification row with `pushed_at IS NULL AND push_error IS NULL` for users with a token → Expo push
    (batched); mark `pushed_at` or `push_error`. Uses `Expo.isExpoPushToken`.
 
@@ -489,7 +499,8 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             "laf sok" per rival you lead — opens a sheet of rendered `poke` lines to choose from,
                             leave/cancel; finished → button to results
 (app)/challenge/[id]/results.tsx   winner view: podium + "KOYDUM MU?" CTA per loser (or "Hepsine koy") → taunt picker; loser view: shame screen
-                            (big TauntBubble if received, else "bekliyor..." ), rewards/penalty text, "Rövanş" button; tie view
+                            (big TauntBubble if received, else "bekliyor..." — and 24 h after `finalizedAt`, counted from the
+                            last fetch, "unuttu galiba, rövanş aç, bu sefer sen koy" instead), rewards/penalty text, "Rövanş" button; tie view
 (app)/challenge/[id]/taunt.tsx     picker: target chip(s), list of templates rendered with real names/scores (levels ≤ target max; higher ones shown locked with
                             "X bunu kaldıramaz" note), custom text field (banned-word check client side), preview, "GÖNDER" → success animation
 (app)/challenge/[id]/entry.tsx     modal: log manual value (numeric pad, quick +1/+5 chips per unit), note, proof photo (camera/gallery → /uploads), day selector (today/yesterday)
@@ -515,6 +526,7 @@ davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), r
 - `useUnreadCount` polls every 30 s in foreground, plus refetch on AppState active. When `latestId` changes and the new
   items have `pushedAt == null` (server includes `pushed` flag) and app is in background → `fireLocal`. In foreground → in-app Toast.
 - Tapping a notification response routes: taunt/challenge_* → `/challenge/[id]/results` or `/challenge/[id]`, friend_* → friends tab.
+  A `reminder` with `data.kind === 'taunt_followup'` (2.4, 3b) opens the results, where the laf is sent; the inbox row does the same.
 
 ### 3.6 Tests
 

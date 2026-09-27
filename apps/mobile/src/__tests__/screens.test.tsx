@@ -595,6 +595,48 @@ describe('an itiraz on the feed', () => {
   });
 });
 
+describe('a loser still waiting for the winner to talk', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** Ali beat the reader `ago` ms ago and has not sent a thing. */
+  function lostTo(ago: number) {
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - ago).toISOString();
+    return {
+      challenge: { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: ALI.id },
+      standings: [
+        { ...detail.me!, user: ALI, score: 12430, rank: 1, isWinner: true },
+        { ...detail.me!, score: 8000, rank: 2 },
+      ],
+      taunts: [],
+    };
+  }
+
+  it('tells them to hang on while the winner may still get round to it', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => lostTo(3 * 3_600_000));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Ali daha ağzını açmadı. Beklemede kal.');
+    expect(text).not.toContain('unuttu galiba');
+  });
+
+  it('stops promising a laf after a day without one', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => lostTo(30 * 3_600_000));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Ali unuttu galiba. Rövanş aç, bu sefer sen koy.');
+    expect(text).not.toContain('Beklemede kal');
+  });
+});
+
 describe('invite link on the friends tab', () => {
   it('warns that a localhost link opens nowhere else', async () => {
     api.health = jest.fn(async () => ({ ok: true, version: '1', time: '', app: null, publicUrl: null }));

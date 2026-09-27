@@ -102,6 +102,23 @@ Push başarısız olsa bile laf inbox'ta durur. Uygulama 45 saniyede bir okunmam
 push gelmemiş bir öğe bulursa cihazın kendi yerel bildirimini üretir. Yani Expo Go'da bile
 KOYDUM ulaşır, sadece anında değil.
 
+Zincirin zayıf halkası 2. adım: laf ancak kazanan uygulamayı açıp gönderirse var. Gece 23:59'da
+biten çelınc kazanan uyurken kapanır, üşengeç kazanan hiç açmaz; kaybeden de "daha ağzını açmadı"
+yazısına bakar durur. Bu yüzden bitişten 2 saat sonra hâlâ laf yememiş bir kaybeden varsa,
+zamanlayıcının `sendTauntFollowups` adımı kazanana tek bir hatırlatma gönderir: "Koymayacak
+mısın? Veli ağzını açmanı bekliyor." Kurallar:
+
+* çelınc başına bir kez; `taunt_followups (challenge_id, stage)` tablosu hak talebidir;
+* yalnızca kazananın kendi saatiyle 12:00–22:00 arasında (dürtmeyle aynı pencere). Saat, hak
+  talebinden **önce** kontrol edilir; gece yarısı biten çelıncın hatırlatması yanmaz, öğlen gider;
+* bitişten 48 saat sonra artık gitmez;
+* beraberlikte gitmez; lafı zaten almış, hesabını silmiş ya da kazananla arasında engel olan
+  kaybeden de beklemiyor sayılır. Metin yalnızca hâlâ bekleyenlerin adını sayar.
+
+Kazananın adına otomatik laf **atılmaz**; "KOYDUM MU?" kazananın hakkı, onun ağzından başkası
+konuşmaz. Kaybedenin sonuç ekranı da dürüst olur: bitişten 24 saat sonra "bekle" yerine
+"unuttu galiba, rövanş aç, bu sefer sen koy" der.
+
 ## Gün ortası dürtme
 
 Arkadaşın seni elle dürtebilir. Asıl mesele kimsenin bakmadığı anda gelen bildirim: zamanlayıcı

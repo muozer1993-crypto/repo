@@ -45,8 +45,9 @@ import {
 } from '../db/index.js';
 import { asVulgarityLevel, toPublicUser } from '../serialize.js';
 import { disputeAwaitingAnswer, resolveDisputes } from './entries.js';
+import { isBlockedBetween } from './friends.js';
 import { notify } from './notifications.js';
-import { sendWeeklyRecaps } from './recap.js';
+import { joinNames, sendWeeklyRecaps } from './recap.js';
 import { awardBadges } from './stats.js';
 
 export interface SchedulerSummary {
@@ -58,6 +59,8 @@ export interface SchedulerSummary {
   reminders: number;
   nudges: number;
   recaps: number;
+  /** Winners reminded that a loser is still waiting for their "KOYDUM MU?". */
+  tauntFollowups: number;
 }
 
 export interface SchedulerDeps {
@@ -374,6 +377,30 @@ function reminderTitle(level: VulgarityLevel): string {
   if (level === 1) return '⏰ Günlük hatırlatma';
   if (level === 3) return '⏰ Kalk lan 🍆';
   return '⏰ Bugün ne yaptın?';
+}
+
+/**
+ * "Ali hâlâ bekliyor": the winner has not said a word to the people they beat.
+ * `losers` are only the ones still waiting, runner-up first.
+ */
+function tauntFollowupCopy(level: VulgarityLevel, losers: string[]): { title: string; body: string } {
+  const names = joinNames(losers);
+  const several = losers.length > 1;
+  if (level === 1) {
+    return {
+      title: `${names} hâlâ bekliyor`,
+      body: several
+        ? 'Kazandın ama onlara bir şey yazmadın. İki satır yaz, bitsin.'
+        : 'Kazandın ama bir şey yazmadın. İki satır yaz, bitsin.',
+    };
+  }
+  if (level === 3) {
+    return {
+      title: 'KOYMADIN DAHA 🍆',
+      body: several ? `${names} sırada bekliyor, hadi hepsine koy.` : `${names} bekliyor, hadi koy şunu.`,
+    };
+  }
+  return { title: 'Koymayacak mısın?', body: `${names} ağzını açmanı bekliyor.` };
 }
 
 // ---------------------------------------------------------------------------
@@ -803,6 +830,93 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
   return sent;
 }
 
+/** Give the winner a moment to gloat by themselves before anybody reminds them. */
+const TAUNT_FOLLOWUP_AFTER_MS = 2 * 60 * 60_000;
+/** Two days on, a "KOYDUM MU?" is about nothing; the loser's screen gave up after one. */
+const TAUNT_FOLLOWUP_UNTIL_MS = 48 * 60 * 60_000;
+
+/**
+ * "Ali hâlâ bekliyor": the one reminder a winner gets when a loser is still
+ * waiting for their "KOYDUM MU?".
+ *
+ * Taunts only exist when the winner opens the app and sends one, and the loser
+ * was told it is coming. A çelınc that ends at 23:59 while the winner sleeps, or
+ * a lazy winner, would leave the loser staring at "daha ağzını açmadı" forever.
+ *
+ * Once per çelınc (`taunt_followups` is the claim), from two hours after the
+ * finish until two days after, and only inside the nudge's waking hours where
+ * the winner lives now: this is about their day, not the çelınc's days, so it
+ * reads the profile timezone, not the one pinned at join. The hour is checked
+ * BEFORE the claim, so a midnight finish keeps its slot until noon.
+ * Losers already taunted, deleted, or on the other side of a block are not
+ * waiting for anything, and with none of them left nothing is sent. It never
+ * taunts in the winner's name: a "KOYDUM MU?" is theirs to send.
+ */
+export function sendTauntFollowups(db: Database, now: Date = new Date()): number {
+  const iso = nowIso(now);
+  const due = db
+    .prepare(
+      `SELECT c.* FROM challenges c
+         LEFT JOIN taunt_followups f ON f.challenge_id = c.id AND f.stage = 1
+        WHERE c.status = 'finished' AND c.winner_id IS NOT NULL AND c.is_tie = 0
+          AND c.finalized_at <= ? AND c.finalized_at > ?
+          AND f.challenge_id IS NULL`,
+    )
+    .all(
+      nowIso(new Date(now.getTime() - TAUNT_FOLLOWUP_AFTER_MS)),
+      nowIso(new Date(now.getTime() - TAUNT_FOLLOWUP_UNTIL_MS)),
+    ) as ChallengeRow[];
+
+  const waiting = db.prepare(
+    `SELECT u.* FROM challenge_participants p
+       JOIN users u ON u.id = p.user_id AND u.deleted_at IS NULL
+      WHERE p.challenge_id = ? AND p.status = 'accepted' AND p.user_id <> ?
+        AND NOT EXISTS (
+          SELECT 1 FROM taunts t
+           WHERE t.challenge_id = p.challenge_id AND t.from_user_id = ? AND t.to_user_id = p.user_id
+        )
+      ORDER BY p.final_rank ASC, p.rowid ASC`,
+  );
+  const claim = db.prepare(
+    'INSERT OR IGNORE INTO taunt_followups (challenge_id, stage, created_at) VALUES (?, 1, ?)',
+  );
+  let sent = 0;
+
+  for (const challenge of due) {
+    const winnerId = challenge.winner_id;
+    if (!winnerId) continue;
+    const winner = userMap(db, [winnerId]).get(winnerId);
+    if (!winner || winner.deleted_at) continue;
+
+    const losers = (waiting.all(challenge.id, winnerId, winnerId) as UserRow[]).filter(
+      (loser) => !isBlockedBetween(db, winnerId, loser.id),
+    );
+    if (losers.length === 0) continue;
+
+    let hour: number;
+    try {
+      hour = localHour(now, winner.timezone || DEFAULT_TIMEZONE);
+    } catch {
+      continue;
+    }
+    if (hour < NUDGE_FROM_HOUR || hour >= NUDGE_UNTIL_HOUR) continue;
+    if (claim.run(challenge.id, iso).changes === 0) continue;
+
+    const copy = tauntFollowupCopy(levelOf(winner), losers.map((loser) => loser.display_name));
+    notify(db, {
+      userId: winner.id,
+      type: 'reminder',
+      title: copy.title,
+      body: copy.body,
+      data: { challengeId: challenge.id, kind: 'taunt_followup' },
+      createdAt: iso,
+    });
+    sent += 1;
+  }
+
+  return sent;
+}
+
 /**
  * One scheduler pass. Every step is isolated: a failure in one is reported through
  * `deps.onError` and the others still run.
@@ -816,6 +930,7 @@ export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: Sch
     reminders: 0,
     nudges: 0,
     recaps: 0,
+    tauntFollowups: 0,
   };
   const step = <T>(name: string, fn: () => T, apply: (value: T) => void): void => {
     try {
@@ -832,6 +947,7 @@ export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: Sch
   step('cancel', () => cancelUnderfilled(db, now), (n) => (summary.cancelled = n));
   step('reminders', () => sendReminders(db, now), (n) => (summary.reminders = n));
   step('nudges', () => sendNudges(db, now), (n) => (summary.nudges = n));
+  step('tauntFollowups', () => sendTauntFollowups(db, now), (n) => (summary.tauntFollowups = n));
   // after finalize, so a çelınc that ended this minute is already in the count
   step('recaps', () => sendWeeklyRecaps(db, now), (n) => (summary.recaps = n));
 

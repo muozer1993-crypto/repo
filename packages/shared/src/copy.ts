@@ -24,7 +24,7 @@ export const MICROCOPY: Record<MicrocopyKey, MicrocopyEntry> = {
   "challenge_active_tie": { level1: "Başa başsınız. Küçük bir fark yeter.", level2: "Başa baş gidiyorsunuz. Bir kıpırda, öne geç.", level3: "Kafa kafaya. Kim önce kıpırdarsa o koyar." },
   "challenge_active_losing": { level1: "Biraz gerideysin. Küçük bir gayret yeter.", level2: "Geridesin. Böyle giderse yiyeceksin.", level3: "Geridesin. Kalk yoksa akşam yersin 🍆" },
   "challenge_finished_won": { level1: "Kazandın, tebrikler. İstersen arkadaşına bir mesaj gönder.", level2: "Koydun lan. Kaybedene bir laf gönder.", level3: "SAPLADIN. Bildirimi seç, gitsin." },
-  "challenge_finished_lost": { level1: "Bu sefer olmadı. Rövanş isteyebilirsin.", level2: "Yedin. Birazdan bildirim gelecek.", level3: "Yedin işte. Bildirim yolda, aç da oku." },
+  "challenge_finished_lost": { level1: "Bu sefer olmadı. Rövanş isteyebilirsin.", level2: "Yedin. Kazanan ağzını açarsa telefonun öter.", level3: "Yedin işte. Laf gelirse aç da oku." },
   "shame_screen_title": { level1: "Bu tur senin değil", level2: "YEDİN", level3: "SAPLANDIN 🍆" },
   "shame_screen_subtitle": { level1: "Kazanan sana bir not bıraktı.", level2: "Kazanan sana laf soktu, aşağıda.", level3: "Kazanan sana koydu. Mesajı aşağıda." },
   "taunt_picker_title": { level1: "Bir mesaj seç", level2: "Hangi lafı sokalım?", level3: "Nasıl saplayalım?" },

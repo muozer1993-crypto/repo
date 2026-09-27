@@ -267,6 +267,21 @@ CREATE TABLE IF NOT EXISTS recaps_sent (
 );
 `;
 
+/**
+ * The reminder a winner gets when a loser is still waiting for their "KOYDUM
+ * MU?". The primary key is the claim, per çelınc and stage: stage 1 is the only
+ * one today, and the column lets a later, second reminder claim its own slot
+ * without another migration.
+ */
+const TAUNT_FOLLOWUPS = `
+CREATE TABLE IF NOT EXISTS taunt_followups (
+  challenge_id TEXT NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+  stage        INTEGER NOT NULL,
+  created_at   TEXT NOT NULL,
+  PRIMARY KEY (challenge_id, stage)
+);
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -274,4 +289,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '004_nudges_sent', sql: NUDGES_SENT },
   { id: '005_screen_time_daily', sql: SCREEN_TIME_DAILY },
   { id: '006_recaps_sent', sql: RECAPS_SENT },
+  { id: '007_taunt_followups', sql: TAUNT_FOLLOWUPS },
 ];

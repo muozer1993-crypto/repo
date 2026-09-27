@@ -192,6 +192,8 @@ export function routeForNotificationData(data: unknown): NotificationRoute {
   if (type === 'friend_request' || type === 'friend_accepted') return { kind: 'friends' };
   if (!challengeId) return { kind: 'inbox' };
   if (type === 'taunt' || type === 'challenge_finished') return { kind: 'results', challengeId };
+  // "Ali hâlâ bekliyor": the winner sends the laf from the results screen
+  if (type === 'reminder' && payload.kind === 'taunt_followup') return { kind: 'results', challengeId };
   return { kind: 'challenge', challengeId };
 }
 

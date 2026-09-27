@@ -513,6 +513,176 @@ describe('scheduler: an itiraz nobody answers', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The winner who never says a word
+// ---------------------------------------------------------------------------
+
+const PLAYERS = [
+  ['ali', 'Ali'],
+  ['veli', 'Veli'],
+  ['ayse', 'Ayşe'],
+] as const;
+
+/**
+ * A water çelınc between Ali and the next `glasses.length - 1` friends, each
+ * logging their glasses, that finishes on the dot at `endsAt` (by default two
+ * hours from NOW: 14:00 in Istanbul). Returns the moment it was finalized.
+ */
+async function finishedWater(
+  h: TestApp,
+  glasses: number[],
+  endsAt = iso(h, 2 * HOUR),
+): Promise<{ players: RegisteredUser[]; challengeId: string; finishedAt: string }> {
+  const players: RegisteredUser[] = [];
+  for (const [username, displayName] of PLAYERS.slice(0, glasses.length)) {
+    players.push(await registerUser(h.app, username, { displayName }));
+  }
+  const [creator, ...friends] = players as [RegisteredUser, ...RegisteredUser[]];
+  for (const friend of friends) befriend(h.app, creator.me.id, friend.me.id);
+
+  const created = await authed(h.app, creator.token)({
+    method: 'POST',
+    url: '/challenges',
+    payload: { typeKey: 'su_bardak', startsAt: iso(h), endsAt, participantIds: friends.map((f) => f.me.id) },
+  });
+  expect(created.statusCode).toBe(201);
+  const challengeId = created.json<Challenge>().id;
+  for (const friend of friends) {
+    const accepted = await authed(h.app, friend.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    expect(accepted.statusCode).toBe(200);
+  }
+  tick(h);
+  for (const [index, player] of players.entries()) await logWater(h, player, challengeId, glasses[index] ?? 0);
+
+  at(h, endsAt, 1);
+  expect(tick(h)).toMatchObject({ finalized: 1, tauntFollowups: 0 });
+  return { players, challengeId, finishedAt: challengeRow(h, challengeId).finalized_at as string };
+}
+
+/** The "hâlâ bekliyor" reminders in one person's inbox. */
+function followups(h: TestApp, user: RegisteredUser) {
+  return listByType(h.db, user.me.id, 'reminder').filter((row) => dataOf(row).kind === 'taunt_followup');
+}
+
+async function taunt(h: TestApp, from: RegisteredUser, to: RegisteredUser, challengeId: string) {
+  const response = await authed(h.app, from.token)({
+    method: 'POST',
+    url: `/challenges/${challengeId}/taunt`,
+    payload: { toUserId: to.me.id, customBody: 'Koydum mu?' },
+  });
+  expect(response.statusCode).toBe(201);
+}
+
+describe('scheduler: a winner who never says "KOYDUM MU?"', () => {
+  it('reminds the winner once, two hours after the finish, and never the loser', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId, finishedAt } = await finishedWater(harness, [6, 4]);
+    const [ali, veli] = players as [RegisteredUser, RegisteredUser];
+
+    at(harness, finishedAt, 2 * HOUR - MINUTE);
+    expect(tick(harness)).toMatchObject({ tauntFollowups: 0 });
+
+    at(harness, finishedAt, 2 * HOUR); // 16:00 in Istanbul
+    expect(tick(harness)).toMatchObject({ tauntFollowups: 1 });
+    const sent = followups(harness, ali);
+    expect(sent).toHaveLength(1);
+    expect(dataOf(sent[0])).toEqual({ challengeId, kind: 'taunt_followup' });
+    expect(sent[0]).toMatchObject({ title: 'Koymayacak mısın?', body: 'Veli ağzını açmanı bekliyor.' });
+    expect(followups(harness, veli)).toHaveLength(0);
+
+    // one is all it takes: later passes, the next afternoon too, stay quiet
+    for (const later of [2 * HOUR + MINUTE, 5 * HOUR, 26 * HOUR]) {
+      at(harness, finishedAt, later);
+      expect(tick(harness)).toMatchObject({ tauntFollowups: 0 });
+    }
+    expect(followups(harness, ali)).toHaveLength(1);
+  });
+
+  it('stays quiet when the winner already said it', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId, finishedAt } = await finishedWater(harness, [6, 4]);
+    const [ali, veli] = players as [RegisteredUser, RegisteredUser];
+    await taunt(harness, ali, veli, challengeId);
+
+    at(harness, finishedAt, 2 * HOUR);
+    expect(tick(harness)).toMatchObject({ tauntFollowups: 0 });
+    expect(followups(harness, ali)).toHaveLength(0);
+  });
+
+  it('names only the losers still waiting', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId, finishedAt } = await finishedWater(harness, [8, 5, 3]);
+    const [ali, veli] = players as [RegisteredUser, RegisteredUser, RegisteredUser];
+    await taunt(harness, ali, veli, challengeId);
+
+    at(harness, finishedAt, 2 * HOUR);
+    expect(tick(harness)).toMatchObject({ tauntFollowups: 1 });
+    expect(followups(harness, ali)[0]?.body).toBe('Ayşe ağzını açmanı bekliyor.');
+  });
+
+  it('talks to the whole queue when several are waiting, at the winner\'s own level', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, finishedAt } = await finishedWater(harness, [8, 5, 3]);
+    const [ali] = players as [RegisteredUser];
+    harness.db.prepare('UPDATE users SET vulgarity_max = 3 WHERE id = ?').run(ali.me.id);
+
+    at(harness, finishedAt, 2 * HOUR);
+    expect(tick(harness)).toMatchObject({ tauntFollowups: 1 });
+    // runner-up first
+    expect(followups(harness, ali)[0]).toMatchObject({
+      title: 'KOYMADIN DAHA 🍆',
+      body: 'Veli ve Ayşe sırada bekliyor, hadi hepsine koy.',
+    });
+  });
+
+  it('has nobody to remind after a tie', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId, finishedAt } = await finishedWater(harness, [5, 5]);
+    expect(challengeRow(harness, challengeId).is_tie).toBe(1);
+
+    at(harness, finishedAt, 2 * HOUR);
+    expect(tick(harness)).toMatchObject({ tauntFollowups: 0 });
+    for (const player of players) expect(followups(harness, player)).toHaveLength(0);
+  });
+
+  it('does not push the winner towards somebody behind a block', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, finishedAt } = await finishedWater(harness, [6, 4]);
+    const [ali, veli] = players as [RegisteredUser, RegisteredUser];
+    const blocked = await authed(harness.app, veli.token)({ method: 'POST', url: `/users/${ali.me.id}/block` });
+    expect(blocked.statusCode).toBe(200);
+
+    at(harness, finishedAt, 2 * HOUR);
+    expect(tick(harness)).toMatchObject({ tauntFollowups: 0 });
+    expect(followups(harness, ali)).toHaveLength(0);
+  });
+
+  it('lets a winner who finished at midnight sleep, and reminds them at noon', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, finishedAt } = await finishedWater(harness, [6, 4], MIDNIGHT_END);
+    const [ali] = players as [RegisteredUser];
+
+    for (const night of [2 * HOUR, 6 * HOUR, 11 * HOUR]) {
+      at(harness, finishedAt, night); // 02:00, 06:00, 11:00 in Istanbul
+      expect(tick(harness)).toMatchObject({ tauntFollowups: 0 });
+    }
+    at(harness, '2026-01-07T09:00:00.000Z'); // 12:00 in Istanbul
+    expect(tick(harness)).toMatchObject({ tauntFollowups: 1 });
+    expect(followups(harness, ali)).toHaveLength(1);
+  });
+
+  it('lets it go two days after the finish', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, finishedAt } = await finishedWater(harness, [6, 4]);
+    const [ali] = players as [RegisteredUser];
+
+    // the server was off the whole time and comes back in the afternoon two days later
+    at(harness, finishedAt, 48 * HOUR + MINUTE);
+    expect(tick(harness)).toMatchObject({ tauntFollowups: 0 });
+    expect(followups(harness, ali)).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Cancellation
 // ---------------------------------------------------------------------------
 

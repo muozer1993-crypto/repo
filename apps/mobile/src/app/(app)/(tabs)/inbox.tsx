@@ -105,6 +105,12 @@ function targetFor(item: Notification): string | null {
     case 'taunt':
     case 'challenge_finished':
       return challengeId ? `/challenge/${challengeId}/results` : null;
+    case 'reminder':
+      // the winner's "Ali hâlâ bekliyor": the laf is sent from the results screen
+      if (dataString(item.data, 'kind') === 'taunt_followup') {
+        return challengeId ? `/challenge/${challengeId}/results` : null;
+      }
+      return challengeId ? `/challenge/${challengeId}` : null;
     default:
       return challengeId ? `/challenge/${challengeId}` : null;
   }

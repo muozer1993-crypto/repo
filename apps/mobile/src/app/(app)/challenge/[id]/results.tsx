@@ -79,7 +79,18 @@ const NO_PENALTY: Record<VulgarityLevel, string> = {
   3: 'Ceza yazmamışlar. Yediğin yeter zaten 🍆',
 };
 
-const WAIT_SUB = (level: VulgarityLevel, winner: string): string => {
+/**
+ * After this long without a word, "bekle" stops being honest: the winner has
+ * had their reminder (the server sends it from two hours on) and ignored it.
+ */
+const WAIT_GIVES_UP_MS = 24 * 60 * 60_000;
+
+const WAIT_SUB = (level: VulgarityLevel, winner: string, gaveUp: boolean): string => {
+  if (gaveUp) {
+    if (level === 1) return `${winner} bir şey yazmadı, unuttu galiba. İstersen rövanş aç, bu sefer sen kazan.`;
+    if (level === 3) return `${winner} unuttu galiba, koyamadı bile 🍆 Rövanş aç, bu sefer sen sapla.`;
+    return `${winner} unuttu galiba. Rövanş aç, bu sefer sen koy.`;
+  }
   if (level === 1) return `${winner} henüz bir şey yazmadı. Belki nazik davranıyor.`;
   if (level === 3) return `${winner} daha saplamadı. Telefonunu yakınında tut 🍆`;
   return `${winner} daha ağzını açmadı. Beklemede kal.`;
@@ -249,6 +260,11 @@ export default function ResultsScreen() {
   const senderOf = (taunt: Taunt): ParticipantView | undefined =>
     standings.find((p) => p.user.id === taunt.fromUserId);
 
+  // the last fetch is the clock: a pure read, unlike `Date.now()` in render, and
+  // plenty fresh for a line that flips after a day
+  const finalizedMs = challenge.finalizedAt ? Date.parse(challenge.finalizedAt) : Number.NaN;
+  const waitGaveUp = Number.isFinite(finalizedMs) && query.dataUpdatedAt - finalizedMs >= WAIT_GIVES_UP_MS;
+
   // how far behind the winner I finished / how far ahead of the runner-up I did
   const runnerUp = losers[0];
   const loserGap = winner && mine ? Math.abs(winner.score - mine.score) : 0;
@@ -304,7 +320,7 @@ export default function ResultsScreen() {
           <Card edgeColor={Colors.accentDim}>
             <Text variant="title">Daha sesi çıkmadı</Text>
             <Text variant="small" muted style={styles.gap}>
-              {WAIT_SUB(level, winner?.user.displayName ?? 'Kazanan')}
+              {WAIT_SUB(level, winner?.user.displayName ?? 'Kazanan', waitGaveUp)}
             </Text>
           </Card>
         )

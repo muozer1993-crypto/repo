@@ -56,7 +56,8 @@ export function startScheduler(
         summary.cancelled ||
         summary.reminders ||
         summary.nudges ||
-        summary.recaps
+        summary.recaps ||
+        summary.tauntFollowups
       ) {
         app.log.info(summary, 'scheduler pass');
       }

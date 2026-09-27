@@ -374,6 +374,13 @@ koydun, kaç kere yedin, toplam adım ve kankalar arasında haftanın kralı. Su
 kapalıysa pazartesi öğlene kadar yine gönderilir. Gelen kutusunda kart olarak görünür, dokununca
 profildeki sıralamaya gider.
 
+**Laf sokmayı unutan kazanan:** çelınc bittikten 2 saat sonra kazanan kaybedenlerden birine
+hâlâ laf sokmadıysa ona bir kere "Koymayacak mısın? Veli ağzını açmanı bekliyor." düşer,
+dokununca sonuç ekranı açılır. Gece gitmez: kazananın saatiyle 12:00–22:00 arasında gelir, yani
+gece yarısı biten çelıncın hatırlatması ertesi öğlen gelir. İki gün geçtiyse hiç gitmez.
+Kazananın adına otomatik laf atılmaz. Kaybeden taraf bir gün boyunca laf gelmezse sonuç
+ekranında "unuttu galiba, rövanş aç" yazısını görür.
+
 ---
 
 ## Sunucuyu internete açmak
