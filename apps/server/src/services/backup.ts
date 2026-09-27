@@ -6,8 +6,9 @@
  * A crash mid-write, a bad disk, a mistaken delete: without a copy it is gone.
  * `db.backup()` is SQLite's online backup, safe while the server is serving.
  *
- * Files: `<DATA_DIR>/backups/koydum-YYYY-MM-DD.db`. To restore, stop the server
- * and copy one over `<DATA_DIR>/koydum.db`.
+ * Files: `<DATA_DIR>/backups/koydum-YYYY-MM-DD.db`. To restore: stop the server,
+ * delete `<DATA_DIR>/koydum.db-wal` and `-shm` if present (a stale WAL replayed
+ * onto the restored file corrupts it), copy a backup over `<DATA_DIR>/koydum.db`.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,6 +41,7 @@ export async function backupIfDue(
 
   // write aside and rename, so a crash mid-copy never leaves a "backup" that is half a file
   const temp = `${target}.tmp`;
+  for (const stale of [temp, `${temp}-journal`, `${temp}-wal`, `${temp}-shm`]) fs.rmSync(stale, { force: true });
   await db.backup(temp);
   fs.renameSync(temp, target);
 

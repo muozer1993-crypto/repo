@@ -11,6 +11,9 @@ import com.google.android.gms.fitness.LocalRecordingClient
 import com.google.android.gms.fitness.data.LocalDataType
 import com.google.android.gms.fitness.data.LocalField
 import com.google.android.gms.fitness.request.LocalDataReadRequest
+import com.google.android.gms.fitness.result.LocalDataReadResponse
+import com.google.android.gms.tasks.Task
+import com.google.android.gms.tasks.Tasks
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
@@ -34,7 +37,8 @@ import java.util.concurrent.TimeUnit
  *   status(): "ok" | "no-permission" | "play-services" | "unsupported"
  *   subscribe(): boolean      — start recording (idempotent); data exists only
  *                               from the first successful subscribe on
- *   dailySteps(days): [{ dayKey, steps }] newest first, today up to now
+ *   dailySteps(days): [{ dayKey, steps }] newest first, today up to now; past
+ *                             days with no recorded data are left out
  */
 class KoydumStepsModule : Module() {
   override fun definition() = ModuleDefinition {
@@ -66,25 +70,37 @@ class KoydumStepsModule : Module() {
       }
       val count = days.coerceIn(1, MAX_DAYS)
       val now = System.currentTimeMillis()
-      val start = startOfDay(now, count - 1)
       try {
-        val request = LocalDataReadRequest.Builder()
-          .aggregate(LocalDataType.TYPE_STEP_COUNT_DELTA)
-          .bucketByTime(1, TimeUnit.DAYS)
-          .setTimeRange(start / 1000L, now / 1000L, TimeUnit.SECONDS)
-          .build()
-        FitnessLocal.getLocalRecordingClient(context)
-          .readData(request)
-          .addOnSuccessListener { response ->
-            val totals = LinkedHashMap<String, Int>()
+        val client = FitnessLocal.getLocalRecordingClient(context)
+        // One read per LOCAL day, [midnight, next midnight or now). A single
+        // read bucketed by 24 h drifts an hour after a DST change and moves
+        // late-evening steps onto the next day.
+        val keys = ArrayList<String>(count)
+        val reads = ArrayList<Task<LocalDataReadResponse>>(count)
+        for (offset in 0 until count) {
+          val dayStart = startOfDay(now, offset)
+          val dayEnd = if (offset == 0) now else startOfDay(now, offset - 1)
+          keys.add(dayKeyOf(dayStart + 12L * 60 * 60 * 1000))
+          val request = LocalDataReadRequest.Builder()
+            .aggregate(LocalDataType.TYPE_STEP_COUNT_DELTA)
+            // wider than the range, so the whole day is one bucket
+            .bucketByTime(1, TimeUnit.DAYS)
+            .setTimeRange(dayStart / 1000L, maxOf(dayStart / 1000L + 1, dayEnd / 1000L), TimeUnit.SECONDS)
+            .build()
+          reads.add(client.readData(request))
+        }
+        Tasks.whenAllComplete(reads).addOnCompleteListener {
+          val out = ArrayList<Map<String, Any>>(count)
+          for (i in 0 until count) {
+            val task = reads[i]
+            if (!task.isSuccessful) continue
+            var steps = 0
+            var points = 0
+            val response = task.result ?: continue
             for (bucket in response.buckets) {
-              // buckets are 24 h from local midnight; the middle of one is
-              // always inside the right local day, DST or not
-              val middle = bucket.getStartTime(TimeUnit.MILLISECONDS) + 12L * 60 * 60 * 1000
-              val key = dayKeyOf(middle)
-              var steps = 0
               for (dataSet in bucket.dataSets) {
                 for (point in dataSet.dataPoints) {
+                  points += 1
                   steps += try {
                     point.getValue(LocalField.FIELD_STEPS).asInt()
                   } catch (_: Exception) {
@@ -92,18 +108,14 @@ class KoydumStepsModule : Module() {
                   }
                 }
               }
-              totals[key] = (totals[key] ?: 0) + steps
             }
-            // every day in the window gets a row, newest first, so "0 today"
-            // is an answer rather than a missing one
-            val out = ArrayList<Map<String, Any>>(count)
-            for (offset in 0 until count) {
-              val key = dayKeyOf(startOfDay(now, offset) + 12L * 60 * 60 * 1000)
-              out.add(mapOf("dayKey" to key, "steps" to (totals[key] ?: 0)))
-            }
-            promise.resolve(out)
+            // A past day with no data point is a day the phone was not
+            // recording yet — "no answer", never "0 steps". Only today is
+            // reported as 0 when nothing was walked so far.
+            if (points > 0 || i == 0) out.add(mapOf("dayKey" to keys[i], "steps" to steps))
           }
-          .addOnFailureListener { promise.resolve(emptyList<Map<String, Any>>()) }
+          promise.resolve(out)
+        }
       } catch (_: Exception) {
         promise.resolve(emptyList<Map<String, Any>>())
       }

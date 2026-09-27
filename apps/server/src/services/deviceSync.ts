@@ -10,9 +10,10 @@
  * could pre-fill a whole 30-day race with the daily maximum on day one. The window
  * is read in the timezone pinned when the user joined that challenge.
  *
- * A device reading overwrites whatever is on the row for that day, including a
- * typed value: the sensor is the honest one. The reverse is blocked in
- * `validateAndUpsertEntry` (`device_locked`).
+ * On a higher-is-better metric (steps) a device reading only ever raises a
+ * day's entry; on lower-is-better (screen time) it overwrites whatever is there,
+ * typed values included — the phone is the honest one. A typed value may never
+ * replace a device reading there (`device_locked` in `validateAndUpsertEntry`).
  */
 import { challengeTypesForDevice, type DeviceMetric, type EntrySource } from '@koydum/shared';
 import { newId, nowIso, type ChallengeRow, type Database, type UserRow } from '../db/index.js';
@@ -86,14 +87,16 @@ export function fanOutDeviceDays(
         | { id: string; value: number; source: string }
         | undefined;
       if (existing) {
-        // Steps: an Android without Health Connect counts only while the app is
-        // open, and the user was told to declare the real number by hand. That
-        // declaration must not be shaved back down by the next partial count —
-        // the phone only ever raises a typed higher-is-better value. (Friends can
-        // still dispute a fantasy number.) Lower-is-better readings always win.
-        const keepTyped =
-          existing.source === 'manual' && type.direction === 'higher' && Number(existing.value) >= value;
-        if (!keepTyped) updateEntry.run(value, day.source, at, existing.id);
+        // A day's steps only ever grow. A LOWER reading for a day that already
+        // has a value is a partial source, never a correction: a typed
+        // declaration the foreground counter has not caught up with, a phone
+        // that was reinstalled and started recording this afternoon, a second
+        // phone. So on a higher-is-better metric the device can raise a day but
+        // never lower it. (Friends can still dispute a fantasy number.)
+        // Lower-is-better readings (screen time) always win: the phone is the
+        // honest one there.
+        const keepExisting = type.direction === 'higher' && Number(existing.value) >= value;
+        if (!keepExisting) updateEntry.run(value, day.source, at, existing.id);
       } else {
         insertEntry.run(newId(), challenge.id, user.id, day.dayKey, value, day.source, at, at, at);
       }

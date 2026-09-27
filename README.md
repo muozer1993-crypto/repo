@@ -347,9 +347,13 @@ npm start -w apps/server
 Önüne nginx/Caddy koyup HTTPS ver. Tek dosyalık SQLite veritabanı `DATA_DIR` altında.
 
 **Yedek kendiliğinden alınır.** Sunucu her gün ilk açıldığında ve gün dönünce veritabanının bir
-kopyasını `DATA_DIR/backups/koydum-YYYY-AA-GG.db` olarak yazar, son 7 günü tutar. Bir şey bozulursa
-sunucuyu kapat, en yeni yedeği `DATA_DIR/koydum.db` üzerine kopyala, sunucuyu aç. Evdeki
-bilgisayarda bu klasör `apps/server/data/backups`.
+kopyasını `DATA_DIR/backups/koydum-YYYY-AA-GG.db` olarak yazar, son 7 günü tutar. Bir şey bozulursa:
+
+1. Sunucuyu kapat.
+2. `DATA_DIR` içinde `koydum.db-wal` ve `koydum.db-shm` varsa sil. Kalırlarsa geri yüklenen dosyayı bozarlar.
+3. En yeni yedeği `DATA_DIR/koydum.db` üzerine kopyala, sunucuyu aç.
+
+Evdeki bilgisayarda bu klasör `apps/server/data`, yedekler `apps/server/data/backups` altında.
 
 ### Ortam değişkenleri
 

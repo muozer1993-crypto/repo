@@ -123,10 +123,14 @@ describe('Android steps recorded while the app is closed', () => {
     recording.resetRecordingProvider();
   }
 
-  afterEach(() => {
+  afterEach(async () => {
     core.requireOptionalNativeModule = original;
     recording.resetRecordingProvider();
+    await AsyncStorage.removeItem('koydum.stepRecordingSince');
   });
+
+  /** Recording that has been running on this phone since last week. */
+  const recordingSinceLastWeek = () => AsyncStorage.setItem('koydum.stepRecordingSince', JSON.stringify('2020-01-01'));
 
   const today = () => {
     const d = new Date();
@@ -134,6 +138,7 @@ describe('Android steps recorded while the app is closed', () => {
   };
 
   it('uses the recording, not the foreground count, and says it is not approximate', async () => {
+    await recordingSinceLastWeek();
     const subscribe = jest.fn(async () => true);
     withModule({
       status: jest.fn(async () => 'ok'),
@@ -147,6 +152,7 @@ describe('Android steps recorded while the app is closed', () => {
   });
 
   it('keeps the larger of recording and foreground count per day, never the sum', async () => {
+    await recordingSinceLastWeek();
     await AsyncStorage.setItem('koydum.stepCache', JSON.stringify({ days: { [today()]: 5000 } }));
     withModule({
       status: jest.fn(async () => 'ok'),
@@ -172,7 +178,38 @@ describe('Android steps recorded while the app is closed', () => {
     });
   });
 
+  it('stays approximate, with Beyan et, on the day recording starts', async () => {
+    withModule({
+      status: jest.fn(async () => 'ok'),
+      subscribe: jest.fn(async () => true),
+      dailySteps: jest.fn(async () => [{ dayKey: today(), steps: 300 }]),
+    });
+    expect(await steps.getStepAvailability()).toEqual({ available: true, source: 'pedometer', approximate: true });
+    expect(await recording.recordingSince()).toBe(today());
+  });
+
+  it('never reports a day from before recording started, so a reinstall cannot sync zeros over real days', async () => {
+    const yesterday = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    withModule({
+      status: jest.fn(async () => 'ok'),
+      subscribe: jest.fn(async () => true),
+      // an older module build that zero-fills the whole window
+      dailySteps: jest.fn(async () => [
+        { dayKey: today(), steps: 150 },
+        { dayKey: yesterday, steps: 0 },
+      ]),
+    });
+    await recording.ensureRecording();
+    const days = await steps.getDailySteps(7);
+    expect(days.map((d) => d.dayKey)).toEqual([today()]);
+  });
+
   it('never trusts a malformed row from the module', async () => {
+    await recordingSinceLastWeek();
     withModule({
       status: jest.fn(async () => 'ok'),
       subscribe: jest.fn(async () => true),

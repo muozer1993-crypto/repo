@@ -344,6 +344,21 @@ describe('device readings versus typed declarations', () => {
     expect(row).toEqual({ value: 9100, source: 'pedometer' });
   });
 
+  it('a lower or zero step reading never lowers a day a device already reported (reinstall, second phone)', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await livePair(harness, 'adim_yarisi');
+    const call = authed(harness.app, ali.token);
+    const day = today(harness);
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 9000, source: 'health_connect' }] } });
+    // a freshly installed phone that started recording this afternoon
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 0, source: 'pedometer' }] } });
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 1200, source: 'pedometer' }] } });
+    const row = harness.db.prepare('SELECT value, source FROM entries WHERE challenge_id = ? AND user_id = ?').get(challengeId, ali.me.id) as { value: number; source: string };
+    expect(row).toEqual({ value: 9000, source: 'health_connect' });
+    const raw = harness.db.prepare('SELECT steps, source FROM steps_daily WHERE user_id = ? AND day_key = ?').get(ali.me.id, day);
+    expect(raw).toEqual({ steps: 9000, source: 'health_connect' });
+  });
+
   it('a typed screen time is always replaced by the phone reading (lower is better, the phone is honest)', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await livePair(harness, 'ekran_suresi_beyani');

@@ -40,7 +40,11 @@ function syncSteps(db: Database, user: UserRow, days: StepsSyncDay[], now: Date)
   const upsert = db.prepare(
     `INSERT INTO steps_daily (user_id, day_key, steps, source, updated_at)
      VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(user_id, day_key) DO UPDATE SET steps = excluded.steps, source = excluded.source, updated_at = excluded.updated_at`,
+     ON CONFLICT(user_id, day_key) DO UPDATE SET
+       -- a day's steps only grow; a lower reading is a partial source (see deviceSync.ts)
+       steps = MAX(steps_daily.steps, excluded.steps),
+       source = CASE WHEN excluded.steps >= steps_daily.steps THEN excluded.source ELSE steps_daily.source END,
+       updated_at = excluded.updated_at`,
   );
   const run = db.transaction((list: StepsSyncDay[]) => {
     for (const day of list) upsert.run(user.id, day.dayKey, day.steps, day.source, at);

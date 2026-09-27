@@ -2,7 +2,7 @@ import { Pedometer } from 'expo-sensors';
 import { Platform } from 'react-native';
 
 import { StorageKeys, getJson, setJson } from '@/lib/storage';
-import { ensureRecording, recordedDailySteps, recordingStatus } from '@/services/recordingSteps';
+import { ensureRecording, recordedDailySteps, recordingStartedToday, recordingStatus } from '@/services/recordingSteps';
 import type { DailySteps, StepAvailability } from '@/services/steps';
 
 /**
@@ -309,7 +309,9 @@ export async function getStepAvailability(): Promise<StepAvailability> {
 
     const recording = await recordingStatus();
     if (recording === 'ok' && (await ensureRecording())) {
-      return { available: true, source: 'pedometer', approximate: false };
+      // the day recording starts, the morning before it is missing: keep the
+      // "yaklaşık" label and the Beyan et button for that one day
+      return { available: true, source: 'pedometer', approximate: await recordingStartedToday() };
     }
 
     const available = await Pedometer.isAvailableAsync();

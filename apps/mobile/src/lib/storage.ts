@@ -78,4 +78,6 @@ export const StorageKeys = {
   pendingInvite: 'koydum.pendingInvite',
   /** the "yeni sürüm var" card the reader closed, by version */
   dismissedUpdate: 'koydum.dismissedUpdate',
+  /** local day key of the first successful Play services step subscription */
+  stepRecordingSince: 'koydum.stepRecordingSince',
 } as const;

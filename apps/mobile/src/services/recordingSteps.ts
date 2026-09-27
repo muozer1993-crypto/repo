@@ -1,6 +1,8 @@
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import { Platform } from 'react-native';
 
+import { StorageKeys, getJson, setJson } from '@/lib/storage';
+
 /**
  * Android steps recorded by Google Play services while KOYDUM is closed.
  *
@@ -56,7 +58,15 @@ export async function recordingStatus(): Promise<RecordingStatus> {
   }
 }
 
-/** Starts recording once per app run; true when the phone is recording steps. */
+function localDayKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Starts recording once per app run; true when the phone is recording steps.
+ * The first success on this install is remembered by day: recording has no data
+ * before it, so earlier days are never taken from it (see recordingSince).
+ */
 export async function ensureRecording(): Promise<boolean> {
   if (subscribed) return true;
   const native = provider();
@@ -67,15 +77,41 @@ export async function ensureRecording(): Promise<boolean> {
   } catch {
     subscribed = false;
   }
+  if (subscribed) {
+    try {
+      if (!(await recordingSince())) await setJson(StorageKeys.stepRecordingSince, localDayKey(new Date()));
+    } catch {
+      // storage trouble only costs the guard below, not the recording
+    }
+  }
   return subscribed;
 }
 
-/** Daily totals, newest first; empty when the phone cannot answer. Never throws. */
+/** The local day recording started on this install, or null. */
+export async function recordingSince(): Promise<string | null> {
+  const stored = await getJson<string>(StorageKeys.stepRecordingSince);
+  return typeof stored === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(stored) ? stored : null;
+}
+
+/** True on the day recording started: part of that day was walked before it. */
+export async function recordingStartedToday(now: Date = new Date()): Promise<boolean> {
+  return (await recordingSince()) === localDayKey(now);
+}
+
+/**
+ * Daily totals, newest first; empty when the phone cannot answer. Never throws.
+ *
+ * Days before recording started on this install are dropped: the phone has no
+ * data for them, and a 0 synced for a past day would overwrite what an earlier
+ * install (or another source) already reported.
+ */
 export async function recordedDailySteps(days: number): Promise<{ dayKey: string; steps: number }[]> {
   const native = provider();
   if (!native) return [];
   const window = Math.max(1, Math.min(days, 10));
   try {
+    const since = await recordingSince();
+    if (!since) return [];
     const rows = await native.dailySteps(window);
     if (!Array.isArray(rows)) return [];
     return rows
@@ -83,6 +119,7 @@ export async function recordedDailySteps(days: number): Promise<{ dayKey: string
         (row): row is { dayKey: string; steps: number } =>
           !!row && typeof row.dayKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.dayKey) && Number.isFinite(row.steps)
       )
+      .filter((row) => row.dayKey >= since)
       .map((row) => ({ dayKey: row.dayKey, steps: Math.max(0, Math.round(row.steps)) }));
   } catch {
     return [];
