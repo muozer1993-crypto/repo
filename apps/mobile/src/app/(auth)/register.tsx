@@ -10,6 +10,7 @@ import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { PendingInviteBanner } from '@/components/PendingInviteBanner';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
@@ -120,6 +121,8 @@ export default function RegisterScreen() {
           {t('register_title', level)}
         </Text>
       </View>
+
+      <PendingInviteBanner action="register" />
 
       <View style={styles.form}>
         <Input

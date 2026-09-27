@@ -26,6 +26,7 @@ import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { formatNumber } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
+import { resolveServerUrl } from '@/utils/url';
 
 /* ------------------------------------------------------------------ utils */
 
@@ -42,11 +43,6 @@ function quickAdds(maxPerEntry: number): number[] {
   const cap = Math.max(1, Math.floor(maxPerEntry));
   const presets = cap >= 400 ? [10, 25, 50] : cap >= 100 ? [5, 10, 25] : [1, 5, 10];
   return presets.filter((value) => value <= cap);
-}
-
-function absoluteUrl(url: string, baseUrl: string): string {
-  if (/^(https?:)?\/\//i.test(url) || url.startsWith('data:') || url.startsWith('file:')) return url;
-  return `${baseUrl.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`;
 }
 
 /**
@@ -386,7 +382,7 @@ export default function EntryModalScreen() {
         {proofUrl ? (
           <View style={styles.proofWrap}>
             <Image
-              source={{ uri: absoluteUrl(proofUrl, serverUrl) }}
+              source={{ uri: resolveServerUrl(proofUrl, serverUrl) }}
               style={styles.proofPreview}
               contentFit="cover"
               transition={120}

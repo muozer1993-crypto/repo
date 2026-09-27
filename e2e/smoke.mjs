@@ -380,6 +380,10 @@ async function main() {
       if (message.type() === 'error') consoleErrors.push(message.text());
     });
     page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
+    // "Failed to load resource: 404" on its own names no URL; this does
+    page.on('response', (response) => {
+      if (response.status() >= 400) consoleErrors.push(`http ${response.status()} ${response.url()}`);
+    });
 
     // 1. logged out
     await page.goto(`${statics.url}/`, { waitUntil: 'domcontentloaded' });
@@ -425,6 +429,33 @@ async function main() {
     await page.goto(`${statics.url}/inbox`, { waitUntil: 'domcontentloaded' });
     await expectText(page, ['Gelen Kutusu', 'Gelen', 'okundu'], 'inbox');
     await page.screenshot({ path: join(SHOT_DIR, '06-inbox.png'), fullPage: true });
+
+    // 7. the invite page a shared link opens, served by the API itself
+    await page.goto(`${API_URL}/davet/${story.mustafa.me.inviteCode}`, { waitUntil: 'domcontentloaded' });
+    await expectText(page, ["Mustafa seni KOYDUM'a çağırıyor"], 'invite page on the server');
+    await page.screenshot({ path: join(SHOT_DIR, '07-invite-page.png'), fullPage: true });
+
+    // 8. a new player taps the link inside the app: the friend request goes out by itself
+    const can = new Api(API_URL);
+    const registered = await can.call('POST', '/auth/register', {
+      username: 'can',
+      password: 'koydum123',
+      displayName: 'Can',
+      timezone: 'Europe/Istanbul',
+    });
+    can.token = registered.token;
+    await seedSession(page, statics.url, { token: registered.token, me: registered.me });
+    await page.goto(
+      `${statics.url}/davet/${story.mustafa.me.inviteCode}?server=${encodeURIComponent(API_URL)}`,
+      { waitUntil: 'domcontentloaded' }
+    );
+    await expectText(page, ['İstek gitti'], 'invite link inside the app');
+    await page.screenshot({ path: join(SHOT_DIR, '08-invite-app.png'), fullPage: true });
+    const mustafaFriends = await story.mustafa.api.call('GET', '/friends');
+    if (!(mustafaFriends.incoming ?? []).some((row) => row.user?.username === 'can')) {
+      fail(`the invite link did not deliver Can's request: ${JSON.stringify(mustafaFriends.incoming)}`);
+    }
+    log('invite link: page rendered, request delivered');
 
     const realErrors = consoleErrors.filter(
       (text) => !/favicon|Download the React DevTools|source ?map|Warning:/i.test(text)

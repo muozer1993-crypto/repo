@@ -2,7 +2,7 @@ import { TAGLINE, pickTaunt, renderTaunt, t, type TauntVars, type VulgarityLevel
 import * as Application from 'expo-application';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { AppState, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -12,6 +12,7 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
+import { useAppUpdate } from '@/components/UpdateBanner';
 import { useUpdateMe } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { ApiError } from '@/lib/api';
@@ -132,6 +133,8 @@ export default function SettingsScreen() {
   const preview = renderTaunt(pickTaunt('win', pendingLevel, 1), PREVIEW_VARS);
   const deviceTz = deviceTimezone();
   const version = Application.nativeApplicationVersion ?? (Platform.OS === 'web' ? 'web' : '—');
+  // the settings screen shows it even when the home card was closed
+  const update = useAppUpdate();
   const build = Application.nativeBuildVersion;
 
   const refreshPush = async () => {
@@ -585,6 +588,15 @@ export default function SettingsScreen() {
           Sürüm {version}
           {build ? ` (${build})` : ''} · {PLATFORM}
         </Text>
+        {update ? (
+          <Button
+            title={`Yeni sürümü indir (${update.latest})`}
+            variant="secondary"
+            size="sm"
+            style={styles.selfCenter}
+            onPress={() => void Linking.openURL(update.downloadUrl)}
+          />
+        ) : null}
         <Text variant="micro" faint center>
           Bu uygulama eğlence ve gelişim için tasarlandı. Amacının dışına çıkarmayın, kimse
           kimseyi kırmasın.
@@ -596,6 +608,7 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   content: { gap: Spacing.lg, paddingVertical: Spacing.lg },
+  selfCenter: { alignSelf: 'center' },
   header: { gap: Spacing.xs },
   block: { gap: Spacing.md, marginTop: Spacing.sm },
   blockTop: { marginTop: Spacing.sm },

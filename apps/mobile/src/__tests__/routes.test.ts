@@ -114,6 +114,8 @@ describe('route tree', () => {
       '/challenge/[id]/results',
       '/challenge/[id]/taunt',
       '/challenge/new',
+      // invite links: koydum://davet/ABC123?server=..., reachable signed in or not
+      '/davet/[code]',
       '/focus/[id]',
       '/friends',
       '/inbox',

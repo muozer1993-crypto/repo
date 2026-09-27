@@ -25,6 +25,7 @@ import { syncScreenTimeNow } from '@/services/screenTimeSync';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { safeDayKey, safeTodayKey } from '@/utils/datetime';
+import { applyPendingInvite } from '@/services/invite';
 
 /**
  * Glue between the OS and the app:
@@ -87,6 +88,34 @@ export function NotificationBridge() {
       sub.remove();
     };
   }, [token, serverUrl, makeClient]);
+
+  // --- an invite link opened before this account existed -----------------
+  useEffect(() => {
+    if (!token) return;
+    let alive = true;
+    void (async () => {
+      const outcome = await applyPendingInvite(makeClient(), serverUrl);
+      if (!alive || !outcome) return;
+      if (outcome.kind === 'sent' || outcome.kind === 'accepted') {
+        void queryClient.invalidateQueries({ queryKey: qk.friends });
+        toast({
+          title: outcome.kind === 'accepted' ? 'Kanka oldunuz' : 'Kanka isteği gitti',
+          body:
+            outcome.kind === 'accepted'
+              ? 'İlk çelıncı aç, kim kime koyacak görelim.'
+              : `${outcome.name ?? 'Davet eden'} kabul edince çelınc açabilirsiniz.`,
+          kind: 'success',
+        });
+      } else if (outcome.kind === 'missing') {
+        toast({ title: 'Davet kodu geçersizmiş', body: 'Arkadaşını kullanıcı adıyla ekleyebilirsin.', kind: 'info' });
+      } else if (outcome.kind === 'failed') {
+        toast({ title: 'Kanka isteği gitmedi', body: outcome.message, kind: 'danger' });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [token, serverUrl, makeClient, queryClient, toast]);
 
   // --- notification taps -------------------------------------------------
   useEffect(() => {

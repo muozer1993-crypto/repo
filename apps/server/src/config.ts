@@ -27,8 +27,26 @@ export interface Config {
   uploadDir: string;
   /** SQLite database file, or ':memory:'. */
   dbPath: string;
-  /** Absolute base URL the phones use — proof image URLs are built from it. */
+  /** Absolute base URL the phones use (PUBLIC_URL). */
   publicUrl: string;
+  /**
+   * True when PUBLIC_URL (or an override) actually named the address. The
+   * default `http://localhost:<port>` is only right for the machine itself, so
+   * pages that hand a link to somebody else build it from the request instead.
+   */
+  publicUrlExplicit: boolean;
+  /**
+   * Where a published Android build lives: `koydum.apk` plus `latest.json`
+   * (`{ version, notes? }`), written by `npm run apk:yayinla`. Default
+   * `<DATA_DIR>/app`.
+   */
+  appDir: string;
+  /**
+   * APP_DOWNLOAD_URL / APP_LATEST_VERSION: point at a build hosted elsewhere
+   * (an expo.dev build page, Drive) instead of a file in `appDir`.
+   */
+  appDownloadUrl?: string;
+  appLatestVersion?: string;
   /** Fastify log level. */
   logLevel: string;
   /** HS256 secret for API tokens. */
@@ -119,7 +137,23 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
 
   const dbPath = overrides.dbPath ?? (memory ? MEMORY : path.join(dataDir, 'koydum.db'));
 
+  const publicUrlExplicit =
+    overrides.publicUrlExplicit ??
+    (overrides.publicUrl !== undefined || (env.PUBLIC_URL !== undefined && env.PUBLIC_URL.trim() !== ''));
   const publicUrl = (overrides.publicUrl ?? readString(env.PUBLIC_URL, `http://localhost:${port}`)).replace(/\/+$/, '');
+
+  const appDir =
+    overrides.appDir ??
+    (env.APP_DIR && env.APP_DIR.trim() !== ''
+      ? env.APP_DIR.trim()
+      : memory
+        ? path.join(os.tmpdir(), 'koydum-test-app')
+        : path.join(dataDir, 'app'));
+  const appDownloadUrl =
+    overrides.appDownloadUrl ?? (env.APP_DOWNLOAD_URL && env.APP_DOWNLOAD_URL.trim() !== '' ? env.APP_DOWNLOAD_URL.trim() : undefined);
+  const appLatestVersion =
+    overrides.appLatestVersion ??
+    (env.APP_LATEST_VERSION && env.APP_LATEST_VERSION.trim() !== '' ? env.APP_LATEST_VERSION.trim() : undefined);
 
   const logLevel = overrides.logLevel ?? readString(env.LOG_LEVEL, DEFAULTS.logLevel);
 
@@ -146,6 +180,10 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     uploadDir,
     dbPath,
     publicUrl,
+    publicUrlExplicit,
+    appDir,
+    appDownloadUrl,
+    appLatestVersion,
     logLevel,
     jwtSecret,
     expoAccessToken,

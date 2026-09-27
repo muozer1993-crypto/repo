@@ -65,6 +65,7 @@ import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { formatDayKeyFriendly, formatMinutes, formatNumber, formatTime, relativeTime } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
+import { resolveServerUrl } from '@/utils/url';
 
 /* ------------------------------------------------------------------ utils */
 
@@ -92,12 +93,6 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   finished: { label: 'BİTTİ', color: Colors.textMuted },
   cancelled: { label: 'İPTAL', color: Colors.danger },
 };
-
-/** Uploads come back absolute, but a relative path must still resolve. */
-function absoluteUrl(url: string, baseUrl: string): string {
-  if (/^(https?:)?\/\//i.test(url) || url.startsWith('data:') || url.startsWith('file:')) return url;
-  return `${baseUrl.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`;
-}
 
 /** +1 / +5 / +10, scaled down for small caps and up for very generous ones. */
 function quickAdds(maxPerEntry: number): number[] {
@@ -386,7 +381,7 @@ export default function ChallengeDetailScreen() {
       <Sheet visible={!!proofUrl} onClose={() => setProofUrl(null)} title="Kanıt" scroll={false}>
         {proofUrl ? (
           <Image
-            source={{ uri: absoluteUrl(proofUrl, serverUrl) }}
+            source={{ uri: resolveServerUrl(proofUrl, serverUrl) }}
             style={styles.proofFull}
             contentFit="contain"
             transition={120}
@@ -1300,7 +1295,7 @@ function FeedRow({
           accessibilityLabel="Kanıtı büyüt"
           onPress={() => onProof(item.proofUrl as string)}>
           <Image
-            source={{ uri: absoluteUrl(item.proofUrl, baseUrl) }}
+            source={{ uri: resolveServerUrl(item.proofUrl, baseUrl) }}
             style={styles.thumb}
             contentFit="cover"
             transition={120}

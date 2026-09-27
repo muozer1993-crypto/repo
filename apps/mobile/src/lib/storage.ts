@@ -74,4 +74,8 @@ export const StorageKeys = {
   stepCache: 'koydum.stepCache',
   focusSession: 'koydum.focusSession',
   lastInboxId: 'koydum.lastInboxId',
+  /** an invite link opened before the reader had an account here */
+  pendingInvite: 'koydum.pendingInvite',
+  /** the "yeni sürüm var" card the reader closed, by version */
+  dismissedUpdate: 'koydum.dismissedUpdate',
 } as const;

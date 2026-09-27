@@ -915,7 +915,8 @@ describe('POST /uploads', () => {
     expect(response.statusCode).toBe(201);
 
     const url = response.json<{ url: string }>().url;
-    expect(url).toMatch(/^http:\/\/test\.local\/uploads\/[0-9a-f-]{36}\.png$/);
+    // relative: each phone resolves it against the address it uses for the server
+    expect(url).toMatch(/^\/uploads\/[0-9a-f-]{36}\.png$/);
 
     const filename = url.split('/').pop()!;
     expect(fs.readFileSync(path.join(h.config.uploadDir, filename))).toEqual(PNG);

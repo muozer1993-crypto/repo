@@ -54,6 +54,19 @@ export interface ApiClientOptions {
 
 type Query = Record<string, string | number | boolean | null | undefined>;
 
+/** `app` is the Android build the server offers, when the operator published one. */
+export interface HealthResponse {
+  ok: boolean;
+  version: string;
+  time: string;
+  app?: { latestVersion: string | null; downloadUrl: string; notes: string | null } | null;
+}
+
+export interface InviteLookup {
+  code: string;
+  inviter: { username: string; displayName: string; avatarEmoji: string };
+}
+
 export class ApiClient {
   baseUrl: string;
   token: string | null;
@@ -142,7 +155,12 @@ export class ApiClient {
   /* ------------------------------------------------------------- health */
 
   health() {
-    return this.request<{ ok: boolean; version: string; time: string }>('GET', '/health');
+    return this.request<HealthResponse>('GET', '/health');
+  }
+
+  /** Who owns an invite code — public fields only, no token needed. */
+  invite(code: string) {
+    return this.request<InviteLookup>('GET', `/invites/${encodeURIComponent(code)}`);
   }
 
   /* --------------------------------------------------------------- auth */

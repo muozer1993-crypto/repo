@@ -24,6 +24,7 @@ import { errorHandler, notFoundHandler } from './errors.js';
 import { registerAuth } from './plugins/auth.js';
 
 import healthRoutes from './routes/health.js';
+import inviteRoutes from './routes/invites.js';
 import authRoutes from './routes/auth.js';
 import meRoutes from './routes/me.js';
 import userRoutes from './routes/users.js';
@@ -150,6 +151,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
   await app.register(entryRoutes);
   await app.register(socialRoutes);
   await app.register(uploadRoutes);
+  await app.register(inviteRoutes);
   if (config.enableDevRoutes) await app.register(devRoutes);
 
   if (ownsDb) {

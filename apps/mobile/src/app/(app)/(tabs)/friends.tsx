@@ -23,12 +23,18 @@ import { qk } from '@/lib/query';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
 import { byLevel } from '@/utils/levelCopy';
+import { isLocalNetworkUrl } from '@/utils/url';
 
 const MONO = Platform.select({ ios: 'Courier', android: 'monospace', default: 'monospace' });
 
 export default function FriendsScreen() {
   const level = useLevel();
   const me = useAuth((s) => s.me);
+  const serverUrl = useAuth((s) => s.serverUrl);
+  // the page this link opens is served by our own server: it names the
+  // inviter, opens the app with the right address, and offers the APK
+  const inviteLink = me?.inviteCode ? `${serverUrl.replace(/\/+$/, '')}/davet/${me.inviteCode}` : null;
+  const linkIsLocal = isLocalNetworkUrl(serverUrl);
   const api = useApi();
   const toast = useToast();
   const friends = useFriends();
@@ -117,8 +123,12 @@ export default function FriendsScreen() {
   const copyCode = async () => {
     if (!me?.inviteCode) return;
     try {
-      await Clipboard.setStringAsync(me.inviteCode);
-      toast({ title: 'Kopyalandı', body: 'Kodu kankana gönder.', kind: 'success' });
+      await Clipboard.setStringAsync(inviteLink ?? me.inviteCode);
+      toast({
+        title: 'Kopyalandı',
+        body: inviteLink ? 'Bağlantıyı kankana gönder.' : 'Kodu kankana gönder.',
+        kind: 'success',
+      });
     } catch {
       toast({ title: 'Kopyalanamadı', body: 'Kodu elle yaz gitsin.', kind: 'danger' });
     }
@@ -126,9 +136,11 @@ export default function FriendsScreen() {
 
   const shareCode = async () => {
     if (!me?.inviteCode) return;
-    // No store link yet, so the message says how to get the app instead of
-    // pretending there is one to tap.
-    const message = `KOYDUM'da beni kanka olarak ekle. Davet kodum: ${me.inviteCode} (@${me.username}). Uygulama sende yoksa benden iste, APK'yı yollarım.`;
+    // The link opens a page on our server: it opens the app (or offers the APK)
+    // and sends the friend request by itself. The bare code stays as a fallback.
+    const message = inviteLink
+      ? `KOYDUM'da kanka olalım 🍆 Bağlantıya dokun, uygulama açılsın: ${inviteLink}\nAçılmazsa davet kodum: ${me.inviteCode} (@${me.username})`
+      : `KOYDUM'da beni kanka olarak ekle. Davet kodum: ${me.inviteCode} (@${me.username}). Uygulama sende yoksa benden iste, APK'yı yollarım.`;
     if (Platform.OS === 'web') {
       // react-native-web's Share is not reliable in every browser; copying always works
       await copyCode();
@@ -351,11 +363,16 @@ export default function FriendsScreen() {
           {me?.inviteCode ?? '········'}
         </Text>
         <Text variant="tiny" muted style={styles.codeHint}>
-          Kankan bu kodu arama kutusuna yazıp “Kod ile ekle”ye bassın.
+          Paylaş’a bas, giden bağlantıya dokunan kankan uygulamayı açar ya da indirir, istek kendiliğinden gelir. Kodu elle yazmak da olur.
         </Text>
+        {linkIsLocal ? (
+          <Text variant="tiny" faint style={styles.codeHint}>
+            Sunucu şu an evdeki bilgisayarında, bu bağlantı sadece aynı Wi-Fi’dakilerde açılır. Başka yerdeki kankalar için sunucuyu internete açmak gerekiyor.
+          </Text>
+        ) : null}
         <View style={styles.codeActions}>
           <Button
-            title="Kopyala"
+            title={inviteLink ? 'Bağlantıyı kopyala' : 'Kopyala'}
             icon="📋"
             variant="secondary"
             size="sm"

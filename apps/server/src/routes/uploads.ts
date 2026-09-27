@@ -5,8 +5,8 @@
  * (enforced by @fastify/multipart in src/app.ts, which throws
  * `FST_REQ_FILE_TOO_LARGE` → 413 `file_too_large`). The stored name is random and the
  * extension comes from the declared mimetype, never from the client's filename, so a
- * "photo.php" cannot become a file with that name on disk. The response URL points at
- * the static `/uploads/` mount.
+ * "photo.php" cannot become a file with that name on disk. The response URL is the
+ * path under the static `/uploads/` mount, relative to the server.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -70,6 +70,9 @@ export default async function uploadRoutes(app: FastifyInstance): Promise<void> 
     await fs.promises.writeFile(path.join(uploadDir, filename), buffer);
     perUser.record(row.id, now);
 
-    return reply.code(201).send({ url: `${app.config.publicUrl}/uploads/${filename}` });
+    // Relative on purpose: the phones resolve it against the address THEY use
+    // for this server. An absolute URL built from PUBLIC_URL's default
+    // (localhost) pointed every phone at itself, and the photo never loaded.
+    return reply.code(201).send({ url: `/uploads/${filename}` });
   });
 }

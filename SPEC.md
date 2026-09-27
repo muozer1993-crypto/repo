@@ -287,7 +287,12 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | GET /challenges/:id/results | `{ challenge, standings: ParticipantView[], taunts, tauntTemplatesForWinner?: TauntTemplate[] (rendered previews per loser) }` |
 | GET /leaderboard | friends + me ranked by wins, then tauntsSent |
 | POST /uploads | multipart field `file`; returns `{ url: PUBLIC_URL + '/uploads/<uuid>.<ext>' }` |
-| GET /uploads/* | static |
+| GET /uploads/* | static; `POST /uploads` answers a path (`/uploads/<uuid>.jpg`) that each phone resolves against its own server address |
+| GET /davet/:code | public HTML invite page (no auth): inviter's display name + emoji, OpenGraph tags, "KOYDUM'da aç" (Android: `intent://davet/CODE?server=<origin>#Intent;scheme=koydum;package=com.koydum.app;S.browser_fallback_url=<origin>/indir?kod=CODE;end`, others: `koydum://davet/CODE?server=<origin>`), APK download when published; 404 page for unknown codes. `<origin>` is PUBLIC_URL when set, else built from the request's Host (+ X-Forwarded-Proto). Strict CSP, no scripts. Rate-limited with /invites (120 per IP per 10 min) |
+| GET /indir?kod= | same page without an inviter |
+| GET /invites/:code | public JSON `{ code, inviter: { username, displayName, avatarEmoji } }`, 404 `invite_not_found`; rate-limited (429 `too_many_lookups`) |
+| GET /koydum.apk | the build published with `npm run apk:yayinla` (`<APP_DIR>/koydum.apk` + `latest.json`), `application/vnd.android.package-archive`; 404 `apk_not_found` |
+| GET /health | also `app: { latestVersion, downloadUrl, notes } \| null` — the app shows "Yeni sürüm var" when latestVersion > its native version |
 | POST /uploads | one image per request (jpg/png/webp, ≤ 5 MB); at most 60 per account per hour (429 `upload_limit`) |
 
 ### 2.3 Entry validation (`services/entries.ts`)
@@ -414,7 +419,8 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
 (app)/challenge/[id]/entry.tsx     modal: log manual value (numeric pad, quick +1/+5 chips per unit), note, proof photo (camera/gallery → /uploads), day selector (today/yesterday)
 (app)/focus/[id].tsx        full-screen timer (pick 15/25/45/60 min), big countdown, "elini telefondan çek" copy, leaving app → abandoned state with copy focus_abandoned; completion posts entry
 (app)/user/[id].tsx         public profile + head-to-head record vs me + "Çelınc aç" shortcut
-(app)/settings.tsx          vulgarity level (with preview), reminder hour, timezone (auto), server URL, push status + "yeniden dene", delete account (double confirm), about
+(app)/settings.tsx          vulgarity level (with preview), reminder hour, timezone (auto), server URL, push status + "yeniden dene", delete account (double confirm), about (+ "Yeni sürümü indir" when the server offers a newer APK)
+davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), reachable signed in or not. Signed in: sends the friend request at once. Signed out: parks the code (services/invite.ts) and goes to register/login; the bridge sends it right after sign-in. A `server` differing from the current one is shown and only switched to on an explicit tap (after a /health check); builds with a baked-in URL ignore it.
 ```
 
 ### 3.4 Per-metric action area (challenge detail)

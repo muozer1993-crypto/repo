@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/Loading';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
+import { UpdateBanner } from '@/components/UpdateBanner';
 import { useChallengeAction, useChallenges, useFriends } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { ApiError } from '@/lib/api';
@@ -113,6 +114,8 @@ export default function HomeScreen() {
             onPress={() => router.push('/settings')}
           />
         </View>
+
+        <UpdateBanner />
 
         <StepsHeader state={steps} />
 

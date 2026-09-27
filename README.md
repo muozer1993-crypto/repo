@@ -231,6 +231,35 @@ kısmını ona göre genişletiriz.)
 * Play'den kurmak sunucu sorununu çözmez. Arkadaşların uygulamayı Play'den de alsa, uygulamanın
   konuşacağı bir KOYDUM sunucusu olmak zorunda — aşağıdaki bölüm.
 
+### 1d. Davet bağlantısı ve APK'yı sunucudan dağıtmak
+
+Kankalar sekmesindeki **Paylaş** artık bir bağlantı gönderir: `http://<sunucu>/davet/ABC123`.
+Arkadaşın bağlantıya dokununca sunucunun kendi sayfası açılır:
+
+* "Mustafa seni KOYDUM'a çağırıyor" yazar (WhatsApp önizlemesinde de görünür),
+* **KOYDUM'da aç** uygulamayı açar ve sunucu adresini uygulamaya kendisi verir; arkadaşın IP yazmaz,
+* uygulama yoksa aynı sayfadan APK indirilir,
+* kayıt olunca kanka isteği kendiliğinden gider.
+
+APK'yı sunucuya koymak için expo.dev'den indirdiğin dosyayı bir kere yayınla:
+
+```bash
+npm run apk:yayinla -- C:\Users\sen\Downloads\koydum.apk
+# sürümü app.json'dan okur; elle vermek istersen: -- dosya.apk --surum 1.1.0 --not "Ekran süresi geldi"
+```
+
+Dosya `apps/server/data/app/koydum.apk` olarak durur, sunucu yeniden başlatmadan `/koydum.apk`
+adresinden sunar. APK'yı başka yerde tutuyorsan (expo.dev derleme sayfası gibi) sunucuya
+`APP_DOWNLOAD_URL` ve `APP_LATEST_VERSION` ortam değişkenlerini ver, sayfa oraya yönlendirir.
+
+Yayınladığın sürüm telefondakinden yeniyse uygulamanın ana ekranında **"Yeni sürüm var"** kartı
+çıkar ve İndir'e basınca APK iner. Böylece kimse hangi APK'da olduğunu tahmin etmek zorunda kalmaz.
+
+> Bağlantının kimde açılacağı sunucunun nerede olduğuna bağlı. Sunucu evdeki bilgisayardaysa
+> (`192.168.x.x`) bağlantı sadece aynı Wi-Fi'dakilerde açılır; uygulama bunu Kankalar sekmesinde
+> söyler. Başka şehirdeki arkadaşlar için aşağıdaki tünel ya da kalıcı kurulum gerekir; tünel
+> adresiyle açılan sayfa bağlantıları o adresten kurar.
+
 ### 2. Sunucu — asıl iş bu
 
 APK tek başına yetmez: uygulama bir KOYDUM sunucusuna bağlanmak zorunda. Üç senaryo var:
@@ -287,10 +316,12 @@ yedeklemek için o dosyayı kopyalaman yeterli.
 | `HOST` | `0.0.0.0` | Yerel ağdan erişim için böyle bırak |
 | `DATA_DIR` | `./data` | SQLite veritabanı ve JWT anahtarı |
 | `UPLOAD_DIR` | `<DATA_DIR>/uploads` | Kanıt fotoğrafları |
-| `PUBLIC_URL` | `http://localhost:4000` | Telefonların gördüğü adres |
+| `PUBLIC_URL` | boş | Sunucunun internetteki adresi. Boşsa davet sayfası bağlantıları gelen isteğin adresinden kurar, evde de tünelde de doğru çıkar. |
 | `JWT_SECRET` | otomatik üretilir | Elle vermek istersen |
 | `EXPO_ACCESS_TOKEN` | boş | Expo push için isteğe bağlı |
 | `ENABLE_DEV_ROUTES` | `0` | `1` yaparsan test uçları açılır (üretimde açma) |
+| `APP_DIR` | `<DATA_DIR>/app` | `npm run apk:yayinla`'nın APK'yı koyduğu yer |
+| `APP_DOWNLOAD_URL` / `APP_LATEST_VERSION` | boş | APK başka yerdeyse bağlantısı ve sürümü |
 | `TRUST_PROXY` | `0` | Önünde nginx/Caddy/Fly gibi bir ters vekil varsa `1` yap; `X-Forwarded-For` başlığına o zaman güvenilir. Doğrudan erişilen bir sunucuda kapalı kalmalı, yoksa herkes kendi IP'sini seçip giriş denemesi sınırlarını aşar. |
 
 ---

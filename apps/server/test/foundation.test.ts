@@ -303,6 +303,8 @@ describe('GET /health', () => {
       ok: true,
       version: harness.config.version,
       time: '2026-01-05T09:00:00.000Z',
+      // no Android build published on this server
+      app: null,
     });
   });
 
