@@ -13,7 +13,7 @@ import { Screen } from '@/components/Screen';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
-import { useChallenges, useInbox, useMarkInboxRead, useUnread } from '@/hooks/queries';
+import { inboxRows, useChallenges, useInbox, useMarkInboxRead, useUnread } from '@/hooks/queries';
 import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { useLevel } from '@/store/auth';
@@ -70,6 +70,13 @@ const EMPTY_BODY: Record<1 | 2 | 3, string> = {
   1: 'Bir çelınc açtığında ya da bir kanka seni davet ettiğinde burada görürsün.',
   2: 'Kimse ses etmemiş. Bir çelınc aç da ortalık hareketlensin.',
   3: 'Kimse sana koymamış. Aç bir çelınc da birine sapla.',
+};
+
+/** Under the last row once older pages were loaded and none is left. */
+const END_OF_INBOX: Record<1 | 2 | 3, string> = {
+  1: 'Daha eski bildirim yok.',
+  2: 'Dibe vurdun, daha eskisi yok.',
+  3: 'Dibe vurdun lan, daha eskisi yok 🍆',
 };
 
 /**
@@ -151,15 +158,19 @@ export default function InboxScreen() {
   // this list does, and nothing else refetches a tab that stays mounted: the
   // badge said 1 while the list had nothing new until a pull-to-refresh.
   // `latestId` is the newest row, read or not, i.e. what should be on top here.
+  const items = inboxRows(inbox.data?.pages);
   const latestId = unread.data?.latestId ?? null;
-  const firstId = inbox.data?.[0]?.id ?? null;
+  const firstId = items[0]?.id ?? null;
   const inboxLoaded = inbox.data !== undefined;
+  // a refetch started now would only join the older page's request and bring
+  // back nothing new on top, so it waits for that page to land
+  const fetchingOlder = inbox.isFetchingNextPage;
   const refetchInbox = inbox.refetch;
   useEffect(() => {
-    if (!inboxLoaded || !latestId || latestId === firstId) return;
+    if (!inboxLoaded || fetchingOlder || !latestId || latestId === firstId) return;
     // keyed on the ids, not on the fetch state: a failed refetch waits for the next poll
     void refetchInbox({ cancelRefetch: false });
-  }, [inboxLoaded, latestId, firstId, refetchInbox]);
+  }, [inboxLoaded, fetchingOlder, latestId, firstId, refetchInbox]);
 
   const tz = useTimezone();
   const today = safeTodayKey(tz);
@@ -180,11 +191,19 @@ export default function InboxScreen() {
     });
   }
 
-  const items = inbox.data ?? [];
-  // Only the loaded page can be counted here, the server counts every row; the
+  // Only the loaded pages can be counted here, the server counts every row; the
   // larger wins, so the header never says "Okunmamış bildirim yok" under a badge.
   const unreadCount = Math.max(items.filter((item) => !item.readAt).length, unread.data?.count ?? 0);
   const sections = groupByDay(items, tz, today, yesterday);
+
+  // One page at a time and never over a refetch, which fetchNextPage would
+  // cancel. After a failed page only the footer button tries again: reaching
+  // the end would otherwise fire it on every bounce.
+  const loadOlder = (retry: boolean) => {
+    if (!inbox.hasNextPage || inbox.isFetching) return;
+    if (inbox.isFetchNextPageError && !retry) return;
+    void inbox.fetchNextPage();
+  };
 
   const open = (item: Notification) => {
     if (!item.readAt) markRead.mutate({ ids: [item.id] });
@@ -251,7 +270,8 @@ export default function InboxScreen() {
     );
   }
 
-  if (inbox.isError) {
+  // an older page that failed keeps everything above it; its footer says so
+  if (inbox.isError && !inbox.isFetchNextPageError) {
     const err = inbox.error;
     const isNetwork = err instanceof ApiError && err.isNetwork;
     return (
@@ -280,6 +300,31 @@ export default function InboxScreen() {
         ListHeaderComponent={header}
         refreshing={inbox.isRefetching}
         onRefresh={() => void inbox.refetch()}
+        onEndReached={() => loadOlder(false)}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          inbox.hasNextPage ? (
+            <View style={styles.footer}>
+              {inbox.isFetchNextPageError ? (
+                <Text variant="tiny" faint center>
+                  Eskiler gelmedi. Bir daha dene.
+                </Text>
+              ) : null}
+              <Button
+                title="Daha eskileri göster"
+                variant="ghost"
+                size="sm"
+                icon="⏬"
+                loading={inbox.isFetchingNextPage}
+                onPress={() => loadOlder(true)}
+              />
+            </View>
+          ) : (inbox.data?.pages.length ?? 0) > 1 ? (
+            <Text variant="tiny" faint center style={styles.footer}>
+              {END_OF_INBOX[level]}
+            </Text>
+          ) : null
+        }
         ListEmptyComponent={
           <EmptyState
             emoji="📭"
@@ -389,6 +434,7 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xxl },
   listEmpty: { flexGrow: 1 },
+  footer: { alignItems: 'center', gap: Spacing.xs, paddingVertical: Spacing.md },
   skeletons: { gap: Spacing.md, paddingTop: Spacing.sm },
   skeleton: { borderRadius: Radius.lg },
   dayHeader: {

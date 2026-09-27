@@ -24,6 +24,7 @@ import { qk } from '@/lib/query';
 import { useAuth } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
+import { playedTogether } from '@/utils/history';
 
 interface HeadToHead {
   mine: number;
@@ -62,12 +63,13 @@ export default function UserProfileScreen() {
 
   // Head-to-head: in every finished challenge we both played, whoever ranked
   // higher took that round. Works for 1v1 and for crowded çelınclar alike.
+  // Tapping the card lists exactly these, so both count the same rounds.
   const head: HeadToHead = { mine: 0, theirs: 0, ties: 0, total: 0 };
   for (const summary of finished.data ?? []) {
     if (summary.challenge.status !== 'finished') continue;
     const mineSide = summary.participants.find((p) => p.user.id === myId);
     const theirSide = summary.participants.find((p) => p.user.id === id);
-    if (!mineSide || !theirSide) continue;
+    if (!mineSide || !theirSide || !playedTogether(summary, myId, id)) continue;
     head.total += 1;
     if (mineSide.rank < theirSide.rank) head.mine += 1;
     else if (mineSide.rank > theirSide.rank) head.theirs += 1;
@@ -313,7 +315,11 @@ export default function UserProfileScreen() {
       </View>
 
       {!isMe ? (
-        <Card edgeColor={head.mine >= head.theirs ? Colors.success : Colors.danger}>
+        <Card
+          edgeColor={head.mine >= head.theirs ? Colors.success : Colors.danger}
+          onPress={
+            head.total > 0 ? () => router.push({ pathname: '/history', params: { with: id } }) : undefined
+          }>
           <Text variant="label">Aranızdaki hesap</Text>
           <View style={styles.headRow}>
             <View style={styles.headCell}>
@@ -352,6 +358,11 @@ export default function UserProfileScreen() {
           {liveLine ? (
             <Text variant="small" color={Colors.yellow} style={styles.liveLine}>
               🔥 {liveLine}
+            </Text>
+          ) : null}
+          {head.total > 0 ? (
+            <Text variant="tiny" bold color={Colors.accent} style={styles.headMore}>
+              Çelınclarınıza bak ›
             </Text>
           ) : null}
         </Card>
@@ -532,6 +543,7 @@ const styles = StyleSheet.create({
   badgeEmpty: { marginTop: Spacing.sm },
   actions: { gap: Spacing.md },
   liveLine: { marginTop: Spacing.sm },
+  headMore: { marginTop: Spacing.sm },
   menu: { gap: Spacing.sm },
   menuItem: {
     gap: 2,

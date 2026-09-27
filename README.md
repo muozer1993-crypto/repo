@@ -691,6 +691,12 @@ O zaman rakibin yeni bir çelınc açsın. Genel kural: reddeden çelıncı aça
 kalanlara haber verir; yarışacak iki kişi kalmayınca çelınc bitişi beklemeden "herkes kaçtı" diye
 iptal olur.
 
+**Eski bir çelıncı ya da eski bir lafı bulamıyorum.**
+Ana sayfa bitenlerin sadece son beşini gösterir; altındaki **Hepsini gör** hepsini açar. Üstteki
+düğmelerle koyduklarını, yediklerini, berabereleri ya da iptal olanları ayırırsın. Bir kankanın
+profilinde "Aranızdaki hesap" kartına dokununca sadece onunla oynadıkların gelir. Gelen kutusunda
+aşağı indikçe eski bildirimler yüklenir.
+
 **Kanka şifresini unuttu, giremiyor.**
 Yeni hesap açmasın, her şeyi sıfırdan başlar. Sen `npm run yonet -- sifre <kullanici-adi>`
 çalıştır, çıkan şifreyi ona gönder. Ayrıntısı [Yönetim komutları](#yönetim-komutları) bölümünde.

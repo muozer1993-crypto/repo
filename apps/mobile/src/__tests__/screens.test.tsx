@@ -1,4 +1,4 @@
-import type { Me } from '@koydum/shared';
+import type { Me, ParticipantView } from '@koydum/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
@@ -16,7 +16,7 @@ import { ApiError } from '@/lib/api';
 
 /* ------------------------------------------------------------------ mocks */
 
-const searchParams: { id?: string } = {};
+const searchParams: { id?: string; with?: string; show?: string } = {};
 
 /** The last focus effect a screen handed over; nothing navigates here, so tests run it by hand. */
 const mockFocus: { effect?: () => void } = {};
@@ -202,6 +202,8 @@ const NETWORK_ERROR = new ApiError('network', 'Sunucuya ulaşamadım.', 0);
 
 beforeEach(() => {
   delete searchParams.id;
+  delete searchParams.with;
+  delete searchParams.show;
   for (const key of Object.keys(api)) delete api[key];
   Object.assign(api, {
     challenges: jest.fn(async () => []),
@@ -1616,5 +1618,271 @@ describe('taking a social mistake back', () => {
     await settle();
     await answerAlert('Geri çek');
     expect(api.withdrawFriendRequest).toHaveBeenCalledWith('u-4');
+  });
+});
+
+describe('the whole çelınc history', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const VELI = { id: 'u-3', username: 'veli', displayName: 'Veli', avatarEmoji: '🦁', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** Çelınc `n` against one rival, closed `n` days before the 20th: 1 is the newest. */
+  function past(n: number, rival: typeof ALI, outcome: 'won' | 'lost' | 'tie' | 'cancelled') {
+    const { challenge, participants } = challengeDetail();
+    const me = { ...participants[0]!, rank: outcome === 'lost' ? 2 : 1, isWinner: outcome === 'won' };
+    const them = { ...me, user: rival, rank: outcome === 'won' ? 2 : 1, isWinner: outcome === 'lost' };
+    return {
+      challenge: {
+        ...challenge,
+        id: `c-${n}`,
+        title: `Çelınc ${n}`,
+        status: outcome === 'cancelled' ? ('cancelled' as const) : ('finished' as const),
+        endsAt: new Date(Date.UTC(2026, 8, 20 - n)).toISOString(),
+        finalizedAt: new Date(Date.UTC(2026, 8, 20 - n)).toISOString(),
+        winnerId: outcome === 'won' ? ME.id : outcome === 'lost' ? rival.id : null,
+        isTie: outcome === 'tie',
+      },
+      participants: [me, them] as ParticipantView[],
+      me,
+      unreadTaunts: 0,
+    };
+  }
+
+  // Ali: 1 won, 3 won, 4 tie, 6 lost. Veli: 2 lost, 5 won, 7 cancelled.
+  function seven() {
+    const list = [
+      past(1, ALI, 'won'),
+      past(2, VELI, 'lost'),
+      past(3, ALI, 'won'),
+      past(4, ALI, 'tie'),
+      past(5, VELI, 'won'),
+      past(6, ALI, 'lost'),
+      past(7, VELI, 'cancelled'),
+    ];
+    // Ali said no to Veli's çelınc: rank 0 in the list, and never a round between us
+    const declined = { ...list[4]!.participants[1]!, user: ALI, status: 'declined' as const, rank: 0, isWinner: false };
+    list[4]!.participants.push(declined);
+    return list;
+  }
+
+  function serve(list: ReturnType<typeof seven>) {
+    api.challenges = jest.fn(async (status?: string) =>
+      status ? list.filter((summary) => status.split(',').includes(summary.challenge.status)) : list
+    );
+  }
+
+  function titles(tree: ReactTestRenderer): number[] {
+    const text = rendered(tree);
+    return [1, 2, 3, 4, 5, 6, 7].filter((n) => text.includes(`Çelınc ${n}`));
+  }
+
+  function tapChip(tree: ReactTestRenderer, label: string): void {
+    act(() => {
+      findWith(tree, 'label', label, 'onPress').props.onPress();
+    });
+  }
+
+  it('home keeps the newest five and offers the rest behind "Hepsini gör (7)"', async () => {
+    serve(seven());
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.push!.mockClear();
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    expect(titles(tree)).toEqual([1, 2, 3, 4, 5]);
+    expect(rendered(tree)).toContain('HEPSİNİ GÖR (7)');
+    press(tree, 'Hepsini gör (7)');
+    expect(router.push).toHaveBeenCalledWith('/history');
+  });
+
+  it('home says nothing about the rest when five is all there is', async () => {
+    serve(seven().slice(0, 5));
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    expect(titles(tree)).toEqual([1, 2, 3, 4, 5]);
+    expect(rendered(tree)).not.toContain('HEPSİNİ GÖR');
+  });
+
+  it('history lists all seven, and the chips split the wins from the losses', async () => {
+    serve(seven());
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.push!.mockClear();
+    const HistoryScreen = require('@/app/(app)/history').default;
+    const tree = renderScreen(<HistoryScreen />);
+    await settle();
+
+    expect(titles(tree)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    tapChip(tree, 'Koyduklarım (3)');
+    expect(titles(tree)).toEqual([1, 3, 5]);
+    tapChip(tree, 'Yediklerim (2)');
+    expect(titles(tree)).toEqual([2, 6]);
+    tapChip(tree, 'Berabere (1)');
+    expect(titles(tree)).toEqual([4]);
+    tapChip(tree, 'İptal (1)');
+    expect(titles(tree)).toEqual([7]);
+
+    // a cancelled one has no result to show; a finished one opens straight on it
+    const { ChallengeCard } = require('@/components/ChallengeCard') as typeof import('@/components/ChallengeCard');
+    act(() => tree.root.findByType(ChallengeCard).props.onPress());
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: '/challenge/[id]', params: { id: 'c-7' } });
+    tapChip(tree, 'Hepsi (7)');
+    act(() => tree.root.findAllByType(ChallengeCard)[0]!.props.onPress());
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: '/challenge/[id]/results', params: { id: 'c-1' } });
+  });
+
+  it('the rövanş badge opens it on the losses', async () => {
+    serve(seven());
+    searchParams.show = 'lost';
+    const HistoryScreen = require('@/app/(app)/history').default;
+    const tree = renderScreen(<HistoryScreen />);
+    await settle();
+
+    expect(titles(tree)).toEqual([2, 6]);
+  });
+
+  it('says so when nothing has finished yet', async () => {
+    serve([]);
+    const HistoryScreen = require('@/app/(app)/history').default;
+    const tree = renderScreen(<HistoryScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Daha bitmiş çelıncın yok');
+  });
+
+  it('a rival\'s head-to-head counts the rounds we both played and opens exactly those', async () => {
+    serve(seven());
+    searchParams.id = ALI.id;
+    api.userProfile = jest.fn(async () => ({
+      ...ALI,
+      stats: { wins: 0, losses: 0, challengesPlayed: 0 },
+      badges: [],
+    }));
+    api.friends = jest.fn(async () => ({ friends: [ALI], incoming: [], outgoing: [] }));
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.push!.mockClear();
+    const UserScreen = require('@/app/(app)/user/[id]').default;
+    const tree = renderScreen(<UserScreen />);
+    await settle();
+
+    // 1 and 3 mine, 6 his, 4 a tie; the çelınc he said no to is not a round he won
+    expect(rendered(tree)).toContain('2-1 öndesin.');
+    const { Card } = require('@/components/Card') as typeof import('@/components/Card');
+    const [card] = tree.root.findAllByType(Card).filter((node) => typeof node.props.onPress === 'function');
+    act(() => card!.props.onPress());
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/history', params: { with: ALI.id } });
+  });
+
+  it('history `with` a rival keeps only the çelınclar the two of us played, until "Herkesle"', async () => {
+    serve(seven());
+    searchParams.with = ALI.id;
+    const HistoryScreen = require('@/app/(app)/history').default;
+    const tree = renderScreen(<HistoryScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('🆚 Ali ile oynadıkların');
+    expect(titles(tree)).toEqual([1, 3, 4, 6]);
+    tapChip(tree, 'Yediklerim (1)');
+    expect(titles(tree)).toEqual([6]);
+    tapChip(tree, 'İptal (0)');
+    expect(rendered(tree)).toContain('İptal olan çelınc yok.');
+
+    tapChip(tree, 'Herkesle');
+    tapChip(tree, 'Hepsi (7)');
+    expect(titles(tree)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(rendered(tree)).not.toContain('oynadıkların');
+  });
+});
+
+describe('an inbox longer than one page', () => {
+  const NOW = Date.now();
+  /** Row `i` minutes old, unless it is told when; bodies end in "." so 1 is not a prefix of 10. */
+  function row(i: number, at = NOW - i * 60_000) {
+    return {
+      id: `n-${i}`,
+      type: 'poke',
+      title: '👉 Dürtüldün',
+      body: `satır-${i}.`,
+      data: {},
+      readAt: new Date(NOW).toISOString(),
+      createdAt: new Date(at).toISOString(),
+    };
+  }
+
+  // A full first page whose last row shares its millisecond with the next one:
+  // one scheduler pass can write both. `before` = that instant would lose n-30.
+  const edge = NOW - 29 * 60_000;
+  const firstPage = [...Array.from({ length: 29 }, (_, i) => row(i)), row(29, edge)];
+  const secondPage = [row(29, edge), row(30, edge), row(31), row(32), row(33)];
+
+  function list(tree: ReactTestRenderer) {
+    const [node] = tree.root.findAll(
+      (candidate) => typeof candidate.props.onEndReached === 'function' && Array.isArray(candidate.props.sections)
+    );
+    if (!node) throw new Error('SectionList bulunamadı');
+    return node;
+  }
+
+  function ids(tree: ReactTestRenderer): string[] {
+    const sections = list(tree).props.sections as { data: { id: string }[] }[];
+    return sections.flatMap((section) => section.data.map((item) => item.id));
+  }
+
+  async function reachEnd(tree: ReactTestRenderer): Promise<void> {
+    act(() => {
+      list(tree).props.onEndReached({ distanceFromEnd: 0 });
+    });
+    await settle();
+  }
+
+  it('fetches the older page at the bottom, a millisecond past the last row, and shows both once', async () => {
+    api.inbox = jest.fn(async ({ before }: { before?: string } = {}) => (before ? secondPage : firstPage));
+    const InboxScreen = require('@/app/(app)/(tabs)/inbox').default;
+    const tree = renderScreen(<InboxScreen />);
+    await settle();
+
+    expect(api.inbox).toHaveBeenCalledTimes(1);
+    expect(ids(tree)).toHaveLength(30);
+    expect(rendered(tree)).toContain('DAHA ESKİLERİ GÖSTER');
+
+    await reachEnd(tree);
+    expect(api.inbox).toHaveBeenCalledTimes(2);
+    expect(api.inbox).toHaveBeenLastCalledWith({ before: new Date(edge + 1).toISOString(), limit: 30 });
+    expect(ids(tree)).toEqual(Array.from({ length: 34 }, (_, i) => `n-${i}`));
+    // a short page is the last one
+    expect(rendered(tree)).not.toContain('DAHA ESKİLERİ GÖSTER');
+    expect(rendered(tree)).toContain('Dibe vurdun, daha eskisi yok.');
+
+    await reachEnd(tree);
+    expect(api.inbox).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps what it has when the older page fails, and only the button tries again', async () => {
+    let fail = true;
+    api.inbox = jest.fn(async ({ before }: { before?: string } = {}) => {
+      if (!before) return firstPage;
+      if (fail) throw NETWORK_ERROR;
+      return secondPage;
+    });
+    const InboxScreen = require('@/app/(app)/(tabs)/inbox').default;
+    const tree = renderScreen(<InboxScreen />);
+    await settle();
+
+    await reachEnd(tree);
+    expect(api.inbox).toHaveBeenCalledTimes(2);
+    expect(rendered(tree)).not.toContain('Sunucuya ulaşamadım');
+    expect(ids(tree)).toHaveLength(30);
+    expect(rendered(tree)).toContain('Eskiler gelmedi. Bir daha dene.');
+
+    // bouncing at the bottom does not hammer a server that just said no
+    await reachEnd(tree);
+    expect(api.inbox).toHaveBeenCalledTimes(2);
+
+    fail = false;
+    press(tree, 'Daha eskileri göster');
+    await settle();
+    expect(api.inbox).toHaveBeenCalledTimes(3);
+    expect(ids(tree)).toHaveLength(34);
   });
 });

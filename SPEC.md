@@ -488,10 +488,14 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
 (app)/(tabs)/index.tsx      header: today's steps + sync button + level chip; sections: Davetler (accept/decline inline;
                             "Reddet" asks first, and says so when the no would cancel the çelınc),
                             Aktif (cards: emoji, title, countdown, mini standings, my rank; losing → red "yiyorsun" chip),
-                            Bekleyen, Biten (last 5); FAB "Çelınc Aç"
+                            Bekleyen, Biten (newest 5; the header counts all of them, and past 5 a "Hepsini gör (N)"
+                            button opens history); FAB "Çelınc Aç"
 (app)/(tabs)/friends.tsx    list friends (tap → user/[id]), incoming/outgoing requests (an outgoing one has "Geri çek":
                             confirm → DELETE /friends/:userId?only=request), search by username, my invite code (copy/share)
-(app)/(tabs)/inbox.tsx      inbox list grouped by day; taunt items rendered as TauntBubble (big, red, shame); tap → challenge or friends; "Hepsini okundu yap"
+(app)/(tabs)/inbox.tsx      inbox list grouped by day; taunt items rendered as TauntBubble (big, red, shame); tap → challenge or friends; "Hepsini okundu yap";
+                            pages of 30 (useInfiniteQuery on qk.inbox): reaching the end, or "Daha eskileri göster", loads the next
+                            older page with `before` = the last row's createdAt + 1 ms (rows sharing that millisecond come again and
+                            are shown once); a failed older page keeps the list, says "Eskiler gelmedi" and only the button retries
 (app)/(tabs)/profile.tsx    me: avatar emoji picker, stats grid (Koydum / Yedin / Berabere / Kankalar), badges, leaderboard preview, settings link, logout
 (app)/challenge/new.tsx     4-step wizard: 1) tip seç (grouped by category, each shows emoji + name + desc at my level)
                             2) ayarlar (title, start now / tomorrow, duration days 1/3/7/14/30 or custom, deadline time for checkin, proof toggle, reward, penalty)
@@ -527,7 +531,13 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
 (app)/focus/[id].tsx        full-screen timer (pick 15/25/45/60 min), big countdown, "elini telefondan çek" copy, leaving app → abandoned state with copy focus_abandoned; completion posts entry;
                             while the timer runs, Android back (and any other pop: usePreventRemove) opens the same "Seansı bitirelim mi?" sheet as "Vazgeç" instead of leaving;
                             a failed refetch keeps the last detail and the timer (the "Seans açılmadı" screen is only for a çelınc never loaded)
-(app)/user/[id].tsx         public profile + head-to-head record vs me + "Çelınc aç" shortcut; not friends yet →
+(app)/history.tsx           every finished and cancelled çelınc, newest closed first (the same `GET /challenges` list home
+                            uses); chips Hepsi / Koyduklarım / Yediklerim / Berabere / İptal with counts, read like the Karne
+                            (a loss is someone else's win in a çelınc I played); `with=<userId>` keeps the ones we both played
+                            (both `accepted`) until "Herkesle"; `show=<chip>` opens on that chip (the rövanş badge → Yediklerim);
+                            tap → results (finished) or the çelınc (cancelled); pull-to-refresh
+(app)/user/[id].tsx         public profile + head-to-head record vs me (finished çelınclar we both played, both `accepted`:
+                            one who declined or left sits at rank 0 and is no round; tap → history `with` them) + "Çelınc aç" shortcut; not friends yet →
                             "Kanka isteği gönder", "Kanka isteğini kabul et" for an incoming one, "İsteği geri çek"
                             (confirm) for my own; "Diğer seçenekler": copy username, remove friend, report, block
                             (the toast says it can be undone under Ayarlar → Engellediklerin)
@@ -565,8 +575,8 @@ davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), r
   friend_*, and for each `data.challengeId` the challenge lists, the detail and the results. Called by the received listener
   (push), by the inbox poll whenever it returns items (either surface) and by the background handler while the app is alive.
   The tabs stay mounted and `refetchOnWindowFocus` is off, so the two list tabs also catch up on their own: Gelen refetches
-  when the unread poll's `latestId` is not its first row, and its "N yeni" chip / "Hepsini okundu yap" use the larger of the
-  loaded page's unread and the server's `count`; Kankalar refetches on focus when its list is older than 20 s.
+  when the unread poll's `latestId` is not its first row (waiting while an older page is on its way), and its "N yeni" chip /
+  "Hepsini okundu yap" use the larger of the loaded pages' unread and the server's `count`; Kankalar refetches on focus when its list is older than 20 s.
 
 ### 3.6 Tests
 

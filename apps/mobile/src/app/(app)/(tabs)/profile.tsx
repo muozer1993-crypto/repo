@@ -122,8 +122,9 @@ const BADGE_HOWTO: Record<
   },
   rovans: {
     how: 'Kaybettiğin bir çelıncın sonuç ekranından rövanş iste ve bu sefer kazan.',
-    cta: 'Biten çelınclara bak',
-    href: { pathname: '/(app)/(tabs)' },
+    cta: 'Kaybettiklerine bak',
+    // straight to the losses: those are the ones a rövanş can be asked from
+    href: { pathname: '/history', params: { show: 'lost' } },
   },
 };
 

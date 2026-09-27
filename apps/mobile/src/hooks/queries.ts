@@ -12,7 +12,8 @@ import type {
   PublicUser,
   UnreadCount,
 } from '@koydum/shared';
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { LIMITS } from '@koydum/shared';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
@@ -109,14 +110,52 @@ export function useBlocked() {
   });
 }
 
+/**
+ * Gelen, newest page first; scrolling to the bottom asks for the next older
+ * page. Invalidating `qk.inbox` refetches every page loaded so far, top down.
+ */
 export function useInbox() {
   const api = useApi();
   const token = useAuth((s) => s.token);
-  return useQuery<Notification[]>({
+  return useInfiniteQuery({
     queryKey: qk.inbox,
-    queryFn: () => api.inbox({ limit: 50 }),
+    queryFn: ({ pageParam }) => api.inbox({ before: pageParam, limit: LIMITS.INBOX_PAGE_DEFAULT }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage, _pages, lastPageParam) => olderInboxCursor(lastPage, lastPageParam),
     enabled: !!token,
   });
+}
+
+/**
+ * Where the next, older inbox page starts; undefined once a page comes back
+ * short, i.e. there is nothing older.
+ *
+ * The server pages with `created_at < before`, and one scheduler pass can write
+ * several rows for a user in the same millisecond (a finish, a badge, a taunt).
+ * Cutting at the last row's own instant would skip whichever of them fell just
+ * past the page, so the cursor sits one millisecond later: the next page opens
+ * with that instant's rows again and the screen drops the ones it already has.
+ */
+function olderInboxCursor(page: Notification[], previous: string | undefined): string | undefined {
+  const last = page[page.length - 1];
+  if (!last || page.length < LIMITS.INBOX_PAGE_DEFAULT) return undefined;
+  const ms = Date.parse(last.createdAt);
+  if (!Number.isFinite(ms)) return undefined;
+  const cursor = new Date(ms + 1).toISOString();
+  // a whole page inside one millisecond would ask for itself forever
+  return cursor === previous ? undefined : cursor;
+}
+
+/** Every loaded inbox page as one list, minus the rows a page boundary repeated. */
+export function inboxRows(pages: readonly Notification[][] | undefined): Notification[] {
+  const seen = new Set<string>();
+  const rows: Notification[] = [];
+  for (const item of (pages ?? []).flat()) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    rows.push(item);
+  }
+  return rows;
 }
 
 export function useUnread() {

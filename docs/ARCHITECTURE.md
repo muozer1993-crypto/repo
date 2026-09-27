@@ -137,6 +137,13 @@ dönünce kendiliğinden yenilenmez; o yüzden Gelen, rozetin gördüğü en yen
 Bir bildirime dokunmak onu okunmuş sayar: push da telefonun kendi kopyası da satırın
 `notificationId`'sini taşır.
 
+Gelen kutusu 30'ar satırlık sayfalarla gelir; listenin dibine inince bir eski sayfa istenir.
+Sunucu `created_at < before` ile keser, zamanlayıcının tek bir turu da aynı kişiye aynı
+milisaniyede birkaç satır yazabilir (bitiş, rozet, laf). İmleç son satırın kendi anı olsaydı
+sayfa sınırına denk gelen kardeşi kaybolurdu; o yüzden bir milisaniye sonrası gönderilir ve
+sınırda iki kere gelen satır ekranda bir kere gösterilir. Yeni bir satır gelince yüklenmiş bütün
+sayfalar baştan okunur.
+
 Zincirin zayıf halkası 2. adım: laf ancak kazanan uygulamayı açıp gönderirse var. Gece 23:59'da
 biten çelınc kazanan uyurken kapanır, üşengeç kazanan hiç açmaz; kaybeden de "daha ağzını açmadı"
 yazısına bakar durur. Bu yüzden bitişten 2 saat sonra hâlâ laf yememiş bir kaybeden varsa,

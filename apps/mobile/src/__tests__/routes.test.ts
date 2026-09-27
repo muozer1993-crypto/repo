@@ -118,6 +118,8 @@ describe('route tree', () => {
       '/davet/[code]',
       '/focus/[id]',
       '/friends',
+      // every finished çelınc; `with` narrows it to one rival
+      '/history',
       '/inbox',
       '/login',
       '/onboarding',

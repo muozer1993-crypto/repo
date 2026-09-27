@@ -30,6 +30,7 @@ import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Shadow, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
 import { formatNumber } from '@/utils/format';
+import { pastChallenges } from '@/utils/history';
 import { TAUNT_CTA, TAUNT_CTA_ICON, byLevel, declineQuestion, endsWithoutMe } from '@/utils/levelCopy';
 
 const LEVEL_LABEL: Record<VulgarityLevel, string> = {
@@ -70,14 +71,9 @@ export default function HomeScreen() {
   const pending = list
     .filter((s) => s.challenge.status === 'pending' && s.me?.status !== 'invited')
     .sort((a, b) => time(a.challenge.startsAt) - time(b.challenge.startsAt));
-  const finished = list
-    .filter((s) => s.challenge.status === 'finished' || s.challenge.status === 'cancelled')
-    .sort(
-      (a, b) =>
-        time(b.challenge.finalizedAt ?? b.challenge.endsAt) -
-        time(a.challenge.finalizedAt ?? a.challenge.endsAt)
-    )
-    .slice(0, 5);
+  // the rest of them live on the history screen, behind "Hepsini gör"
+  const past = pastChallenges(list);
+  const finished = past.slice(0, 5);
 
   const nothingAtAll =
     !challenges.isPending && !challenges.isError && list.length === 0;
@@ -192,7 +188,7 @@ export default function HomeScreen() {
 
         {finished.length > 0 ? (
           <View style={styles.section}>
-            <SectionHeader title="Bitenler" count={finished.length} emoji="🏁" />
+            <SectionHeader title="Bitenler" count={past.length} emoji="🏁" />
             {finished.map((summary) => {
               const won =
                 !summary.challenge.isTie &&
@@ -223,6 +219,16 @@ export default function HomeScreen() {
                 </View>
               );
             })}
+            {past.length > finished.length ? (
+              <Button
+                title={`Hepsini gör (${past.length})`}
+                variant="ghost"
+                size="sm"
+                icon="🗂️"
+                style={styles.seeAll}
+                onPress={() => router.push('/history')}
+              />
+            ) : null}
           </View>
         ) : null}
 
@@ -618,6 +624,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   finishedItem: { gap: Spacing.sm },
+  seeAll: { alignSelf: 'center' },
   emptyWrap: { alignItems: 'center', gap: Spacing.md },
   skeleton: { borderRadius: Radius.lg },
   errorCard: { marginBottom: Spacing.xl },
