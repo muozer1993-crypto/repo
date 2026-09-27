@@ -74,6 +74,8 @@ const PUSH_REASONS: Record<NonNullable<PushRegistration['reason']>, string> = {
     'EAS proje kimliği yok. Bilgisayarda “eas init” çalıştırıp uygulamayı yeniden derlemen lazım.',
   unavailable:
     'Bu sürümde bildirim modülü yüklenemedi. Uygulama içi bildirimler ve gelen kutusu çalışmaya devam eder.',
+  'no-fcm':
+    'Anlık push için bu sürümde Firebase ayarı yok. Bildirimler yine geliyor: uygulama arka planda aşağı yukarı 15 dakikada bir gelen kutuna bakıp yeni geleni telefonuna düşürüyor. Anlık olsun istersen README’deki Firebase adımları.',
   error: 'Bildirim servisi hata verdi.',
 };
 
@@ -334,9 +336,10 @@ export default function SettingsScreen() {
     }
     const reason = push.reason ?? 'error';
     const detail = PUSH_REASONS[reason];
+    const softened = reason === 'expo-go-android' || reason === 'no-fcm';
     return {
-      label: reason === 'expo-go-android' ? 'Kısıtlı' : 'Kapalı',
-      color: reason === 'expo-go-android' ? Colors.yellow : Colors.danger,
+      label: reason === 'no-fcm' ? 'Gecikmeli' : reason === 'expo-go-android' ? 'Kısıtlı' : 'Kapalı',
+      color: softened ? Colors.yellow : Colors.danger,
       detail: push.detail ? `${detail} (${push.detail})` : detail,
     };
   };

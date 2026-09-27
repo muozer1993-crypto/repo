@@ -313,9 +313,33 @@ Kalıcı kurulumda sunucu **7/24 açık kalmalı**: çelınclar bitince sonucu h
 bildirimini gönderen zamanlayıcı orada çalışıyor. Bilgisayar kapalıyken çelınc bitmez, biriken
 işleri sunucu açılınca yapar.
 
-> **Push bildirimi için:** `eas init` çalıştırmadan `extra.eas.projectId` olmaz ve push token
-> alınamaz. Uygulama bunu Ayarlar ekranında açıkça söyler; token yoksa bildirimler gelen
-> kutusundan gecikmeli gelir.
+### Bildirimler: gecikmeli (hazır) ve anlık (Firebase ile)
+
+**Kurulumsuz hali zaten çalışıyor.** Uygulama arka planda aşağı yukarı 15 dakikada bir gelen
+kutusuna bakar ve yeni gelen "KOYDUM MU?", dürtme ya da davet varsa telefonun kendi bildirimiyle
+gösterir. Uygulama kapalı olsa da olur. Ayarlar'da bildirim satırı bu durumda **Gecikmeli** yazar.
+Android pili korumak için bu aralığı bazen uzatabilir.
+
+**Anlık olsun istersen** (laf atıldığı saniye telefon titresin), Android'e Google'ın push servisi
+(Firebase Cloud Messaging) gerekir. Bir kerelik iş, ücretsiz:
+
+1. [console.firebase.google.com](https://console.firebase.google.com) → **Proje ekle** → adı KOYDUM, Analytics'i kapatabilirsin.
+2. Projede **Android uygulaması ekle** → paket adı `com.koydum.app` → **google-services.json**'ı indir.
+3. Dosyayı `apps/mobile/google-services.json` olarak koy ve `apps/mobile/app.json` içinde `"android": {` satırının hemen altına şunu ekle:
+   ```json
+   "googleServicesFile": "./google-services.json",
+   ```
+4. Firebase'de **Proje ayarları → Hizmet hesapları → Yeni özel anahtar oluştur** → bir JSON iner. Bu dosya gizli, kimseyle paylaşma, git'e koyma.
+5. Bilgisayarda:
+   ```powershell
+   cd C:\Users\ArisK\koydum\apps\mobile
+   eas credentials
+   ```
+   Android → preview → **Google Service Account** → **Push Notifications (FCM V1)** → 4. adımdaki JSON'u seç.
+6. `google-services.json`'ı commit'le (bu dosya gizli değil, Google da öyle diyor) ve yeni APK derle.
+
+Yeni APK'da Ayarlar'daki bildirim satırı **Açık** olur. `eas init` yapılmamışsa (`extra.eas.projectId`
+yoksa) push token hiç alınamaz; bu depoda zaten yapılmış durumda.
 
 ---
 

@@ -3,7 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { ApiClient } from '@/lib/api';
 import { StorageKeys, getJson } from '@/lib/storage';
 import { guessServerUrl, serverUrlIsEditable } from '@/lib/config';
-import { setBadgeCount } from '@/services/notifications';
+import { deliverNewInbox } from '@/services/inboxNotifier';
 import { flushQueue } from '@/services/offlineQueue';
 import { syncScreenTimeNow } from '@/services/screenTimeSync';
 import { syncStepsNow } from '@/services/stepSync';
@@ -50,9 +50,10 @@ export async function runBackgroundWork(): Promise<void> {
     // the queue keeps the entries
   }
   try {
-    const unread = await client.unreadCount();
-    await setBadgeCount(unread.count);
+    // the reason this task matters most: without Firebase push, this is how a
+    // closed app still shows the loser "KOYDUM MU?"
+    await deliverNewInbox(client, 'system');
   } catch {
-    // ignore
+    // offline: the next run tries again
   }
 }

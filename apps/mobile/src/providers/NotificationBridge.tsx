@@ -5,16 +5,14 @@ import { AppState, Platform } from 'react-native';
 
 import { useToast } from '@/components/Toast';
 import { qk } from '@/lib/query';
-import { StorageKeys, getItem, setItem } from '@/lib/storage';
+import { StorageKeys, setItem } from '@/lib/storage';
 import { registerBackgroundSync, setBackgroundHandler } from '@/services/background';
 import {
   addReceivedListener,
   addResponseListener,
-  fireLocal,
   getInitialRoute,
   installNotificationHandler,
   registerForPush,
-  setBadgeCount,
   type NotificationRoute,
 } from '@/services/notifications';
 import { clearFailed, flushQueue, readQueue } from '@/services/offlineQueue';
@@ -26,6 +24,7 @@ import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { safeDayKey, safeTodayKey } from '@/utils/datetime';
 import { applyPendingInvite } from '@/services/invite';
+import { deliverNewInbox } from '@/services/inboxNotifier';
 
 /**
  * Glue between the OS and the app:
@@ -168,30 +167,16 @@ export function NotificationBridge() {
 
     const poll = async () => {
       try {
-        const client = makeClient();
-        const unread = await client.unreadCount();
-        if (cancelled) return;
-        await setBadgeCount(unread.count);
-        const lastSeen = await getItem(StorageKeys.lastInboxId);
-        if (!unread.latestId || unread.latestId === lastSeen) return;
-
-        const items = await client.inbox({ limit: 10 });
-        if (cancelled) return;
-        await setItem(StorageKeys.lastInboxId, unread.latestId);
-        // only surface items the server could not push itself
-        const fresh = items.filter((item) => !item.readAt && item.pushed !== true);
-        if (lastSeen === null) return; // first run: do not replay history
-        for (const item of fresh.slice(0, 3)) {
-          if (AppState.currentState === 'active') {
-            toast({
-              title: item.title,
-              body: item.body,
-              kind: item.type === 'taunt' ? 'taunt' : 'info',
-              onPress: () => router.push('/(app)/(tabs)/inbox'),
-            });
-          } else {
-            await fireLocal(item.title, item.body, { ...item.data, type: item.type });
-          }
+        const onScreen = AppState.currentState === 'active';
+        const shown = await deliverNewInbox(makeClient(), onScreen ? 'in-app' : 'system');
+        if (cancelled || !onScreen) return;
+        for (const item of shown) {
+          toast({
+            title: item.title,
+            body: item.body,
+            kind: item.type === 'taunt' ? 'taunt' : 'info',
+            onPress: () => router.push('/(app)/(tabs)/inbox'),
+          });
         }
       } catch {
         // offline: try again on the next tick
@@ -286,10 +271,10 @@ export function NotificationBridge() {
       await syncSteps();
       await drain();
       try {
-        const unread = await makeClient().unreadCount();
-        await setBadgeCount(unread.count);
+        // the app is alive but not on screen: new items become phone notifications
+        await deliverNewInbox(makeClient(), 'system');
       } catch {
-        // ignore
+        // offline: the next run tries again
       }
     });
     void registerBackgroundSync();

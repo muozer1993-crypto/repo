@@ -69,6 +69,8 @@ export interface PushRegistration {
     | 'no-project-id'
     | 'expo-go-android'
     | 'unavailable'
+    /** Android build without Firebase (google-services.json): no instant push */
+    | 'no-fcm'
     | 'error';
   detail?: string;
 }
@@ -120,12 +122,14 @@ export async function registerForPush(): Promise<PushRegistration> {
     const result = await push.getExpoPushTokenAsync({ projectId: id });
     return { token: result.data, granted: true };
   } catch (error) {
-    return {
-      token: null,
-      granted: false,
-      reason: 'error',
-      detail: error instanceof Error ? error.message : String(error),
-    };
+    const detail = error instanceof Error ? error.message : String(error);
+    // An Android build made without google-services.json cannot get an FCM
+    // token: "Default FirebaseApp is not initialized...". That is a setup step,
+    // not a fault, and notifications still arrive through the background check.
+    if (Platform.OS === 'android' && /firebase|fcm|google-services/i.test(detail)) {
+      return { token: null, granted: true, reason: 'no-fcm' };
+    }
+    return { token: null, granted: false, reason: 'error', detail };
   }
 }
 
