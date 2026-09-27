@@ -218,6 +218,8 @@ src/services/push.ts        Expo push sender (batch, handles DeviceNotRegistered
 src/services/stats.ts       computeUserStats(userId), evaluate & award badges
 src/services/scheduler.ts   setInterval 30s: activate due, finalize ended, cancel underfilled, reminders
 src/services/taunts.ts      sendTaunt() with clamp + one-per-loser rule; sendPoke() rate limit
+src/services/admin.ts       owner tools: listUsers(), listReports(), resetPassword() (8-char readable temp password)
+src/cli/yonet.ts            `npm run yonet -- kullanicilar | sikayetler | sifre <kullanici>` on the server's own DB file
 ```
 
 ### 2.1 Tables (SQLite, WAL mode, foreign keys ON)
@@ -276,7 +278,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | GET /me/inbox/unread | `{ count, latestId }` |
 | GET /users/search?q= | prefix match on username or display_name, excludes self, blocked; max 20 |
 | GET /users/:id | `PublicUser` + public stats (wins/losses/challengesPlayed) + badges |
-| POST /users/:id/block, /unblock, /report | block sets/creates friendship row status 'blocked' with requester = blocker; blocked users can't see or invite each other |
+| POST /users/:id/block, /unblock, /report | block sets/creates friendship row status 'blocked' with requester = blocker; blocked users can't see or invite each other. report stores a `reports` row and logs a `warn` line (`YENİ ŞİKAYET`) for the owner; nothing in the app reads reports |
 | GET /friends | `FriendsView` |
 | POST /friends/request | by username or inviteCode; if the target already requested you → auto accept. 404 `user_not_found`, 409 `already_friends` |
 | POST /friends/:friendshipId/accept, /decline | addressee only |
@@ -351,6 +353,8 @@ inbox read/unread, account deletion, uploads (multipart), badges awarded.
 
 Daily backup (`services/backup.ts`, run from the scheduler tick): `db.backup()` into `<DATA_DIR>/backups/koydum-YYYY-MM-DD.db` (Istanbul date) once per day, written aside and renamed, last 7 kept; skipped for `:memory:`.
 
+Owner CLI (`npm run yonet`, root script → workspace script, so the cwd is `apps/server` and the default `./data` is the server's database): `kullanicilar` (username, name, created, last seen in Istanbul time, accepted active çelınclar, deleted last), `sikayetler` (reporter, reported, reason, newest first), `sifre <kullanici>` (new random password from `abcdefghjkmnpqrstuvwxyz23456789`, stored as scrypt, printed once; unknown or deleted → Turkish error, exit 1). No argument → Turkish help (exit 0); unknown command → help on stderr, exit 1. Refuses when the DB file does not exist rather than creating one, and never writes a JWT secret. Safe beside a running server (WAL + busy_timeout). There is no email and no reset endpoint: a forgotten password is reset by the owner; existing tokens stay valid.
+
 `.env.example`, `Dockerfile` (node:22-alpine, `npm ci --workspaces`, `CMD npm start -w apps/server`), `docker-compose.yml`
 (volume for data+uploads), `README` section on deploying (Railway/Fly/any VPS) and on LAN usage (`HOST=0.0.0.0`,
 server URL `http://<LAN-IP>:4000` in the app).
@@ -407,7 +411,7 @@ utils/format.ts          formatNumber (tr-TR), formatDuration, relativeTime (tr)
 ```
 _layout.tsx                 providers (QueryClientProvider, GestureHandlerRootView, SafeAreaProvider), hydrate auth,
                             notifications setup, Stack with <Stack.Protected guard={!token}> (auth) and guard={!!token} (app)
-(auth)/login.tsx            username/password, link to register, "Sunucu adresi" link
+(auth)/login.tsx            username/password, link to register, forgot-password hint (ask the server's owner), "Sunucu adresi" link
 (auth)/register.tsx         + display name, vulgarity level picker (with live preview of a taunt at that level)
 (auth)/server.tsx           edit server URL, "Bağlantıyı test et" → GET /health
 onboarding.tsx              3 slides (copy onboarding_1..3), shown once after register

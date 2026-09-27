@@ -228,3 +228,13 @@ Bu uygulamanın kullanıcısı bir arkadaş grubudur, on binlerce kişi değil. 
 veritabanı yedeklemesi kolaydır (`cp koydum.db yedek.db`), ORM yoktur, migration'lar kodun
 içinde string olarak durur ve açılışta bir transaction içinde uygulanır. Sorgu sayısı azdır ve
 hepsi hazırlanmış ifadelerdir.
+
+## Sunucuyu açanın araçları
+
+E-posta yok, şifre sıfırlama bağlantısı da yok: bu bir arkadaş grubu, herkes sunucuyu açanı
+tanır. Şifresini unutana yeni şifreyi o verir: `npm run yonet -- sifre ali` (`src/cli/yonet.ts`;
+işin kendisi `services/admin.ts`'te). Komut sunucunun kullandığı veritabanı dosyasını ikinci bir
+bağlantıyla açar. WAL ikinci bağlantıyı içeri alır, `busy_timeout` sunucunun yazmasını bekler;
+yani sunucu açıkken çalışır. Oturumlar durumsuz JWT olduğundan yeni şifre açık oturumları
+kapatmaz. Şikayetler de aynı yoldan okunur (`sikayetler`): uygulamada onları okuyan bir ekran yok,
+sunucu her yeni şikayette kendi penceresine bir `warn` satırı düşer.

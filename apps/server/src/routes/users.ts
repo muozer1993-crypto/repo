@@ -125,6 +125,11 @@ export default async function userRoutes(app: FastifyInstance): Promise<void> {
       body.reason,
       nowIso(app.now()),
     );
+    // Nobody in the app reads reports; this line lands in the owner's server window.
+    request.log.warn(
+      { reporter: me.row.username, reported: target.username, reason: body.reason },
+      'YENİ ŞİKAYET (npm run yonet -- sikayetler)',
+    );
     return reply.code(201).send({ ok: true });
   });
 }

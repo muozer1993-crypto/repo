@@ -32,13 +32,14 @@ Bu görüntüler uçtan uca test çalışırken gerçek veriyle çekildi (<code>
 3. [Telefonda açmak](#telefonda-açmak)
 4. [APK yapıp arkadaşına göndermek](#apk-yapıp-arkadaşına-göndermek)
 5. [Sunucuyu internete açmak](#sunucuyu-internete-açmak)
-6. [Adamlık seviyeleri](#adamlık-seviyeleri)
-7. [Çelınc türleri](#çelınc-türleri)
-8. [Adım sayımı nasıl çalışıyor](#adım-sayımı-nasıl-çalışıyor)
-9. [Proje yapısı](#proje-yapısı)
-10. [Geliştirme komutları](#geliştirme-komutları)
-11. [Sık karşılaşılan sorunlar](#sık-karşılaşılan-sorunlar)
-12. [Testler](#testler)
+6. [Yönetim komutları](#yönetim-komutları)
+7. [Adamlık seviyeleri](#adamlık-seviyeleri)
+8. [Çelınc türleri](#çelınc-türleri)
+9. [Adım sayımı nasıl çalışıyor](#adım-sayımı-nasıl-çalışıyor)
+10. [Proje yapısı](#proje-yapısı)
+11. [Geliştirme komutları](#geliştirme-komutları)
+12. [Sık karşılaşılan sorunlar](#sık-karşılaşılan-sorunlar)
+13. [Testler](#testler)
 
 ---
 
@@ -404,6 +405,39 @@ Evdeki bilgisayarda bu klasör `apps/server/data`, yedekler `apps/server/data/ba
 
 ---
 
+## Yönetim komutları
+
+Sunucuyu açan sensin, hesapların anahtarı da sende. Birkaç iş için tek komut var. Sunucu açıkken de
+çalışır; ikinci bir PowerShell penceresi aç, depo klasöründe çalıştır:
+
+```powershell
+cd C:\Users\ArisK\koydum
+npm run yonet -- kullanicilar     # herkes: ne zaman katıldı, en son ne zaman girdi, kaç çelıncı sürüyor
+npm run yonet -- sikayetler       # gelen şikayetler, en yenisi en üstte
+npm run yonet -- sifre ali        # şifresini unutan ali'ye yeni şifre
+```
+
+Hep depo klasöründen `npm run yonet` ile çalıştır. Sunucunun kullandığı veritabanını
+(`apps/server/data/koydum.db`) böyle bulur; bulamazsa bir şeye dokunmadan söyler.
+
+**Kanka şifresini unuttu.** E-posta yok, "şifremi unuttum" bağlantısı da yok; giriş ekranı ona
+sunucuyu açana, yani sana yazmasını söyler. `npm run yonet -- sifre ali` yeni bir şifre üretip
+ekrana yazar (`uemjz5kk` gibi; birbirine benzeyen harf ve rakam yok). WhatsApp'tan gönder, o
+şifreyle girsin. Hesabı, kankaları, rozetleri ve süren çelıncları yerinde kalır.
+
+* Kullanıcı adını hatırlamıyorsa önce `npm run yonet -- kullanicilar` ile bak.
+* Başka bir telefonda açık kalmış oturumu varsa o kapanmaz; şifre sıfırlamak kimseyi dışarı atmaz.
+* Çok yanlış deneme yaptıysa uygulama "Çok fazla deneme yaptın" der; yazdığı süre kadar beklesin.
+
+**Şikayetler.** Uygulamada biri birini şikayet edince sunucu penceresine `YENİ ŞİKAYET` diye bir
+satır düşer, `npm run yonet -- sikayetler` de hepsini listeler. Gerisi sana kalmış: konuşursunuz,
+gerekirse engellemesini söylersin.
+
+Docker'da çalıştırıyorsan komutun başına `docker compose exec koydum` ekle:
+`docker compose exec koydum npm run yonet -- sifre ali`.
+
+---
+
 ## Adamlık seviyeleri
 
 Herkes **kendi** tavan seviyesini seçer ve o seviye korunur. Sen 3'te olsan bile, 1'i seçmiş
@@ -417,7 +451,8 @@ arkadaşına giden bildirim 1. seviyeye yumuşatılır. Bunu sunucu zorlar, uygu
 
 Ne yaparsan yap uygulamanın üretmediği şeyler: etnik, dini, cinsiyet, cinsel yönelim veya
 engellilik temelli hakaret; tehdit; aile fertlerine küfür. Kullanıcı kendi metnini yazarken de
-bu filtre çalışır. Ayrıca herkes birbirini engelleyebilir ve şikayet edebilir.
+bu filtre çalışır. Ayrıca herkes birbirini engelleyebilir ve şikayet edebilir; şikayetler
+sunucuyu açana gider ([Yönetim komutları](#yönetim-komutları)).
 
 ---
 
@@ -512,6 +547,7 @@ koydum/
 │   │   └── assets/brand/  ikon, splash, favicon
 │   └── server/
 │       ├── src/routes/    HTTP uçları
+│       ├── src/cli/       npm run yonet (şifre sıfırlama, kullanıcılar, şikayetler)
 │       ├── src/services/  çelınc yaşam döngüsü, bildirim, push
 │       └── src/db/        şema ve göçler
 ├── packages/shared/       tipler, şemalar, puanlama, katalog, laflar
@@ -564,6 +600,10 @@ yükleniyor, gelmezse uygulama onsuz devam ediyor.
 **Çelınc bitti ama sonuç çıkmadı.**
 Sonuçlandırmayı sunucudaki zamanlayıcı yapar ve 30 saniyede bir çalışır. Sunucu kapalıysa
 açıldığında geçmiş çelınclarını da kapatır.
+
+**Kanka şifresini unuttu, giremiyor.**
+Yeni hesap açmasın, her şeyi sıfırdan başlar. Sen `npm run yonet -- sifre <kullanici-adi>`
+çalıştır, çıkan şifreyi ona gönder. Ayrıntısı [Yönetim komutları](#yönetim-komutları) bölümünde.
 
 **Saat farkı.**
 Günler kullanıcının kendi saat dilimine göre hesaplanır. Yurt dışına çıkarsan Ayarlar

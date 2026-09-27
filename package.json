@@ -15,7 +15,8 @@
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "apk:yayinla": "node apps/server/scripts/publish-apk.mjs",
-    "internet": "node apps/server/scripts/internet.mjs"
+    "internet": "node apps/server/scripts/internet.mjs",
+    "yonet": "npm run yonet --workspace apps/server --"
   },
   "engines": {
     "node": ">=20"

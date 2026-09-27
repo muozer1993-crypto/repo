@@ -99,6 +99,10 @@ export default function LoginScreen() {
             Hesabın yok mu? <Text variant="small" color={Colors.accent} bold>Kaydol</Text>
           </Text>
         </Link>
+        {/* no email, no reset link: the owner resets it with npm run yonet -- sifre */}
+        <Text variant="tiny" faint style={styles.link}>
+          Şifreni mi unuttun? Sunucuyu açan kankana yaz, sıfırlasın.
+        </Text>
         {serverUrlIsEditable() ? (
           <Link href="/(auth)/server" asChild>
             <Text variant="tiny" faint style={styles.link}>

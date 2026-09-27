@@ -196,7 +196,7 @@ export default function UserProfileScreen() {
       await api.reportUser(id, text);
       setReportOpen(false);
       setReason('');
-      toast({ title: 'Şikayet alındı', body: 'Bakacağız.', kind: 'success' });
+      toast({ title: 'Şikayet alındı', body: 'Sunucuyu açan kankaya gitti.', kind: 'success' });
     } catch (err) {
       toast({
         title: 'Şikayet gönderilemedi',

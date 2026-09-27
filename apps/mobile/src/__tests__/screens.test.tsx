@@ -440,3 +440,12 @@ describe('invite link on the friends tab', () => {
     expect(text).not.toContain('aynı Wi-Fi');
   });
 });
+
+describe('login screen', () => {
+  it('tells a friend who forgot the password whom to ask', async () => {
+    const LoginScreen = require('@/app/(auth)/login').default;
+    const tree = renderScreen(<LoginScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('Şifreni mi unuttun? Sunucuyu açan kankana yaz, sıfırlasın.');
+  });
+});
