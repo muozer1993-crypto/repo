@@ -1,4 +1,4 @@
-import { TAGLINE, pickTaunt, renderTaunt, t, type TauntVars, type VulgarityLevel } from '@koydum/shared';
+import { LIMITS, TAGLINE, pickTaunt, renderTaunt, t, type TauntVars, type VulgarityLevel } from '@koydum/shared';
 import * as Application from 'expo-application';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -7,8 +7,10 @@ import { AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, View } 
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Chip } from '@/components/Chip';
+import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
+import { Sheet } from '@/components/Sheet';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
@@ -32,7 +34,7 @@ import {
 import { deviceTimezone, useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
-import { CUSTOM_TAUNT_CEILING_NOTE } from '@/utils/levelCopy';
+import { CUSTOM_TAUNT_CEILING_NOTE, byLevel } from '@/utils/levelCopy';
 
 const PREVIEW_VARS: TauntVars = {
   winner: 'Mustafa',
@@ -106,6 +108,127 @@ const PLATFORM: 'ios' | 'android' | 'web' =
 
 const HOURS: (number | null)[] = [null, ...Array.from({ length: 24 }, (_, i) => i)];
 
+interface PasswordErrors {
+  current?: string;
+  next?: string;
+  repeat?: string;
+}
+
+/**
+ * "Şifreni değiştir": the place a sign-up "123456", or the temporary password
+ * the owner handed out with `npm run yonet -- sifre`, becomes a real one. The
+ * server answers a wrong current password with a 400, never a 401, so a typo
+ * here does not log anybody out.
+ */
+function PasswordSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const api = useApi();
+  const setSession = useAuth((s) => s.setSession);
+  const level = useLevel();
+  const toast = useToast();
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [repeat, setRepeat] = useState('');
+  const [errors, setErrors] = useState<PasswordErrors>({});
+  const [busy, setBusy] = useState(false);
+
+  // nothing typed here should still be sitting in the fields next time
+  const close = () => {
+    setCurrent('');
+    setNext('');
+    setRepeat('');
+    setErrors({});
+    onClose();
+  };
+
+  const submit = async () => {
+    const found: PasswordErrors = {};
+    if (!current) found.current = 'Mevcut şifreni yaz.';
+    if (next.length < LIMITS.PASSWORD_MIN) found.next = `Yeni şifre en az ${LIMITS.PASSWORD_MIN} karakter olmalı.`;
+    else if (next.length > LIMITS.PASSWORD_MAX) found.next = `Yeni şifre en fazla ${LIMITS.PASSWORD_MAX} karakter olabilir.`;
+    if (repeat !== next) found.repeat = 'İkisi aynı değil, bir daha yaz.';
+    setErrors(found);
+    if (found.current || found.next || found.repeat) return;
+
+    setBusy(true);
+    try {
+      const result = await api.changePassword({ currentPassword: current, newPassword: next });
+      await setSession(result.token, result.me);
+      close();
+      toast({
+        title: byLevel(level, 'Şifren değişti', 'Tamamdır, yeni şifre işlendi', 'Oldu. Bu sefer unutma 🍆'),
+        kind: 'success',
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'wrong_password') setErrors({ current: err.message });
+      else if (err instanceof ApiError && err.code === 'same_password') setErrors({ next: err.message });
+      else {
+        toast({
+          title: 'Şifre değişmedi',
+          body: err instanceof ApiError ? err.message : undefined,
+          kind: 'danger',
+        });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet visible={visible} onClose={close} title="Şifreni değiştir">
+      <Input
+        label="Mevcut şifre"
+        placeholder="••••••"
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete="current-password"
+        value={current}
+        onChangeText={(text) => {
+          setCurrent(text);
+          setErrors((prev) => ({ ...prev, current: undefined }));
+        }}
+        returnKeyType="next"
+        error={errors.current}
+      />
+      <Input
+        label="Yeni şifre"
+        placeholder="••••••"
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete="new-password"
+        value={next}
+        onChangeText={(text) => {
+          setNext(text);
+          setErrors((prev) => ({ ...prev, next: undefined }));
+        }}
+        maxLength={LIMITS.PASSWORD_MAX}
+        returnKeyType="next"
+        error={errors.next}
+        hint={`En az ${LIMITS.PASSWORD_MIN} karakter.`}
+      />
+      <Input
+        label="Yeni şifre (tekrar)"
+        placeholder="••••••"
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete="new-password"
+        value={repeat}
+        onChangeText={(text) => {
+          setRepeat(text);
+          setErrors((prev) => ({ ...prev, repeat: undefined }));
+        }}
+        maxLength={LIMITS.PASSWORD_MAX}
+        returnKeyType="go"
+        onSubmitEditing={() => void submit()}
+        error={errors.repeat}
+      />
+      <Button title="Değiştir" size="lg" fullWidth loading={busy} onPress={() => void submit()} />
+      <Text variant="micro" faint>
+        Başka bir telefonda açık kalan oturumun kapanmaz.
+      </Text>
+    </Sheet>
+  );
+}
+
 export default function SettingsScreen() {
   const me = useAuth((s) => s.me);
   const logout = useAuth((s) => s.logout);
@@ -130,6 +253,7 @@ export default function SettingsScreen() {
   const [stepsBusy, setStepsBusy] = useState(false);
   const [screenTime, setScreenTime] = useState<ScreenTimeAvailability | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
 
   const pendingLevel: VulgarityLevel = levelOverride ?? me?.vulgarityMax ?? 2;
   const preview = renderTaunt(pickTaunt('win', pendingLevel, 1), PREVIEW_VARS);
@@ -567,6 +691,12 @@ export default function SettingsScreen() {
           <Text variant="tiny" muted>
             {me ? `@${me.username} · davet kodu ${me.inviteCode}` : 'Hesap bilgisi yüklenemedi.'}
           </Text>
+          <Button
+            title="Şifreni değiştir"
+            variant="secondary"
+            fullWidth
+            onPress={() => setPasswordOpen(true)}
+          />
           <Button title="Çıkış yap" variant="secondary" fullWidth onPress={() => void doLogout()} />
           <Button
             title="Hesabı sil"
@@ -612,6 +742,8 @@ export default function SettingsScreen() {
           kimseyi kırmasın.
         </Text>
       </View>
+
+      <PasswordSheet visible={passwordOpen} onClose={() => setPasswordOpen(false)} />
     </Screen>
   );
 }

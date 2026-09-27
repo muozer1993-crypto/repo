@@ -50,9 +50,24 @@ const ME: Me = {
   badges: [],
 };
 
+/** what a 401 leaves behind for the login screen (see store/auth) */
+const mockSession = { ended: false };
+const mockClearSessionEnded = jest.fn(() => {
+  mockSession.ended = false;
+});
+const mockSetSession = jest.fn(async () => {});
+
 jest.mock('@/store/auth', () => ({
   useAuth: (selector: (state: unknown) => unknown) =>
-    selector({ me: ME, token: 'token', serverUrl: 'http://localhost:4000', refreshMe: jest.fn() }),
+    selector({
+      me: ME,
+      token: 'token',
+      serverUrl: 'http://localhost:4000',
+      refreshMe: jest.fn(),
+      setSession: mockSetSession,
+      sessionEnded: mockSession.ended,
+      clearSessionEnded: mockClearSessionEnded,
+    }),
   useLevel: () => 2,
   deviceTimezone: () => 'Europe/Istanbul',
 }));
@@ -64,6 +79,11 @@ jest.mock('@/services/steps', () => ({
   requestStepPermission: jest.fn(async () => false),
   openHealthConnectSettingsIfPossible: jest.fn(async () => false),
   startForegroundStepTracking: () => () => {},
+}));
+
+// Ayarlar asks for push on mount; the real module would load expo-notifications
+jest.mock('@/services/notifications', () => ({
+  registerForPush: jest.fn(async () => ({ token: null, reason: 'web' })),
 }));
 
 /* ------------------------------------------------------------------ setup */
@@ -447,5 +467,110 @@ describe('login screen', () => {
     const tree = renderScreen(<LoginScreen />);
     await settle();
     expect(rendered(tree)).toContain('Şifreni mi unuttun? Sunucuyu açan kankana yaz, sıfırlasın.');
+    expect(rendered(tree)).not.toContain('Oturumun düşmüş');
+  });
+
+  it('says why after the server ended the session, once', async () => {
+    mockSession.ended = true;
+    mockClearSessionEnded.mockClear();
+    const LoginScreen = require('@/app/(auth)/login').default;
+    const tree = renderScreen(<LoginScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('Oturumun düşmüş, bir daha gir.');
+    expect(mockClearSessionEnded).toHaveBeenCalledTimes(1);
+    expect(mockSession.ended).toBe(false);
+
+    const again = renderScreen(<LoginScreen />);
+    await settle();
+    expect(rendered(again)).not.toContain('Oturumun düşmüş');
+  });
+});
+
+/** The first mounted element carrying `props[key] === value` and a handler named `handler`. */
+function findWith(tree: ReactTestRenderer, key: string, value: string, handler: string) {
+  const [node] = tree.root.findAll(
+    (candidate) => candidate.props[key] === value && typeof candidate.props[handler] === 'function'
+  );
+  if (!node) throw new Error(`${key}="${value}" bulunamadı`);
+  return node;
+}
+
+function press(tree: ReactTestRenderer, title: string): void {
+  act(() => {
+    findWith(tree, 'title', title, 'onPress').props.onPress();
+  });
+}
+
+function typeInto(tree: ReactTestRenderer, label: string, text: string): void {
+  act(() => {
+    findWith(tree, 'label', label, 'onChangeText').props.onChangeText(text);
+  });
+}
+
+describe('settings password sheet', () => {
+  function openSheet(): ReactTestRenderer {
+    const SettingsScreen = require('@/app/(app)/settings').default;
+    const tree = renderScreen(<SettingsScreen />);
+    press(tree, 'Şifreni değiştir');
+    return tree;
+  }
+
+  beforeEach(() => {
+    mockSetSession.mockClear();
+  });
+
+  it('flags a short new password and a repeat that does not match, and sends nothing', async () => {
+    api.changePassword = jest.fn();
+    const tree = openSheet();
+    await settle();
+
+    typeInto(tree, 'Mevcut şifre', '123456');
+    typeInto(tree, 'Yeni şifre', 'kisa');
+    typeInto(tree, 'Yeni şifre (tekrar)', 'kisaa');
+    await act(async () => {
+      findWith(tree, 'title', 'Değiştir', 'onPress').props.onPress();
+    });
+
+    const text = rendered(tree);
+    expect(text).toContain('Yeni şifre en az 6 karakter olmalı.');
+    expect(text).toContain('İkisi aynı değil, bir daha yaz.');
+    expect(api.changePassword).not.toHaveBeenCalled();
+  });
+
+  it('shows a wrong current password under its field and keeps the session', async () => {
+    api.changePassword = jest.fn(async () => {
+      throw new ApiError('wrong_password', 'Mevcut şifren tutmadı.', 400);
+    });
+    const tree = openSheet();
+    await settle();
+
+    typeInto(tree, 'Mevcut şifre', 'yanlis');
+    typeInto(tree, 'Yeni şifre', 'yepyeni42');
+    typeInto(tree, 'Yeni şifre (tekrar)', 'yepyeni42');
+    await act(async () => {
+      findWith(tree, 'title', 'Değiştir', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(api.changePassword).toHaveBeenCalledWith({ currentPassword: 'yanlis', newPassword: 'yepyeni42' });
+    expect(rendered(tree)).toContain('Mevcut şifren tutmadı.');
+    expect(mockSetSession).not.toHaveBeenCalled();
+  });
+
+  it('stores the session the server hands back', async () => {
+    api.changePassword = jest.fn(async () => ({ token: 'yeni-token', me: ME }));
+    const tree = openSheet();
+    await settle();
+
+    typeInto(tree, 'Mevcut şifre', '123456');
+    typeInto(tree, 'Yeni şifre', 'yepyeni42');
+    typeInto(tree, 'Yeni şifre (tekrar)', 'yepyeni42');
+    await act(async () => {
+      findWith(tree, 'title', 'Değiştir', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(mockSetSession).toHaveBeenCalledWith('yeni-token', ME);
+    expect(rendered(tree)).toContain('Tamamdır, yeni şifre işlendi');
   });
 });

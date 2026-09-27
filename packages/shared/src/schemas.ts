@@ -122,6 +122,17 @@ export const LoginBodySchema = z.object({
 });
 export type LoginBody = z.infer<typeof LoginBodySchema>;
 
+/**
+ * The current password is only checked against the stored hash, so it gets the
+ * login rule (an old account may predate today's minimum); the new one has to
+ * pass the sign-up rule.
+ */
+export const ChangePasswordBodySchema = z.object({
+  currentPassword: z.string().min(1, 'Mevcut şifre boş olamaz').max(LIMITS.PASSWORD_MAX),
+  newPassword: PasswordSchema,
+});
+export type ChangePasswordBody = z.infer<typeof ChangePasswordBodySchema>;
+
 export const UpdateMeBodySchema = z.object({
   displayName: DisplayNameSchema.optional(),
   avatarEmoji: AvatarEmojiSchema.optional(),

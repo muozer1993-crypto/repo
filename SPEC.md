@@ -142,6 +142,7 @@ Rule grammar: `<statKey><op><number>` with op in `>=`, `>`, `==`, `<=`; multiple
 ```ts
 RegisterBody { username: /^[a-z0-9_]{3,20}$/ (lowercased), password: min 6 max 72, displayName: 1..30, timezone: string (default 'Europe/Istanbul') }
 LoginBody { username, password }
+ChangePasswordBody { currentPassword: 1..72 (login rule), newPassword: min 6 max 72 (sign-up rule) }
 UpdateMeBody { displayName?, avatarEmoji? (1..4 chars), vulgarityMax? (1|2|3), timezone?, reminderHour? (0..23 | null) }
 PushTokenBody { token: string, platform: 'ios'|'android'|'web' }
 StepsSyncBody { days: { dayKey, steps: int 0..100000, source: 'pedometer'|'health_connect' }[] (max 14) }
@@ -201,11 +202,11 @@ src/config.ts           env: PORT=4000, HOST=0.0.0.0, DATA_DIR=./data, UPLOAD_DI
                         DATA_DIR/secret if missing), PUBLIC_URL, LOG_LEVEL
 src/db/index.ts         openDb(path|':memory:'), migrations, helpers (nowIso, newId = crypto.randomUUID)
 src/db/migrations.ts    SQL strings
-src/auth/jwt.ts         sign/verify HS256 with node:crypto (header.payload.sig, exp 90d)
+src/auth/jwt.ts         sign/verify HS256 with node:crypto (header.payload.sig, exp 90d, extended by POST /auth/refresh)
 src/auth/password.ts    scrypt hash/verify (salt:hash hex)
 src/plugins/auth.ts     fastify decorator `authenticate` preHandler → request.user = {id}
-src/routes/auth.ts      /auth/register, /auth/login
-src/routes/me.ts        /me, PATCH /me, DELETE /me, /me/push-token, /me/steps, /me/screen-time, /me/inbox*
+src/routes/auth.ts      /auth/register, /auth/login, /auth/refresh
+src/routes/me.ts        /me, PATCH /me, DELETE /me, POST /me/password, /me/push-token, /me/steps, /me/screen-time, /me/inbox*
 src/routes/users.ts     /users/search, /users/:id, block/unblock/report
 src/routes/friends.ts   /friends*
 src/routes/challenges.ts/challenges*, entries, disputes, poke, taunt, rematch, results
@@ -264,9 +265,11 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | GET /health | `{ ok: true, version, time }` |
 | POST /auth/register | 409 `username_taken`. Returns `{ token, me }` |
 | POST /auth/login | 401 `bad_credentials` |
+| POST /auth/refresh | authenticated, no body. Returns `{ token }` with a fresh 90 days. An expired token gets the usual 401: renewal keeps a live session alive, it never revives a dead one. The app calls it about once a week |
 | GET /me | `Me` |
 | PATCH /me | partial update |
 | DELETE /me | soft delete: anonymize username → `deleted_<id8>`, clear push token, leave active challenges |
+| POST /me/password | `ChangePasswordBody`. Wrong current password → **400** `wrong_password` (never 401: the app logs out on any 401), new equal to current (after NFKC) → 400 `same_password`, 8 wrong ones per account in 15 min (login's per-account budget) → 429 `too_many_attempts`. Returns `{ token, me }` like login. Tokens are stateless JWTs and nothing is revoked: other phones already signed in stay signed in |
 | POST /me/push-token | store |
 | DELETE /me/push-token | clear (logout) |
 | POST /me/steps | upsert steps_daily; for every active/pending challenge with `deviceMetric: 'steps'` the user has accepted and whose day range contains dayKey → upsert entry(source). Returns `{ updated: number }` (`services/deviceSync.ts`) |
@@ -353,7 +356,7 @@ inbox read/unread, account deletion, uploads (multipart), badges awarded.
 
 Daily backup (`services/backup.ts`, run from the scheduler tick): `db.backup()` into `<DATA_DIR>/backups/koydum-YYYY-MM-DD.db` (Istanbul date) once per day, written aside and renamed, last 7 kept; skipped for `:memory:`.
 
-Owner CLI (`npm run yonet`, root script → workspace script, so the cwd is `apps/server` and the default `./data` is the server's database): `kullanicilar` (username, name, created, last seen in Istanbul time, accepted active çelınclar, deleted last), `sikayetler` (reporter, reported, reason, newest first), `sifre <kullanici>` (new random password from `abcdefghjkmnpqrstuvwxyz23456789`, stored as scrypt, printed once; unknown or deleted → Turkish error, exit 1). No argument → Turkish help (exit 0); unknown command → help on stderr, exit 1. Refuses when the DB file does not exist rather than creating one, and never writes a JWT secret. Safe beside a running server (WAL + busy_timeout). There is no email and no reset endpoint: a forgotten password is reset by the owner; existing tokens stay valid.
+Owner CLI (`npm run yonet`, root script → workspace script, so the cwd is `apps/server` and the default `./data` is the server's database): `kullanicilar` (username, name, created, last seen in Istanbul time, accepted active çelınclar, deleted last), `sikayetler` (reporter, reported, reason, newest first), `sifre <kullanici>` (new random password from `abcdefghjkmnpqrstuvwxyz23456789`, stored as scrypt, printed once; unknown or deleted → Turkish error, exit 1). No argument → Turkish help (exit 0); unknown command → help on stderr, exit 1. Refuses when the DB file does not exist rather than creating one, and never writes a JWT secret. Safe beside a running server (WAL + busy_timeout). There is no email and no reset endpoint: a forgotten password is reset by the owner; existing tokens stay valid. A signed-in user changes their own (including the temporary one) in Ayarlar → Hesap → "Şifreni değiştir" (`POST /me/password`).
 
 `.env.example`, `Dockerfile` (node:22-alpine, `npm ci --workspaces`, `CMD npm start -w apps/server`), `docker-compose.yml`
 (volume for data+uploads), `README` section on deploying (Railway/Fly/any VPS) and on LAN usage (`HOST=0.0.0.0`,
@@ -386,10 +389,11 @@ react-native-health-connect. iOS `infoPlist.NSMotionUsageDescription` Turkish; A
 ### 3.2 State & services (`src/`)
 
 ```
-lib/api.ts             ApiClient: baseUrl + token; request<T>(method, path, body?); typed helpers for every endpoint; ApiError { code, message, status }
-lib/storage.ts         key-value: SecureStore on native, localStorage on web (token, serverUrl, level cache)
+lib/api.ts             ApiClient: baseUrl + token; request<T>(method, path, body?); typed helpers for every endpoint; ApiError { code, message, status }; any 401 calls onUnauthorized
+lib/storage.ts         key-value: SecureStore on native, localStorage on web (token, serverUrl, level cache, tokenRenewedAt)
 lib/query.ts           QueryClient + query keys
-store/auth.ts          zustand: { token, me, serverUrl, hydrated, setToken, setMe, logout, setServerUrl }; hydrate on boot
+store/auth.ts          zustand: { token, me, serverUrl, hydrated, sessionEnded, setSession, setMe, logout, setServerUrl }; hydrate on boot, then (once /me answered) renewTokenIfDue. A 401 from the store's client sets `sessionEnded` (only when there was a token) before logging out; setSession stamps tokenRenewedAt, logout removes it
+services/session.ts    renewTokenIfDue(client, onToken?): when tokenRenewedAt is missing, in the future or ≥ 7 days old → POST /auth/refresh, store the token (only if the stored one is still the token that asked, so a logout mid-request is not undone), stamp tokenRenewedAt, onToken(token). Never throws. Called from hydrate and from the headless task
 store/ui.ts            vulgarity level used for UI copy (mirrors me.vulgarityMax), onboarding done flag
 hooks/*.ts             useMe, useChallenges(status), useChallenge(id), useFriends, useInbox, useUnreadCount (30 s poll while foreground), mutations
 services/steps.ts      getDailySteps(days: number): Promise<{ dayKey, steps, source }[]> + syncSteps(); platform files: steps.native.ts (ios Pedometer.getStepCountAsync per day; android: try Health Connect aggregate per day, else Pedometer.watchStepCount accumulate persisted per day in AsyncStorage), steps.web.ts (returns [])
@@ -399,7 +403,7 @@ services/screenTimeSync.ts syncScreenTimeNow(): POST /me/screen-time with the la
 modules/koydum-screen-time/  local Expo module (Kotlin): UsageStatsManager.queryEvents → foreground minutes per local day; app.plugin.js adds PACKAGE_USAGE_STATS (tools:ignore=ProtectedPermissions) to the manifest
 services/notifications.ts  registerForPush() → token or null (never throws; web returns null); setNotificationHandler; Android channel; response listener → router.push to challenge/inbox
 services/localNotify.ts  fireLocal(title, body, data) — used when a new inbox item arrives that was not pushed (device without push). On Android it posts on the `koydum` channel (trigger `{ channelId }`); a `null` trigger would land in the library's English "Miscellaneous" fallback channel
-services/background.ts   BackgroundTask (15 min): sync steps + fetch unread inbox → fire local notifications for new items (skip on web / Expo Go gracefully). With the app swiped away the task runs headless (services/backgroundWork.ts) and does the same from the stored session. The app entry `index.ts` (package.json `main`) imports `expo-router/entry` and then this file, so the task is defined even in a headless run, where expo-router never renders `_layout`; an undefined task is unregistered by expo-task-manager.
+services/background.ts   BackgroundTask (15 min): sync steps + fetch unread inbox → fire local notifications for new items (skip on web / Expo Go gracefully). With the app swiped away the task runs headless (services/backgroundWork.ts) and does the same from the stored session, renewing the token first when it is due (a phone only ever woken by the task must not lose its session at day 90). The app entry `index.ts` (package.json `main`) imports `expo-router/entry` and then this file, so the task is defined even in a headless run, where expo-router never renders `_layout`; an undefined task is unregistered by expo-task-manager.
 services/inboxNotifier.ts deliverNewInbox(client, surface | () => surface) → { surface, items }: the one place that turns unread, un-pushed inbox items into phone notifications (or, when on screen, items for ONE in-app toast of the newest with "N bildirim daha"). The surface is resolved after the fetch. Shared by the foreground poll, the background handler and the headless task. Only rows newer than the stored lastInboxId count (one full page of 100 is fetched); delivered ids are remembered (last 100) so racing checks never show an item twice; the first check on an install replays nothing (an empty first inbox stores a sentinel so the first row that ever arrives is shown); more than 3 new items → 2 shown + one "N bildirim daha". A phone holding a registered push token only updates the badge: push delivers there, and a local copy shown before the server's next flush would ring twice. This is what makes "KOYDUM MU?" reach a closed phone on a build without Firebase (registerForPush reports reason 'no-fcm', settings says "Gecikmeli").
 services/focus.ts        focus session engine: start/stop, AppState listener → abandon when app leaves foreground > 10 s (grace), persists in-progress session to survive reload
 theme/                   colors, spacing, typography (dark neon), components: Screen, Button, Card, Avatar, Chip, Stat, ProgressBar, Countdown, EmptyState, Toast, TauntBubble, Confetti (reanimated, optional), Sheet
@@ -411,7 +415,7 @@ utils/format.ts          formatNumber (tr-TR), formatDuration, relativeTime (tr)
 ```
 _layout.tsx                 providers (QueryClientProvider, GestureHandlerRootView, SafeAreaProvider), hydrate auth,
                             notifications setup, Stack with <Stack.Protected guard={!token}> (auth) and guard={!!token} (app)
-(auth)/login.tsx            username/password, link to register, forgot-password hint (ask the server's owner), "Sunucu adresi" link
+(auth)/login.tsx            username/password, link to register, forgot-password hint (ask the server's owner), "Sunucu adresi" link; after a 401 logout shows "Oturumun düşmüş, bir daha gir." once (store `sessionEnded`, cleared on mount)
 (auth)/register.tsx         + display name, vulgarity level picker (with live preview of a taunt at that level)
 (auth)/server.tsx           edit server URL, "Bağlantıyı test et" → GET /health
 onboarding.tsx              3 slides (copy onboarding_1..3), shown once after register
@@ -436,7 +440,7 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
 (app)/challenge/[id]/entry.tsx     modal: log manual value (numeric pad, quick +1/+5 chips per unit), note, proof photo (camera/gallery → /uploads), day selector (today/yesterday)
 (app)/focus/[id].tsx        full-screen timer (pick 15/25/45/60 min), big countdown, "elini telefondan çek" copy, leaving app → abandoned state with copy focus_abandoned; completion posts entry
 (app)/user/[id].tsx         public profile + head-to-head record vs me + "Çelınc aç" shortcut
-(app)/settings.tsx          vulgarity level (with preview), reminder hour, timezone (auto), server URL, push status + "yeniden dene", delete account (double confirm), about (+ "Yeni sürümü indir" when the server offers a newer APK)
+(app)/settings.tsx          vulgarity level (with preview), reminder hour, timezone (auto), server URL, push status + "yeniden dene", "Şifreni değiştir" sheet (current / new / repeat; min length and mismatch checked inline, wrong_password and same_password shown under their field, success → setSession + level toast), delete account (double confirm), about (+ "Yeni sürümü indir" when the server offers a newer APK)
 davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), reachable signed in or not. Signed in: shows the inviter and sends the friend request only on a tap (a waiting request from that person would be ACCEPTED by it). A fresh install still on the localhost fallback adopts the link's server (after /health) without a conflict warning. Signed out: parks the code (services/invite.ts) and goes to register/login; the bridge sends it right after sign-in. A `server` differing from the current one is shown and only switched to on an explicit tap (after a /health check); builds with a baked-in URL ignore it.
 ```
 

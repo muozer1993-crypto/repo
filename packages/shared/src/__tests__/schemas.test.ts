@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ChallengeListQuerySchema,
+  ChangePasswordBodySchema,
   CreateChallengeBodySchema,
   DayKeySchema,
   DisputeBodySchema,
@@ -70,6 +71,18 @@ describe('LoginBody', () => {
   it('normalises the username and requires a password', () => {
     expect(LoginBodySchema.parse({ username: 'ADMIN', password: 'x' })).toEqual({ username: 'admin', password: 'x' });
     expect(LoginBodySchema.safeParse({ username: 'admin', password: '' }).success).toBe(false);
+  });
+});
+
+describe('ChangePasswordBody', () => {
+  it('lets an old short password through but holds the new one to the sign-up rule', () => {
+    expect(ChangePasswordBodySchema.parse({ currentPassword: '123', newPassword: 'yenisifre' })).toEqual({
+      currentPassword: '123',
+      newPassword: 'yenisifre',
+    });
+    expect(issuePaths(ChangePasswordBodySchema.safeParse({ currentPassword: '', newPassword: 'yenisifre' }))).toEqual(['currentPassword']);
+    expect(issuePaths(ChangePasswordBodySchema.safeParse({ currentPassword: 'eski123', newPassword: '12345' }))).toEqual(['newPassword']);
+    expect(issuePaths(ChangePasswordBodySchema.safeParse({ currentPassword: 'eski123', newPassword: 'a'.repeat(73) }))).toEqual(['newPassword']);
   });
 });
 

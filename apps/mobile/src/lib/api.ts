@@ -175,6 +175,11 @@ export class ApiClient {
     return this.request<AuthResponse>('POST', '/auth/login', { body });
   }
 
+  /** A fresh 90 days for the token this client holds (services/session.ts). */
+  refreshToken() {
+    return this.request<{ token: string }>('POST', '/auth/refresh');
+  }
+
   /* ----------------------------------------------------------------- me */
 
   me() {
@@ -193,6 +198,11 @@ export class ApiClient {
 
   deleteMe() {
     return this.request<{ ok: true }>('DELETE', '/me');
+  }
+
+  /** A wrong current password is a 400 `wrong_password`, so it never logs out. */
+  changePassword(body: { currentPassword: string; newPassword: string }) {
+    return this.request<AuthResponse>('POST', '/me/password', { body });
   }
 
   setPushToken(body: { token: string; platform: 'ios' | 'android' | 'web' }) {

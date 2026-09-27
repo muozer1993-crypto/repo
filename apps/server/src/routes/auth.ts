@@ -1,9 +1,10 @@
 /**
- * POST /auth/register, POST /auth/login (SPEC 2.2).
+ * POST /auth/register, POST /auth/login, POST /auth/refresh (SPEC 2.2).
  *
- * Both return the same `{ token, me }` envelope so the app has everything it needs
- * after a single call. Usernames are stored lowercase (the zod schema lowercases
- * them), passwords go through scrypt, and the token is our own HS256 JWT.
+ * Register and login return the same `{ token, me }` envelope so the app has
+ * everything it needs after a single call. Usernames are stored lowercase (the
+ * zod schema lowercases them), passwords go through scrypt, and the token is our
+ * own HS256 JWT.
  */
 import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
@@ -12,6 +13,7 @@ import { signToken } from '../auth/jwt.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { getUserByUsername } from '../db/index.js';
 import { conflict, parseBody, tooMany, unauthorized } from '../errors.js';
+import { requireUser } from '../plugins/auth.js';
 import { toMe } from '../serialize.js';
 import { createUser, usernameTaken } from '../services/accounts.js';
 import { AttemptLimiter, retryAfterText } from '../services/throttle.js';
@@ -21,7 +23,7 @@ import { AttemptLimiter, retryAfterText } from '../services/throttle.js';
  * group of friends sharing one NAT never notices, and small enough that neither
  * password guessing nor scrypt flooding is free.
  */
-const LOGIN_FAILURES_PER_ACCOUNT = { max: 8, windowMs: 15 * 60 * 1000 };
+export const LOGIN_FAILURES_PER_ACCOUNT = { max: 8, windowMs: 15 * 60 * 1000 };
 const LOGIN_FAILURES_PER_IP = { max: 40, windowMs: 15 * 60 * 1000 };
 const REGISTRATIONS_PER_IP = { max: 120, windowMs: 10 * 60 * 1000 };
 
@@ -119,5 +121,18 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
       me: toMe(db, row, now),
     };
     return payload;
+  });
+
+  /**
+   * A fresh 90 days for a token that still works. Without it every token died
+   * exactly 90 days after login, so friends who joined the same week were all
+   * thrown out on the same day, and a phone that only ran the background task
+   * stopped sending steps without a word. The app calls this about once a week.
+   * An expired token gets the usual 401 from `authenticate`: renewal is not a
+   * way back in, only a way to stay in.
+   */
+  app.post('/auth/refresh', { preHandler: app.authenticate }, async (request) => {
+    const { row } = requireUser(request);
+    return { token: signToken({ sub: row.id }, config.jwtSecret, undefined, app.now()) };
   });
 }

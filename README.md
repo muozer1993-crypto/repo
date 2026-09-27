@@ -423,7 +423,9 @@ Hep depo klasöründen `npm run yonet` ile çalıştır. Sunucunun kullandığı
 **Kanka şifresini unuttu.** E-posta yok, "şifremi unuttum" bağlantısı da yok; giriş ekranı ona
 sunucuyu açana, yani sana yazmasını söyler. `npm run yonet -- sifre ali` yeni bir şifre üretip
 ekrana yazar (`uemjz5kk` gibi; birbirine benzeyen harf ve rakam yok). WhatsApp'tan gönder, o
-şifreyle girsin. Hesabı, kankaları, rozetleri ve süren çelıncları yerinde kalır.
+şifreyle girsin. Hesabı, kankaları, rozetleri ve süren çelıncları yerinde kalır. Girdikten sonra
+**Ayarlar → Hesap → Şifreni değiştir**'den kendi şifresini koyabilir; "123456" ile kaydolanlar da
+oradan değiştirir.
 
 * Kullanıcı adını hatırlamıyorsa önce `npm run yonet -- kullanicilar` ile bak.
 * Başka bir telefonda açık kalmış oturumu varsa o kapanmaz; şifre sıfırlamak kimseyi dışarı atmaz.
@@ -604,6 +606,13 @@ açıldığında geçmiş çelınclarını da kapatır.
 **Kanka şifresini unuttu, giremiyor.**
 Yeni hesap açmasın, her şeyi sıfırdan başlar. Sen `npm run yonet -- sifre <kullanici-adi>`
 çalıştır, çıkan şifreyi ona gönder. Ayrıntısı [Yönetim komutları](#yönetim-komutları) bölümünde.
+
+**Uygulama "Oturumun düşmüş, bir daha gir." diyor.**
+Oturum 90 gün geçerli ve uygulama onu haftada bir kendiliğinden tazeliyor; açılınca ya da arka
+plandaki 15 dakikalık kontrolde. Bu yazıyı görmek için telefonun aylarca sunucuya hiç
+ulaşmamış olması gerekir. Aynı kullanıcı adı ve şifreyle girsin, her şey yerinde. Herkes aynı
+anda görüyorsa sunucunun JWT anahtarı değişmiştir (`JWT_SECRET` değişti ya da
+`apps/server/data/secret` silindi); herkes bir kere yeniden girer, o kadar.
 
 **Saat farkı.**
 Günler kullanıcının kendi saat dilimine göre hesaplanır. Yurt dışına çıkarsan Ayarlar

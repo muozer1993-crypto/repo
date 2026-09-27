@@ -1,7 +1,8 @@
 /**
  * The signed-in user's own resources (SPEC 2.2):
- *   GET/PATCH/DELETE /me, POST+DELETE /me/push-token, POST /me/steps,
- *   POST /me/screen-time, GET /me/inbox, POST /me/inbox/read, GET /me/inbox/unread.
+ *   GET/PATCH/DELETE /me, POST /me/password, POST+DELETE /me/push-token,
+ *   POST /me/steps, POST /me/screen-time, GET /me/inbox, POST /me/inbox/read,
+ *   GET /me/inbox/unread.
  *
  * The interesting ones are the two device syncs: the phone posts raw daily
  * readings (steps, screen minutes) and the server fans them out into an entry
@@ -10,24 +11,30 @@
  */
 import type { FastifyInstance } from 'fastify';
 import {
+  ChangePasswordBodySchema,
   InboxQuerySchema,
   InboxReadBodySchema,
   PushTokenBodySchema,
   ScreenTimeSyncBodySchema,
   StepsSyncBodySchema,
   UpdateMeBodySchema,
+  type AuthResponse,
   type Notification,
   type ScreenTimeSyncDay,
   type StepsSyncDay,
   type UnreadCount,
 } from '@koydum/shared';
+import { signToken } from '../auth/jwt.js';
+import { hashPassword, verifyPassword } from '../auth/password.js';
 import { nowIso, type Database, type UserRow } from '../db/index.js';
-import { parseBody, parseQuery } from '../errors.js';
+import { badRequest, parseBody, parseQuery, tooMany } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { toMe, toNotification } from '../serialize.js';
 import { softDeleteUser } from '../services/accounts.js';
 import { fanOutDeviceDays } from '../services/deviceSync.js';
 import { listInbox, markRead, unreadCount } from '../services/notifications.js';
+import { AttemptLimiter, retryAfterText } from '../services/throttle.js';
+import { LOGIN_FAILURES_PER_ACCOUNT } from './auth.js';
 
 /**
  * Writes the synced days into `steps_daily` and mirrors them into every open
@@ -84,8 +91,15 @@ function syncScreenTime(db: Database, user: UserRow, days: ScreenTimeSyncDay[], 
 }
 
 export default async function meRoutes(app: FastifyInstance): Promise<void> {
-  const { db } = app;
+  const { db, config } = app;
   const auth = { preHandler: app.authenticate };
+
+  /**
+   * A phone left unlocked on the table already holds a working token, so the
+   * current password is the only thing between it and a hijacked account —
+   * guessing it here gets the same budget as guessing it at login.
+   */
+  const passwordFailures = new AttemptLimiter(LOGIN_FAILURES_PER_ACCOUNT.max, LOGIN_FAILURES_PER_ACCOUNT.windowMs);
 
   app.get('/me', auth, async (request) => toMe(db, requireUser(request).row, app.now()));
 
@@ -119,6 +133,47 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
     const { row } = requireUser(request);
     const deleted = softDeleteUser(db, row, app.now());
     return { ok: true, username: deleted.username };
+  });
+
+  // ---------------------------------------------------------------------------
+  // Password
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Swaps a throwaway "123456" (or the one the owner handed out with
+   * `npm run yonet -- sifre`) for a real one. Answers with a fresh session like
+   * login does. Tokens are stateless JWTs, so other phones already signed in
+   * stay signed in (SPEC 2.2).
+   */
+  app.post('/me/password', auth, async (request) => {
+    const { row } = requireUser(request);
+    const now = app.now();
+    const waitMs = passwordFailures.retryAfterMs(row.id, now);
+    if (waitMs > 0) {
+      throw tooMany('too_many_attempts', `Çok fazla deneme yaptın. ${retryAfterText(waitMs)}`);
+    }
+
+    const body = parseBody(ChangePasswordBodySchema, request.body);
+    // A 400, never a 401: the app logs out on any 401, and a typo in this form
+    // must not cost the session it was typed in.
+    if (!(await verifyPassword(body.currentPassword, row.password_hash))) {
+      passwordFailures.record(row.id, now);
+      throw badRequest('wrong_password', 'Mevcut şifren tutmadı.');
+    }
+    passwordFailures.reset(row.id);
+    // compared the way scrypt sees them, so a look-alike spelling is "the same" too
+    if (body.newPassword.normalize('NFKC') === body.currentPassword.normalize('NFKC')) {
+      throw badRequest('same_password', 'Yeni şifren eskisiyle aynı. Başka bir şey yaz.');
+    }
+
+    const hash = await hashPassword(body.newPassword);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, row.id);
+
+    const payload: AuthResponse = {
+      token: signToken({ sub: row.id }, config.jwtSecret, undefined, now),
+      me: toMe(db, row, now),
+    };
+    return payload;
   });
 
   // ---------------------------------------------------------------------------

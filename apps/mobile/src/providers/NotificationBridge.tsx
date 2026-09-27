@@ -36,6 +36,10 @@ import { deliverNewInbox } from '@/services/inboxNotifier';
  */
 export function NotificationBridge() {
   const token = useAuth((s) => s.token);
+  // A renewed token (services/session) or a password change swaps the token
+  // string but not the person; the tap handler keys on this so it does not
+  // replay the notification the app was opened with.
+  const signedIn = !!token;
   const serverUrl = useAuth((s) => s.serverUrl);
   const makeClient = useAuth((s) => s.client);
   const refreshMe = useAuth((s) => s.refreshMe);
@@ -118,7 +122,7 @@ export function NotificationBridge() {
 
   // --- notification taps -------------------------------------------------
   useEffect(() => {
-    if (!token) return;
+    if (!signedIn) return;
     const go = (route: NotificationRoute) => {
       if (!route) return;
       if (route.kind === 'inbox') router.push('/(app)/(tabs)/inbox');
@@ -158,7 +162,7 @@ export function NotificationBridge() {
       response.remove();
       received.remove();
     };
-  }, [token, queryClient, toast]);
+  }, [signedIn, queryClient, toast]);
 
   // --- inbox poll: local notification when push did not deliver ----------
   useEffect(() => {

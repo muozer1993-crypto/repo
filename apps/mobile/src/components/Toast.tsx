@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -65,6 +65,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(() => show, [show]);
+
+  // A toast raised just before the provider goes away (a screen test tearing
+  // down) must not fire its hide into an unmounted tree.
+  useEffect(() => {
+    const pending = timer;
+    return () => {
+      if (pending.current) clearTimeout(pending.current);
+    };
+  }, []);
 
   return (
     <ToastContext.Provider value={value}>

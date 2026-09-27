@@ -6,6 +6,7 @@ import { guessServerUrl, serverUrlIsEditable } from '@/lib/config';
 import { deliverNewInbox } from '@/services/inboxNotifier';
 import { flushQueue } from '@/services/offlineQueue';
 import { syncScreenTimeNow } from '@/services/screenTimeSync';
+import { renewTokenIfDue } from '@/services/session';
 import { syncStepsNow } from '@/services/stepSync';
 
 /**
@@ -34,6 +35,10 @@ export async function runBackgroundWork(): Promise<void> {
   const client = new ApiClient({ baseUrl, token, timeoutMs: 20_000 });
   // a throwaway cache: nothing is mounted to read it, invalidation is a no-op
   const queryClient = new QueryClient();
+
+  // A phone that is only ever woken by this task still has to renew its token,
+  // or steps and "KOYDUM MU?" stop the day it expires. Never throws.
+  await renewTokenIfDue(client, (next) => client.withToken(next));
 
   try {
     await syncStepsNow({ client, queryClient });

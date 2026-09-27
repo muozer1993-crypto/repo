@@ -82,4 +82,6 @@ export const StorageKeys = {
   dismissedUpdate: 'koydum.dismissedUpdate',
   /** local day key of the first successful Play services step subscription */
   stepRecordingSince: 'koydum.stepRecordingSince',
+  /** when the stored token was last issued or renewed (see services/session) */
+  tokenRenewedAt: 'koydum.tokenRenewedAt',
 } as const;

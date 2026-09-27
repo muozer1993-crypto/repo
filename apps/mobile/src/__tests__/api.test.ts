@@ -70,6 +70,33 @@ describe('ApiClient', () => {
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
 
+  it('renews the token and changes the password on their own paths', async () => {
+    const spy = mockFetch(() => json({ token: 'yeni' }));
+    const client = new ApiClient({ baseUrl: BASE, token: 'eski' });
+
+    await expect(client.refreshToken()).resolves.toEqual({ token: 'yeni' });
+    expect(spy.mock.calls[0][0]).toBe(`${BASE}/auth/refresh`);
+    const refresh = spy.mock.calls[0][1] as RequestInit;
+    expect(refresh.method).toBe('POST');
+    expect(refresh.body).toBeUndefined();
+
+    await client.changePassword({ currentPassword: '123456', newPassword: 'yepyeni42' });
+    expect(spy.mock.calls[1][0]).toBe(`${BASE}/me/password`);
+    const change = spy.mock.calls[1][1] as RequestInit;
+    expect(change.method).toBe('POST');
+    expect(JSON.parse(String(change.body))).toEqual({ currentPassword: '123456', newPassword: 'yepyeni42' });
+  });
+
+  it('keeps the session when the current password is wrong', async () => {
+    mockFetch(() => json({ error: { code: 'wrong_password', message: 'Mevcut şifren tutmadı.' } }, 400));
+    const onUnauthorized = jest.fn();
+    const client = new ApiClient({ baseUrl: BASE, token: 'abc', onUnauthorized });
+    await expect(
+      client.changePassword({ currentPassword: 'yanlis', newPassword: 'yepyeni42' })
+    ).rejects.toMatchObject({ code: 'wrong_password', status: 400 });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
   it('treats 204 as an empty result', async () => {
     mockFetch(() => new Response(null, { status: 204 }));
     await expect(new ApiClient({ baseUrl: BASE }).clearPushToken()).resolves.toBeUndefined();

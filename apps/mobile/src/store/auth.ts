@@ -6,6 +6,7 @@ import { ApiClient } from '@/lib/api';
 import { guessServerUrl, serverUrlIsEditable } from '@/lib/config';
 import { queryClient } from '@/lib/query';
 import { StorageKeys, getJson, removeItem, setItem, setJson } from '@/lib/storage';
+import { markTokenRenewed, renewTokenIfDue } from '@/services/session';
 
 interface AuthState {
   hydrated: boolean;
@@ -14,12 +15,19 @@ interface AuthState {
   serverUrl: string;
   /** true while the initial /me refresh is in flight */
   refreshing: boolean;
+  /**
+   * The server turned the token down and the app logged out on its own. The
+   * login screen says so once, then clears it, so nobody wonders why they are
+   * looking at it.
+   */
+  sessionEnded: boolean;
 
   hydrate: () => Promise<void>;
   setSession: (token: string, me: Me) => Promise<void>;
   setMe: (me: Me) => Promise<void>;
   setServerUrl: (url: string) => Promise<void>;
   logout: () => Promise<void>;
+  clearSessionEnded: () => void;
   client: () => ApiClient;
   refreshMe: () => Promise<Me | null>;
 }
@@ -48,6 +56,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   me: null,
   serverUrl: guessServerUrl(),
   refreshing: false,
+  sessionEnded: false,
 
   hydrate: async () => {
     const [token, me, storedUrl] = await Promise.all([
@@ -66,7 +75,19 @@ export const useAuth = create<AuthState>((set, get) => ({
         serverUrlIsEditable() && typeof storedUrl === 'string' && storedUrl ? storedUrl : guessServerUrl(),
       hydrated: true,
     });
-    if (token) void get().refreshMe();
+    if (token) {
+      void get()
+        .refreshMe()
+        .then((fresh) => {
+          // Only a token the server has just accepted is worth renewing; a dead
+          // one already got its 401 and the logout that comes with it.
+          if (!fresh) return;
+          void renewTokenIfDue(get().client(), (next) => {
+            // a logout or another login while the request was out wins
+            if (get().token === token) set({ token: next });
+          });
+        });
+    }
   },
 
   setSession: async (token, me) => {
@@ -74,8 +95,10 @@ export const useAuth = create<AuthState>((set, get) => ({
     // cached challenges, inbox or unread badge
     const previous = get().me;
     if (previous && previous.id !== me.id) queryClient.clear();
-    set({ token, me });
-    await Promise.all([setJson(StorageKeys.token, token), setJson(StorageKeys.me, me)]);
+    set({ token, me, sessionEnded: false });
+    // every token handed to setSession was just signed, so the weekly renewal
+    // has nothing to do for a while
+    await Promise.all([setJson(StorageKeys.token, token), setJson(StorageKeys.me, me), markTokenRenewed()]);
   },
 
   setMe: async (me) => {
@@ -110,6 +133,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     queryClient.clear();
     await Promise.all([
       removeItem(StorageKeys.token),
+      removeItem(StorageKeys.tokenRenewedAt),
       removeItem(StorageKeys.me),
       removeItem(StorageKeys.pushToken),
       // otherwise the next account's first poll replays its history as local
@@ -118,12 +142,17 @@ export const useAuth = create<AuthState>((set, get) => ({
     ]);
   },
 
+  clearSessionEnded: () => set({ sessionEnded: false }),
+
   client: () => {
     const { serverUrl, token } = get();
     return new ApiClient({
       baseUrl: serverUrl,
       token,
       onUnauthorized: () => {
+        // A wrong password on the login screen is a 401 too, and there is no
+        // session to lose there.
+        if (get().token) set({ sessionEnded: true });
         void get().logout();
       },
     });

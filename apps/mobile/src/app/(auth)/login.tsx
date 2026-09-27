@@ -1,9 +1,10 @@
 import { Link, router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { PendingInviteBanner } from '@/components/PendingInviteBanner';
 import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
@@ -16,6 +17,16 @@ export default function LoginScreen() {
   const setSession = useAuth((s) => s.setSession);
   const makeClient = useAuth((s) => s.client);
   const serverUrl = useAuth((s) => s.serverUrl);
+  const sessionEnded = useAuth((s) => s.sessionEnded);
+  const clearSessionEnded = useAuth((s) => s.clearSessionEnded);
+
+  // Taken once: the note stays for this visit and is gone by the next one.
+  // Without it, a phone that got a 401 simply showed this screen, and nobody
+  // knew why they had been signed out.
+  const [sessionNote] = useState(sessionEnded);
+  useEffect(() => {
+    if (sessionNote) clearSessionEnded();
+  }, [sessionNote, clearSessionEnded]);
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -65,6 +76,14 @@ export default function LoginScreen() {
           Arkadaşına koy. Sapır sapır.
         </Text>
       </View>
+
+      {sessionNote ? (
+        <Card edgeColor={Colors.yellow}>
+          <Text variant="small" bold>
+            Oturumun düşmüş, bir daha gir.
+          </Text>
+        </Card>
+      ) : null}
 
       <PendingInviteBanner action="login" />
 

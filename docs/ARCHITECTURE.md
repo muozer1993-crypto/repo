@@ -209,6 +209,8 @@ görev **başsız** çalışır: JS paketi yüklenir ama React hiç kurulmaz, do
 yoktur. Bu durumda `services/backgroundWork.ts` oturumu doğrudan depodan okur ve aynı üç işi
 yapar: adım ve ekran süresi okumalarını gönderir, çevrimdışı kuyruğunu boşaltır, gelen kutusu
 sayısını rozete yazar. "Kimse uygulamayı açmasa da çelınc puan toplar" sözü buna dayanır.
+Sırası gelmişse işe oturumu yenileyerek başlar (aşağıda "Oturumlar"): sadece bu görevle uyanan
+bir telefon da 90. gün dışarıda kalmaz.
 
 Görevin tanımı bu yüzden `_layout`'tan değil, uygulamanın giriş dosyasından gelir:
 `apps/mobile/index.ts` (`package.json`'daki `main`) önce `expo-router/entry`'yi, sonra
@@ -221,6 +223,24 @@ Telefonun kendi çıkardığı bildirimler (`fireLocal`, hatırlatmalar) Android
 kanalına gider. Tetikleyicisi `null` olan bir bildirim kütüphanenin İngilizce "Miscellaneous"
 kanalına düşer; orayı susturan biri bütün lafları da susturmuş olurdu. O yüzden hemen gösterilecek
 bildirim de sadece `channelId` taşıyan bir tetikleyiciyle gönderilir.
+
+## Oturumlar
+
+Oturum, sunucunun imzaladığı durumsuz bir JWT'dir ve imzalandığı andan itibaren 90 gün geçerlidir.
+Eskiden bunu yenileyen bir şey yoktu: aynı hafta katılan kankaların hepsi aynı gün dışarı
+atılıyordu, arka plan görevi de 401'i yutup adım göndermeyi sessizce bırakıyordu. Şimdi
+`services/session.ts` haftada bir, önce hangisi çalışırsa (uygulamanın açılışı ya da başsız
+görev), `POST /auth/refresh` ile token'ı taze 90 günlükle değiştirir. Süresi dolmuş bir token
+yenilenmez; yenileme içeride kalmanın yolu, geri girmenin değil. Yenileme sürerken çıkış yapan
+birinin token'ı depoya geri yazılmaz. Sunucu yine de bir token'ı reddederse (401) uygulama çıkış
+yapar ve giriş ekranı bir kereliğine "Oturumun düşmüş, bir daha gir." der; önceden hiçbir şey
+demeden giriş ekranını gösteriyordu.
+
+Şifre, Ayarlar → Hesap → "Şifreni değiştir"den değişir (`POST /me/password`). Yanlış girilen
+mevcut şifre 401 değil 400 `wrong_password` döner, çünkü uygulama her 401'de çıkış yapar; bir
+yazım hatası o anki oturuma mal olmamalı. Buradaki tahmin hakkı da girişteki kadardır: hesap
+başına 15 dakikada 8 yanlış. Token'lar durumsuz olduğundan şifre değişince başka
+telefonlarda açık oturumlar kapanmaz; bunun için sunucunun iptal listesi tutması gerekirdi.
 
 ## Neden SQLite
 
