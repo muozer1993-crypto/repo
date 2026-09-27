@@ -109,15 +109,17 @@ describe('challenge lifecycle', () => {
     ]);
     expect(running[0]!.isWinner).toBe(true);
 
-    // finalize when the clock passes endsAt
+    // at endsAt a step çelınc still waits for the phones; an hour later it is final
     harness.setNow('2026-01-07T09:00:00.000Z');
+    expect(finalizeEndedChallenges(db, app.now())).toBe(0);
+    harness.setNow('2026-01-07T10:00:00.000Z');
     expect(finalizeEndedChallenges(db, app.now())).toBe(1);
 
     const finished = getChallengeRow(db, challengeId) as ChallengeRow;
     expect(finished.status).toBe('finished');
     expect(finished.winner_id).toBe(ali.me.id);
     expect(finished.is_tie).toBe(0);
-    expect(finished.finalized_at).toBe('2026-01-07T09:00:00.000Z');
+    expect(finished.finalized_at).toBe('2026-01-07T10:00:00.000Z');
 
     const stored = db
       .prepare('SELECT user_id, final_score, final_rank FROM challenge_participants WHERE challenge_id = ? ORDER BY final_rank')
@@ -217,7 +219,8 @@ describe('challenge lifecycle', () => {
     const summary = runSchedulerOnce(db, app.now());
     expect(summary).toEqual({ activated: 1, finalized: 0, cancelled: 1, reminders: 0, nudges: 0, recaps: 0 });
 
-    harness.setNow('2026-01-06T08:00:00.000Z');
+    // the end plus the hour a step çelınc gives the phones
+    harness.setNow('2026-01-06T09:00:00.000Z');
     expect(runSchedulerOnce(db, app.now()).finalized).toBe(1);
   });
 });

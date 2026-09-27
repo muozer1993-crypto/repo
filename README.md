@@ -644,8 +644,11 @@ yüklenirken patlıyordu ve bütün uygulamayı düşürüyordu; artık bildirim
 yükleniyor, gelmezse uygulama onsuz devam ediyor.
 
 **Çelınc bitti ama sonuç çıkmadı.**
-Sonuçlandırmayı sunucudaki zamanlayıcı yapar ve 30 saniyede bir çalışır. Sunucu kapalıysa
-açıldığında geçmiş çelınclarını da kapatır.
+Sonuçlandırmayı sunucudaki zamanlayıcı yapar ve 30 saniyede bir çalışır. Adım ve ekran süresi
+çelınclarında bu bilerek bir saate kadar sürer: son akşamın adımları telefonlardan geç gelir,
+uygulama o sırada "Sonuç birazdan" yazar. Herkesin telefonu son günü gönderince hemen kapanır.
+Sunucu kapalıysa açıldığında geçmiş çelınclarını da kapatır; adım çelınclarında telefonlara
+açıldıktan sonra yine bir saat tanır.
 
 **Kanka şifresini unuttu, giremiyor.**
 Yeni hesap açmasın, her şeyi sıfırdan başlar. Sen `npm run yonet -- sifre <kullanici-adi>`

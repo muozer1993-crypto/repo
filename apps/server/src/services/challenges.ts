@@ -16,6 +16,7 @@
  */
 import {
   DEFAULT_TIMEZONE,
+  LIMITS,
   compareDayKeys,
   computeScore,
   formatScore,
@@ -27,6 +28,7 @@ import {
   t,
   todayKey,
   type ChallengeType,
+  type DeviceMetric,
   type MetricType,
   type ParticipantView,
   type RankingResult,
@@ -58,6 +60,8 @@ export interface SchedulerSummary {
 export interface SchedulerDeps {
   /** Called for anything that goes wrong inside one step (never throws out). */
   onError?: (step: string, err: unknown) => void;
+  /** When this server process started; see `finalizeEndedChallenges`. */
+  bootAt?: Date;
 }
 
 // ---------------------------------------------------------------------------
@@ -565,13 +569,79 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
   return computeStandings(db, updated, now);
 }
 
-/** Step 2 — every `active` challenge whose end time has passed. */
-export function finalizeEndedChallenges(db: Database, now: Date = new Date()): number {
+/** Where each phone reading lands before the fan-out (`routes/me.ts`). */
+const DEVICE_DAILY_TABLE: Record<DeviceMetric, string> = {
+  steps: 'steps_daily',
+  screen_time: 'screen_time_daily',
+};
+
+/**
+ * True when every accepted player's phone has reported their LAST day of the
+ * çelınc after it ended. Each sync sends the past week, so a sync after the end
+ * carries the final evening in full; nothing better is coming, and making the
+ * group wait out the rest of the hour would only delay the result.
+ *
+ * The day is the player's own (pinned timezone), the same window expression the
+ * fan-out writes against. Somebody who declares steps by hand never syncs, so
+ * with them in the race the full settle hour always runs.
+ */
+function everyPhoneReported(db: Database, challenge: ChallengeRow, metric: DeviceMetric): boolean {
+  const accepted = acceptedParticipants(db, challenge.id);
+  const users = userMap(db, accepted.map((p) => p.user_id));
+  const endedAt = Date.parse(challenge.ends_at);
+  const lastSync = db.prepare(`SELECT updated_at FROM ${DEVICE_DAILY_TABLE[metric]} WHERE user_id = ? AND day_key = ?`);
+
+  return accepted.every((participant) => {
+    const tz = participantTimezone(participant, users.get(participant.user_id));
+    const lastDay = challengeWindow(challenge, tz).at(-1);
+    if (!lastDay) return false;
+    const row = lastSync.get(participant.user_id, lastDay) as { updated_at: string } | undefined;
+    return !!row && Date.parse(row.updated_at) > endedAt;
+  });
+}
+
+/**
+ * Whether an ended çelınc is still waiting for the phones.
+ *
+ * Only types the phone counts on its own wait: the final evening's steps sit on
+ * the device until the next background sync, and a winner crowned at midnight on
+ * a 22:15 reading cannot be taken back (the fan-out stops at `finished`). Typed
+ * çelınclar have nothing more to receive and finish on the dot.
+ *
+ * The hour runs from the end or from this process's start, whichever is later: a
+ * server that was off at midnight must not crown anybody on boot before a single
+ * phone could reach it, and a restart during the hour starts it again, which
+ * needs no bookkeeping table.
+ */
+function stillSettling(db: Database, challenge: ChallengeRow, now: Date, bootAt?: Date): boolean {
+  const metric = typeForChallenge(challenge).deviceMetric;
+  if (!metric) return false;
+  const settleFrom = Math.max(Date.parse(challenge.ends_at), bootAt?.getTime() ?? Number.NEGATIVE_INFINITY);
+  if (now.getTime() >= settleFrom + LIMITS.DEVICE_SETTLE_MS) return false;
+  return !everyPhoneReported(db, challenge, metric);
+}
+
+/**
+ * Step 2 — every `active` challenge whose end time has passed, once the phones
+ * have had their chance to report (`stillSettling`). Until then it stays `active`,
+ * so a late device sync still fans out into it; typed entries are refused from
+ * `ends_at` on (`challenge_ended` in `validateAndUpsertEntry`).
+ */
+export function finalizeEndedChallenges(
+  db: Database,
+  now: Date = new Date(),
+  options: { bootAt?: Date } = {},
+): number {
   const ended = db
     .prepare("SELECT * FROM challenges WHERE status = 'active' AND ends_at <= ?")
     .all(nowIso(now)) as ChallengeRow[];
-  for (const challenge of ended) finalizeChallenge(db, challenge, now);
-  return ended.length;
+  let finalized = 0;
+  for (const challenge of ended) {
+    if (stillSettling(db, challenge, now, options.bootAt)) continue;
+    finalizeChallenge(db, challenge, now);
+    finalized += 1;
+  }
+  return finalized;
 }
 
 /**
@@ -587,14 +657,16 @@ export function finalizeEndedChallenges(db: Database, now: Date = new Date()): n
  */
 export function sendReminders(db: Database, now: Date = new Date()): number {
   const iso = nowIso(now);
+  // `ends_at > now`: a çelınc waiting for the phones after its end is still
+  // `active`, but there is nothing left to type into it
   const candidates = db
     .prepare(
       `SELECT DISTINCT u.* FROM users u
          JOIN challenge_participants p ON p.user_id = u.id AND p.status = 'accepted'
-         JOIN challenges c ON c.id = p.challenge_id AND c.status = 'active'
+         JOIN challenges c ON c.id = p.challenge_id AND c.status = 'active' AND c.ends_at > ?
         WHERE u.deleted_at IS NULL AND u.reminder_hour IS NOT NULL`,
     )
-    .all() as UserRow[];
+    .all(iso) as UserRow[];
 
   const claim = db.prepare('INSERT OR IGNORE INTO reminders_sent (user_id, day_key) VALUES (?, ?)');
   // the reminder says "you have nothing today" — so it only goes to people for
@@ -739,7 +811,7 @@ export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: Sch
   };
 
   step('activate', () => activateDueChallenges(db, now), (n) => (summary.activated = n));
-  step('finalize', () => finalizeEndedChallenges(db, now), (n) => (summary.finalized = n));
+  step('finalize', () => finalizeEndedChallenges(db, now, { bootAt: deps.bootAt }), (n) => (summary.finalized = n));
   step('cancel', () => cancelUnderfilled(db, now), (n) => (summary.cancelled = n));
   step('reminders', () => sendReminders(db, now), (n) => (summary.reminders = n));
   step('nudges', () => sendNudges(db, now), (n) => (summary.nudges = n));

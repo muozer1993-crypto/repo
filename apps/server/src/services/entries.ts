@@ -186,6 +186,17 @@ export function dayWindowError(issue: DayWindowIssue, metricType: MetricType, so
   return badRequest('day_too_old', `En fazla ${backfillDaysFor(metricType, source)} gün geriye giriş yapabilirsin.`);
 }
 
+/** The Turkish 400 for a typed entry after the end; says what is still coming in. */
+function challengeEndedError(type: ChallengeType): HttpError {
+  if (type.deviceMetric === 'steps') {
+    return badRequest('challenge_ended', 'Süre bitti, artık elle giriş yok. Telefonların saydığı son adımlar toplanıyor.');
+  }
+  if (type.deviceMetric === 'screen_time') {
+    return badRequest('challenge_ended', 'Süre bitti, artık elle giriş yok. Telefonların ölçtüğü son ekran süreleri toplanıyor.');
+  }
+  return badRequest('challenge_ended', 'Süre bitti, artık giriş yok. Sonuç birazdan.');
+}
+
 /**
  * Validates one entry against SPEC 2.3 and writes it (insert or upsert, per metric).
  * Throws `HttpError`s carrying the documented codes; never returns an invalid write.
@@ -220,6 +231,14 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
       .prepare('SELECT * FROM entries WHERE challenge_id = ? AND user_id = ? AND session_id = ?')
       .get(challenge.id, user.id, sessionId) as EntryRow | undefined;
     if (replay) return { entry: replay, created: false };
+  }
+
+  // Past its end a phone-counted çelınc stays `active` for up to an hour so the
+  // last evening's device sync can land (`finalizeEndedChallenges`). That hour is
+  // for the phones only: a number typed now could be picked after seeing the
+  // final standings. A replay above is still answered — it was written in time.
+  if (now.getTime() >= Date.parse(challenge.ends_at) && !isDeviceSource(body.source)) {
+    throw challengeEndedError(type);
   }
 
   const allowed = ALLOWED_SOURCES[type.metricType];

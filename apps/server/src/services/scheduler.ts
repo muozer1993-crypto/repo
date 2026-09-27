@@ -39,10 +39,14 @@ export function startScheduler(
 ): () => Promise<void> {
   const push = options.push ?? createPushSender(config);
   let inFlight: Promise<void> | null = null;
+  // A phone-counted çelınc that ended while this server was off waits a full
+  // hour from now, not from its end, so the phones get to report before anybody wins.
+  const bootAt = app.now();
 
   const tick = async (): Promise<void> => {
     try {
       const summary = runSchedulerOnce(db, app.now(), {
+        bootAt,
         onError: (stepName, err) => app.log.error({ err, step: stepName }, 'scheduler step failed'),
       });
       if (

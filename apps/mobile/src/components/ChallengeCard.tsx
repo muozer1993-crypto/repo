@@ -51,7 +51,15 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
 
       <View style={styles.footer}>
         {challenge.status === 'active' ? (
-          <Countdown target={challenge.endsAt} prefix="⏳" variant="tiny" bold />
+          // Past the end a phone-counted çelınc stays active for up to an hour
+          // while the last syncs come in; the countdown's own clock flips it.
+          <Countdown
+            target={challenge.endsAt}
+            prefix="⏳"
+            finishedLabel="⏳ Sonuç bekleniyor"
+            variant="tiny"
+            bold
+          />
         ) : challenge.status === 'pending' ? (
           <Countdown target={challenge.startsAt} prefix="🚦 başlıyor:" variant="tiny" muted />
         ) : (

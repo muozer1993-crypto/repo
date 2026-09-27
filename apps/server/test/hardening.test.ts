@@ -490,7 +490,8 @@ describe('manual_lower_is_better across timezones', () => {
     expect(refused.statusCode).toBe(400);
     expect(errorCode(refused)).toBe('day_out_of_range');
 
-    harness.setNow('2026-01-06T23:31:00.000Z');
+    // past the end and the hour the phones get to report screen time
+    harness.setNow('2026-01-07T00:30:00.000Z');
     const advanced = await harness.app.inject({ method: 'POST', url: '/dev/advance' });
     expect(advanced.json<{ finalized: number }>().finalized).toBe(1);
 

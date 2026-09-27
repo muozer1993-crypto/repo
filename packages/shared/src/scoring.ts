@@ -45,6 +45,13 @@ export const LIMITS = {
   POKE_COOLDOWN_MS: 2 * 60 * 60 * 1000,
   /** Accepting an invite is allowed while now < endsAt - this. */
   ACCEPT_CUTOFF_MS: 60 * 60 * 1000,
+  /**
+   * How long a çelınc the phone counts (steps, screen time) waits past its end
+   * for the final evening to arrive before a winner is crowned. A background
+   * sync runs every 15+ minutes and Doze stretches that; finalizing on the dot
+   * would score whatever the phones happened to send last.
+   */
+  DEVICE_SETTLE_MS: 60 * 60 * 1000,
   REMATCH_START_DELAY_MS: 5 * 60 * 1000,
   INBOX_PAGE_DEFAULT: 30,
   INBOX_PAGE_MAX: 100,

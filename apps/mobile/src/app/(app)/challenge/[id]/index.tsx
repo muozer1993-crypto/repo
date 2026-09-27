@@ -105,6 +105,18 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+/** What the server is still waiting for once the time is up (`settling`). */
+function settlingNote(type: ChallengeType | undefined): string {
+  switch (type?.deviceMetric) {
+    case 'steps':
+      return 'Telefonların saydığı son adımlar toplanıyor. Herkesinki gelince, en fazla da bir saat içinde kazanan belli olur.';
+    case 'screen_time':
+      return 'Telefonların ölçtüğü son ekran süreleri toplanıyor. Herkesinki gelince, en fazla da bir saat içinde kazanan belli olur.';
+    default:
+      return 'Son hesap yapılıyor, bir dakikaya kalmaz.';
+  }
+}
+
 /* ----------------------------------------------------------------- screen */
 
 export default function ChallengeDetailScreen() {
@@ -120,11 +132,36 @@ export default function ChallengeDetailScreen() {
   const detail = query.data;
   const type = detail ? getChallengeType(detail.challenge.typeKey) : undefined;
 
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const refreshMe = useAuth((s) => s.refreshMe);
+
   const [proofUrl, setProofUrl] = useState<string | null>(null);
-  // Read once per mount instead of during render: `Date.now()` in render is
-  // impure for the React Compiler. The query refetches every 45 s, so a start
-  // time that passes while the screen is open is still picked up.
-  const [renderedAt] = useState(() => Date.now());
+  // Read on mount (and again when the end countdown runs out) instead of during
+  // render: `Date.now()` in render is impure for the React Compiler. The query
+  // refetches every 45 s, so a start time that passes while the screen is open
+  // is still picked up.
+  const [renderedAt, setRenderedAt] = useState(() => Date.now());
+
+  /**
+   * Past its end, a çelınc the phones count stays `active` for up to an hour on
+   * the server while it waits for the last evening's sync, and typed entries are
+   * refused from the end on. The screen says "sonuç birazdan" instead of a
+   * countdown stuck at zero and offers no entry buttons.
+   */
+  const endsAtMs = detail ? Date.parse(detail.challenge.endsAt) : Number.NaN;
+  const settling = detail?.challenge.status === 'active' && Number.isFinite(endsAtMs) && endsAtMs <= renderedAt;
+  const settlingMetric = settling && detail?.me?.status === 'accepted' ? type?.deviceMetric : undefined;
+
+  // The background sync may be 15+ minutes away; somebody looking at the result
+  // is the moment to send this phone's last count, so it is not the one missing.
+  useEffect(() => {
+    if (!settlingMetric) return;
+    const sync = settlingMetric === 'steps' ? syncStepsNow : syncScreenTimeNow;
+    sync({ client: api, queryClient, refreshMe }).catch(() => {
+      // best effort: the app sends it again on the next foreground or background run
+    });
+  }, [settlingMetric, api, queryClient, refreshMe]);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)'));
 
@@ -260,6 +297,14 @@ export default function ChallengeDetailScreen() {
                 onFinish={() => void query.refetch()}
               />
             </>
+          ) : settling ? (
+            <>
+              <Text variant="label">Süre bitti</Text>
+              <Text variant="big">Sonuç birazdan</Text>
+              <Text variant="tiny" faint>
+                {settlingNote(type)}
+              </Text>
+            </>
           ) : challenge.status === 'active' ? (
             <>
               <Text variant="label">Bitmesine</Text>
@@ -267,7 +312,10 @@ export default function ChallengeDetailScreen() {
                 target={challenge.endsAt}
                 variant="big"
                 finishedLabel="Süre doldu"
-                onFinish={() => void query.refetch()}
+                onFinish={() => {
+                  setRenderedAt(Date.now());
+                  void query.refetch();
+                }}
               />
             </>
           ) : (
@@ -307,7 +355,8 @@ export default function ChallengeDetailScreen() {
           Sıralama
         </Text>
         <Standings participants={participants} type={type} meId={meId} finished={challenge.status === 'finished'} />
-        {challenge.status === 'active' && isPlayer ? (
+        {/* "küçük bir gayret yeter" is a lie once nothing more counts */}
+        {challenge.status === 'active' && !settling && isPlayer ? (
           <Text
             variant="small"
             bold
@@ -332,7 +381,7 @@ export default function ChallengeDetailScreen() {
       ) : null}
 
       {/* ------------------------------------------------------- actions */}
-      {challenge.status === 'active' && isPlayer && type ? (
+      {challenge.status === 'active' && !settling && isPlayer && type ? (
         <ActionArea
           id={id}
           detail={detail}

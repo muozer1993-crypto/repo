@@ -51,6 +51,14 @@ Geçişleri 30 saniyede bir çalışan `services/scheduler.ts` yapar. Aynı fonk
 (`runSchedulerOnce`) testlerde ve `/dev/advance` ucunda doğrudan çağrılır, yani zamanlayıcı
 davranışı beklemeden test edilebilir.
 
+Adımı ya da ekran süresini telefonun kendisinin saydığı çelınclar bitişte hemen kapanmaz. Son
+akşamın adımları telefonda bir sonraki arka plan senkronunu bekler (15 dakika ve üstü), gece
+yarısı kapatırsak kazananı eksik sayıyla seçeriz ve sonradan gelen adımlar çöpe gider. Bu yüzden
+çelınc bir saat daha `active` kalır: telefonlar son günü göndermeye devam eder, elle giriş ise
+bitişten itibaren kabul edilmez (`challenge_ended`). Herkesin telefonu son günü bitişten sonra
+gönderdiyse beklemeden kapanır. Sunucu bitişte kapalıysa bir saat açıldığı andan sayılır
+(`bootAt`). Elle girilen çelınclar tam bitişte kapanır.
+
 ## Puanlama
 
 `packages/shared/src/scoring.ts` saf bir fonksiyondur: girdi olarak çelınc tipi, gün listesi ve

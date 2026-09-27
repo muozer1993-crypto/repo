@@ -315,7 +315,9 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 
 ### 2.3 Entry validation (`services/entries.ts`)
 
-Common: user must be `accepted` participant; challenge `active`; `dayKey` must be in
+Common: user must be `accepted` participant; challenge `active`; from `endsAt` on only device sources
+(`pedometer`, `health_connect`, `usage_stats`) are taken — a typed entry answers 400 `challenge_ended` while a
+phone-counted çelınc waits for the last syncs (2.4); `dayKey` must be in
 `dayKeysBetween(startsAt, endsAt, user.tz)`; `dayKey <= todayKey(user.tz)`; `dayKey >= todayKey − 2 days`
 (manual types) / `− 7 days` (steps); value ≤ `type.maxPerEntry`; proof required when
 `challenge.proofRequired` and source is manual (400 `proof_required`) — and only for metrics where a photo can back a typed number (`manual_count`, `manual_lower_is_better`, `auto_steps`); a `daily_boolean` mark or a `checkin` has no photo step and ignores the flag. Device sources (`pedometer`, `health_connect`, `usage_stats`) never need proof; `usage_stats` gets the 7-day device backfill window.
@@ -333,17 +335,25 @@ Per type:
 
 After every write: recompute standings (in memory via shared `rankParticipants`) and return.
 
-### 2.4 Lifecycle (scheduler, every 30 s; also callable directly for tests: `runSchedulerOnce(db, now)`)
+### 2.4 Lifecycle (scheduler, every 30 s; also callable directly for tests: `runSchedulerOnce(db, now, { bootAt? })`)
 
 1. `pending` with `starts_at <= now`: if accepted count ≥ 2 → `active` + `challenge_started` notification to accepted;
    else if `ends_at <= now` → `cancelled` (`challenge_cancelled`). (Single-participant challenges wait; others can still accept.)
-2. `active` with `ends_at <= now` → finalize: accepted participants with `rankParticipants`; write final_score/rank,
+2. `active` with `ends_at <= now` → finalize. A type with a `deviceMetric` (steps, screen time) first **settles**: the
+   phone's last evening usually arrives with the next background sync (15+ minutes, longer under Doze), so it
+   stays `active` until `now >= max(ends_at, bootAt) + LIMITS.DEVICE_SETTLE_MS` (1 h), or earlier once every
+   accepted participant's `steps_daily` / `screen_time_daily` row for their own last window day
+   (`challengeWindow(c, participantTimezone(p, u)).at(-1)`) has `updated_at > ends_at`. `bootAt` is when
+   `startScheduler` started, so a server that was off at the end gives the phones the full hour after boot. While
+   settling, device syncs still fan out into the last day and typed entries get `challenge_ended` (2.3); the
+   app shows "Sonuç birazdan" instead of the countdown, hides the entry buttons and sends its own count once.
+   Every other type finalizes right at `ends_at`. Finalize: accepted participants with `rankParticipants`; write final_score/rank,
    winner_id/is_tie, `finished`, `finalized_at`; notifications: winner → `challenge_finished` with data
    `{ role: 'winner' }`, losers → `{ role: 'loser', winnerId }`, tie → `{ role: 'tie' }`. The TITLE is a short
    lock-screen phrase per level ("Kazandın 🏆" / "KOYDUN! 👑" / "KOYDUN! 👑🍆", and "Bu tur bitti" / "Yedin lan" /
    "YEDİN 🍆"); the `challenge_finished_won` / `_lost` sentence opens the BODY, because a phone truncates a long
    title to nothing useful. Award badges (stats recompute) for all participants.
-3. Reminders: for each user with `reminder_hour` not null and an active challenge, when `localHour(now, tz) === reminder_hour`
+3. Reminders: for each user with `reminder_hour` not null and an active challenge whose `ends_at` is still ahead (a settling one has nothing left to type), when `localHour(now, tz) === reminder_hour`
    and no `reminders_sent` row for today → `reminder` notification with copy `notification_daily_reminder`.
 4. Push queue: every notification row with `pushed_at IS NULL AND push_error IS NULL` for users with a token → Expo push
    (batched); mark `pushed_at` or `push_error`. Uses `Expo.isExpoPushToken`.
@@ -453,6 +463,9 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             3) kankalar seç (multi-select friends) 4) özet + "KOY BAKALIM" create
 (app)/challenge/[id].tsx    detail: hero (emoji, title, status/countdown, reward), standings (ranked bars with scores + "koyuyor/yiyor" labels),
                             my action area per metric type (see 3.4), feed of recent entries with dispute button,
+                            past `endsAt` but still `active` (settling, 2.4) → "Süre bitti / Sonuç birazdan" instead of the
+                            countdown, no action area or "böyle devam" verdict, one device sync on open (the list card
+                            says "Sonuç bekleniyor"),
                             "laf sok" per rival you lead — opens a sheet of rendered `poke` lines to choose from,
                             leave/cancel; finished → button to results
 (app)/challenge/[id]/results.tsx   winner view: podium + "KOYDUM MU?" CTA per loser (or "Hepsine koy") → taunt picker; loser view: shame screen

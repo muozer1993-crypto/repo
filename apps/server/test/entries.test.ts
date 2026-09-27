@@ -130,6 +130,52 @@ describe('entry rules shared by every metric', () => {
     expect(errorCode(future)).toBe('day_in_future');
   });
 
+  it('after the end takes the phone\'s late count but no typed number', async () => {
+    harness = await makeApp({ now: NOW });
+    // runs to 12:00 tomorrow; the scheduler has not been by yet
+    const steps = await liveChallenge(harness, 'adim_yarisi', {}, 1);
+    const water = await liveChallenge(harness, 'su_bardak', {}, 1, '2');
+    harness.advance(DAY_MS + 60_000);
+    const lastDay = today(harness);
+
+    const typed = await post(harness, steps.ali, steps.challengeId, {
+      dayKey: lastDay,
+      value: 9000,
+      source: 'manual',
+      clientTime: iso(harness),
+    });
+    expect(typed.statusCode).toBe(400);
+    expect(errorCode(typed)).toBe('challenge_ended');
+    expect((typed.json() as { error: { message: string } }).error.message).toContain('son adımlar');
+
+    const counted = await post(harness, steps.ali, steps.challengeId, {
+      dayKey: lastDay,
+      value: 9000,
+      source: 'pedometer',
+      clientTime: iso(harness),
+    });
+    expect(counted.statusCode).toBe(201);
+
+    const synced = await authed(harness.app, steps.veli.token)({
+      method: 'POST',
+      url: '/me/steps',
+      payload: { days: [{ dayKey: lastDay, steps: 11000, source: 'health_connect' }] },
+    });
+    expect(synced.statusCode).toBe(200);
+    expect(synced.json<{ updated: number }>().updated).toBe(1);
+
+    // a typed çelınc has no phone to wait for, and takes nothing either
+    const glass = await post(harness, water.ali, water.challengeId, {
+      dayKey: lastDay,
+      value: 1,
+      source: 'manual',
+      clientTime: iso(harness),
+      sessionId: randomUUID(),
+    });
+    expect(glass.statusCode).toBe(400);
+    expect(errorCode(glass)).toBe('challenge_ended');
+  });
+
   it('allows 7 days of backfill for steps and only 2 for manual entries', async () => {
     harness = await makeApp({ now: NOW });
     const steps = await liveChallenge(harness, 'adim_yarisi', {}, 30, '_adim');

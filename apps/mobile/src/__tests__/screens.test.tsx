@@ -335,7 +335,8 @@ function challengeDetail() {
       unit: 'adım',
       title: 'Haftalık Adım',
       startsAt: '2026-09-07T00:00:00.000Z',
-      endsAt: '2026-09-14T00:00:00.000Z',
+      // still running whenever the suite runs; the settling tests move it back
+      endsAt: new Date(Date.now() + 3 * 86_400_000).toISOString(),
       status: 'active' as const,
       rewardText: 'Kaybeden kahve ısmarlar',
       penaltyText: null,
@@ -433,6 +434,61 @@ describe('standings verdict', () => {
     const text = rendered(tree);
     expect(text).toContain('Aferin lan koçum');
     expect(text).not.toContain('Başa baş');
+  });
+});
+
+describe('a step çelınc past its end, still active on the server', () => {
+  it('says the last steps are coming in, offers no entry, and sends this phone\'s count', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    detail.challenge.endsAt = new Date(Date.now() - 5 * 60_000).toISOString();
+    api.challenge = jest.fn(async () => detail);
+    const steps = require('@/services/steps') as { getDailySteps: jest.Mock };
+    steps.getDailySteps.mockClear();
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    // labels render in Turkish capitals
+    expect(text).toContain('SÜRE BİTTİ');
+    expect(text).toContain('Sonuç birazdan');
+    expect(text).toContain('son adımlar toplanıyor');
+    expect(text).not.toContain('BİTMESİNE');
+    expect(text).not.toContain('SENİN SIRAN');
+    expect(text).not.toContain('BEYAN ET');
+    // no "böyle devam" when there is nothing left to continue
+    expect(text).not.toContain('Aferin lan koçum');
+    expect(steps.getDailySteps).toHaveBeenCalled();
+  });
+
+  it('counts down and offers the entry while the time is not up', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => challengeDetail());
+    const steps = require('@/services/steps') as { getDailySteps: jest.Mock };
+    steps.getDailySteps.mockClear();
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('BİTMESİNE');
+    expect(text).toContain('SENİN SIRAN');
+    expect(text).toContain('BEYAN ET');
+    expect(text).not.toContain('Sonuç birazdan');
+    expect(steps.getDailySteps).not.toHaveBeenCalled();
+  });
+
+  it('home shows "sonuç bekleniyor" on its card instead of a countdown stuck at zero', async () => {
+    const { challenge, participants, me } = challengeDetail();
+    const ended = { ...challenge, endsAt: new Date(Date.now() - 5 * 60_000).toISOString() };
+    api.challenges = jest.fn(async () => [{ challenge: ended, participants, me, unreadTaunts: 0 }]);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('Sonuç bekleniyor');
   });
 });
 
