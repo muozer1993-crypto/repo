@@ -16,7 +16,14 @@ export interface DailySteps {
 }
 
 export type StepAvailability =
-  | { available: true; source: StepSource; /** Android foreground-only counting */ approximate: boolean }
+  | {
+      available: true;
+      source: StepSource;
+      /** Android foreground-only counting */
+      approximate: boolean;
+      /** why it is only approximate, when something the user can do would fix it */
+      upgrade?: 'play-services';
+    }
   | { available: false; reason: 'web' | 'no-sensor' | 'denied' | 'health-connect-missing' | 'error'; detail?: string };
 
 export async function getStepAvailability(): Promise<StepAvailability> {

@@ -164,6 +164,12 @@ Cihaz kaynağı (`pedometer`, `health_connect`, `usage_stats`) elle yazılmış 
 tersi yasaktır: telefonun okuduğu bir gün için `manual` yazmaya kalkan istek 409 `device_locked`
 alır. Kanıt fotoğrafı da sadece `manual` için zorunludur.
 
+Android'de adımın üç kaynağı var, sırayla: Health Connect (kuruluysa), Google Play hizmetlerinin
+Recording API'si (`apps/mobile/modules/koydum-steps/`) ve uygulama açıkken sayım. Android 9'dan
+beri arka plandaki bir uygulama adım sensöründen hiç olay almaz; bu yüzden uygulama kapalıyken
+saymanın tek yolu, sayımı Play hizmetlerinin yapması. Kayıt ilk izin anında başlar; o günün
+öncesini uygulamanın ön planda saydığı değer tamamlar, ikisinden büyük olan alınır.
+
 Ekran süresinin Android tarafı `apps/mobile/modules/koydum-screen-time/` altında yerel bir Expo
 modülüdür (Kotlin, `UsageStatsManager.queryEvents`). Uygulama onu adıyla arar
 (`requireOptionalNativeModule('KoydumScreenTime')`), yoksa ya da izin verilmemişse sebebiyle

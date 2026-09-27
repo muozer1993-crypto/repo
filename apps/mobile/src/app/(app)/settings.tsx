@@ -493,8 +493,10 @@ export default function SettingsScreen() {
               ? steps.source === 'health_connect'
                 ? 'Health Connect’ten günlük adımların otomatik geliyor.'
                 : steps.approximate
-                  ? 'Adımlar uygulama açıkken sayılıyor (yaklaşık). Kesin sonuç için Health Connect kur.'
-                  : 'Telefonun adım sayacı okunuyor, günlük adımların otomatik geliyor.'
+                  ? steps.upgrade === 'play-services'
+                    ? 'Adımlar şimdilik uygulama açıkken sayılıyor (yaklaşık). Google Play hizmetlerini Play Store’dan güncellersen telefon, uygulama kapalıyken de sayar.'
+                    : 'Adımlar uygulama açıkken sayılıyor (yaklaşık). Kesin sonuç için Health Connect kur.'
+                  : 'Adımlarını telefon kendisi sayıyor, uygulama kapalıyken de. Günlük toplam kendiliğinden gelir.'
               : STEP_REASONS[steps.reason] + (steps.detail ? ` (${steps.detail})` : '')}
         </Text>
         <View style={styles.buttonRow}>

@@ -108,3 +108,94 @@ describe('Android step tracking', () => {
     });
   });
 });
+
+/* ------------------------------------------------ Play services recording */
+
+describe('Android steps recorded while the app is closed', () => {
+  const core = require('expo-modules-core') as { requireOptionalNativeModule: (name: string) => unknown };
+  const recording = require('@/services/recordingSteps') as typeof import('@/services/recordingSteps');
+  const steps = require('@/services/steps.native') as typeof import('@/services/steps.native');
+  const original = core.requireOptionalNativeModule;
+  const AsyncStorage = require('@react-native-async-storage/async-storage');
+
+  function withModule(module: unknown) {
+    core.requireOptionalNativeModule = (name: string) => (name === 'KoydumSteps' ? module : original(name));
+    recording.resetRecordingProvider();
+  }
+
+  afterEach(() => {
+    core.requireOptionalNativeModule = original;
+    recording.resetRecordingProvider();
+  });
+
+  const today = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  it('uses the recording, not the foreground count, and says it is not approximate', async () => {
+    const subscribe = jest.fn(async () => true);
+    withModule({
+      status: jest.fn(async () => 'ok'),
+      subscribe,
+      dailySteps: jest.fn(async () => [{ dayKey: today(), steps: 8123 }]),
+    });
+    expect(await steps.getStepAvailability()).toEqual({ available: true, source: 'pedometer', approximate: false });
+    expect(subscribe).toHaveBeenCalledTimes(1);
+    const days = await steps.getDailySteps(1);
+    expect(days).toEqual([{ dayKey: today(), steps: 8123, source: 'pedometer' }]);
+  });
+
+  it('keeps the larger of recording and foreground count per day, never the sum', async () => {
+    await AsyncStorage.setItem('koydum.stepCache', JSON.stringify({ days: { [today()]: 5000 } }));
+    withModule({
+      status: jest.fn(async () => 'ok'),
+      subscribe: jest.fn(async () => true),
+      // recording began this afternoon: it saw less than the app did this morning
+      dailySteps: jest.fn(async () => [{ dayKey: today(), steps: 1200 }]),
+    });
+    expect((await steps.getDailySteps(1))[0]).toEqual({ dayKey: today(), steps: 5000, source: 'pedometer' });
+    await AsyncStorage.removeItem('koydum.stepCache');
+  });
+
+  it('falls back to the foreground count, and names the fix, when Play services is too old', async () => {
+    withModule({
+      status: jest.fn(async () => 'play-services'),
+      subscribe: jest.fn(async () => true),
+      dailySteps: jest.fn(async () => []),
+    });
+    expect(await steps.getStepAvailability()).toEqual({
+      available: true,
+      source: 'pedometer',
+      approximate: true,
+      upgrade: 'play-services',
+    });
+  });
+
+  it('never trusts a malformed row from the module', async () => {
+    withModule({
+      status: jest.fn(async () => 'ok'),
+      subscribe: jest.fn(async () => true),
+      dailySteps: jest.fn(async () => [{ dayKey: 'yesterday', steps: 5 }, { dayKey: today(), steps: Number.NaN }, null]),
+    });
+    expect(await recording.recordedDailySteps(3)).toEqual([]);
+  });
+
+  it('merges newest first and trims to the window', () => {
+    const merged = steps.mergeLarger(
+      [
+        { dayKey: '2026-09-27', steps: 100 },
+        { dayKey: '2026-09-26', steps: 900 },
+      ],
+      [
+        { dayKey: '2026-09-27', steps: 400, source: 'pedometer' },
+        { dayKey: '2026-09-25', steps: 50, source: 'pedometer' },
+      ],
+      2
+    );
+    expect(merged).toEqual([
+      { dayKey: '2026-09-27', steps: 400, source: 'pedometer' },
+      { dayKey: '2026-09-26', steps: 900, source: 'pedometer' },
+    ]);
+  });
+});

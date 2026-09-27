@@ -1,0 +1,7 @@
+{
+  "name": "koydum-steps",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local Expo module: daily steps from Google Play services' on-device Recording API, recorded even while KOYDUM is closed.",
+  "license": "UNLICENSED"
+}

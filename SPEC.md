@@ -340,6 +340,8 @@ inbox read/unread, account deletion, uploads (multipart), badges awarded.
 
 ### 2.6 Ops
 
+Daily backup (`services/backup.ts`, run from the scheduler tick): `db.backup()` into `<DATA_DIR>/backups/koydum-YYYY-MM-DD.db` (Istanbul date) once per day, written aside and renamed, last 7 kept; skipped for `:memory:`.
+
 `.env.example`, `Dockerfile` (node:22-alpine, `npm ci --workspaces`, `CMD npm start -w apps/server`), `docker-compose.yml`
 (volume for data+uploads), `README` section on deploying (Railway/Fly/any VPS) and on LAN usage (`HOST=0.0.0.0`,
 server URL `http://<LAN-IP>:4000` in the app).
@@ -378,6 +380,7 @@ store/auth.ts          zustand: { token, me, serverUrl, hydrated, setToken, setM
 store/ui.ts            vulgarity level used for UI copy (mirrors me.vulgarityMax), onboarding done flag
 hooks/*.ts             useMe, useChallenges(status), useChallenge(id), useFriends, useInbox, useUnreadCount (30 s poll while foreground), mutations
 services/steps.ts      getDailySteps(days: number): Promise<{ dayKey, steps, source }[]> + syncSteps(); platform files: steps.native.ts (ios Pedometer.getStepCountAsync per day; android: try Health Connect aggregate per day, else Pedometer.watchStepCount accumulate persisted per day in AsyncStorage), steps.web.ts (returns [])
+services/recordingSteps.ts Android steps recorded by Google Play services' Recording API (local module `KoydumSteps`, modules/koydum-steps, play-services-fitness 21.3.0): status() / subscribe() / dailySteps(days ≤ 10). Used by steps.native.ts after Health Connect and before the foreground counter; per day the larger of recording and foreground count wins (both undercount; never summed). Since Android 9 a background app gets no step-sensor events, so this is the only way to count while the app is closed.
 services/screenTime.ts   getScreenTimeAvailability() / requestScreenTimePermission() / getDailyScreenMinutes(days): looks up the local Expo module `KoydumScreenTime` by name (requireOptionalNativeModule); Android + usage access → real numbers, everywhere else `available: false` with a reason (ios | web | needs-native-module | permission | error)
 services/screenTimeSync.ts syncScreenTimeNow(): POST /me/screen-time with the last 7 days when the phone can read them; twin of stepSync.ts, called from the same places
 modules/koydum-screen-time/  local Expo module (Kotlin): UsageStatsManager.queryEvents → foreground minutes per local day; app.plugin.js adds PACKAGE_USAGE_STATS (tools:ignore=ProtectedPermissions) to the manifest

@@ -2,6 +2,7 @@ import { Pedometer } from 'expo-sensors';
 import { Platform } from 'react-native';
 
 import { StorageKeys, getJson, setJson } from '@/lib/storage';
+import { ensureRecording, recordedDailySteps, recordingStatus } from '@/services/recordingSteps';
 import type { DailySteps, StepAvailability } from '@/services/steps';
 
 /**
@@ -9,11 +10,14 @@ import type { DailySteps, StepAvailability } from '@/services/steps';
  *
  *  - iOS: Core Motion keeps seven days of history, so `getStepCountAsync` gives
  *    us real per-day totals even if the app was never opened.
- *  - Android: `getStepCountAsync` does not exist. We ask Health Connect for
- *    daily totals (accurate, needs a development build), and when that is not
- *    available we fall back to counting steps while the app is in the
- *    foreground and persisting the running total per day. That fallback is
- *    explicitly surfaced in the UI as "yaklaşık".
+ *  - Android, in order of preference:
+ *      1. Health Connect, when installed and granted (Samsung Health, Fit...).
+ *      2. Google Play services' Recording API (services/recordingSteps.ts):
+ *         counted by the phone all day, app open or not.
+ *      3. Counting while the app is in the foreground, persisted per day —
+ *         surfaced in the UI as "yaklaşık". Kept running under 2 as well, and
+ *         the larger of the two is used per day, so the day recording started
+ *         does not lose what was counted before it.
  */
 
 export type { DailySteps, StepAvailability, StepSource } from '@/services/steps';
@@ -271,6 +275,23 @@ export function startForegroundStepTracking(): () => void {
   };
 }
 
+/**
+ * Per day, the larger of what Play services recorded and what the app counted
+ * in the foreground. Both only ever undercount (recording starts at the first
+ * subscribe; the foreground count stops when the app closes), so the larger
+ * one is the better answer and adding them would double count. Newest first.
+ */
+export function mergeLarger(recorded: DailySteps[] | { dayKey: string; steps: number }[], counted: DailySteps[], window: number): DailySteps[] {
+  const best = new Map<string, number>();
+  for (const row of [...recorded, ...counted]) {
+    best.set(row.dayKey, Math.max(best.get(row.dayKey) ?? 0, row.steps));
+  }
+  return [...best.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0))
+    .slice(0, window)
+    .map(([dayKey, steps]) => ({ dayKey, steps, source: 'pedometer' as const }));
+}
+
 /* ----------------------------------------------------------- public API */
 
 export async function getStepAvailability(): Promise<StepAvailability> {
@@ -286,12 +307,22 @@ export async function getStepAvailability(): Promise<StepAvailability> {
     const hc = await healthConnectReady();
     if (hc) return { available: true, source: 'health_connect', approximate: false };
 
+    const recording = await recordingStatus();
+    if (recording === 'ok' && (await ensureRecording())) {
+      return { available: true, source: 'pedometer', approximate: false };
+    }
+
     const available = await Pedometer.isAvailableAsync();
     if (!available) return { available: false, reason: 'no-sensor' };
     // the sensor existing is not the same as being allowed to read it
     const permission = await Pedometer.getPermissionsAsync();
     if (permission.status === 'denied') return { available: false, reason: 'denied' };
-    return { available: true, source: 'pedometer', approximate: true };
+    return {
+      available: true,
+      source: 'pedometer',
+      approximate: true,
+      ...(recording === 'play-services' ? { upgrade: 'play-services' as const } : {}),
+    };
   } catch (error) {
     return { available: false, reason: 'error', detail: error instanceof Error ? error.message : String(error) };
   }
@@ -315,7 +346,11 @@ export async function requestStepPermission(): Promise<boolean> {
       }
     }
     return await ensureAndroidStepPermission().then(async (ok) => {
-      if (Platform.OS === 'android') return ok;
+      if (Platform.OS === 'android') {
+        // the same ACTIVITY_RECOGNITION grant lets Play services record for us
+        if (ok) await ensureRecording();
+        return ok;
+      }
       const result = await Pedometer.requestPermissionsAsync();
       return result.status === 'granted';
     });
@@ -333,7 +368,9 @@ export async function getDailySteps(days: number): Promise<DailySteps[]> {
       const fromHealthConnect = await healthConnectDailySteps(hc, window);
       if (fromHealthConnect.length > 0) return fromHealthConnect;
     }
-    return await cachedDailySteps(window);
+    const counted = await cachedDailySteps(window);
+    if (!(await ensureRecording())) return counted;
+    return mergeLarger(await recordedDailySteps(window), counted, window);
   } catch {
     return [];
   }

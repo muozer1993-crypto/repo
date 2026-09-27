@@ -344,8 +344,12 @@ DATA_DIR=/var/lib/koydum \
 npm start -w apps/server
 ```
 
-Önüne nginx/Caddy koyup HTTPS ver. Tek dosyalık SQLite veritabanı `DATA_DIR` altında;
-yedeklemek için o dosyayı kopyalaman yeterli.
+Önüne nginx/Caddy koyup HTTPS ver. Tek dosyalık SQLite veritabanı `DATA_DIR` altında.
+
+**Yedek kendiliğinden alınır.** Sunucu her gün ilk açıldığında ve gün dönünce veritabanının bir
+kopyasını `DATA_DIR/backups/koydum-YYYY-AA-GG.db` olarak yazar, son 7 günü tutar. Bir şey bozulursa
+sunucuyu kapat, en yeni yedeği `DATA_DIR/koydum.db` üzerine kopyala, sunucuyu aç. Evdeki
+bilgisayarda bu klasör `apps/server/data/backups`.
 
 ### Ortam değişkenleri
 
@@ -417,7 +421,8 @@ kişi isterse zorunlu olur; evet/hayır günleri ve check-in'lerde fotoğraf yok
 |---|---|---|
 | **iOS** | Core Motion (`Pedometer.getStepCountAsync`) | Son 7 günün geçmişi cihazda durur. Uygulamayı hiç açmasan da adımların sayılır; haftada bir açman yeter. |
 | **Android + Health Connect** | `react-native-health-connect` | Kesin günlük toplam. Geliştirme derlemesi ve Health Connect'e veri yazan bir uygulama (Samsung Health, Google Fit, Fitbit) gerekir. |
-| **Android, Health Connect yoksa** | `Pedometer.watchStepCount` | Sadece uygulama açıkken sayar, cihazda birikir. Uygulama bunu "yaklaşık" diye açıkça işaretler. |
+| **Android, Health Connect yoksa** | Google Play hizmetlerinin **Recording API**'si (`modules/koydum-steps`) | Telefon adımları uygulama kapalıyken de sayar ve 10 gün saklar, iPhone'daki gibi. Hesap ya da internet gerekmez, sadece Fiziksel Aktivite izni. Kayıt, izin verildiği andan itibaren tutulur. |
+| **Android, eski Play hizmetleri** | `Pedometer.watchStepCount` | Sadece uygulama açıkken sayar, cihazda birikir. Uygulama bunu "yaklaşık" diye işaretler ve Play hizmetlerini güncellemeyi önerir. |
 | **Web** | yok | Web derlemesi test amaçlıdır; adım gösterilmez. |
 
 Android 10 ve üstünde adım sayacını okumak için **Fiziksel Aktivite** izni gerekiyor. Uygulama
