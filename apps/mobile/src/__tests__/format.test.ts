@@ -2,6 +2,7 @@ import {
   formatClock,
   formatDayKey,
   formatDayKeyFriendly,
+  formatWeekRange,
   formatMinutes,
   formatNumber,
   relativeTime,
@@ -50,6 +51,11 @@ describe('Turkish formatting', () => {
     expect(formatDayKeyFriendly('2026-09-08', '2026-09-08', '2026-09-07')).toBe('Bugün');
     expect(formatDayKeyFriendly('2026-09-07', '2026-09-08', '2026-09-07')).toBe('Dün');
     expect(formatDayKeyFriendly('2026-09-01', '2026-09-08', '2026-09-07')).toBe('1 Eylül');
+  });
+
+  it('writes a week the short way when it stays in one month', () => {
+    expect(formatWeekRange('2026-01-05', '2026-01-11')).toBe('5 – 11 Ocak');
+    expect(formatWeekRange('2026-09-28', '2026-10-04')).toBe('28 Eylül – 4 Ekim');
   });
 
   it('describes recent times in Turkish without Intl.RelativeTimeFormat', () => {

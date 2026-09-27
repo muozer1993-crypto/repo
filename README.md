@@ -341,6 +341,11 @@ Android pili korumak için bu aralığı bazen uzatabilir.
 Yeni APK'da Ayarlar'daki bildirim satırı **Açık** olur. `eas init` yapılmamışsa (`extra.eas.projectId`
 yoksa) push token hiç alınamaz; bu depoda zaten yapılmış durumda.
 
+**Haftanın hesabı:** her pazar akşamı 20:00'den sonra herkese haftanın özeti düşer: kaç kere
+koydun, kaç kere yedin, toplam adım ve kankalar arasında haftanın kralı. Sunucu pazar akşamı
+kapalıysa pazartesi öğlene kadar yine gönderilir. Gelen kutusunda kart olarak görünür, dokununca
+profildeki sıralamaya gider.
+
 ---
 
 ## Sunucuyu internete açmak

@@ -170,6 +170,50 @@ describe('empty lists', () => {
     expect(rendered(tree)).toContain('Gelen Kutusu');
   });
 
+  it('inbox draws the Sunday recap as a card, and survives a malformed one', async () => {
+    api.inbox = jest.fn(async () => [
+      {
+        id: 'recap-1',
+        type: 'recap',
+        title: '📊 Haftanın hesabı',
+        body: 'Bu hafta 2 kere koydun, 1 kere yedin.',
+        data: {
+          weekKey: '2026-01-11',
+          weekStart: '2026-01-05',
+          weekEnd: '2026-01-11',
+          wins: 2,
+          losses: 1,
+          ties: 0,
+          steps: 22200,
+          active: 1,
+          highlights: ['👑 Haftanın kralı sensin. Kankalar sana çalışsın.'],
+        },
+        readAt: null,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'recap-0',
+        type: 'recap',
+        title: '📊 Eski özet',
+        body: 'Eski sunucudan gelen düz metin.',
+        data: { wins: 'iki' },
+        readAt: new Date().toISOString(),
+        createdAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+    ]);
+    const InboxScreen = require('@/app/(app)/(tabs)/inbox').default;
+    const tree = renderScreen(<InboxScreen />);
+    await settle();
+    const text = rendered(tree);
+    expect(text).toContain('5 – 11 Ocak');
+    expect(text).toContain('Koydun');
+    expect(text).toContain('22.200');
+    expect(text).toContain('Haftanın kralı sensin');
+    expect(text).toContain('çelınc hâlâ sürüyor');
+    // the malformed one falls back to the plain row with its body
+    expect(text).toContain('Eski sunucudan gelen düz metin.');
+  });
+
   it('friends shows the empty state and the invite code', async () => {
     const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
     const tree = renderScreen(<FriendsScreen />);

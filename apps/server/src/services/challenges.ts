@@ -43,6 +43,7 @@ import {
 } from '../db/index.js';
 import { asVulgarityLevel, toPublicUser } from '../serialize.js';
 import { notify } from './notifications.js';
+import { sendWeeklyRecaps } from './recap.js';
 import { awardBadges } from './stats.js';
 
 export interface SchedulerSummary {
@@ -51,6 +52,7 @@ export interface SchedulerSummary {
   cancelled: number;
   reminders: number;
   nudges: number;
+  recaps: number;
 }
 
 export interface SchedulerDeps {
@@ -727,7 +729,7 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
  * `deps.onError` and the others still run.
  */
 export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: SchedulerDeps = {}): SchedulerSummary {
-  const summary: SchedulerSummary = { activated: 0, finalized: 0, cancelled: 0, reminders: 0, nudges: 0 };
+  const summary: SchedulerSummary = { activated: 0, finalized: 0, cancelled: 0, reminders: 0, nudges: 0, recaps: 0 };
   const step = <T>(name: string, fn: () => T, apply: (value: T) => void): void => {
     try {
       apply(fn());
@@ -741,6 +743,8 @@ export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: Sch
   step('cancel', () => cancelUnderfilled(db, now), (n) => (summary.cancelled = n));
   step('reminders', () => sendReminders(db, now), (n) => (summary.reminders = n));
   step('nudges', () => sendNudges(db, now), (n) => (summary.nudges = n));
+  // after finalize, so a çelınc that ended this minute is already in the count
+  step('recaps', () => sendWeeklyRecaps(db, now), (n) => (summary.recaps = n));
 
   return summary;
 }

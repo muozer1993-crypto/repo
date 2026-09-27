@@ -31,7 +31,8 @@ export function startScheduler(app: FastifyInstance, db: Database, config: Confi
         summary.finalized ||
         summary.cancelled ||
         summary.reminders ||
-        summary.nudges
+        summary.nudges ||
+        summary.recaps
       ) {
         app.log.info(summary, 'scheduler pass');
       }

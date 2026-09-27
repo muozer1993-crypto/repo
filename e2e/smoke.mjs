@@ -260,6 +260,16 @@ async function submitForm(page) {
   await button.click();
 }
 
+/** 20:30 in Istanbul (UTC+3 all year) on the coming Sunday — recap time for the story's players. */
+function nextSundayEvening(from) {
+  const midnightUtc = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
+  for (let i = 0; i <= 7; i++) {
+    const candidate = new Date(midnightUtc + i * 24 * 60 * 60_000 + (17 * 60 + 30) * 60_000);
+    if (candidate > from && candidate.getUTCDay() === 0) return candidate;
+  }
+  throw new Error('no Sunday in the next week');
+}
+
 async function expectText(page, needles, label) {
   let lastSeen = '';
   try {
@@ -463,6 +473,21 @@ async function main() {
       fail(`the invite link did not deliver Can's request: ${JSON.stringify(mustafaFriends.incoming)}`);
     }
     log('invite link: page rendered, request delivered');
+
+    // 9. Sunday evening: the weekly recap lands in the inbox as a card. Last on
+    // purpose — this scheduler pass also runs every other step at that moment.
+    const recapAt = nextSundayEvening(new Date());
+    const pass = await fetch(`${API_URL}/dev/advance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ now: recapAt.toISOString() }),
+    }).then((response) => response.json());
+    if (!pass.recaps) fail(`the Sunday scheduler pass sent no recap: ${JSON.stringify(pass)}`);
+    await seedSession(page, statics.url, { token: story.mustafa.api.token, me: story.mustafa.me });
+    await page.goto(`${statics.url}/inbox`, { waitUntil: 'domcontentloaded' });
+    await expectText(page, ['HAFTANIN HESABI'], 'weekly recap card in the inbox');
+    await expectText(page, ['KOYDUN', 'Koydun'], 'weekly recap tiles');
+    await page.screenshot({ path: join(SHOT_DIR, '09-weekly-recap.png'), fullPage: true });
 
     const realErrors = consoleErrors.filter(
       (text) => !/favicon|Download the React DevTools|source ?map|Warning:/i.test(text)

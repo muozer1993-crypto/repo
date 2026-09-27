@@ -72,6 +72,16 @@ export function formatDayKey(dayKey: string, opts: { withWeekday?: boolean } = {
   return opts.withWeekday ? `${label} ${TR_DAYS[date.getUTCDay()]}` : label;
 }
 
+/** "2026-01-05".."2026-01-11" -> "5 – 11 Ocak"; across months "29 Eylül – 5 Ekim" */
+export function formatWeekRange(startKey: string, endKey: string): string {
+  const start = formatDayKey(startKey);
+  const end = formatDayKey(endKey);
+  const [startDay, ...startMonth] = start.split(' ');
+  const [, ...endMonth] = end.split(' ');
+  if (startMonth.length > 0 && startMonth.join(' ') === endMonth.join(' ')) return `${startDay} – ${end}`;
+  return `${start} – ${end}`;
+}
+
 /** "2026-09-08" -> "Bugün" / "Dün" / "8 Eylül" */
 export function formatDayKeyFriendly(dayKey: string, todayKey: string, yesterdayKey: string): string {
   if (dayKey === todayKey) return 'Bugün';

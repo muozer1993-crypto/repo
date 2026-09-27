@@ -252,10 +252,26 @@ CREATE TABLE IF NOT EXISTS screen_time_daily (
 CREATE INDEX IF NOT EXISTS idx_screen_time_daily_user ON screen_time_daily(user_id, day_key);
 `;
 
+/**
+ * One weekly recap per person per week. `week_key` is the local Sunday that ends
+ * the week, so the primary key is the rate limit; `sent_at` is where the next
+ * recap starts counting, so a çelınc that finishes late on Sunday night lands in
+ * the following week instead of falling between the two.
+ */
+const RECAPS_SENT = `
+CREATE TABLE IF NOT EXISTS recaps_sent (
+  user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  week_key TEXT NOT NULL,
+  sent_at  TEXT NOT NULL,
+  PRIMARY KEY (user_id, week_key)
+);
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
   { id: '003_participant_timezone', sql: PARTICIPANT_TIMEZONE },
   { id: '004_nudges_sent', sql: NUDGES_SENT },
   { id: '005_screen_time_daily', sql: SCREEN_TIME_DAILY },
+  { id: '006_recaps_sent', sql: RECAPS_SENT },
 ];

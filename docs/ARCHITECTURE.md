@@ -103,6 +103,26 @@ Spam olmaması dört kurala bağlı:
 Kapanış cümlesi metriğe göre değişir: "kalk da iki dolaş" odak çelıncında saçmadır, orada
 "telefonu bırak da bir seans yap" der.
 
+## Haftanın hesabı
+
+Her pazar akşamı 20:00'den sonra (okuyanın kendi saatiyle) zamanlayıcı herkese haftanın
+özetini düşer: kaç kere koydun, kaç kere yedin, kaç adım attın, en iyi günün hangisiydi ve
+kankalar arasında **haftanın kralı** kim. Tek bir çelınca değil gruba dair olan tek bildirim bu;
+pazartesi sabahki laf atışmasını pazar akşamı başlatan kısım.
+
+* `recaps_sent (user_id, week_key)` hız sınırıdır; `week_key` haftayı bitiren yerel pazardır.
+* Sunucu bütün pazar akşamı kapalı kaldıysa özet pazartesi öğlene kadar yine gider, sonrasında
+  gitmez — çarşamba gelen bir özet hiçbir şey anlatmaz.
+* Sonuç penceresi bir önceki özetten şimdiye kadardır (en fazla 7 gün). Pazar 23:59'da biten bir
+  çelınc bu yüzden ya bu haftaya ya da bir sonrakine girer, ikisine birden ya da hiçbirine değil.
+* Kral önce galibiyete, eşitse haftalık adıma bakar; ikisi de birebir eşitse taht paylaşılır.
+  En çok yürüyen ise sadece tek başına öndeyse söylenir.
+* Anlatacak bir şey yoksa (biten çelınc yok, adım yok, süren çelınc yok, kankalardan kimse bir şey
+  yapmamış) satır hiç yazılmaz.
+
+Metin sunucuda, okuyanın seviyesinde yazılır; `data` ise sayıları ve hazır satırları taşır, gelen
+kutusu bunları kutucuklu bir kart olarak çizer. `data` bozuksa kart yerine düz metin satırı çıkar.
+
 ## Rozet merdivenleri
 
 Rozetler düz bir duvar değil, yedi **merdivendir**: koyuş, yiyiş, adım, odak, erken kalkma,

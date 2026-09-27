@@ -60,7 +60,13 @@ export type FriendshipStatus = 'pending' | 'accepted' | 'blocked';
 export type NotificationType =
   | 'friend_request' | 'friend_accepted' | 'challenge_invite' | 'challenge_started'
   | 'challenge_cancelled' | 'challenge_finished' | 'taunt' | 'poke' | 'dispute'
-  | 'entry_rejected' | 'reminder' | 'badge' | 'rematch' | 'nudge';
+  | 'entry_rejected' | 'reminder' | 'badge' | 'rematch' | 'nudge' | 'recap';
+// data of a 'recap' notification (the inbox draws it as a card):
+export interface RecapData {
+  weekStart: string; weekEnd: string; // Monday..Sunday, reader's local day keys
+  wins: number; losses: number; ties: number; steps: number; active: number;
+  highlights: string[]; // "👑 Haftanın kralı ...", already at the reader's level
+}
 export type TauntContext = 'win' | 'win_big' | 'win_close' | 'tie' | 'poke' | 'streak' | 'revenge';
 ```
 
@@ -241,6 +247,8 @@ nudges_sent(challenge_id TEXT, user_id TEXT, day_key TEXT, PRIMARY KEY(challenge
   -- the primary key IS the rate limit for the mid-day nudge: one per çelınc per person per local day
 reports(id TEXT PK, reporter_id TEXT, reported_id TEXT, reason TEXT, created_at TEXT)
 reminders_sent(user_id TEXT, day_key TEXT, PRIMARY KEY(user_id, day_key))
+recaps_sent(user_id TEXT, week_key TEXT, sent_at TEXT, PRIMARY KEY(user_id, week_key))
+  -- one weekly recap per person; week_key = the local Sunday ending the week, sent_at = where the next window starts
 ```
 
 ### 2.2 Endpoints (all JSON; errors `{ error: { code, message } }`, message in Turkish)
@@ -264,6 +272,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | GET /me/inbox?before=<iso>&limit=30 | newest first |
 | POST /me/inbox/read | `{ ids }` or `{ all: true }` |
 | (scheduler) reminders | daily reminder only to users with no non-rejected entry today in any active challenge; nudges only to `accepted` participants |
+| (scheduler) recaps | weekly `recap` from Sunday 20:00 until Monday 12:00 in the reader's timezone, once per week (`recaps_sent`): wins/losses/ties of çelınclar finalized since the previous recap (≤ 7 days), Monday–Sunday steps, the king of the week among the reader and their friends (most wins, then steps; exact ties share) and the clear step leader. Nothing to tell → no row |
 | GET /me/inbox/unread | `{ count, latestId }` |
 | GET /users/search?q= | prefix match on username or display_name, excludes self, blocked; max 20 |
 | GET /users/:id | `PublicUser` + public stats (wins/losses/challengesPlayed) + badges |

@@ -7,6 +7,7 @@ import { Card } from '@/components/Card';
 import { Chip } from '@/components/Chip';
 import { EmptyState } from '@/components/EmptyState';
 import { Skeleton } from '@/components/Loading';
+import { RecapCard } from '@/components/RecapCard';
 import { Screen } from '@/components/Screen';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
@@ -18,6 +19,7 @@ import { useLevel } from '@/store/auth';
 import { Colors, FontSize, Radius, Spacing } from '@/theme';
 import { safeDayKey, safeTodayKey } from '@/utils/datetime';
 import { formatDayKeyFriendly, relativeTime } from '@/utils/format';
+import { parseRecapData } from '@/utils/recap';
 
 const TYPE_EMOJI: Record<NotificationType, string> = {
   friend_request: '👋',
@@ -34,6 +36,7 @@ const TYPE_EMOJI: Record<NotificationType, string> = {
   badge: '🏅',
   rematch: '🔁',
   nudge: '👀',
+  recap: '📊',
 };
 
 const TYPE_COLOR: Partial<Record<NotificationType, string>> = {
@@ -51,6 +54,7 @@ const TYPE_COLOR: Partial<Record<NotificationType, string>> = {
   badge: Colors.yellow,
   rematch: Colors.accent,
   nudge: Colors.yellow,
+  recap: Colors.yellow,
 };
 
 const EMPTY_TITLE: Record<1 | 2 | 3, string> = {
@@ -96,6 +100,7 @@ function targetFor(item: Notification): string | null {
     case 'friend_accepted':
       return '/(app)/(tabs)/friends';
     case 'badge':
+    case 'recap': // the leaderboard lives on the profile
       return '/(app)/(tabs)/profile';
     case 'taunt':
     case 'challenge_finished':
@@ -310,6 +315,13 @@ function InboxRow({
           </View>
         ) : null}
       </Pressable>
+    );
+  }
+
+  const recap = item.type === 'recap' ? parseRecapData(item.data) : null;
+  if (recap) {
+    return (
+      <RecapCard title={item.title} recap={recap} timeLabel={time} unread={unread} onPress={() => onPress(item)} />
     );
   }
 

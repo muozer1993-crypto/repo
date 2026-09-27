@@ -63,8 +63,29 @@ export const NOTIFICATION_TYPES = [
   'rematch',
   /** the mid-day "o ne lan, sana fark koymuş" poke the server sends by itself */
   'nudge',
+  /** Sunday evening: the week's score, "haftanın kralı" and the step count */
+  'recap',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+/**
+ * `data` of a `recap` notification: the numbers the inbox card draws. The text
+ * lines are already written at the reader's level, so the phone never has to
+ * know how to phrase "haftanın kralı".
+ */
+export interface RecapData {
+  /** Monday and Sunday of the week, as local day keys of the reader. */
+  weekStart: string;
+  weekEnd: string;
+  wins: number;
+  losses: number;
+  ties: number;
+  steps: number;
+  /** çelınclar still running when the recap was written */
+  active: number;
+  /** "👑 Haftanın kralı ..." and friends, ready to show */
+  highlights: string[];
+}
 
 export const TAUNT_CONTEXTS = ['win', 'win_big', 'win_close', 'tie', 'poke', 'streak', 'revenge'] as const;
 export type TauntContext = (typeof TAUNT_CONTEXTS)[number];
