@@ -18,9 +18,15 @@ import { ApiError } from '@/lib/api';
 
 const searchParams: { id?: string } = {};
 
+/** The last focus effect a screen handed over; nothing navigates here, so tests run it by hand. */
+const mockFocus: { effect?: () => void } = {};
+
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn(), back: jest.fn(), navigate: jest.fn(), canGoBack: () => false },
   useLocalSearchParams: () => searchParams,
+  useFocusEffect: (effect: () => void) => {
+    mockFocus.effect = effect;
+  },
   Link: ({ children }: { children: React.ReactNode }) => children,
 }));
 
@@ -121,7 +127,15 @@ function renderScreen(element: ReactElement): ReactTestRenderer {
   return tree;
 }
 
+/** The query client a mounted screen was rendered with. */
+function clientOf(tree: ReactTestRenderer): QueryClient {
+  const entry = mounted.find((candidate) => candidate.tree === tree);
+  if (!entry) throw new Error('screen not mounted');
+  return entry.client;
+}
+
 afterEach(() => {
+  delete mockFocus.effect;
   for (const { tree, client } of mounted.splice(0)) {
     act(() => {
       tree.unmount();
@@ -637,6 +651,89 @@ describe('a loser still waiting for the winner to talk', () => {
     const text = rendered(tree);
     expect(text).toContain('Ali unuttu galiba. Rövanş aç, bu sefer sen koy.');
     expect(text).not.toContain('Beklemede kal');
+  });
+});
+
+describe('new notifications reach the tabs that stay mounted', () => {
+  const poke = {
+    id: 'n-1',
+    type: 'poke',
+    title: '👉 Dürtüldün',
+    body: 'Veli seni dürttü.',
+    data: { challengeId: 'c-9' },
+    readAt: new Date().toISOString(),
+    createdAt: new Date(Date.now() - 60_000).toISOString(),
+  };
+
+  it('the inbox refetches when the badge hears of a newer row, and counts what it has not loaded', async () => {
+    api.inbox = jest.fn(async () => [poke]);
+    // unread rows further down than the loaded page still count
+    api.unreadCount = jest.fn(async () => ({ count: 3, latestId: 'n-1' }));
+    const InboxScreen = require('@/app/(app)/(tabs)/inbox').default;
+    const tree = renderScreen(<InboxScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('3 yeni');
+    expect(rendered(tree)).not.toContain('Okunmamış bildirim yok');
+    expect(api.inbox).toHaveBeenCalledTimes(1);
+
+    const taunt = {
+      id: 'n-2',
+      type: 'taunt',
+      title: 'KOYDUM MU?',
+      body: 'Veli sana sapır sapır koydu.',
+      data: { challengeId: 'c-9', tauntId: 't-1' },
+      readAt: null,
+      createdAt: new Date().toISOString(),
+    };
+    api.inbox = jest.fn(async () => [taunt, poke]);
+    api.unreadCount = jest.fn(async () => ({ count: 4, latestId: 'n-2' }));
+    // what the 30 s poll behind the tab badge does
+    await act(async () => {
+      await clientOf(tree).invalidateQueries({ queryKey: ['unread'] });
+    });
+    await settle();
+    expect(api.inbox).toHaveBeenCalledTimes(1);
+    expect(rendered(tree)).toContain('Veli sana sapır sapır koydu.');
+    expect(rendered(tree)).toContain('4 yeni');
+
+    // the same newest row again: nothing to fetch
+    await act(async () => {
+      await clientOf(tree).invalidateQueries({ queryKey: ['unread'] });
+    });
+    await settle();
+    expect(api.inbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('the friends tab refetches a list older than 20 s when it comes back into focus', async () => {
+    const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
+    const tree = renderScreen(<FriendsScreen />);
+    await settle();
+    expect(api.friends).toHaveBeenCalledTimes(1);
+
+    // straight back from another tab: the list is fresh
+    act(() => mockFocus.effect?.());
+    await settle();
+    expect(api.friends).toHaveBeenCalledTimes(1);
+
+    api.friends = jest.fn(async () => ({
+      friends: [],
+      incoming: [
+        {
+          id: 'f-1',
+          user: { id: 'u-2', username: 'veli', displayName: 'Veli', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' },
+        },
+      ],
+      outgoing: [],
+    }));
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 21_000);
+    try {
+      act(() => mockFocus.effect?.());
+      await settle();
+    } finally {
+      clock.mockRestore();
+    }
+    expect(api.friends).toHaveBeenCalledTimes(1);
+    expect(rendered(tree)).toContain('GELEN İSTEKLER'); // the label variant capitalises
   });
 });
 

@@ -458,7 +458,7 @@ services/recordingSteps.ts Android steps recorded by Google Play services' Recor
 services/screenTime.ts   getScreenTimeAvailability() / requestScreenTimePermission() / getDailyScreenMinutes(days): looks up the local Expo module `KoydumScreenTime` by name (requireOptionalNativeModule); Android + usage access → real numbers, everywhere else `available: false` with a reason (ios | web | needs-native-module | permission | error)
 services/screenTimeSync.ts syncScreenTimeNow(): POST /me/screen-time with the last 7 days when the phone can read them; twin of stepSync.ts, called from the same places
 modules/koydum-screen-time/  local Expo module (Kotlin): UsageStatsManager.queryEvents → foreground minutes per local day; app.plugin.js adds PACKAGE_USAGE_STATS (tools:ignore=ProtectedPermissions) to the manifest
-services/notifications.ts  registerForPush() → token or null (never throws; web returns null); setNotificationHandler; Android channel; response listener → router.push to challenge/inbox
+services/notifications.ts  registerForPush() → token or null (never throws; web returns null); setNotificationHandler; Android channel; response listener → router.push to challenge/inbox (the route keeps `notificationId` so the tap marks the row read, 3.5)
 services/notifications.ts fireLocal(title, body, data) — used when a new inbox item arrives that was not pushed (device without push). On Android it posts on the `koydum` channel (trigger `{ channelId }`); a `null` trigger would land in the library's English "Miscellaneous" fallback channel
 services/background.ts   BackgroundTask (15 min): sync steps + fetch unread inbox → fire local notifications for new items (skip on web / Expo Go gracefully). With the app swiped away the task runs headless (services/backgroundWork.ts) and does the same from the stored session, renewing the token first when it is due (a phone only ever woken by the task must not lose its session at day 90). The app entry `index.ts` (package.json `main`) imports `expo-router/entry` and then this file, so the task is defined even in a headless run, where expo-router never renders `_layout`; an undefined task is unregistered by expo-task-manager.
 services/inboxNotifier.ts deliverNewInbox(client, surface | () => surface) → { surface, items }: the one place that turns unread, un-pushed inbox items into phone notifications (or, when on screen, items for ONE in-app toast of the newest with "N bildirim daha"). The surface is resolved after the fetch. Shared by the foreground poll, the background handler and the headless task. Only rows newer than the stored lastInboxId count (one full page of 100 is fetched); delivered ids are remembered (last 100) so racing checks never show an item twice; the first check on an install replays nothing (an empty first inbox stores a sentinel so the first row that ever arrives is shown); more than 3 new items → 2 shown + one "N bildirim daha". A phone holding a registered push token only updates the badge: push delivers there, and a local copy shown before the server's next flush would ring twice. This is what makes "KOYDUM MU?" reach a closed phone on a build without Firebase (registerForPush reports reason 'no-fcm', settings says "Gecikmeli").
@@ -527,6 +527,16 @@ davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), r
   items have `pushedAt == null` (server includes `pushed` flag) and app is in background → `fireLocal`. In foreground → in-app Toast.
 - Tapping a notification response routes: taunt/challenge_* → `/challenge/[id]/results` or `/challenge/[id]`, friend_* → friends tab.
   A `reminder` with `data.kind === 'taunt_followup'` (2.4, 3b) opens the results, where the laf is sent; the inbox row does the same.
+  The in-app toast for a push received in the foreground opens the same place (`routeForNotificationData`).
+- A tap also marks its inbox row read: the server's push and `fireLocal` both put `notificationId` in the data, the route keeps
+  it, and the bridge sends `POST /me/inbox/read { ids: [id] }` (then refreshes unread + inbox) before navigating. The phone's own
+  reminders carry no id.
+- New rows refresh what is on screen (`invalidateForNotifications` in hooks/queries): inbox + unread always, friends for
+  friend_*, and for each `data.challengeId` the challenge lists, the detail and the results. Called by the received listener
+  (push), by the inbox poll whenever it returns items (either surface) and by the background handler while the app is alive.
+  The tabs stay mounted and `refetchOnWindowFocus` is off, so the two list tabs also catch up on their own: Gelen refetches
+  when the unread poll's `latestId` is not its first row, and its "N yeni" chip / "Hepsini okundu yap" use the larger of the
+  loaded page's unread and the server's `count`; Kankalar refetches on focus when its list is older than 20 s.
 
 ### 3.6 Tests
 

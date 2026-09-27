@@ -119,4 +119,35 @@ describe('where a tapped notification goes', () => {
     ).toEqual({ kind: 'challenge', challengeId: 'c1' });
     expect(routeForNotificationData({ type: 'reminder', dayKey: '2026-09-27' })).toEqual({ kind: 'inbox' });
   });
+
+  it('keeps the inbox row it came from, so the tap can mark it read', () => {
+    // the server's push and the phone's own copy (fireLocal) both carry it
+    expect(routeForNotificationData({ type: 'poke', challengeId: 'c1', notificationId: 'n1' })).toEqual({
+      kind: 'challenge',
+      challengeId: 'c1',
+      notificationId: 'n1',
+    });
+    expect(routeForNotificationData({ type: 'taunt', challengeId: 'c1', tauntId: 't1', notificationId: 'n2' })).toEqual({
+      kind: 'results',
+      challengeId: 'c1',
+      notificationId: 'n2',
+    });
+    expect(routeForNotificationData({ type: 'friend_request', notificationId: 'n3' })).toEqual({
+      kind: 'friends',
+      notificationId: 'n3',
+    });
+    expect(routeForNotificationData({ type: 'badge', notificationId: 'n4' })).toEqual({
+      kind: 'inbox',
+      notificationId: 'n4',
+    });
+  });
+
+  it('adds no id when there is no row behind it', () => {
+    // the phone's own reminders and the "N bildirim daha" summary
+    expect(routeForNotificationData({ type: 'inbox' })).toEqual({ kind: 'inbox' });
+    expect(routeForNotificationData({ type: 'taunt', challengeId: 'c1', notificationId: 42 })).toEqual({
+      kind: 'results',
+      challengeId: 'c1',
+    });
+  });
 });

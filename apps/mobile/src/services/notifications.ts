@@ -175,17 +175,30 @@ export async function setBadgeCount(count: number): Promise<void> {
   }
 }
 
-export type NotificationRoute =
+type RouteTarget =
   | { kind: 'challenge'; challengeId: string }
   | { kind: 'results'; challengeId: string }
   | { kind: 'inbox' }
-  | { kind: 'friends' }
-  | null;
+  | { kind: 'friends' };
+
+/**
+ * Where a tapped notification goes. `notificationId` is the inbox row behind it
+ * (the server's push and `fireLocal` copies both carry one), so the tap can mark
+ * that row read the way tapping it in Gelen does. The phone's own reminders
+ * have no row and no id.
+ */
+export type NotificationRoute = (RouteTarget & { notificationId?: string }) | null;
 
 /** Maps a notification payload to the screen it should open. */
 export function routeForNotificationData(data: unknown): NotificationRoute {
   if (!data || typeof data !== 'object') return null;
   const payload = data as Record<string, unknown>;
+  const target = targetForPayload(payload);
+  const notificationId = typeof payload.notificationId === 'string' ? payload.notificationId : '';
+  return notificationId ? { ...target, notificationId } : target;
+}
+
+function targetForPayload(payload: Record<string, unknown>): RouteTarget {
   const type = typeof payload.type === 'string' ? payload.type : '';
   const challengeId = typeof payload.challengeId === 'string' ? payload.challengeId : null;
 

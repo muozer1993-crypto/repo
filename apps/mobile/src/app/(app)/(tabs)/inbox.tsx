@@ -1,5 +1,6 @@
 import { addDays, getChallengeType, type Notification, type NotificationType } from '@koydum/shared';
 import { router } from 'expo-router';
+import { useEffect } from 'react';
 import { Pressable, SectionList, type SectionListData, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/Button';
@@ -12,7 +13,7 @@ import { Screen } from '@/components/Screen';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
-import { useChallenges, useInbox, useMarkInboxRead } from '@/hooks/queries';
+import { useChallenges, useInbox, useMarkInboxRead, useUnread } from '@/hooks/queries';
 import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { useLevel } from '@/store/auth';
@@ -141,7 +142,22 @@ export default function InboxScreen() {
   const level = useLevel();
   const toast = useToast();
   const inbox = useInbox();
+  const unread = useUnread();
   const markRead = useMarkInboxRead();
+
+  // The unread poll behind the tab badge (every 30 s) hears of a new row before
+  // this list does, and nothing else refetches a tab that stays mounted: the
+  // badge said 1 while the list had nothing new until a pull-to-refresh.
+  // `latestId` is the newest row, read or not, i.e. what should be on top here.
+  const latestId = unread.data?.latestId ?? null;
+  const firstId = inbox.data?.[0]?.id ?? null;
+  const inboxLoaded = inbox.data !== undefined;
+  const refetchInbox = inbox.refetch;
+  useEffect(() => {
+    if (!inboxLoaded || !latestId || latestId === firstId) return;
+    // keyed on the ids, not on the fetch state: a failed refetch waits for the next poll
+    void refetchInbox({ cancelRefetch: false });
+  }, [inboxLoaded, latestId, firstId, refetchInbox]);
 
   const tz = useTimezone();
   const today = safeTodayKey(tz);
@@ -163,7 +179,9 @@ export default function InboxScreen() {
   }
 
   const items = inbox.data ?? [];
-  const unreadCount = items.filter((item) => !item.readAt).length;
+  // Only the loaded page can be counted here, the server counts every row; the
+  // larger wins, so the header never says "Okunmamış bildirim yok" under a badge.
+  const unreadCount = Math.max(items.filter((item) => !item.readAt).length, unread.data?.count ?? 0);
   const sections = groupByDay(items, tz, today, yesterday);
 
   const open = (item: Notification) => {

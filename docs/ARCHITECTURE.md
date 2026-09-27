@@ -105,6 +105,14 @@ Push başarısız olsa bile laf inbox'ta durur. Uygulama 45 saniyede bir okunmam
 push gelmemiş bir öğe bulursa cihazın kendi yerel bildirimini üretir. Yani Expo Go'da bile
 KOYDUM ulaşır, sadece anında değil.
 
+Yeni bir satır gelince (push ya da bu yoklama) açık ekranlar da tazelenir
+(`invalidateForNotifications`): gelen kutusu ve rozet her zaman, kanka isteğinde Kankalar,
+çelınca dair bir satırda çelınc listeleri, o çelıncın detayı ve sonucu. Sekmeler açık kalır ve odağa
+dönünce kendiliğinden yenilenmez; o yüzden Gelen, rozetin gördüğü en yeni satır kendi en
+üstündeki değilse kendini yeniler, Kankalar da listesi 20 saniyeden eskiyse sekmeye dönünce.
+Bir bildirime dokunmak onu okunmuş sayar: push da telefonun kendi kopyası da satırın
+`notificationId`'sini taşır.
+
 Zincirin zayıf halkası 2. adım: laf ancak kazanan uygulamayı açıp gönderirse var. Gece 23:59'da
 biten çelınc kazanan uyurken kapanır, üşengeç kazanan hiç açmaz; kaybeden de "daha ağzını açmadı"
 yazısına bakar durur. Bu yüzden bitişten 2 saat sonra hâlâ laf yememiş bir kaybeden varsa,

@@ -11,7 +11,7 @@ import type {
   PublicProfile,
   UnreadCount,
 } from '@koydum/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
@@ -136,6 +136,41 @@ export function useProfile(id: string | undefined) {
     queryFn: () => api.userProfile(id as string),
     enabled: !!id,
   });
+}
+
+/**
+ * What new notifications change on screen. The tabs stay mounted and nothing
+ * refetches them on focus (lib/query), so without this a taunt lit the badge
+ * while Gelen stayed a row short, and a friend request was toasted but missing
+ * from "Gelen istekler" until a pull-to-refresh.
+ *
+ * `data` is either an inbox row's data or a push payload; both carry the
+ * çelınc as `challengeId`.
+ */
+export function invalidateForNotifications(
+  qc: QueryClient,
+  items: readonly { type?: string; data?: unknown }[]
+): void {
+  void qc.invalidateQueries({ queryKey: qk.inbox });
+  void qc.invalidateQueries({ queryKey: qk.unread });
+
+  let friends = false;
+  const challengeIds = new Set<string>();
+  for (const item of items) {
+    if (item.type === 'friend_request' || item.type === 'friend_accepted') friends = true;
+    const challengeId =
+      item.data && typeof item.data === 'object' ? (item.data as Record<string, unknown>).challengeId : undefined;
+    if (typeof challengeId === 'string' && challengeId) challengeIds.add(challengeId);
+  }
+
+  if (friends) void qc.invalidateQueries({ queryKey: qk.friends });
+  // a taunt lands on an open results screen, which has no refetch interval:
+  // without this the loser keeps reading "henüz konuşmadı, bekle"
+  if (challengeIds.size > 0) void qc.invalidateQueries({ queryKey: ['challenges'] });
+  for (const id of challengeIds) {
+    void qc.invalidateQueries({ queryKey: qk.challenge(id) });
+    void qc.invalidateQueries({ queryKey: qk.results(id) });
+  }
 }
 
 /* ----------------------------------------------------------- mutations */

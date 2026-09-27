@@ -13,6 +13,7 @@ import {
   getInitialRoute,
   installNotificationHandler,
   registerForPush,
+  routeForNotificationData,
   type NotificationRoute,
 } from '@/services/notifications';
 import { clearFailed, flushQueue, readQueue } from '@/services/offlineQueue';
@@ -20,6 +21,7 @@ import { syncReminders, type ReminderChallenge } from '@/services/reminders';
 import { startForegroundStepTracking } from '@/services/steps';
 import { syncStepsNow } from '@/services/stepSync';
 import { syncScreenTimeNow } from '@/services/screenTimeSync';
+import { invalidateForNotifications } from '@/hooks/queries';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { safeDayKey, safeTodayKey } from '@/utils/datetime';
@@ -125,6 +127,17 @@ export function NotificationBridge() {
     if (!signedIn) return;
     const go = (route: NotificationRoute) => {
       if (!route) return;
+      if (route.notificationId) {
+        // opening it is reading it, as a tap on the row in Gelen is; without
+        // this the badge kept counting a laf the loser had already opened
+        makeClient()
+          .markInboxRead({ ids: [route.notificationId] })
+          .then(() => {
+            void queryClient.invalidateQueries({ queryKey: qk.unread });
+            void queryClient.invalidateQueries({ queryKey: qk.inbox });
+          })
+          .catch(() => {});
+      }
       if (route.kind === 'inbox') router.push('/(app)/(tabs)/inbox');
       else if (route.kind === 'friends') router.push('/(app)/(tabs)/friends');
       else if (route.kind === 'results') router.push(`/challenge/${route.challengeId}/results`);
@@ -134,35 +147,23 @@ export function NotificationBridge() {
     void getInitialRoute().then(go);
     const response = addResponseListener(go);
     const received = addReceivedListener((title, body, data) => {
-      void queryClient.invalidateQueries({ queryKey: qk.unread });
-      void queryClient.invalidateQueries({ queryKey: qk.inbox });
-      const payload = (data ?? {}) as { type?: string; challengeId?: string };
-      // a taunt lands on an open results screen, which has no refetch interval:
-      // without this the loser keeps reading "henüz konuşmadı, bekle"
-      if (payload.challengeId) {
-        void queryClient.invalidateQueries({ queryKey: qk.challenge(payload.challengeId) });
-        void queryClient.invalidateQueries({ queryKey: qk.results(payload.challengeId) });
-        void queryClient.invalidateQueries({ queryKey: ['challenges'] });
-      }
+      const payload = (data ?? {}) as { type?: string };
+      invalidateForNotifications(queryClient, [{ type: payload.type, data }]);
+      // the toast opens what a tap on the push would: a finished çelınc and the
+      // winner's "hâlâ bekliyor" go to the results, not the çelınc screen
+      const route = routeForNotificationData(data) ?? { kind: 'inbox' };
       toast({
         title: title || 'KOYDUM',
         body,
         kind: payload.type === 'taunt' ? 'taunt' : 'info',
-        onPress: () =>
-          go(
-            payload.challengeId
-              ? payload.type === 'taunt'
-                ? { kind: 'results', challengeId: payload.challengeId }
-                : { kind: 'challenge', challengeId: payload.challengeId }
-              : { kind: 'inbox' }
-          ),
+        onPress: () => go(route),
       });
     });
     return () => {
       response.remove();
       received.remove();
     };
-  }, [signedIn, queryClient, toast]);
+  }, [signedIn, makeClient, queryClient, toast]);
 
   // --- inbox poll: local notification when push did not deliver ----------
   useEffect(() => {
@@ -175,8 +176,12 @@ export function NotificationBridge() {
         const delivery = await deliverNewInbox(makeClient(), () =>
           AppState.currentState === 'active' ? 'in-app' : 'system'
         );
+        if (cancelled) return;
+        // Without push this poll is the only one that hears of a new row, on
+        // screen or not; the lists it touches refetch now, not on the next pull.
+        if (delivery.items.length > 0) invalidateForNotifications(queryClient, delivery.items);
         const [newest] = delivery.items;
-        if (cancelled || delivery.surface !== 'in-app' || !newest) return;
+        if (delivery.surface !== 'in-app' || !newest) return;
         // one toast at a time: a second one would only replace the first
         const more = delivery.items.length - 1;
         toast({
@@ -200,7 +205,7 @@ export function NotificationBridge() {
       clearInterval(id);
       sub.remove();
     };
-  }, [token, serverUrl, makeClient, toast]);
+  }, [token, serverUrl, makeClient, queryClient, toast]);
 
   // --- steps: foreground counter + background sync ----------------------
   useEffect(() => {
@@ -279,7 +284,9 @@ export function NotificationBridge() {
       await drain();
       try {
         // the app is alive but not on screen: new items become phone notifications
-        await deliverNewInbox(makeClient(), 'system');
+        const delivery = await deliverNewInbox(makeClient(), 'system');
+        // and the poll will not see them again when the app comes back
+        if (delivery.items.length > 0) invalidateForNotifications(queryClient, delivery.items);
       } catch {
         // offline: the next run tries again
       }

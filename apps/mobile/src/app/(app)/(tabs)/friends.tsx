@@ -1,8 +1,8 @@
 import type { PublicUser } from '@koydum/shared';
 import { t } from '@koydum/shared';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Platform, Pressable, Share, StyleSheet, View } from 'react-native';
 
@@ -27,6 +27,9 @@ import { isLocalNetworkUrl, isLoopbackUrl } from '@/utils/url';
 
 const MONO = Platform.select({ ios: 'Courier', android: 'monospace', default: 'monospace' });
 
+/** Coming back to the tab refetches a list older than this (the app's staleTime). */
+const FRIENDS_FRESH_MS = 20_000;
+
 export default function FriendsScreen() {
   const level = useLevel();
   const me = useAuth((s) => s.me);
@@ -44,6 +47,18 @@ export default function FriendsScreen() {
   const toast = useToast();
   const friends = useFriends();
   const action = useFriendAction();
+  const queryClient = useQueryClient();
+
+  // The tab stays mounted and nothing refetches on focus (lib/query), so a
+  // request that came in while you were elsewhere never showed under "Gelen
+  // istekler" until a pull-to-refresh.
+  useFocusEffect(() => {
+    const state = queryClient.getQueryState(qk.friends);
+    if (!state || state.fetchStatus !== 'idle') return;
+    // from the last answer, good or bad: a server that is down is asked at most every 20 s
+    const lastTry = Math.max(state.dataUpdatedAt, state.errorUpdatedAt);
+    if (Date.now() - lastTry > FRIENDS_FRESH_MS) void queryClient.refetchQueries({ queryKey: qk.friends });
+  });
 
   const [term, setTerm] = useState('');
   const [query, setQuery] = useState('');
