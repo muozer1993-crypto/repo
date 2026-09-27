@@ -1,3 +1,4 @@
+/* eslint-disable import/first -- the jest.mock call must run before the module under test */
 /**
  * Without Firebase push the phone itself has to show "KOYDUM MU?". The notifier
  * decides what is new, shows it once — never twice across the poll, the
