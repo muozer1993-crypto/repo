@@ -28,8 +28,9 @@ import {
 import { syncStepsNow } from '@/services/stepSync';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Shadow, Spacing } from '@/theme';
+import { confirmTr } from '@/utils/confirm';
 import { formatNumber } from '@/utils/format';
-import { TAUNT_CTA, TAUNT_CTA_ICON, byLevel } from '@/utils/levelCopy';
+import { TAUNT_CTA, TAUNT_CTA_ICON, byLevel, declineQuestion, endsWithoutMe } from '@/utils/levelCopy';
 
 const LEVEL_LABEL: Record<VulgarityLevel, string> = {
   1: 'NAZİK',
@@ -503,7 +504,11 @@ function InviteCard({
   const type = getChallengeType(summary.challenge.typeKey);
   const inviter = summary.participants.find((p) => p.user.id === summary.challenge.creatorId)?.user;
 
-  const run = (kind: 'accept' | 'decline') => {
+  const run = async (kind: 'accept' | 'decline') => {
+    if (kind === 'decline') {
+      const question = declineQuestion(level, endsWithoutMe(summary.participants, summary.me?.user.id ?? null));
+      if (!(await confirmTr(question.title, question.body, 'Reddet'))) return;
+    }
     action.mutate(kind, {
       onSuccess: () => {
         toast({
@@ -558,7 +563,7 @@ function InviteCard({
           style={styles.inviteButton}
           loading={action.isPending && action.variables === 'accept'}
           disabled={action.isPending}
-          onPress={() => run('accept')}
+          onPress={() => void run('accept')}
         />
         <Button
           title="Reddet"
@@ -568,7 +573,7 @@ function InviteCard({
           style={styles.inviteButton}
           loading={action.isPending && action.variables === 'decline'}
           disabled={action.isPending}
-          onPress={() => run('decline')}
+          onPress={() => void run('decline')}
         />
       </View>
     </Card>

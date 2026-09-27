@@ -64,7 +64,7 @@ import { getStepAvailability, getTodaySteps, type StepAvailability } from '@/ser
 import { syncStepsNow } from '@/services/stepSync';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
-import { byLevel } from '@/utils/levelCopy';
+import { byLevel, declineQuestion, endsWithoutMe } from '@/utils/levelCopy';
 import { confirmTr } from '@/utils/confirm';
 import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
@@ -394,7 +394,11 @@ export default function ChallengeDetailScreen() {
 
       {/* -------------------------------------------------- invite reply */}
       {mine?.status === 'invited' && (challenge.status === 'pending' || challenge.status === 'active') ? (
-        <InviteActions id={id} />
+        <InviteActions id={id} level={level} endsIt={endsWithoutMe(participants, meId)} />
+      ) : null}
+      {/* a "Reddet" is not final while the çelınc still takes players */}
+      {mine?.status === 'declined' && (challenge.status === 'pending' || (challenge.status === 'active' && !settling)) ? (
+        <RejoinCard id={id} level={level} />
       ) : null}
 
       {/* ------------------------------------------------------- actions */}
@@ -478,16 +482,25 @@ function Header({ onBack, title }: { onBack: () => void; title: string }) {
 
 /* --------------------------------------------------------- invite actions */
 
-function InviteActions({ id }: { id: string }) {
+function InviteActions({ id, level, endsIt }: { id: string; level: VulgarityLevel; endsIt: boolean }) {
   const action = useChallengeAction(id);
   const toast = useToast();
 
   const run = async (kind: 'accept' | 'decline') => {
+    if (kind === 'decline') {
+      const question = declineQuestion(level, endsIt);
+      if (!(await confirmTr(question.title, question.body, 'Reddet'))) return;
+    }
     try {
       await action.mutateAsync(kind);
       toast({
         title: kind === 'accept' ? 'Girdin' : 'Kaçtın',
-        body: kind === 'accept' ? 'Skorun sayılmaya başladı.' : 'Bu çelınc sensiz devam ediyor.',
+        body:
+          kind === 'accept'
+            ? 'Skorun sayılmaya başladı.'
+            : endsIt
+              ? 'Rakip kalmadı, çelınc iptal oldu.'
+              : 'Bu çelınc sensiz devam ediyor.',
         kind: kind === 'accept' ? 'success' : 'info',
       });
     } catch (error) {
@@ -514,6 +527,52 @@ function InviteActions({ id }: { id: string }) {
           disabled={action.isPending}
           onPress={() => void run('decline')}
         />
+      </View>
+    </Card>
+  );
+}
+
+/**
+ * The way back from a "Reddet": the server lets a declined invite accept while
+ * the çelınc still takes players. Too late (its last hour) comes back as the
+ * server's own words in the toast.
+ */
+function RejoinCard({ id, level }: { id: string; level: VulgarityLevel }) {
+  const action = useChallengeAction(id);
+  const toast = useToast();
+
+  const join = () => {
+    action.mutate('accept', {
+      onSuccess: () => {
+        toast({
+          title: 'Girdin',
+          body: byLevel(
+            level,
+            'Çelınc yine listende. Kolay gelsin.',
+            'Çelınc yine listende. Bastır bakalım.',
+            'Çelınc yine listende. Göster kendini 🍆'
+          ),
+          kind: 'success',
+        });
+      },
+      onError: (error) => {
+        toast({ title: 'Olmadı', body: errorText(error, 'Katılamadın.'), kind: 'danger' });
+      },
+    });
+  };
+
+  return (
+    <Card edgeColor={Colors.yellow}>
+      <View style={styles.actionBody}>
+        <Text variant="small">
+          {byLevel(
+            level,
+            'Bu daveti reddetmiştin. Fikrin değiştiyse hâlâ katılabilirsin.',
+            'Reddetmiştin. Fikrin değiştiyse hâlâ girebilirsin.',
+            'Tırsmıştın 🐔 Adamlığın yetiyorsa hâlâ girebilirsin.'
+          )}
+        </Text>
+        <Button title="Katıl" size="md" fullWidth loading={action.isPending} onPress={join} />
       </View>
     </Card>
   );
@@ -1810,11 +1869,16 @@ function FooterActions({
   const canCancel = challenge.status === 'pending' && challenge.creatorId === meId;
   const finished = challenge.status === 'finished';
 
+  // leaving a head-to-head leaves nobody to race: the server cancels it on the spot
+  const leavingEndsIt = endsWithoutMe(detail.participants, meId);
+
   const run = async (kind: 'leave' | 'cancel') => {
     const ok = await confirmTr(
       kind === 'leave' ? 'Ayrılıyor musun?' : 'Çelıncı iptal et',
       kind === 'leave'
-        ? 'Skorun silinmez ama sıralamadan düşersin. Kankalar bunu görecek.'
+        ? leavingEndsIt
+          ? 'Başka kimse kalmadığı için çelınc iptal olur, rakibine de haber gider.'
+          : 'Skorun silinmez ama sıralamadan düşersin. Kankalar bunu görecek.'
         : 'Herkese iptal bildirimi gider. Emin misin?',
       kind === 'leave' ? 'Ayrıl' : 'İptal et'
     );
@@ -1823,7 +1887,12 @@ function FooterActions({
       await action.mutateAsync(kind);
       toast({
         title: kind === 'leave' ? 'Ayrıldın' : 'İptal edildi',
-        body: kind === 'leave' ? 'Bu çelınc sensiz devam ediyor.' : 'Çelınc kapandı.',
+        body:
+          kind === 'cancel'
+            ? 'Çelınc kapandı.'
+            : leavingEndsIt
+              ? 'Rakip kalmadı, çelınc iptal oldu.'
+              : 'Bu çelınc sensiz devam ediyor.',
         kind: 'info',
       });
       onLeft();

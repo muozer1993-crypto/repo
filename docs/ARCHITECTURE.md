@@ -39,17 +39,26 @@ bu yüzden çelınc yaşam döngüsü gerçek zamana hiç bağlı değildir.
 
 ```
 pending ──(başlangıç geldi, ≥2 kabul)──► active ──(bitiş geldi)──► finished
-   │                                                                  │
-   └──(kimse kabul etmedi / creator iptal etti)──► cancelled           │
-                                                                      ▼
-                                              kazanan KOYDUM MU? gönderir
-                                              kaybeden rezillik ekranını görür
-                                              herkes rövanş açabilir
+   │                                       │                          │
+   │ kimse kabul etmedi                    │ herkes kaçtı             ▼
+   │ creator iptal etti                    │          kazanan KOYDUM MU? gönderir
+   │ herkes kaçtı                          │          kaybeden rezillik ekranını görür
+   └──────────────► cancelled ◄────────────┘          herkes rövanş açabilir
 ```
 
 Geçişleri 30 saniyede bir çalışan `services/scheduler.ts` yapar. Aynı fonksiyon
 (`runSchedulerOnce`) testlerde ve `/dev/advance` ucunda doğrudan çağrılır, yani zamanlayıcı
 davranışı beklemeden test edilebilir.
+
+Zamanlayıcıyı beklemeyen iki iptal var: açanın kendi iptali ve "herkes kaçtı". İkincisinde bir ret,
+bir ayrılma ya da bir hesap silme çelıncta kabul etmiş ya da hâlâ davetli iki kişi bırakmazsa çelınc
+o istekle birlikte iptal olur (`cancelIfAbandoned`). Yoksa reddedilmiş bir teke tek, açanı bir hafta
+"önde" yürütür, sonunda da "kimse kabul etmedi" diye kapanırdı. Davetli biri hâlâ kabul edip iki
+kişi yapabilecekse bekler. Reddeden açana, ayrılan içeride kalanlara haber verir ("Ali tırstı,
+reddetti", "Ali havlu attı"), engelli ikiliye hiçbir şey gitmez. Bitişten sonra ikisi de sessizdir
+ve iptal etmez: o bekleyişte sonuç zamanlayıcınındır, kaybeden kimse ayrılıp sonucu bozamaz.
+Reddetmek de son söz değildir: çelınc sürdükçe reddeden kabul edebilir, uygulama bunu çelınc
+ekranında "Katıl" diye sunar.
 
 Adımı ya da ekran süresini telefonun kendisinin saydığı çelınclar bitişte hemen kapanmaz. Son
 akşamın adımları telefonda bir sonraki arka plan senkronunu bekler (15 dakika ve üstü), gece

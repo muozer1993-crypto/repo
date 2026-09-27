@@ -390,15 +390,39 @@ describe('accept / decline / leave / cancel', () => {
     expect(list.json<unknown[]>()).toHaveLength(0);
   });
 
-  it('leaves an active challenge', async () => {
+  it('leaves an active challenge, which head to head ends it', async () => {
     harness = await makeApp({ now: NOW });
     const { veli, challengeId } = await twoPlayerChallenge(harness);
     const left = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/leave` });
     expect(left.statusCode).toBe(200);
     expect(left.json<ChallengeDetail>().me?.status).toBe('left');
+    // nobody left to race: cancelled now, not at the end date
+    expect(left.json<ChallengeDetail>().challenge.status).toBe('cancelled');
 
     const again = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/leave` });
-    expect(again.statusCode).toBe(409);
+    expect(again.statusCode).toBe(400);
+    expect(again.json().error.code).toBe('challenge_closed');
+  });
+
+  it('takes a declined invite back while the çelınc still runs', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+    const veli = await registerUser(harness.app, 'veli');
+    const cem = await registerUser(harness.app, 'cem');
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, cem.me.id);
+    const created = await createChallenge(harness, ali, { participantIds: [veli.me.id, cem.me.id] });
+    const id = created.json<Challenge>().id;
+    const veliCall = authed(harness.app, veli.token);
+
+    // Cem has not answered yet, so the çelınc is still on
+    const declined = await veliCall({ method: 'POST', url: `/challenges/${id}/decline` });
+    expect(declined.json<ChallengeDetail>().challenge.status).toBe('active');
+
+    const back = await veliCall({ method: 'POST', url: `/challenges/${id}/accept` });
+    expect(back.statusCode).toBe(200);
+    expect(back.json<ChallengeDetail>().me?.status).toBe('accepted');
+    expect((await veliCall({ method: 'GET', url: '/challenges' })).json<unknown[]>()).toHaveLength(1);
   });
 
   it('cancels a pending challenge as the creator only', async () => {

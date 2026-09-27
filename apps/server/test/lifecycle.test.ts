@@ -4,6 +4,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import type { Challenge, ChallengeDetail } from '@koydum/shared';
 import {
   activateDueChallenges,
   cancelUnderfilled,
@@ -14,10 +15,10 @@ import {
   sendReminders,
 } from '../src/services/challenges.js';
 import { createPushSender } from '../src/services/push.js';
-import { listByType } from '../src/services/notifications.js';
+import { listByType, listInbox } from '../src/services/notifications.js';
 import { computeUserStats, getBadges } from '../src/services/stats.js';
 import { newId, nowIso, type ChallengeRow } from '../src/db/index.js';
-import { makeApp, registerUser, type TestApp } from './helpers.js';
+import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
 
@@ -222,6 +223,173 @@ describe('challenge lifecycle', () => {
     // the end plus the hour a step çelınc gives the phones
     harness.setNow('2026-01-06T09:00:00.000Z');
     expect(runSchedulerOnce(db, app.now()).finalized).toBe(1);
+  });
+});
+
+describe('declining and leaving', () => {
+  const HOUR = 60 * 60_000;
+
+  /** A "Şimdi başla" step çelınc of a week, `creator` against `invitees`. */
+  async function startNow(h: TestApp, creator: RegisteredUser, invitees: RegisteredUser[]): Promise<string> {
+    for (const invitee of invitees) befriend(h.app, creator.me.id, invitee.me.id);
+    const response = await authed(h.app, creator.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: {
+        typeKey: 'adim_yarisi',
+        title: 'Adım Yarışı',
+        startsAt: h.now().toISOString(),
+        endsAt: new Date(h.now().getTime() + 7 * 24 * HOUR).toISOString(),
+        participantIds: invitees.map((user) => user.me.id),
+      },
+    });
+    return response.json<Challenge>().id;
+  }
+
+  function answer(h: TestApp, user: RegisteredUser, challengeId: string, action: 'accept' | 'decline' | 'leave') {
+    return authed(h.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/${action}` });
+  }
+
+  function titles(h: TestApp, user: RegisteredUser, type: 'challenge_declined' | 'challenge_left' | 'challenge_cancelled') {
+    return listByType(h.db, user.me.id, type).map((row) => row.title);
+  }
+
+  it('cancels a head-to-head çelınc the moment the rival declines, and tells the creator both', async () => {
+    harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+    const { app, db } = harness;
+    const mustafa = await registerUser(app, 'mustafa', { displayName: 'Mustafa' });
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali' });
+    const id = await startNow(harness, mustafa, [ali]);
+    expect(getChallengeRow(db, id)?.status).toBe('active');
+
+    const declined = await answer(harness, ali, id, 'decline');
+    expect(declined.statusCode).toBe(200);
+    expect(declined.json<ChallengeDetail>().challenge.status).toBe('cancelled');
+    expect(getChallengeRow(db, id)?.finalized_at).toBe('2026-01-05T09:00:00.000Z');
+
+    // newest first: the "tırstı", then what it did to the çelınc
+    expect(listInbox(db, mustafa.me.id).map((row) => row.type)).toEqual(['challenge_cancelled', 'challenge_declined']);
+    const [no] = listByType(db, mustafa.me.id, 'challenge_declined');
+    expect(no!.title).toBe('Ali tırstı, reddetti');
+    expect(JSON.parse(no!.data)).toEqual({ challengeId: id, fromUserId: ali.me.id });
+    const [cancelled] = listByType(db, mustafa.me.id, 'challenge_cancelled');
+    // not "kimse kabul etmedi": that line is for a çelınc nobody ever answered
+    expect(cancelled!.body).toBe('Adım Yarışı iptal oldu, herkes kaçtı.');
+    expect(JSON.parse(cancelled!.data)).toEqual({ challengeId: id, reason: 'everyone_left' });
+    // Ali knows what he did
+    expect(listInbox(db, ali.me.id).map((row) => row.type)).toEqual(['challenge_invite']);
+    // and a week later the scheduler has nothing left to cancel
+    harness.advance(8 * 24 * HOUR);
+    expect(runSchedulerOnce(db, app.now()).cancelled).toBe(0);
+  });
+
+  it('tells everybody still in when a player walks out, at their own level, and plays on', async () => {
+    harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+    const { app, db } = harness;
+    const mustafa = await registerUser(app, 'mustafa', { displayName: 'Mustafa' });
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(app, 'veli', { displayName: 'Veli', vulgarityMax: 3 });
+    const id = await startNow(harness, mustafa, [ali, veli]);
+    await answer(harness, ali, id, 'accept');
+    await answer(harness, veli, id, 'accept');
+
+    const left = await answer(harness, ali, id, 'leave');
+    expect(left.statusCode).toBe(200);
+    expect(left.json<ChallengeDetail>().challenge.status).toBe('active');
+
+    expect(titles(harness, mustafa, 'challenge_left')).toEqual(['Ali bıraktı kaçtı']);
+    expect(titles(harness, veli, 'challenge_left')).toEqual(['Ali havlu attı 🐔']);
+    expect(titles(harness, ali, 'challenge_left')).toEqual([]);
+    expect(JSON.parse(listByType(db, veli.me.id, 'challenge_left')[0]!.data)).toEqual({ challengeId: id, fromUserId: ali.me.id });
+    expect(titles(harness, mustafa, 'challenge_cancelled')).toEqual([]);
+  });
+
+  it('waits while an invitee could still make it two, and cancels when they say no too', async () => {
+    harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+    const { app, db } = harness;
+    const mustafa = await registerUser(app, 'mustafa', { displayName: 'Mustafa', vulgarityMax: 1 });
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(app, 'veli', { displayName: 'Veli' });
+    const id = await startNow(harness, mustafa, [ali, veli]);
+    await answer(harness, ali, id, 'accept');
+
+    // Veli has not answered: Mustafa and Veli can still race
+    expect((await answer(harness, ali, id, 'leave')).json<ChallengeDetail>().challenge.status).toBe('active');
+    expect(titles(harness, mustafa, 'challenge_left')).toEqual(['Ali çelınctan ayrıldı']);
+    // the invitee was never in the race, so he hears nothing about it
+    expect(titles(harness, veli, 'challenge_left')).toEqual([]);
+
+    harness.advance(HOUR);
+    expect((await answer(harness, veli, id, 'decline')).json<ChallengeDetail>().challenge.status).toBe('cancelled');
+    expect(titles(harness, mustafa, 'challenge_declined')).toEqual(['Veli daveti reddetti']);
+    expect(listByType(db, mustafa.me.id, 'challenge_cancelled').map((row) => row.body)).toEqual([
+      'Adım Yarışı iptal edildi, rakibin kalmadı.',
+    ]);
+    expect(titles(harness, ali, 'challenge_cancelled')).toEqual([]);
+    expect(titles(harness, veli, 'challenge_cancelled')).toEqual([]);
+  });
+
+  it('says nothing across a block, but still cancels', async () => {
+    harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+    const { app, db } = harness;
+    const mustafa = await registerUser(app, 'mustafa', { displayName: 'Mustafa' });
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(app, 'veli', { displayName: 'Veli' });
+    const cem = await registerUser(app, 'cem', { displayName: 'Cem' });
+    const group = await startNow(harness, mustafa, [ali, veli]);
+    await answer(harness, ali, group, 'accept');
+    await answer(harness, veli, group, 'accept');
+    const duel = await startNow(harness, mustafa, [cem]);
+
+    await authed(app, mustafa.token)({ method: 'POST', url: `/users/${ali.me.id}/block` });
+    await authed(app, cem.token)({ method: 'POST', url: `/users/${mustafa.me.id}/block` });
+
+    await answer(harness, ali, group, 'leave');
+    expect(titles(harness, mustafa, 'challenge_left')).toEqual([]);
+    expect(titles(harness, veli, 'challenge_left')).toEqual(['Ali bıraktı kaçtı']);
+
+    await answer(harness, cem, duel, 'decline');
+    expect(titles(harness, mustafa, 'challenge_declined')).toEqual([]);
+    // the çelınc is news about the çelınc, not a word from Cem
+    expect(getChallengeRow(db, duel)?.status).toBe('cancelled');
+    expect(titles(harness, mustafa, 'challenge_cancelled')).toEqual(['Çelınc iptal oldu']);
+  });
+
+  it('cancels a head-to-head çelınc when the rival deletes the account, without a "havlu attı"', async () => {
+    harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+    const { app, db } = harness;
+    const mustafa = await registerUser(app, 'mustafa', { displayName: 'Mustafa' });
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali' });
+    const id = await startNow(harness, mustafa, [ali]);
+    await answer(harness, ali, id, 'accept');
+
+    expect((await authed(app, ali.token)({ method: 'DELETE', url: '/me' })).statusCode).toBe(200);
+    expect(getChallengeRow(db, id)?.status).toBe('cancelled');
+    expect(JSON.parse(listByType(db, mustafa.me.id, 'challenge_cancelled')[0]!.data)).toEqual({
+      challengeId: id,
+      reason: 'everyone_left',
+    });
+    expect(titles(harness, mustafa, 'challenge_left')).toEqual([]);
+  });
+
+  it('leaves a çelınc past its end to the scheduler, and a late no tells nobody', async () => {
+    harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+    const { app, db } = harness;
+    const mustafa = await registerUser(app, 'mustafa', { displayName: 'Mustafa' });
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali' });
+    const id = await startNow(harness, mustafa, [ali]);
+
+    // a step çelınc waits an hour for the phones after its end
+    harness.advance(7 * 24 * HOUR + 10 * 60_000);
+    expect((await answer(harness, ali, id, 'decline')).json<ChallengeDetail>().challenge.status).toBe('active');
+    expect(titles(harness, mustafa, 'challenge_declined')).toEqual([]);
+
+    harness.advance(HOUR);
+    runSchedulerOnce(db, app.now());
+    expect(getChallengeRow(db, id)?.status).toBe('cancelled');
+    expect(JSON.parse(listByType(db, mustafa.me.id, 'challenge_cancelled')[0]!.data)).toMatchObject({
+      reason: 'not_enough_players',
+    });
   });
 });
 

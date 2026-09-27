@@ -8,6 +8,7 @@ import type { VulgarityLevel } from '@koydum/shared';
  * and standings must survive so nobody's history rots when a friend leaves).
  */
 import { newId, newInviteCode, nowIso, type Database, type UserRow } from '../db/index.js';
+import { cancelIfAbandoned } from './challenges.js';
 
 /** How many times we retry a random invite code before giving up (collision odds are ~0). */
 const INVITE_CODE_ATTEMPTS = 20;
@@ -78,7 +79,9 @@ export function anonymizedUsername(userId: string): string {
  * - username → `deleted_<id8>` (freeing the old one) and display name → "Silinen kanka";
  * - credentials, push token and reminder cleared, so nothing can be pushed or logged in;
  * - every participation in a challenge that has NOT finished becomes `left`, which drops
- *   the user out of standings and stops the scheduler from waiting for them;
+ *   the user out of standings and stops the scheduler from waiting for them; a çelınc
+ *   that leaves nobody to race is cancelled right away (`cancelIfAbandoned`). There is
+ *   no "havlu attı" for it: it would come from "Silinen kanka", who cannot hear back;
  * - finished/cancelled challenges, their entries, taunts and badges are untouched.
  *
  * Returns the anonymised row.
@@ -99,13 +102,19 @@ export function softDeleteUser(db: Database, user: UserRow, now: Date = new Date
         WHERE id = ?`,
     ).run(username, at, user.id);
 
-    db.prepare(
-      `UPDATE challenge_participants
-          SET status = 'left'
-        WHERE user_id = ?
-          AND status IN ('invited', 'accepted')
-          AND challenge_id IN (SELECT id FROM challenges WHERE status IN ('pending', 'active'))`,
-    ).run(user.id);
+    const open = db
+      .prepare(
+        `SELECT challenge_id FROM challenge_participants
+          WHERE user_id = ?
+            AND status IN ('invited', 'accepted')
+            AND challenge_id IN (SELECT id FROM challenges WHERE status IN ('pending', 'active'))`,
+      )
+      .all(user.id) as { challenge_id: string }[];
+    const leave = db.prepare("UPDATE challenge_participants SET status = 'left' WHERE challenge_id = ? AND user_id = ?");
+    for (const { challenge_id: challengeId } of open) {
+      leave.run(challengeId, user.id);
+      cancelIfAbandoned(db, challengeId, now);
+    }
 
     // Pending friend requests in either direction are meaningless now.
     db.prepare("DELETE FROM friendships WHERE status = 'pending' AND (requester_id = ? OR addressee_id = ?)").run(

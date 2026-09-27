@@ -321,7 +321,21 @@ function finishedTitle(level: VulgarityLevel, role: 'winner' | 'loser'): string 
   return 'Yedin lan';
 }
 
-function cancelledCopy(level: VulgarityLevel, title: string): { title: string; body: string } {
+/**
+ * `everyone_left`: the rivals were there and walked out (declined, left,
+ * deleted their account). "Kimse kabul etmedi" would be a lie to somebody whose
+ * rival accepted on Monday and quit on Tuesday.
+ */
+function cancelledCopy(
+  level: VulgarityLevel,
+  title: string,
+  reason?: 'everyone_left',
+): { title: string; body: string } {
+  if (reason === 'everyone_left') {
+    if (level === 1) return { title: 'Çelınc iptal edildi', body: `${title} iptal edildi, rakibin kalmadı.` };
+    if (level === 3) return { title: 'Çelınc iptal 🍆', body: `Herkes kaçtı, ${title} yattı. Tek başına koyamazsın 🍆` };
+    return { title: 'Çelınc iptal oldu', body: `${title} iptal oldu, herkes kaçtı.` };
+  }
   if (level === 1) return { title: 'Çelınc iptal edildi', body: `${title} yeterli katılımcı olmadığı için iptal edildi.` };
   if (level === 3) return { title: 'Çelınc iptal 🍆', body: `${title} iptal oldu. Kimse kabul etmedi, korkaklar.` };
   return { title: 'Çelınc iptal oldu', body: `${title} iptal oldu, kimse kabul etmedi.` };
@@ -481,6 +495,56 @@ export function cancelUnderfilled(db: Database, now: Date = new Date()): number 
     cancelled += 1;
   }
   return cancelled;
+}
+
+/**
+ * Whether a çelınc is still being played: open, and its end not reached. Past
+ * `ends_at` an `active` one only waits for its result (the phones' hour, an
+ * itiraz's photo), and what happens to it then is the scheduler's call.
+ */
+export function stillOpen(challenge: ChallengeRow, now: Date): boolean {
+  return (
+    (challenge.status === 'pending' || challenge.status === 'active') &&
+    now.getTime() < Date.parse(challenge.ends_at)
+  );
+}
+
+/**
+ * Cancels a çelınc on the spot once nobody is left to race. Without it a
+ * declined 1v1 ran on with its creator "leading" alone for a week, only to be
+ * cancelled at the end as "kimse kabul etmedi".
+ *
+ * It counts who is in plus who could still say yes: while an invitee could
+ * make it two, it waits. Whoever is still in or invited hears why
+ * (`reason: 'everyone_left'`).
+ *
+ * Only while `stillOpen`: past the end nobody may walk out of a result (the
+ * leave route refuses), and a çelınc that ends with one player is already
+ * cancelled by `finalizeChallenge`. Runs inside the caller's transaction
+ * (decline, leave, account deletion).
+ */
+export function cancelIfAbandoned(db: Database, challengeId: string, now: Date = new Date()): boolean {
+  const challenge = getChallengeRow(db, challengeId);
+  if (!challenge || !stillOpen(challenge, now)) return false;
+  const remaining = participantRows(db, challengeId).filter(
+    (p) => p.status === 'accepted' || p.status === 'invited',
+  );
+  if (remaining.length >= 2) return false;
+
+  const iso = nowIso(now);
+  db.prepare("UPDATE challenges SET status = 'cancelled', finalized_at = ? WHERE id = ?").run(iso, challengeId);
+  for (const user of userMap(db, remaining.map((p) => p.user_id)).values()) {
+    const copy = cancelledCopy(levelOf(user), challenge.title, 'everyone_left');
+    notify(db, {
+      userId: user.id,
+      type: 'challenge_cancelled',
+      title: copy.title,
+      body: copy.body,
+      data: { challengeId, reason: 'everyone_left' },
+      createdAt: iso,
+    });
+  }
+  return true;
 }
 
 /**

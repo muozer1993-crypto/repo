@@ -298,6 +298,20 @@ export function cancelledByCreatorCopy(level: VulgarityLevel, creator: string, t
   return { title: 'Çelınc iptal oldu', body: `${creator} "${title}" çelıncını iptal etti.` };
 }
 
+/** To the creator: an invitee said no. The one moment a "tırstı" is fair game. */
+export function declinedCopy(level: VulgarityLevel, who: string, title: string): CopyText {
+  if (level === 1) return { title: `${who} daveti reddetti`, body: `${who}, "${title}" çelıncına katılmayacak.` };
+  if (level === 3) return { title: `${who} korktu kaçtı 🐔`, body: `"${title}" davetini görünce yok dedi. Adamlığı yetmedi 🍆` };
+  return { title: `${who} tırstı, reddetti`, body: `"${title}" davetine yok dedi.` };
+}
+
+/** To the players still in: somebody walked out mid-çelınc. */
+export function leftCopy(level: VulgarityLevel, who: string, title: string): CopyText {
+  if (level === 1) return { title: `${who} çelınctan ayrıldı`, body: `${who}, "${title}" çelıncında artık yok. Sıralamadan düştü.` };
+  if (level === 3) return { title: `${who} havlu attı 🐔`, body: `"${title}" çelıncında dayanamadı, bıraktı gitti 🍆` };
+  return { title: `${who} bıraktı kaçtı`, body: `"${title}" çelıncını yarıda bıraktı, sıralamadan düştü.` };
+}
+
 /** "12 saat": the answer window as the owner reads it. */
 const ANSWER_HOURS = `${Math.round(LIMITS.DISPUTE_ANSWER_MS / 3_600_000)} saat`;
 

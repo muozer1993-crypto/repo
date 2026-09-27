@@ -20,21 +20,25 @@ import {
   type ChallengeSummary,
 } from '@koydum/shared';
 import { badRequest, conflict, forbidden, parseBody, parseQuery } from '../errors.js';
-import { newId, nowIso, type ChallengeRow, type Database } from '../db/index.js';
+import { newId, nowIso, type ChallengeRow, type Database, type UserRow } from '../db/index.js';
 import { notify } from '../services/notifications.js';
 import { toChallenge } from '../serialize.js';
 import {
   buildDetail,
   buildSummary,
   cancelledByCreatorCopy,
+  declinedCopy,
   freshDetail,
+  getUserRow,
   inviteCopy,
+  leftCopy,
   levelOf,
   requireChallengeRow,
   requireMembership,
   requireUserRow,
 } from '../services/challengeViews.js';
-import { assertNotBlocked } from '../services/friends.js';
+import { acceptedParticipants, cancelIfAbandoned, stillOpen } from '../services/challenges.js';
+import { assertNotBlocked, isBlockedBetween } from '../services/friends.js';
 
 interface IdParams {
   id: string;
@@ -72,6 +76,37 @@ function isBlocked(db: Database, a: string, b: string): boolean {
     )
     .get(a, b, b, a) as { ok: number } | undefined;
   return blocked !== undefined;
+}
+
+/**
+ * "Ali tırstı": a no goes to the creator, a walk-out to the players still in,
+ * each at their own level. Only people still in the race hear it, and never
+ * across a block: somebody who blocked Ali does not want that name in the inbox.
+ */
+function tellWhoIsIn(
+  db: Database,
+  challenge: ChallengeRow,
+  who: UserRow,
+  type: 'challenge_declined' | 'challenge_left',
+  at: string,
+): void {
+  const copyFor = type === 'challenge_declined' ? declinedCopy : leftCopy;
+  for (const participant of acceptedParticipants(db, challenge.id)) {
+    if (participant.user_id === who.id) continue;
+    if (type === 'challenge_declined' && participant.user_id !== challenge.creator_id) continue;
+    if (isBlockedBetween(db, who.id, participant.user_id)) continue;
+    const user = getUserRow(db, participant.user_id);
+    if (!user || user.deleted_at !== null) continue;
+    const copy = copyFor(levelOf(user), who.display_name, challenge.title);
+    notify(db, {
+      userId: user.id,
+      type,
+      title: copy.title,
+      body: copy.body,
+      data: { challengeId: challenge.id, fromUserId: who.id },
+      createdAt: at,
+    });
+  }
 }
 
 export default async function challengeRoutes(app: FastifyInstance): Promise<void> {
@@ -248,6 +283,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
   // -------------------------------------------------------------------------
   app.post('/challenges/:id/decline', { preHandler: app.authenticate }, async (request): Promise<ChallengeDetail> => {
     const me = request.user;
+    const now = app.now();
     const { id } = request.params as IdParams;
     const challenge = requireChallengeRow(db, id);
     const membership = requireMembership(db, challenge, me.id);
@@ -257,10 +293,17 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     }
     if (membership.status !== 'invited') throw conflict('already_declined', 'Bu daveti zaten cevapladın.');
 
-    db.prepare("UPDATE challenge_participants SET status = 'declined' WHERE challenge_id = ? AND user_id = ?").run(
-      challenge.id,
-      me.id,
-    );
+    const run = db.transaction(() => {
+      db.prepare("UPDATE challenge_participants SET status = 'declined' WHERE challenge_id = ? AND user_id = ?").run(
+        challenge.id,
+        me.id,
+      );
+      // a no to a çelınc that is already over is news to nobody
+      if (!stillOpen(challenge, now)) return;
+      tellWhoIsIn(db, challenge, me.row, 'challenge_declined', nowIso(now));
+      cancelIfAbandoned(db, challenge.id, now);
+    });
+    run();
     return freshDetail(db, challenge.id, me.id, app.now());
   });
 
@@ -269,6 +312,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
   // -------------------------------------------------------------------------
   app.post('/challenges/:id/leave', { preHandler: app.authenticate }, async (request): Promise<ChallengeDetail> => {
     const me = request.user;
+    const now = app.now();
     const { id } = request.params as IdParams;
     const challenge = requireChallengeRow(db, id);
     const membership = requireMembership(db, challenge, me.id);
@@ -286,15 +330,28 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     if (
       challenge.status === 'active' &&
       membership.status === 'accepted' &&
-      app.now().getTime() >= Date.parse(challenge.ends_at)
+      now.getTime() >= Date.parse(challenge.ends_at)
     ) {
       throw badRequest('challenge_ended', 'Süre bitti, sonuç birazdan. Artık ayrılamazsın.');
     }
 
-    db.prepare("UPDATE challenge_participants SET status = 'left' WHERE challenge_id = ? AND user_id = ?").run(
-      challenge.id,
-      me.id,
-    );
+    const run = db.transaction(() => {
+      db.prepare("UPDATE challenge_participants SET status = 'left' WHERE challenge_id = ? AND user_id = ?").run(
+        challenge.id,
+        me.id,
+      );
+      if (!stillOpen(challenge, now)) return;
+      // "Ayrıl" on an invite never joined the race: to the others it is a no
+      tellWhoIsIn(
+        db,
+        challenge,
+        me.row,
+        membership.status === 'invited' ? 'challenge_declined' : 'challenge_left',
+        nowIso(now),
+      );
+      cancelIfAbandoned(db, challenge.id, now);
+    });
+    run();
     return freshDetail(db, challenge.id, me.id, app.now());
   });
 

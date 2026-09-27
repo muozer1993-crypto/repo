@@ -1030,3 +1030,105 @@ describe('the Android back button', () => {
     });
   });
 });
+
+describe('saying no to a çelınc', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const CEM = { id: 'u-3', username: 'cem', displayName: 'Cem', avatarEmoji: '🦁', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** Ali's çelınc, the reader in it as `mine`; `crowd` adds Cem, still thinking about it. */
+  function aliInvites(mine: 'invited' | 'declined', crowd = false) {
+    const detail = challengeDetail();
+    const ali = { ...detail.me!, user: ALI };
+    const me = { ...detail.me!, status: mine, score: 0, days: 0, rank: 0, lastEntryAt: null };
+    const cem = { ...me, user: CEM, status: 'invited' as const };
+    const participants = crowd ? [ali, me, cem] : [ali, me];
+    return { ...detail, challenge: { ...detail.challenge, creatorId: ALI.id }, participants, me };
+  }
+
+  let alert: jest.SpyInstance;
+
+  beforeEach(() => {
+    const { Alert } = require('react-native') as typeof import('react-native');
+    alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    alert.mockRestore();
+  });
+
+  /** Taps a button of the confirmation the screen raised last. */
+  async function answerAlert(text: string): Promise<void> {
+    const buttons = alert.mock.calls[alert.mock.calls.length - 1]?.[2] as { text?: string; onPress?: () => void }[];
+    await act(async () => {
+      buttons.find((button) => button.text === text)?.onPress?.();
+    });
+    await settle();
+  }
+
+  it('asks before a "Reddet" on the home card, and says a head-to-head would be over', async () => {
+    const { challenge, participants, me } = aliInvites('invited');
+    api.challenges = jest.fn(async () => [{ challenge, participants, me, unreadTaunts: 0 }]);
+    api.declineChallenge = jest.fn(async () => ({}));
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    press(tree, 'Reddet');
+    await settle();
+    expect(alert).toHaveBeenCalledTimes(1);
+    const [title, body] = alert.mock.calls[0]!;
+    expect(title).toBe('Pas mı geçiyorsun?');
+    expect(body).toContain('çelınc yatar');
+    expect(api.declineChallenge).not.toHaveBeenCalled();
+
+    await answerAlert('Vazgeç');
+    expect(api.declineChallenge).not.toHaveBeenCalled();
+
+    press(tree, 'Reddet');
+    await settle();
+    await answerAlert('Reddet');
+    expect(api.declineChallenge).toHaveBeenCalledWith('c-1');
+  });
+
+  it('asks before a "Yokum" too, and says the way back while others may still join', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => aliInvites('invited', true));
+    api.declineChallenge = jest.fn(async () => ({}));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    press(tree, 'Yokum');
+    await settle();
+    expect(alert.mock.calls[0]![1]).toContain("Gelen'deki davetten");
+    expect(api.declineChallenge).not.toHaveBeenCalled();
+    await answerAlert('Reddet');
+    expect(api.declineChallenge).toHaveBeenCalledWith('c-1');
+  });
+
+  it('lets a declined invite back in with "Katıl"', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => aliInvites('declined', true));
+    api.acceptChallenge = jest.fn(async () => ({}));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Reddetmiştin. Fikrin değiştiyse hâlâ girebilirsin.');
+    press(tree, 'Katıl');
+    await settle();
+    expect(api.acceptChallenge).toHaveBeenCalledWith('c-1');
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('offers no way back once the çelınc is over', async () => {
+    searchParams.id = 'c-1';
+    const detail = aliInvites('declined', true);
+    api.challenge = jest.fn(async () => ({ ...detail, challenge: { ...detail.challenge, status: 'cancelled' as const } }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    expect(rendered(tree)).not.toContain('Reddetmiştin');
+  });
+});

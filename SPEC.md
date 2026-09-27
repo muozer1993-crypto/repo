@@ -60,7 +60,8 @@ export type FriendshipStatus = 'pending' | 'accepted' | 'blocked';
 export type NotificationType =
   | 'friend_request' | 'friend_accepted' | 'challenge_invite' | 'challenge_started'
   | 'challenge_cancelled' | 'challenge_finished' | 'taunt' | 'poke' | 'dispute'
-  | 'entry_rejected' | 'reminder' | 'badge' | 'rematch' | 'nudge' | 'recap';
+  | 'entry_rejected' | 'reminder' | 'badge' | 'rematch' | 'nudge' | 'recap'
+  | 'challenge_declined' | 'challenge_left';
 // data of a 'recap' notification (the inbox draws it as a card):
 export interface RecapData {
   weekStart: string; weekEnd: string; // Monday..Sunday, reader's local day keys
@@ -278,7 +279,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | POST /auth/refresh | authenticated, no body. Returns `{ token }` with a fresh 90 days. An expired token gets the usual 401: renewal keeps a live session alive, it never revives a dead one. The app calls it about once a week |
 | GET /me | `Me` |
 | PATCH /me | partial update |
-| DELETE /me | soft delete: anonymize username → `deleted_<id8>`, clear push token, leave active challenges |
+| DELETE /me | soft delete: anonymize username → `deleted_<id8>`, clear push token, leave active challenges (each one then goes through the abandoned check of 2.4, without a `challenge_left`) |
 | POST /me/password | `ChangePasswordBody`. Wrong current password → **400** `wrong_password` (never 401: the app logs out on any 401), new equal to current (after NFKC) → 400 `same_password`, 8 wrong ones per account in 15 min (login's per-account budget) → 429 `too_many_attempts`. Returns `{ token, me }` like login. Tokens are stateless JWTs and nothing is revoked: other phones already signed in stay signed in |
 | POST /me/push-token | store |
 | DELETE /me/push-token | clear (logout) |
@@ -300,7 +301,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | GET /challenges?status=active,pending,finished | mine (accepted or invited), `ChallengeSummary[]`, ordered: active by endsAt asc, pending by startsAt, finished by finalizedAt desc |
 | POST /challenges | 201. Returns the bare `Challenge` — the wizard navigates straight to `/challenge/<id>`. Creator auto `accepted`; others `invited` + `challenge_invite` notification. If startsAt <= now → status `active` immediately |
 | GET /challenges/:id | `ChallengeDetail`; participants only (404 otherwise) |
-| POST /challenges/:id/accept, /decline, /leave | Returns the refreshed `ChallengeDetail`. Accept while status ∈ pending/active and now is before `endsAt − cutoff`, where `cutoff = min(1h, duration/4)` so a minimum-length challenge stays joinable; leave only while pending/active (marks `left`); an accepted player cannot leave an `active` çelınc past `endsAt` (400 `challenge_ended`): it is only waiting (2.4), and head to head leaving would cancel a result already seen |
+| POST /challenges/:id/accept, /decline, /leave | Returns the refreshed `ChallengeDetail`. Accept while status ∈ pending/active and now is before `endsAt − cutoff`, where `cutoff = min(1h, duration/4)` so a minimum-length challenge stays joinable; leave only while pending/active (marks `left`); an accepted player cannot leave an `active` çelınc past `endsAt` (400 `challenge_ended`): it is only waiting (2.4), and head to head leaving would cancel a result already seen. A declined invite may still accept (same window): that is the app's way back from an accidental "Reddet". Before `endsAt`, a decline notifies the creator (`challenge_declined`, data `{ challengeId, fromUserId }`, "Ali tırstı, reddetti") and a leave every other accepted player (`challenge_left`, same data, "Ali havlu attı"); an invitee's leave counts as a decline. Each at the reader's level, only while they are still `accepted`, never across a block (either direction). Then the abandoned check of 2.4 runs, all in one transaction. Past `endsAt` both only change the row |
 | POST /challenges/:id/cancel | creator, only pending; notifies. Returns the refreshed `ChallengeDetail` |
 | POST /challenges/:id/entries | see 2.3; returns `{ entry, standings }` |
 | DELETE /challenges/:id/entries/:entryId | own manual entries only, while active |
@@ -347,6 +348,10 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
 
 1. `pending` with `starts_at <= now`: if accepted count ≥ 2 → `active` + `challenge_started` notification to accepted;
    else if `ends_at <= now` → `cancelled` (`challenge_cancelled`). (Single-participant challenges wait; others can still accept.)
+   Not a scheduler step but the same rule sooner: after a decline, a leave or an account deletion, a `pending`/`active`
+   çelınc before its `ends_at` with fewer than two participants `accepted` or still `invited` is cancelled on the spot
+   (`cancelIfAbandoned`: `finalized_at = now`, `challenge_cancelled` with data `{ challengeId, reason: 'everyone_left' }`
+   to whoever is left, "herkes kaçtı" rather than "kimse kabul etmedi"). Past `ends_at` it is left to the scheduler.
 1b. Disputes (`resolveDisputes`, before finalize): in every `active` çelınc, a `disputed` entry of an accepted player
    whose open disputes reached the threshold (2.2) and whose answer window ran out — `now >=` the created_at of the
    threshold-th oldest open dispute `+ LIMITS.DISPUTE_ANSWER_MS` — is upheld: open disputes → `upheld`, entry →
@@ -477,7 +482,8 @@ _layout.tsx                 providers (QueryClientProvider, GestureHandlerRootVi
 (auth)/server.tsx           edit server URL, "Bağlantıyı test et" → GET /health
 onboarding.tsx              3 slides (copy onboarding_1..3), shown once after register
 (app)/(tabs)/_layout.tsx    Tabs: index "Çelınclar", friends "Kankalar", inbox "Gelen Kutusu" (badge = unread), profile "Ben"
-(app)/(tabs)/index.tsx      header: today's steps + sync button + level chip; sections: Davetler (accept/decline inline),
+(app)/(tabs)/index.tsx      header: today's steps + sync button + level chip; sections: Davetler (accept/decline inline;
+                            "Reddet" asks first, and says so when the no would cancel the çelınc),
                             Aktif (cards: emoji, title, countdown, mini standings, my rank; losing → red "yiyorsun" chip),
                             Bekleyen, Biten (last 5); FAB "Çelınc Aç"
 (app)/(tabs)/friends.tsx    list friends (tap → user/[id]), incoming/outgoing requests, search by username, my invite code (copy/share)
@@ -499,6 +505,8 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             countdown, no action area, "böyle devam" verdict or "Ayrıl", one device sync on open (the list card
                             says "Sonuç bekleniyor"),
                             "laf sok" per rival you lead — opens a sheet of rendered `poke` lines to choose from,
+                            invited → "Varım" / "Yokum" ("Yokum" asks first, like the home card); declined while it
+                            still runs → "Reddetmiştin..." card with "Katıl" (accept),
                             leave/cancel; finished → button to results
 (app)/challenge/[id]/results.tsx   winner view: podium + "KOYDUM MU?" CTA per loser (or "Hepsine koy") → taunt picker; loser view: shame screen
                             (big TauntBubble if received, else "bekliyor..." — and 24 h after `finalizedAt`, counted from the

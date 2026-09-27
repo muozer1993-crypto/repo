@@ -65,6 +65,10 @@ export const NOTIFICATION_TYPES = [
   'nudge',
   /** Sunday evening: the week's score, "haftanın kralı" and the step count */
   'recap',
+  /** to the creator: an invitee said no ("Ali tırstı, reddetti") */
+  'challenge_declined',
+  /** to the players still in: somebody walked out mid-çelınc ("Ali havlu attı") */
+  'challenge_left',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

@@ -1,4 +1,4 @@
-import type { VulgarityLevel } from '@koydum/shared';
+import type { ParticipantView, VulgarityLevel } from '@koydum/shared';
 
 /**
  * Copy that has no MICROCOPY key but still has to speak in all three registers.
@@ -64,6 +64,49 @@ export const REMATCH_WINNER: Record<VulgarityLevel, string> = {
   2: 'Bir daha koyalım',
   3: 'Bir daha saplayalım 🍆',
 };
+
+/**
+ * Whether saying no (or leaving) would leave nobody to race. The server then
+ * cancels the çelınc on the spot (`cancelIfAbandoned`): fewer than two people
+ * left who are in or could still say yes.
+ */
+export function endsWithoutMe(participants: Pick<ParticipantView, 'user' | 'status'>[], meId: string | null): boolean {
+  const others = participants.filter(
+    (p) => p.user.id !== meId && (p.status === 'accepted' || p.status === 'invited')
+  );
+  return others.length < 2;
+}
+
+/**
+ * The question before a no to a çelınc invite (home card and the çelınc
+ * screen), so a thumb that slipped does not throw it away. A declined invite
+ * can be taken back from the çelınc screen, which Gelen still opens, unless
+ * the no ends the çelınc (`endsWithoutMe`): then there is nothing to come back
+ * to, and the question says that instead.
+ */
+export function declineQuestion(level: VulgarityLevel, endsIt: boolean): { title: string; body: string } {
+  const title = byLevel(level, 'Daveti reddediyor musun?', 'Pas mı geçiyorsun?', 'Tırstın mı? 🐔');
+  if (endsIt) {
+    return {
+      title,
+      body: byLevel(
+        level,
+        'Başka rakip olmadığı için reddedersen çelınc iptal olur. Açan kişiye de haber gider.',
+        'Tek rakip sensin, reddedersen çelınc yatar. Açana da haber gider.',
+        'Tek rakip sensin, reddedersen çelınc yatar. Açan da tırstığını öğrenir 🐔'
+      ),
+    };
+  }
+  return {
+    title,
+    body: byLevel(
+      level,
+      "Reddedersen çelınc listenden kalkar, açan kişiye de haber gider. Fikrin değişirse Gelen'deki davetten çelınca girip yine katılabilirsin.",
+      "Reddedersen listenden düşer, açana da haber gider. Fikrin değişirse Gelen'deki davetten girip yine katılırsın.",
+      "Reddedersen listenden düşer, açan da tırstığını öğrenir 🐔 Fikrin değişirse Gelen'deki davetten girip yine katılırsın."
+    ),
+  };
+}
 
 /**
  * Toast once the session followed the server to its new address (the invite
