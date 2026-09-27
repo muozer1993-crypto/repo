@@ -117,5 +117,9 @@ describe('Expo Go on Android', () => {
     await fireLocal('KOYDUM', 'Mustafa sana sapır sapır sapladı', { type: 'taunt' });
     expect(mockChannel).toHaveBeenCalledWith('koydum', expect.objectContaining({ name: 'KOYDUM' }));
     expect(mockSchedule).toHaveBeenCalledTimes(1);
+    // on that channel too: a null trigger would land in "Miscellaneous"
+    expect(mockSchedule).toHaveBeenCalledWith(
+      expect.objectContaining({ trigger: { channelId: 'koydum' } })
+    );
   });
 });

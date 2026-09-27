@@ -14,6 +14,9 @@ import { runBackgroundWork } from '@/services/backgroundWork';
  * away and React never mounted — `runBackgroundWork` does the same job from the
  * stored session. The task body itself has to be defined at module scope,
  * before React runs, which is why this file knows nothing about providers.
+ * The app entry (`index.ts`) imports this file for exactly that reason: a
+ * headless run never renders `_layout`, so an import from the bridge alone
+ * would never happen there.
  */
 
 export const BACKGROUND_TASK_NAME = 'koydum-sync';

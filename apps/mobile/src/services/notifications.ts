@@ -154,7 +154,10 @@ export async function fireLocal(
     await ensureAndroidChannel();
     await api.scheduleNotificationAsync({
       content: { title, body, data, sound: true },
-      trigger: null,
+      // Android files a `null` trigger under the library's fallback channel
+      // ("Miscellaneous", in English), so muting that would silence every
+      // taunt. A channel-only trigger still shows at once, on the KOYDUM one.
+      trigger: Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : null,
     });
   } catch {
     // a failed local notification must never break the calling screen

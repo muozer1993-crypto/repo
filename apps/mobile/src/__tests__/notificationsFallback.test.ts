@@ -81,6 +81,8 @@ describe('when expo-notifications refuses to load', () => {
   it('still fires a local notification', async () => {
     await fireLocal('KOYDUM', 'Mustafa sana sapır sapır sapladı');
     expect(mockSchedule).toHaveBeenCalledTimes(1);
+    // channels are an Android thing; everywhere else "now" is a null trigger
+    expect(mockSchedule).toHaveBeenCalledWith(expect.objectContaining({ trigger: null }));
   });
 
   it('still schedules reminders', async () => {

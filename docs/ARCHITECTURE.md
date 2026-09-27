@@ -155,6 +155,7 @@ zorlar (`__tests__/expoGo.test.ts`), çünkü bu hata bir daha geri gelirse uygu
 ## Uygulamanın katmanları
 
 ```
+index.ts          giriş: expo-router + arka plan görevinin tanımı (başsız çalışma için)
 src/app/          expo-router rotaları — sadece ekran, iş mantığı yok
 src/hooks/        react-query sorguları ve mutasyonları
 src/lib/api.ts    tek HTTP istemcisi; her uç burada tiplenmiş
@@ -208,6 +209,18 @@ görev **başsız** çalışır: JS paketi yüklenir ama React hiç kurulmaz, do
 yoktur. Bu durumda `services/backgroundWork.ts` oturumu doğrudan depodan okur ve aynı üç işi
 yapar: adım ve ekran süresi okumalarını gönderir, çevrimdışı kuyruğunu boşaltır, gelen kutusu
 sayısını rozete yazar. "Kimse uygulamayı açmasa da çelınc puan toplar" sözü buna dayanır.
+
+Görevin tanımı bu yüzden `_layout`'tan değil, uygulamanın giriş dosyasından gelir:
+`apps/mobile/index.ts` (`package.json`'daki `main`) önce `expo-router/entry`'yi, sonra
+`services/background`'u yükler. expo-router rota dosyalarını ancak ekranı çizerken değerlendirir,
+başsız çalışmada da hiçbir şey çizilmez. Tanımı bulamayan expo-task-manager görevi kayıttan
+siler; yani kapalı telefona "KOYDUM MU?" ve adım gönderimi, uygulama bir daha açılana kadar
+sessizce dururdu.
+
+Telefonun kendi çıkardığı bildirimler (`fireLocal`, hatırlatmalar) Android'de `koydum`
+kanalına gider. Tetikleyicisi `null` olan bir bildirim kütüphanenin İngilizce "Miscellaneous"
+kanalına düşer; orayı susturan biri bütün lafları da susturmuş olurdu. O yüzden hemen gösterilecek
+bildirim de sadece `channelId` taşıyan bir tetikleyiciyle gönderilir.
 
 ## Neden SQLite
 

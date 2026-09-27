@@ -15,11 +15,12 @@ import { syncStepsNow } from '@/services/stepSync';
  * `NotificationBridge` installs a richer handler while the app is alive, but a
  * background task started by the OS after the user swiped the app away runs
  * headless: the JS bundle loads, React never mounts, no provider ever calls
- * `setBackgroundHandler`. Without this fallback the task was a no-op exactly
- * in the situation it exists for ("a çelınc keeps scoring even when nobody
- * opens the app"). So the session is read straight from storage and the same
- * three things happen: device readings go up, parked entries drain, the badge
- * reflects the inbox.
+ * `setBackgroundHandler` (in that run the task exists at all only because the
+ * app entry, `index.ts`, imports `services/background`). Without this fallback the
+ * task was a no-op exactly in the situation it exists for ("a çelınc keeps
+ * scoring even when nobody opens the app"). So the session is read straight
+ * from storage and the same three things happen: device readings go up, parked
+ * entries drain, the badge reflects the inbox.
  */
 export async function runBackgroundWork(): Promise<void> {
   const [token, storedUrl] = await Promise.all([

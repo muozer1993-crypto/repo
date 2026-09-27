@@ -318,7 +318,9 @@ işleri sunucu açılınca yapar.
 **Kurulumsuz hali zaten çalışıyor.** Uygulama arka planda aşağı yukarı 15 dakikada bir gelen
 kutusuna bakar ve yeni gelen "KOYDUM MU?", dürtme ya da davet varsa telefonun kendi bildirimiyle
 gösterir. Uygulama kapalı olsa da olur. Ayarlar'da bildirim satırı bu durumda **Gecikmeli** yazar.
-Android pili korumak için bu aralığı bazen uzatabilir.
+Android pili korumak için bu aralığı bazen uzatabilir. Telefonun bildirim ayarlarında hepsi
+**KOYDUM** kanalında durur; onu kapatan lafları da kaçırır. Eski sürümden kalma bir
+"Miscellaneous" kanalı görürsen ona artık bir şey gönderilmiyor.
 
 **Anlık olsun istersen** (laf atıldığı saniye telefon titresin), Android'e Google'ın push servisi
 (Firebase Cloud Messaging) gerekir. Bir kerelik iş, ücretsiz:
