@@ -254,8 +254,14 @@ export class ApiClient {
     return this.request<{ ok: true }>('POST', `/users/${id}/block`);
   }
 
+  /** `removed` is false when there was no block of mine to lift (it is idempotent). */
   unblockUser(id: string) {
-    return this.request<{ ok: true }>('POST', `/users/${id}/unblock`);
+    return this.request<{ status: 'none'; userId: string; removed: boolean }>('POST', `/users/${id}/unblock`);
+  }
+
+  /** The people I blocked, newest first; never the ones who blocked me. */
+  blockedUsers() {
+    return this.request<PublicUser[]>('GET', '/users/blocked');
   }
 
   reportUser(id: string, reason: string) {
@@ -280,8 +286,9 @@ export class ApiClient {
     return this.request<{ ok: true }>('POST', `/friends/${friendshipId}/decline`);
   }
 
+  /** Ends a friendship, or takes back my own request while it is still unanswered. */
   removeFriend(userId: string) {
-    return this.request<{ ok: true }>('DELETE', `/friends/${userId}`);
+    return this.request<{ status: 'removed' | 'withdrawn'; userId: string }>('DELETE', `/friends/${userId}`);
   }
 
   /* ------------------------------------------------------------ catalog */

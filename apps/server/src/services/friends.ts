@@ -90,6 +90,22 @@ export function friendRows(db: Database, userId: string): UserRow[] {
     .all(userId, userId, userId) as UserRow[];
 }
 
+/**
+ * The people `userId` blocked, newest block first: only the blocks they own and
+ * can lift, never the ones placed on them (those stay invisible, as the rest of
+ * a block does). Soft-deleted users are hidden.
+ */
+export function blockedByMe(db: Database, userId: string): UserRow[] {
+  return db
+    .prepare(
+      `SELECT u.* FROM friendships f
+         JOIN users u ON u.id = f.addressee_id
+        WHERE f.status = 'blocked' AND f.requester_id = ? AND u.deleted_at IS NULL
+        ORDER BY f.updated_at DESC, u.display_name ASC`,
+    )
+    .all(userId) as UserRow[];
+}
+
 /** Ids of the accepted friends of `userId` (the invite whitelist for challenges). */
 export function friendIds(db: Database, userId: string): string[] {
   return friendRows(db, userId).map((row) => row.id);

@@ -25,6 +25,7 @@ export const qk = {
   challenge: (id: string) => ['challenge', id] as const,
   results: (id: string) => ['results', id] as const,
   friends: ['friends'] as const,
+  blocked: ['blocked'] as const,
   inbox: ['inbox'] as const,
   unread: ['unread'] as const,
   leaderboard: ['leaderboard'] as const,

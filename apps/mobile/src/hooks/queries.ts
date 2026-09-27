@@ -9,6 +9,7 @@ import type {
   Notification,
   ParticipantView,
   PublicProfile,
+  PublicUser,
   UnreadCount,
 } from '@koydum/shared';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
@@ -93,6 +94,17 @@ export function useFriends() {
   return useQuery<FriendsView>({
     queryKey: qk.friends,
     queryFn: () => api.friends(),
+    enabled: !!token,
+  });
+}
+
+/** Ayarlar → Engellediklerin: the only way back to someone a block hid. */
+export function useBlocked() {
+  const api = useApi();
+  const token = useAuth((s) => s.token);
+  return useQuery<PublicUser[]>({
+    queryKey: qk.blocked,
+    queryFn: () => api.blockedUsers(),
     enabled: !!token,
   });
 }
@@ -347,17 +359,36 @@ export function useFriendAction() {
     | { kind: 'request'; username?: string; inviteCode?: string }
     | { kind: 'accept' | 'decline'; friendshipId: string }
     | { kind: 'remove'; userId: string }
+    // my own unanswered request; the same DELETE, the server tells the two apart
+    | { kind: 'withdraw'; userId: string }
   >({
     mutationFn: (action) => {
       if (action.kind === 'request')
         return api.requestFriend({ username: action.username, inviteCode: action.inviteCode });
-      if (action.kind === 'remove') return api.removeFriend(action.userId);
+      if (action.kind === 'remove' || action.kind === 'withdraw') return api.removeFriend(action.userId);
       if (action.kind === 'accept') return api.acceptFriend(action.friendshipId);
       return api.declineFriend(action.friendshipId);
     },
     onSuccess: () => {
       void invalidate.friends();
       void invalidate.inbox();
+    },
+  });
+}
+
+/**
+ * Lifts a block of mine. The person comes back in search (cached hits were
+ * filtered without them) but not as a friend: the block tore that down.
+ */
+export function useUnblock() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, string>({
+    mutationFn: (userId) => api.unblockUser(userId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.blocked });
+      void qc.invalidateQueries({ queryKey: qk.friends });
+      void qc.invalidateQueries({ queryKey: ['search'] });
     },
   });
 }

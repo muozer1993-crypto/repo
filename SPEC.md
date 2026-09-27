@@ -291,12 +291,13 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | (scheduler) recaps | weekly `recap` from Sunday 20:00 until Monday 12:00 in the reader's timezone, once per week (`recaps_sent`): wins/losses/ties of çelınclar finalized since the previous recap (that recap's `sent_at` when it is ≤ 9 days back — covers a Monday make-up and a DST night — otherwise the last 7 days), Monday–Sunday steps, the king of the week among the reader and their friends (most wins, then steps; exact ties share) and the clear step leader. A Monday make-up says "geçen hafta" / "bu hafta rövanş". Nothing to tell → no row |
 | GET /me/inbox/unread | `{ count, latestId }` |
 | GET /users/search?q= | prefix match on username or display_name, excludes self, blocked; max 20 |
+| GET /users/blocked | `PublicUser[]`: the people I blocked, newest block first (Ayarlar → Engellediklerin). Only blocks I placed, never the ones placed on me; deleted accounts left out |
 | GET /users/:id | `PublicUser` + public stats (wins/losses/challengesPlayed) + badges |
-| POST /users/:id/block, /unblock, /report | block sets/creates friendship row status 'blocked' with requester = blocker; blocked users can't see or invite each other. report stores a `reports` row and logs a `warn` line (`YENİ ŞİKAYET`) for the owner; nothing in the app reads reports |
+| POST /users/:id/block, /unblock, /report | block sets/creates friendship row status 'blocked' with requester = blocker; blocked users can't see or invite each other. unblock lifts only my own block (`{ status: 'none', userId, removed }`, idempotent) and does not bring a friendship back. report stores a `reports` row and logs a `warn` line (`YENİ ŞİKAYET`) for the owner; nothing in the app reads reports |
 | GET /friends | `FriendsView` |
 | POST /friends/request | by username or inviteCode; if the target already requested you → auto accept. 404 `user_not_found`, 409 `already_friends` |
 | POST /friends/:friendshipId/accept, /decline | addressee only |
-| DELETE /friends/:userId | remove friendship |
+| DELETE /friends/:userId | remove an accepted friendship (`{ status: 'removed', userId }`), or withdraw my own unanswered request (`{ status: 'withdrawn', userId }`): the row goes, and so does the addressee's unread `friend_request` notification for it (a read one stays as history). A request sent to me → 404 `friendship_not_found`; that one is answered with /decline |
 | GET /catalog | shared catalog dump |
 | GET /challenges?status=active,pending,finished | mine (accepted or invited), `ChallengeSummary[]`, ordered: active by endsAt asc, pending by startsAt, finished by finalizedAt desc |
 | POST /challenges | 201. Returns the bare `Challenge` — the wizard navigates straight to `/challenge/<id>`. Creator auto `accepted`; others `invited` + `challenge_invite` notification. If startsAt <= now → status `active` immediately |
@@ -486,7 +487,8 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
                             "Reddet" asks first, and says so when the no would cancel the çelınc),
                             Aktif (cards: emoji, title, countdown, mini standings, my rank; losing → red "yiyorsun" chip),
                             Bekleyen, Biten (last 5); FAB "Çelınc Aç"
-(app)/(tabs)/friends.tsx    list friends (tap → user/[id]), incoming/outgoing requests, search by username, my invite code (copy/share)
+(app)/(tabs)/friends.tsx    list friends (tap → user/[id]), incoming/outgoing requests (an outgoing one has "Geri çek":
+                            confirm → DELETE /friends/:userId), search by username, my invite code (copy/share)
 (app)/(tabs)/inbox.tsx      inbox list grouped by day; taunt items rendered as TauntBubble (big, red, shame); tap → challenge or friends; "Hepsini okundu yap"
 (app)/(tabs)/profile.tsx    me: avatar emoji picker, stats grid (Koydum / Yedin / Berabere / Kankalar), badges, leaderboard preview, settings link, logout
 (app)/challenge/new.tsx     4-step wizard: 1) tip seç (grouped by category, each shows emoji + name + desc at my level)
@@ -516,8 +518,11 @@ onboarding.tsx              3 slides (copy onboarding_1..3), shown once after re
 (app)/challenge/[id]/entry.tsx     modal: log manual value (numeric pad, quick +1/+5 chips per unit), note, proof photo (camera/gallery → /uploads), day selector (today/yesterday)
 (app)/focus/[id].tsx        full-screen timer (pick 15/25/45/60 min), big countdown, "elini telefondan çek" copy, leaving app → abandoned state with copy focus_abandoned; completion posts entry;
                             while the timer runs, Android back (and any other pop: usePreventRemove) opens the same "Seansı bitirelim mi?" sheet as "Vazgeç" instead of leaving
-(app)/user/[id].tsx         public profile + head-to-head record vs me + "Çelınc aç" shortcut
-(app)/settings.tsx          vulgarity level (with preview), reminder hour, timezone (auto), server URL (editable builds only: a "Sunucu adresi" sheet taking a bare address or a pasted invite link — `koydum://…?server=` or `https://host/davet/CODE`, see serverFromInviteLink in services/invite.ts — and running moveSession: moved → level toast, different → confirm, logout, set the new address, login screen; unreachable → inline error), push status + "yeniden dene", "Şifreni değiştir" sheet (current / new / repeat; min length and mismatch checked inline, wrong_password and same_password shown under their field, success → setSession + level toast), delete account (double confirm), about (+ "Yeni sürümü indir" when the server offers a newer APK)
+(app)/user/[id].tsx         public profile + head-to-head record vs me + "Çelınc aç" shortcut; not friends yet →
+                            "Kanka isteği gönder", "Kanka isteğini kabul et" for an incoming one, "İsteği geri çek"
+                            (confirm) for my own; "Diğer seçenekler": copy username, remove friend, report, block
+                            (the toast says it can be undone under Ayarlar → Engellediklerin)
+(app)/settings.tsx          vulgarity level (with preview), reminder hour, timezone (auto), server URL (editable builds only: a "Sunucu adresi" sheet taking a bare address or a pasted invite link — `koydum://…?server=` or `https://host/davet/CODE`, see serverFromInviteLink in services/invite.ts — and running moveSession: moved → level toast, different → confirm, logout, set the new address, login screen; unreachable → inline error), push status + "yeniden dene", "Engellediklerin" (my blocks from GET /users/blocked, "Engeli kaldır" → confirm → unblock; empty → "Kimseyi engellemedin."), "Şifreni değiştir" sheet (current / new / repeat; min length and mismatch checked inline, wrong_password and same_password shown under their field, success → setSession + level toast), delete account (double confirm), about (+ "Yeni sürümü indir" when the server offers a newer APK)
 davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), reachable signed in or not. Signed in: shows the inviter and sends the friend request only on a tap (a waiting request from that person would be ACCEPTED by it). A fresh install still on the localhost fallback adopts the link's server (after /health) without a conflict warning. Signed out: parks the code (services/invite.ts) and goes to register/login; the bridge sends it right after sign-in. A `server` differing from the current one is shown and only switched to on an explicit tap (after a /health check); builds with a baked-in URL ignore it. Signed in, the screen also asks that server's /health for its serverId: unless it is known to differ from the stored one (or a tap already found another server), the card reads "Bu davet yeni bir adresten" and its primary button "Yeni adrese geç (çıkış yok)" runs moveSession; the logout buttons stay below as secondary. On 'moved' serverUrl is the link's, so the ordinary send-request card follows.
 ```
 

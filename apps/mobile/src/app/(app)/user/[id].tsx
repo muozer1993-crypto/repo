@@ -1,4 +1,5 @@
 import { LIMITS, getBadge } from '@koydum/shared';
+import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -19,6 +20,7 @@ import { useToast } from '@/components/Toast';
 import { useChallenges, useFriendAction, useFriends, useProfile } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { ApiError } from '@/lib/api';
+import { qk } from '@/lib/query';
 import { useAuth } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
@@ -36,6 +38,7 @@ export default function UserProfileScreen() {
   const myId = useAuth((s) => s.me?.id ?? null);
   const api = useApi();
   const toast = useToast();
+  const queryClient = useQueryClient();
 
   const profile = useProfile(id);
   const friends = useFriends();
@@ -127,6 +130,18 @@ export default function UserProfileScreen() {
     );
   };
 
+  const withdrawRequest = async (name: string) => {
+    const ok = await confirmTr('İsteği geri çek', `${name} isteğini artık görmeyecek.`, 'Geri çek');
+    if (!ok) return;
+    friendAction.mutate(
+      { kind: 'withdraw', userId: id },
+      {
+        onSuccess: () => toast({ title: 'İstek geri çekildi', kind: 'info' }),
+        onError: failFriendAction,
+      }
+    );
+  };
+
   const acceptRequest = (friendshipId: string) => {
     friendAction.mutate(
       { kind: 'accept', friendshipId },
@@ -171,7 +186,13 @@ export default function UserProfileScreen() {
     setBusy('block');
     try {
       await api.blockUser(id);
-      toast({ title: 'Engellendi', kind: 'info' });
+      toast({
+        title: 'Engellendi',
+        body: "Fikrin değişirse Ayarlar → Engellediklerin'den kaldırırsın.",
+        kind: 'info',
+      });
+      // Ayarlar may still hold the list from before this block
+      void queryClient.invalidateQueries({ queryKey: qk.blocked });
       await friends.refetch();
       if (router.canGoBack()) router.back();
     } catch (err) {
@@ -369,21 +390,33 @@ export default function UserProfileScreen() {
                 Kabul edince çelınc açabilirsin.
               </Text>
             </>
+          ) : outgoingPending ? (
+            <>
+              <Button
+                title="İsteği geri çek"
+                size="lg"
+                variant="secondary"
+                icon="↩️"
+                fullWidth
+                loading={friendAction.isPending}
+                onPress={() => void withdrawRequest(user.displayName)}
+              />
+              <Text variant="tiny" faint center>
+                İstek gitti, cevap bekleniyor. Kabul edince birlikte çelınc açabilirsiniz.
+              </Text>
+            </>
           ) : (
             <>
               <Button
-                title={outgoingPending ? 'İstek gönderildi' : 'Kanka isteği gönder'}
+                title="Kanka isteği gönder"
                 size="lg"
-                icon={outgoingPending ? '⏳' : '🫂'}
+                icon="🫂"
                 fullWidth
-                disabled={outgoingPending}
                 loading={friendAction.isPending}
                 onPress={() => sendRequest(user.username)}
               />
               <Text variant="tiny" faint center>
-                {outgoingPending
-                  ? 'İsteği kabul edince birlikte çelınc açabilirsiniz.'
-                  : 'Çelınc açmak için önce kanka olmanız lazım.'}
+                Çelınc açmak için önce kanka olmanız lazım.
               </Text>
             </>
           )}

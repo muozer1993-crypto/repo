@@ -1,6 +1,7 @@
 /**
  * Friendships (SPEC 2.2): GET /friends, POST /friends/request,
- * POST /friends/:friendshipId/accept | /decline, DELETE /friends/:userId.
+ * POST /friends/:friendshipId/accept | /decline, DELETE /friends/:userId (ends a
+ * friendship, or takes back a request I sent that nobody answered yet).
  *
  * A request can be addressed either by `username` or by the 6-character `inviteCode`
  * printed on the profile screen. When the target has already asked us, the request
@@ -153,6 +154,24 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
   app.delete<{ Params: { userId: string } }>('/friends/:userId', auth, async (request) => {
     const me = requireUser(request);
     const existing = friendshipBetween(db, me.id, request.params.userId);
+
+    // My own unanswered request: a request sent to the wrong "mehmet" used to sit
+    // under "Gönderilen istekler" for ever. It goes together with the addressee's
+    // unread notification, so nobody taps a request that is no longer there. One
+    // they already read stays in their inbox as history. An incoming request is
+    // not mine to delete here: the addressee answers it with /decline.
+    if (existing?.status === 'pending' && existing.requester_id === me.id) {
+      db.transaction(() => {
+        db.prepare('DELETE FROM friendships WHERE id = ?').run(existing.id);
+        db.prepare(
+          `DELETE FROM notifications
+            WHERE user_id = ? AND type = 'friend_request' AND read_at IS NULL
+              AND json_extract(data, '$.friendshipId') = ?`,
+        ).run(existing.addressee_id, existing.id);
+      })();
+      return { status: 'withdrawn' as const, userId: request.params.userId };
+    }
+
     if (!existing || existing.status !== 'accepted') {
       throw notFound('friendship_not_found', 'Böyle bir kanka bağın yok.');
     }

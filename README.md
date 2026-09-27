@@ -493,7 +493,10 @@ arkadaşına giden bildirim 1. seviyeye yumuşatılır. Bunu sunucu zorlar, uygu
 Ne yaparsan yap uygulamanın üretmediği şeyler: etnik, dini, cinsiyet, cinsel yönelim veya
 engellilik temelli hakaret; tehdit; aile fertlerine küfür. Kullanıcı kendi metnini yazarken de
 bu filtre çalışır. Ayrıca herkes birbirini engelleyebilir ve şikayet edebilir; şikayetler
-sunucuyu açana gider ([Yönetim komutları](#yönetim-komutları)).
+sunucuyu açana gider ([Yönetim komutları](#yönetim-komutları)). Engel kalıcı değil: fikri
+değişen **Ayarlar → Engellediklerin**'den kaldırır; kanka olmak için yeniden istek atmak gerekir.
+Yanlış kişiye giden kanka isteği de Kankalar sekmesinde **Geri çek** ile geri alınır; karşı taraf
+daha okumadıysa gelen kutusundan da silinir.
 
 ---
 

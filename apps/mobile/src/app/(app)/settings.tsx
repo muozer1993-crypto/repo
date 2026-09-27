@@ -1,9 +1,19 @@
-import { LIMITS, TAGLINE, pickTaunt, renderTaunt, t, type TauntVars, type VulgarityLevel } from '@koydum/shared';
+import {
+  LIMITS,
+  TAGLINE,
+  pickTaunt,
+  renderTaunt,
+  t,
+  type PublicUser,
+  type TauntVars,
+  type VulgarityLevel,
+} from '@koydum/shared';
 import * as Application from 'expo-application';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Chip } from '@/components/Chip';
@@ -15,7 +25,7 @@ import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import { UPDATE_HOW, useAppUpdate } from '@/components/UpdateBanner';
-import { useUpdateMe } from '@/hooks/queries';
+import { useBlocked, useUnblock, useUpdateMe } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { ApiError } from '@/lib/api';
 import { normalizeServerUrl, serverUrlIsEditable } from '@/lib/config';
@@ -313,6 +323,92 @@ function ServerSheet({ visible, onClose }: { visible: boolean; onClose: () => vo
         Aynı sunucuysa hesabın yerinde kalır, çıkış yapmazsın. Başka bir sunucuysa önce sorarım.
       </Text>
     </Sheet>
+  );
+}
+
+/**
+ * "Engellediklerin": a block made in a heated moment used to be for ever. The
+ * blocked person's profile 404s and search hides them, so this list is the one
+ * place left to take it back. It holds only the blocks you placed; a block on
+ * you stays as invisible as the rest of it.
+ */
+function BlockedCard() {
+  const blocked = useBlocked();
+  const unblock = useUnblock();
+  const toast = useToast();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const users = blocked.data ?? [];
+
+  const lift = async (user: PublicUser) => {
+    const ok = await confirmTr(
+      'Engeli kaldır',
+      `${user.displayName} seni yeniden bulabilir. Kanka olmak için yeniden istek atman lazım.`,
+      'Kaldır'
+    );
+    if (!ok) return;
+    setBusyId(user.id);
+    unblock.mutate(user.id, {
+      onSuccess: () => toast({ title: 'Engel kalktı', kind: 'success' }),
+      onError: (err) =>
+        toast({
+          title: 'Engel kalkmadı',
+          body: err instanceof ApiError ? err.message : undefined,
+          kind: 'danger',
+        }),
+      onSettled: () => setBusyId(null),
+    });
+  };
+
+  return (
+    <Card>
+      <Text variant="label">Engellediklerin</Text>
+      {blocked.isPending ? (
+        <Text variant="tiny" muted style={styles.blockTop}>
+          Bakıyorum…
+        </Text>
+      ) : blocked.isError ? (
+        <>
+          <Text variant="tiny" muted style={styles.blockTop}>
+            {blocked.error instanceof ApiError ? blocked.error.message : 'Liste gelmedi.'}
+          </Text>
+          <Button
+            title="Tekrar dene"
+            variant="secondary"
+            size="sm"
+            style={styles.selfStart}
+            onPress={() => void blocked.refetch()}
+          />
+        </>
+      ) : users.length === 0 ? (
+        <Text variant="tiny" muted style={styles.blockTop}>
+          Kimseyi engellemedin.
+        </Text>
+      ) : (
+        <View style={styles.block}>
+          {users.map((user) => (
+            <View key={user.id} style={styles.rowBetween}>
+              <Avatar emoji={user.avatarEmoji} name={user.displayName} size={36} />
+              <View style={styles.rowText}>
+                <Text variant="small" bold numberOfLines={1}>
+                  {user.displayName}
+                </Text>
+                <Text variant="tiny" faint numberOfLines={1}>
+                  @{user.username}
+                </Text>
+              </View>
+              <Button
+                title="Engeli kaldır"
+                variant="secondary"
+                size="sm"
+                loading={busyId === user.id}
+                disabled={busyId !== null}
+                onPress={() => void lift(user)}
+              />
+            </View>
+          ))}
+        </View>
+      )}
+    </Card>
   );
 }
 
@@ -760,6 +856,9 @@ export default function SettingsScreen() {
           />
         ) : null}
       </Card>
+
+      {/* --------------------------------------------------------- blocked */}
+      <BlockedCard />
 
       {/* --------------------------------------------------------- account */}
       <Card>

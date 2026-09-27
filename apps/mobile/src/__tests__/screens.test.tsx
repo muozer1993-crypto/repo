@@ -194,6 +194,7 @@ beforeEach(() => {
     leaderboard: jest.fn(async () => []),
     userProfile: jest.fn(async () => { throw new ApiError('not_found', 'Bulunamadı.', 404); }),
     searchUsers: jest.fn(async () => []),
+    blockedUsers: jest.fn(async () => []),
     syncSteps: jest.fn(async () => ({ updated: 0 })),
   });
 });
@@ -1130,5 +1131,106 @@ describe('saying no to a çelınc', () => {
     await settle();
 
     expect(rendered(tree)).not.toContain('Reddetmiştin');
+  });
+});
+
+describe('taking a social mistake back', () => {
+  const MEHMET = { id: 'u-4', username: 'mehmet', displayName: 'Mehmet', avatarEmoji: '🐻', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  let alert: jest.SpyInstance;
+
+  beforeEach(() => {
+    const { Alert } = require('react-native') as typeof import('react-native');
+    alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    alert.mockRestore();
+  });
+
+  /** Taps a button of the confirmation the screen raised last. */
+  async function answerAlert(text: string): Promise<void> {
+    const buttons = alert.mock.calls[alert.mock.calls.length - 1]?.[2] as { text?: string; onPress?: () => void }[];
+    await act(async () => {
+      buttons.find((button) => button.text === text)?.onPress?.();
+    });
+    await settle();
+  }
+
+  it('settings says so when nobody is blocked', async () => {
+    const SettingsScreen = require('@/app/(app)/settings').default;
+    const tree = renderScreen(<SettingsScreen />);
+    await settle();
+
+    expect(api.blockedUsers).toHaveBeenCalled();
+    expect(rendered(tree)).toContain('Kimseyi engellemedin.');
+  });
+
+  it('settings lists my blocks, and "Engeli kaldır" lifts one only after asking', async () => {
+    api.blockedUsers = jest.fn(async () => [MEHMET]);
+    api.unblockUser = jest.fn(async () => ({ status: 'none', userId: MEHMET.id, removed: true }));
+    const SettingsScreen = require('@/app/(app)/settings').default;
+    const tree = renderScreen(<SettingsScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Mehmet');
+    expect(rendered(tree)).not.toContain('Kimseyi engellemedin.');
+
+    press(tree, 'Engeli kaldır');
+    await settle();
+    expect(alert).toHaveBeenCalledTimes(1);
+    expect(alert.mock.calls[0]![1]).toContain('Mehmet seni yeniden bulabilir.');
+    await answerAlert('Vazgeç');
+    expect(api.unblockUser).not.toHaveBeenCalled();
+
+    api.blockedUsers = jest.fn(async () => []);
+    press(tree, 'Engeli kaldır');
+    await settle();
+    await answerAlert('Kaldır');
+    expect(api.unblockUser).toHaveBeenCalledWith('u-4');
+    // the list is fetched again and the row is gone
+    expect(api.blockedUsers).toHaveBeenCalled();
+    expect(rendered(tree)).toContain('Kimseyi engellemedin.');
+  });
+
+  it('a sent request has "Geri çek" instead of a BEKLİYOR chip, and it asks first', async () => {
+    api.friends = jest.fn(async () => ({ friends: [], incoming: [], outgoing: [{ id: 'f-9', user: MEHMET }] }));
+    api.removeFriend = jest.fn(async () => ({ status: 'withdrawn', userId: MEHMET.id }));
+    const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
+    const tree = renderScreen(<FriendsScreen />);
+    await settle();
+
+    expect(rendered(tree)).not.toContain('BEKLİYOR');
+    press(tree, 'Geri çek');
+    await settle();
+    expect(alert.mock.calls[0]![0]).toBe('İsteği geri çek');
+    expect(alert.mock.calls[0]![1]).toBe('Mehmet isteğini artık görmeyecek.');
+    await answerAlert('Vazgeç');
+    expect(api.removeFriend).not.toHaveBeenCalled();
+
+    press(tree, 'Geri çek');
+    await settle();
+    await answerAlert('Geri çek');
+    expect(api.removeFriend).toHaveBeenCalledWith('u-4');
+  });
+
+  it('the profile of someone I asked offers "İsteği geri çek" instead of a dead button', async () => {
+    searchParams.id = MEHMET.id;
+    api.userProfile = jest.fn(async () => ({
+      ...MEHMET,
+      stats: { wins: 0, losses: 0, challengesPlayed: 0 },
+      badges: [],
+    }));
+    api.friends = jest.fn(async () => ({ friends: [], incoming: [], outgoing: [{ id: 'f-9', user: MEHMET }] }));
+    api.removeFriend = jest.fn(async () => ({ status: 'withdrawn', userId: MEHMET.id }));
+    const UserScreen = require('@/app/(app)/user/[id]').default;
+    const tree = renderScreen(<UserScreen />);
+    await settle();
+
+    expect(rendered(tree)).not.toContain('İstek gönderildi');
+    press(tree, 'İsteği geri çek');
+    await settle();
+    await answerAlert('Geri çek');
+    expect(api.removeFriend).toHaveBeenCalledWith('u-4');
   });
 });

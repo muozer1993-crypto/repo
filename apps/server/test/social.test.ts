@@ -630,6 +630,55 @@ describe('friends', () => {
     expect(missing.json<{ error: { code: string } }>().error.code).toBe('friendship_not_found');
   });
 
+  it('lets the requester take back a request nobody answered', async () => {
+    const h = await boot();
+    const asker = await registerUser(h.app, 'mustafa');
+    const target = await registerUser(h.app, 'mehmet');
+    const call = authed(h.app, asker.token);
+    const targetCall = authed(h.app, target.token);
+    const unreadRequests = () =>
+      h.db
+        .prepare("SELECT * FROM notifications WHERE user_id = ? AND type = 'friend_request' AND read_at IS NULL")
+        .all(target.me.id);
+
+    await call({ method: 'POST', url: '/friends/request', payload: { username: 'mehmet' } });
+    expect(unreadRequests()).toHaveLength(1);
+
+    const withdrawn = await call({ method: 'DELETE', url: `/friends/${target.me.id}` });
+    expect(withdrawn.statusCode).toBe(200);
+    expect(withdrawn.json()).toEqual({ status: 'withdrawn', userId: target.me.id });
+    expect(h.db.prepare('SELECT * FROM friendships').all()).toHaveLength(0);
+    expect(unreadRequests()).toHaveLength(0);
+    expect((await targetCall({ method: 'GET', url: '/friends' })).json<FriendsView>().incoming).toHaveLength(0);
+    expect((await call({ method: 'GET', url: '/friends' })).json<FriendsView>().outgoing).toHaveLength(0);
+
+    // Asking again works, and a request the addressee already read stays in their inbox.
+    const again = await call({ method: 'POST', url: '/friends/request', payload: { username: 'mehmet' } });
+    expect(again.statusCode).toBe(201);
+    await targetCall({ method: 'POST', url: '/me/inbox/read', payload: { all: true } });
+    await call({ method: 'DELETE', url: `/friends/${target.me.id}` });
+    expect(h.db.prepare('SELECT * FROM friendships').all()).toHaveLength(0);
+    const inbox = (await targetCall({ method: 'GET', url: '/me/inbox' })).json<Notification[]>();
+    expect(inbox.map((n) => n.type)).toEqual(['friend_request']);
+  });
+
+  it('does not let the addressee delete an incoming request, only decline it', async () => {
+    const h = await boot();
+    const asker = await registerUser(h.app, 'mustafa');
+    const target = await registerUser(h.app, 'kemal');
+
+    await authed(h.app, asker.token)({ method: 'POST', url: '/friends/request', payload: { username: 'kemal' } });
+    const response = await authed(h.app, target.token)({ method: 'DELETE', url: `/friends/${asker.me.id}` });
+    expect(response.statusCode).toBe(404);
+    expect(response.json<{ error: { code: string } }>().error.code).toBe('friendship_not_found');
+
+    const rows = h.db.prepare('SELECT * FROM friendships').all() as { status: string }[];
+    expect(rows.map((row) => row.status)).toEqual(['pending']);
+    expect(
+      h.db.prepare("SELECT * FROM notifications WHERE user_id = ? AND type = 'friend_request'").all(target.me.id),
+    ).toHaveLength(1);
+  });
+
   it('covers every friend-request error code', async () => {
     const h = await boot();
     const asker = await registerUser(h.app, 'mustafa');
@@ -810,6 +859,63 @@ describe('block / unblock / report', () => {
     // Unblocking twice is a no-op, not an error.
     const noop = await blockerCall({ method: 'POST', url: `/users/${blocked.me.id}/unblock` });
     expect(noop.json<{ removed: boolean }>().removed).toBe(false);
+  });
+
+  it('lists the blocks I placed, newest first, and never the ones placed on me', async () => {
+    const h = await boot();
+    const me = await registerUser(h.app, 'mustafa');
+    const first = await registerUser(h.app, 'kemal');
+    const second = await registerUser(h.app, 'zeynep');
+    const hater = await registerUser(h.app, 'hasan');
+    const call = authed(h.app, me.token);
+    const blockedOf = async (token: string) =>
+      (await authed(h.app, token)({ method: 'GET', url: '/users/blocked' })).json<{ username: string }[]>().map(
+        (u) => u.username,
+      );
+
+    const empty = await call({ method: 'GET', url: '/users/blocked' });
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json()).toEqual([]);
+
+    await call({ method: 'POST', url: `/users/${first.me.id}/block` });
+    h.advance(60_000);
+    await call({ method: 'POST', url: `/users/${second.me.id}/block` });
+    await authed(h.app, hater.token)({ method: 'POST', url: `/users/${me.me.id}/block` });
+
+    expect(await blockedOf(me.token)).toEqual(['zeynep', 'kemal']);
+    expect(await blockedOf(first.token)).toEqual([]);
+    expect(await blockedOf(hater.token)).toEqual(['mustafa']);
+
+    // A block back is the other side's own row: each list still shows only its owner's.
+    await authed(h.app, first.token)({ method: 'POST', url: `/users/${me.me.id}/block` });
+    expect(await blockedOf(first.token)).toEqual(['mustafa']);
+    expect(await blockedOf(me.token)).toEqual(['zeynep', 'kemal']);
+
+    // A deleted account drops off the list.
+    await authed(h.app, second.token)({ method: 'DELETE', url: '/me' });
+    expect(await blockedOf(me.token)).toEqual(['kemal']);
+  });
+
+  it('empties the list on unblock, and search and the profile work again', async () => {
+    const h = await boot();
+    const me = await registerUser(h.app, 'mustafa');
+    const other = await registerUser(h.app, 'kemal');
+    const call = authed(h.app, me.token);
+
+    await call({ method: 'POST', url: `/users/${other.me.id}/block` });
+    expect((await call({ method: 'GET', url: '/users/blocked' })).json<{ id: string }[]>().map((u) => u.id)).toEqual([
+      other.me.id,
+    ]);
+    expect((await call({ method: 'GET', url: '/users/search?q=kem' })).json<unknown[]>()).toHaveLength(0);
+
+    await call({ method: 'POST', url: `/users/${other.me.id}/unblock` });
+
+    expect((await call({ method: 'GET', url: '/users/blocked' })).json<unknown[]>()).toEqual([]);
+    expect((await call({ method: 'GET', url: '/users/search?q=kem' })).json<{ id: string }[]>().map((u) => u.id)).toEqual([
+      other.me.id,
+    ]);
+    expect((await call({ method: 'GET', url: `/users/${other.me.id}` })).statusCode).toBe(200);
+    expect((await authed(h.app, other.token)({ method: 'GET', url: `/users/${me.me.id}` })).statusCode).toBe(200);
   });
 
   it('blocks over a pending request in the other direction', async () => {

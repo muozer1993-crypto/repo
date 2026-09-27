@@ -1,5 +1,5 @@
 /**
- * Other people (SPEC 2.2): GET /users/search, GET /users/:id,
+ * Other people (SPEC 2.2): GET /users/search, GET /users/blocked, GET /users/:id,
  * POST /users/:id/block | /unblock | /report.
  *
  * Blocking is modelled as a `friendships` row with status `blocked` and the blocker
@@ -12,7 +12,7 @@ import { newId, nowIso, type Database, type UserRow } from '../db/index.js';
 import { badRequest, notFound, parseBody, parseQuery } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { toPublicProfile, toPublicUser } from '../serialize.js';
-import { isBlockedBetween, removeBlock, upsertBlock } from '../services/friends.js';
+import { blockedByMe, isBlockedBetween, removeBlock, upsertBlock } from '../services/friends.js';
 
 /** Max hits returned to the app (SPEC 2.2). */
 const SEARCH_LIMIT = 20;
@@ -84,6 +84,15 @@ export default async function userRoutes(app: FastifyInstance): Promise<void> {
       .map(toPublicUser);
 
     // SPEC 2.2 and the mobile client both expect a bare array.
+    return users;
+  });
+
+  // Ayarlar → Engellediklerin. Without it a block was for ever: a blocked profile
+  // 404s and search hides the pair, so the app had nowhere to unblock from.
+  // Registered before /users/:id so nobody reads "blocked" as an id.
+  app.get('/users/blocked', auth, async (request) => {
+    const me = requireUser(request);
+    const users: PublicUser[] = blockedByMe(db, me.id).map(toPublicUser);
     return users;
   });
 

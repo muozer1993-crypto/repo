@@ -22,6 +22,7 @@ import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
+import { confirmTr } from '@/utils/confirm';
 import { byLevel } from '@/utils/levelCopy';
 import { isLocalNetworkUrl, isLoopbackUrl } from '@/utils/url';
 
@@ -134,6 +135,22 @@ export default function FriendsScreen() {
             body: kind === 'accept' ? `${name} artık listende. Aç bir çelınc.` : `${name} eklenmedi.`,
             kind: kind === 'accept' ? 'success' : 'info',
           }),
+        onError: fail,
+        onSettled: () => setBusyKey(null),
+      }
+    );
+  };
+
+  // A request sent to the wrong "mehmet" used to wait there for ever with only a
+  // BEKLİYOR chip. Taking it back also clears it from their unread inbox.
+  const withdraw = async (friendshipId: string, user: PublicUser) => {
+    const ok = await confirmTr('İsteği geri çek', `${user.displayName} isteğini artık görmeyecek.`, 'Geri çek');
+    if (!ok) return;
+    setBusyKey(friendshipId);
+    action.mutate(
+      { kind: 'withdraw', userId: user.id },
+      {
+        onSuccess: () => toast({ title: 'İstek geri çekildi', kind: 'info' }),
         onError: fail,
         onSettled: () => setBusyKey(null),
       }
@@ -343,7 +360,16 @@ export default function FriendsScreen() {
               onPress={() =>
                 router.push({ pathname: '/user/[id]', params: { id: request.user.id } })
               }
-              right={<Chip label="BEKLİYOR" color={Colors.yellow} size="sm" />}
+              right={
+                <Button
+                  title="Geri çek"
+                  size="sm"
+                  variant="ghost"
+                  loading={action.isPending && busyKey === request.id}
+                  disabled={action.isPending && busyKey === request.id}
+                  onPress={() => void withdraw(request.id, request.user)}
+                />
+              }
             />
           ))}
         </View>
