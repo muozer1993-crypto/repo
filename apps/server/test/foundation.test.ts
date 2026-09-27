@@ -305,6 +305,8 @@ describe('GET /health', () => {
       time: '2026-01-05T09:00:00.000Z',
       // no Android build published on this server
       app: null,
+      // the harness's PUBLIC_URL is http://test.local: that is the address to share
+      publicUrl: 'http://test.local',
     });
   });
 

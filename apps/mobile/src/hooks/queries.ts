@@ -21,6 +21,20 @@ import { useAuth } from '@/store/auth';
 
 /* --------------------------------------------------------------- reads */
 
+/**
+ * What the server says about itself: its public address (for invite links) and
+ * the Android build it offers (for "yeni sürüm var"). Cheap and rarely changes.
+ */
+export function useServerInfo() {
+  const api = useApi();
+  return useQuery({
+    queryKey: qk.health,
+    queryFn: () => api.health(),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
 export function useCatalog() {
   const api = useApi();
   const token = useAuth((s) => s.token);

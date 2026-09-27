@@ -30,4 +30,5 @@ export const qk = {
   leaderboard: ['leaderboard'] as const,
   profile: (id: string) => ['profile', id] as const,
   search: (q: string) => ['search', q] as const,
+  health: ['health'] as const,
 };

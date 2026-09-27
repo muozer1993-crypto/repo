@@ -292,7 +292,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | GET /indir?kod= | same page without an inviter |
 | GET /invites/:code | public JSON `{ code, inviter: { username, displayName, avatarEmoji } }`, 404 `invite_not_found`; rate-limited (429 `too_many_lookups`) |
 | GET /koydum.apk | the build published with `npm run apk:yayinla` (`<APP_DIR>/koydum.apk` + `latest.json`), `application/vnd.android.package-archive`; 404 `apk_not_found` |
-| GET /health | also `app: { latestVersion, downloadUrl, notes } \| null` — the app shows "Yeni sürüm var" when latestVersion > its native version |
+| GET /health | also `app: { latestVersion, downloadUrl, notes } \| null` — the app shows "Yeni sürüm var" when latestVersion > its native version — and `publicUrl: string \| null` (PUBLIC_URL when set and not loopback; `npm run internet` sets it to the Cloudflare quick-tunnel address). The friends tab builds invite links from `publicUrl ?? serverUrl`. |
 | POST /uploads | one image per request (jpg/png/webp, ≤ 5 MB); at most 60 per account per hour (429 `upload_limit`) |
 
 ### 2.3 Entry validation (`services/entries.ts`)

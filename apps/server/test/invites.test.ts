@@ -179,6 +179,8 @@ describe('the published build', () => {
     expect(apk.rawPayload.length).toBe(4096);
 
     const health = await harness.app.inject({ method: 'GET', url: '/health', headers: { host: '10.0.0.5:4000' } });
+    // no PUBLIC_URL: nothing better to share than the address the phone already uses
+    expect(health.json<{ publicUrl: string | null }>().publicUrl).toBeNull();
     expect(health.json<{ app: unknown }>().app).toEqual({
       latestVersion: '1.1.0',
       downloadUrl: 'http://10.0.0.5:4000/koydum.apk',

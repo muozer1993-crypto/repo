@@ -369,3 +369,29 @@ describe('standings verdict', () => {
     expect(text).not.toContain('Başa baş');
   });
 });
+
+describe('invite link on the friends tab', () => {
+  it('warns that a localhost link opens nowhere else', async () => {
+    api.health = jest.fn(async () => ({ ok: true, version: '1', time: '', app: null, publicUrl: null }));
+    const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
+    const tree = renderScreen(<FriendsScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('başka hiçbir telefonda açılmaz');
+  });
+
+  it('uses the public address the server reports, and drops the warning', async () => {
+    api.health = jest.fn(async () => ({
+      ok: true,
+      version: '1',
+      time: '',
+      app: null,
+      publicUrl: 'https://tatli-koydum.trycloudflare.com',
+    }));
+    const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
+    const tree = renderScreen(<FriendsScreen />);
+    await settle();
+    const text = rendered(tree);
+    expect(text).not.toContain('başka hiçbir telefonda açılmaz');
+    expect(text).not.toContain('aynı Wi-Fi');
+  });
+});

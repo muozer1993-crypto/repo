@@ -14,7 +14,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "apk:yayinla": "node apps/server/scripts/publish-apk.mjs"
+    "apk:yayinla": "node apps/server/scripts/publish-apk.mjs",
+    "internet": "node apps/server/scripts/internet.mjs"
   },
   "engines": {
     "node": ">=20"

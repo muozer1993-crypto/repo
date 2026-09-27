@@ -60,6 +60,8 @@ export interface HealthResponse {
   version: string;
   time: string;
   app?: { latestVersion: string | null; downloadUrl: string; notes: string | null } | null;
+  /** the address friends elsewhere should use (set by `npm run internet` / PUBLIC_URL) */
+  publicUrl?: string | null;
 }
 
 export interface InviteLookup {

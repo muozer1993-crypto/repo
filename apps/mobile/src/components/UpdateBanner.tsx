@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
 import * as Application from 'expo-application';
 import { useEffect, useState } from 'react';
 import { Linking, Platform, StyleSheet, View } from 'react-native';
@@ -6,7 +5,7 @@ import { Linking, Platform, StyleSheet, View } from 'react-native';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
-import { useApi } from '@/hooks/useApi';
+import { useServerInfo } from '@/hooks/queries';
 import { StorageKeys, getJson, setJson } from '@/lib/storage';
 import { Colors, Spacing } from '@/theme';
 import { compareVersions } from '@/utils/url';
@@ -30,15 +29,9 @@ export const UPDATE_HOW =
   'APK’yla kurduysan indirip eskisinin üstüne kur, hesabın ve çelınclar yerinde kalır. Play’den kurduysan güncellemeyi Play’den al.';
 
 export function useAppUpdate(): { latest: string; downloadUrl: string; notes: string | null } | null {
-  const api = useApi();
   const installed = Application.nativeApplicationVersion;
-  const { data } = useQuery({
-    queryKey: ['health', 'app'],
-    queryFn: () => api.health(),
-    enabled: Platform.OS === 'android' && !!installed,
-    staleTime: 6 * 60 * 60 * 1000,
-    retry: false,
-  });
+  const { data } = useServerInfo();
+  if (Platform.OS !== 'android') return null;
   const offered = data?.app;
   if (!installed || !offered?.latestVersion || !offered.downloadUrl) return null;
   if (compareVersions(offered.latestVersion, installed) <= 0) return null;

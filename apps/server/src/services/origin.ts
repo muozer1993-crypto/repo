@@ -16,7 +16,7 @@ import type { Config } from '../config.js';
 const HOST_RE = /^(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?$/;
 
 /** A PUBLIC_URL of localhost (the old .env.example value) names no public address at all. */
-const LOOPBACK_URL = /^https?:\/\/(?:localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1\])(?::\d+)?$/i;
+export const LOOPBACK_URL = /^https?:\/\/(?:localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1\])(?::\d+)?$/i;
 
 export function publicOrigin(request: FastifyRequest, config: Pick<Config, 'publicUrl' | 'publicUrlExplicit'>): string {
   if (config.publicUrlExplicit && !LOOPBACK_URL.test(config.publicUrl)) return config.publicUrl;

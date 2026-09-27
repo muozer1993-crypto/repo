@@ -115,13 +115,46 @@ hostname -I | awk '{print $1}'
 Çıkan adresi (`192.168.1.20` gibi) uygulamadaki **Sunucu adresi** ekranına yaz. Port yazmazsan
 otomatik `:4000` eklenir. "Bağlantıyı test et" düğmesi yeşil yanıyorsa tamamdır.
 
-### Arkadaşların farklı ağdaysa
+### Arkadaşların farklı ağdaysa: `npm run internet`
 
-Sunucunun internetten erişilebilir olması gerekir. İki seçenek:
+Sunucunun internetten erişilebilir olması gerekir. En kısa yol tek komut; ücretsiz, hesap
+açmak ya da modemden port açmak gerekmiyor.
 
-* **Geçici tünel** (test için): `npx localtunnel --port 4000` ya da `cloudflared tunnel --url http://localhost:4000`.
-  Çıkan `https://...` adresini uygulamaya yaz.
-* **Kalıcı kurulum**: aşağıdaki [Sunucuyu internete açmak](#sunucuyu-internete-açmak) bölümü.
+**Bir kere:** Cloudflare'in tünel programını kur. PowerShell'de:
+
+```powershell
+winget install --id Cloudflare.cloudflared
+```
+
+Kurduktan sonra PowerShell'i kapatıp yeniden aç.
+
+**Her oynamak istediğinde**, `npm run server` yerine:
+
+```powershell
+cd C:\Users\ArisK\koydum
+npm run internet
+```
+
+Birkaç saniye sonra ekranda şuna benzer bir satır çıkar:
+
+```
+✓ KOYDUM internette:  https://tatli-kelimeler-burada.trycloudflare.com
+```
+
+Bundan sonra uygulamada **Kankalar → Paylaş** bu adresle bağlantı gönderir. Başka şehirdeki
+kankan bağlantıya dokunur, uygulama o adrese bağlanır, kanka isteğini gönderir. Senin telefonun
+evdeki Wi-Fi'da kalabilir; aynı sunucudur.
+
+İki şey bilinsin:
+
+* **Pencere açık kaldıkça çalışır.** Bilgisayar uyursa ya da pencereyi kapatırsan kankaların
+  bağlanamaz; çelınc sonuçları sunucu tekrar açılınca hesaplanır.
+* **Adres her açılışta değişir.** Kapatıp açtıysan Paylaş'la yeni bağlantıyı gönder. Kankan
+  yeni bağlantıya dokununca uygulama "başka sunucu" der; **Çıkış yap, orada giriş yap**'a basıp
+  aynı kullanıcı adı ve şifreyle girer, hesabı ve çelınclar yerindedir.
+
+Sabit bir adres ve 7/24 açık bir sunucu istersen aşağıdaki
+[Sunucuyu internete açmak](#sunucuyu-internete-açmak) bölümüne bak.
 
 ### Expo Go'nun sınırları
 
@@ -273,7 +306,7 @@ APK tek başına yetmez: uygulama bir KOYDUM sunucusuna bağlanmak zorunda. Üç
 | Durum | Ne yapman lazım |
 |---|---|
 | **Aynı evdesiniz / aynı Wi-Fi** | Hiçbir şey. Senin bilgisayarında `npm run server` açık olduğu sürece arkadaşın uygulamaya senin yerel IP'ni (`192.168.1.x:4000`) yazar ve oynarsınız. Bilgisayarı kapatınca oyun durur. |
-| **Farklı yerdesiniz, hızlıca denemek istiyorsunuz** | Bir tünel aç: `cloudflared tunnel --url http://localhost:4000` ya da `npx localtunnel --port 4000`. Çıkan `https://...` adresini arkadaşına ver. Bilgisayarın açık kaldığı sürece çalışır. |
+| **Farklı yerdesiniz** | `npm run server` yerine `npm run internet` çalıştır (yukarıdaki [bölüm](#arkadaşların-farklı-ağdaysa-npm-run-internet)). Uygulamadaki Paylaş internet adresini kendisi kullanır. Bilgisayarın açık kaldığı sürece çalışır. |
 | **Kalıcı olarak oynayacaksınız** | Sunucuyu bir yere kur. Depoda hazır `Dockerfile` ve `docker-compose.yml` var; en ucuz VPS'te (aylık birkaç dolar) ya da Fly.io / Railway gibi bir yerde çalışır. Aşağıdaki bölüme bak. |
 
 Kalıcı kurulumda sunucu **7/24 açık kalmalı**: çelınclar bitince sonucu hesaplayan ve "KOYDUM"
