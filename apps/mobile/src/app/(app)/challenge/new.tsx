@@ -11,9 +11,9 @@ import {
   type PublicUser,
   type VulgarityLevel,
 } from '@koydum/shared';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { BackHandler, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/Avatar';
@@ -31,6 +31,7 @@ import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
+import { confirmTr } from '@/utils/confirm';
 import { endOfDayInTz, safeDayKey, safeTodayKey, zonedInstant } from '@/utils/datetime';
 import { formatDayKey, formatTime } from '@/utils/format';
 import { byLevel } from '@/utils/levelCopy';
@@ -412,6 +413,34 @@ export default function NewChallengeScreen() {
     }
     setStep(step - 1);
   };
+
+  // Android's back button used to close the whole modal from any step, taking
+  // the type, the rules and the picked kankas with it. It walks the steps back
+  // like "Geri" does; on the first step it asks before throwing a chosen type
+  // (and whatever was set after it) away, since a stray swipe is no decision.
+  useFocusEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (step > 0) {
+        setStep(step - 1);
+        return true;
+      }
+      if (!type) return false;
+      void confirmTr(
+        byLevel(level, 'Çıkmak istiyor musun?', 'Çıkıyor musun?', 'Kaçıyor musun lan?'),
+        byLevel(
+          level,
+          'Seçtiklerin kaydedilmeyecek, bir dahaki sefere baştan seçmen gerekecek.',
+          'Seçtiklerin gider, sonra baştan seçersin.',
+          'Seçtiklerin çöpe gider. Tırstıysan çık 🍆'
+        ),
+        'Çık'
+      ).then((ok) => {
+        if (ok) close();
+      });
+      return true;
+    });
+    return () => sub.remove();
+  });
 
   const submit = async () => {
     if (!type || !settingsValid || !friendsValid) return;

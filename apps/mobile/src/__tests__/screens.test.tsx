@@ -30,6 +30,15 @@ jest.mock('expo-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+/** What the focus screen last asked of usePreventRemove (the real one needs a navigator). */
+const mockPreventRemove: { prevent?: boolean } = {};
+
+jest.mock('expo-router/react-navigation', () => ({
+  usePreventRemove: (prevent: boolean) => {
+    mockPreventRemove.prevent = prevent;
+  },
+}));
+
 const api: Record<string, jest.Mock> = {};
 
 jest.mock('@/hooks/useApi', () => ({
@@ -874,5 +883,150 @@ describe('settings password sheet', () => {
 
     expect(mockSetSession).toHaveBeenCalledWith('yeni-token', ME);
     expect(rendered(tree)).toContain('Tamamdır, yeni şifre işlendi');
+  });
+});
+
+describe('the Android back button', () => {
+  type BackListener = Parameters<(typeof import('react-native'))['BackHandler']['addEventListener']>[1];
+
+  /** Listeners the screen registered, newest last: Android asks the newest first. */
+  let listeners: BackListener[] = [];
+  let spy: jest.SpyInstance;
+
+  beforeEach(() => {
+    listeners = [];
+    const { BackHandler } = require('react-native') as typeof import('react-native');
+    spy = jest.spyOn(BackHandler, 'addEventListener').mockImplementation((_event, handler) => {
+      listeners.push(handler);
+      return {
+        remove: () => {
+          listeners = listeners.filter((candidate) => candidate !== handler);
+        },
+      };
+    });
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.back!.mockClear();
+    router.replace!.mockClear();
+  });
+
+  afterEach(() => {
+    spy.mockRestore();
+    delete mockPreventRemove.prevent;
+  });
+
+  /**
+   * Focuses the screen as it renders now, presses back once and says whether
+   * the screen kept the press (false means Android goes on to close it).
+   */
+  function pressBack(): boolean {
+    let handled = false;
+    act(() => {
+      // a focus effect may hand back its cleanup, which runs on blur
+      const cleanup: unknown = mockFocus.effect?.();
+      const newest = listeners[listeners.length - 1];
+      handled = newest ? newest({ type: 'hardwareBackPress', timeStamp: Date.now() }) === true : false;
+      if (typeof cleanup === 'function') cleanup();
+    });
+    return handled;
+  }
+
+  function chooseType(tree: ReactTestRenderer, key: string): void {
+    const [row] = tree.root.findAll(
+      (node) => typeof node.props.onSelect === 'function' && node.props.type?.key === key
+    );
+    if (!row) throw new Error(`${key} bulunamadı`);
+    act(() => {
+      row.props.onSelect(row.props.type);
+    });
+  }
+
+  it('walks the wizard back a step at a time instead of closing it', async () => {
+    const NewChallengeScreen = require('@/app/(app)/challenge/new').default;
+    const tree = renderScreen(<NewChallengeScreen />);
+    await settle();
+    chooseType(tree, 'adim_yarisi');
+    press(tree, 'İleri');
+    press(tree, 'İleri');
+    expect(rendered(tree)).toContain('Kime koyacaksın?');
+
+    expect(pressBack()).toBe(true);
+    expect(rendered(tree)).toContain('Kuralları koy');
+    expect(pressBack()).toBe(true);
+    expect(rendered(tree)).toContain('Ne üzerine koyuyoruz?');
+
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    expect(router.back).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('asks before throwing a chosen type away on the first step, and closes on "Çık"', async () => {
+    const { Alert } = require('react-native') as typeof import('react-native');
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    try {
+      const NewChallengeScreen = require('@/app/(app)/challenge/new').default;
+      const tree = renderScreen(<NewChallengeScreen />);
+      await settle();
+      chooseType(tree, 'adim_yarisi');
+
+      expect(pressBack()).toBe(true);
+      expect(alert).toHaveBeenCalledTimes(1);
+      const [title, , buttons] = alert.mock.calls[0]!;
+      expect(title).toBe('Çıkıyor musun?');
+      const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+      expect(router.replace).not.toHaveBeenCalled();
+
+      await act(async () => {
+        buttons?.find((button) => button.text === 'Çık')?.onPress?.();
+      });
+      // opened straight into the wizard, so there is no history to pop
+      expect(router.replace).toHaveBeenCalledWith('/(app)/(tabs)');
+    } finally {
+      alert.mockRestore();
+    }
+  });
+
+  it('lets Android close the wizard when nothing has been chosen yet', async () => {
+    const NewChallengeScreen = require('@/app/(app)/challenge/new').default;
+    renderScreen(<NewChallengeScreen />);
+    await settle();
+    expect(pressBack()).toBe(false);
+  });
+
+  it('asks "Seansı bitirelim mi?" during a running focus session instead of leaving', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge: { ...detail.challenge, typeKey: 'odak_seansi', metricType: 'focus_minutes' as const, unit: 'dk' },
+    }));
+    const FocusScreen = require('@/app/(app)/focus/[id]').default;
+    const tree = renderScreen(<FocusScreen />);
+    await settle();
+
+    // on the picker nothing is at stake yet: back is Android's
+    expect(pressBack()).toBe(false);
+    expect(mockPreventRemove.prevent).toBe(false);
+
+    press(tree, 'Başlat');
+    expect(rendered(tree)).toContain('Elini telefondan çek');
+    expect(rendered(tree)).not.toContain('Seansı bitirelim mi?');
+    expect(mockPreventRemove.prevent).toBe(true);
+
+    expect(pressBack()).toBe(true);
+    expect(rendered(tree)).toContain('Seansı bitirelim mi?');
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    expect(router.back).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+
+    // once they say so, the burnt session no longer holds the screen
+    press(tree, 'Evet, vazgeçtim');
+    expect(rendered(tree)).toContain('Seans yandı');
+    expect(mockPreventRemove.prevent).toBe(false);
+    expect(pressBack()).toBe(false);
+
+    const { saveSession } = require('@/services/focus') as typeof import('@/services/focus');
+    await act(async () => {
+      await saveSession(null);
+    });
   });
 });

@@ -1,9 +1,10 @@
 import { LIMITS, getChallengeType, t } from '@koydum/shared';
 import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Platform, StyleSheet, View } from 'react-native';
+import { Animated, BackHandler, Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -116,6 +117,30 @@ export default function FocusScreen() {
       void deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
     };
   }, [running]);
+
+  /* -------------------------------------------------------- back button */
+  // The on-screen "Vazgeç" asks first, but Android's back button just
+  // unmounted the screen with the session still 'running' in storage, and the
+  // next loadSession turns that into 'abandoned': a 45-minute session gone
+  // without a question. While the timer is on screen every way out opens the
+  // same "Seansı bitirelim mi?" sheet instead. quit() makes the session
+  // 'abandoned', so leave() goes through afterwards. The gates below (a failed
+  // fetch, a non-focus çelınc) have no sheet to open, so they are not held.
+  const timerShown =
+    live && !!detail && type?.metricType === 'focus_minutes' && !query.isError;
+  useFocusEffect(() => {
+    if (!timerShown) return;
+    // also covers a timer with no screen under it, where back would put the
+    // app in the background and burn the session ten seconds later
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setConfirmQuit(true);
+      return true;
+    });
+    return () => sub.remove();
+  });
+  // anything else that would pop the screen (an iOS swipe, a navigation from a
+  // notification) takes the same path
+  usePreventRemove(timerShown, () => setConfirmQuit(true));
 
   /* ------------------------------------------------------- post on done */
   // Declared before the effect that calls it: the React Compiler rejects
