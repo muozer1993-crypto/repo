@@ -8,6 +8,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Config } from '../config.js';
 import type { Database } from '../db/index.js';
+import { backupIfDue } from './backup.js';
 import { runSchedulerOnce } from './challenges.js';
 import { createPushSender } from './push.js';
 
@@ -45,8 +46,19 @@ export function startScheduler(app: FastifyInstance, db: Database, config: Confi
       app.log.error({ err }, 'push flush failed');
     }
 
+    // a no-op on every tick but the first of the day
+    try {
+      const written = await backupIfDue(db, config, app.now());
+      if (written) app.log.info({ file: written }, 'database backup written');
+    } catch (err) {
+      app.log.error({ err }, 'database backup failed');
+    }
+
     running = false;
   };
+
+  // the first copy right at start, not 30 seconds later
+  void tick();
 
   const timer = setInterval(() => {
     void tick();
