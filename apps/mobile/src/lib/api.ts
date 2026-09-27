@@ -12,6 +12,8 @@ import type {
   Notification,
   ParticipantView,
   PublicProfile,
+  ProveBody,
+  ProveResponse,
   PublicUser,
   TauntTemplate,
   UnreadCount,
@@ -184,6 +186,11 @@ export class ApiClient {
   /** A fresh 90 days for the token this client holds (services/session.ts). */
   refreshToken() {
     return this.request<{ token: string }>('POST', '/auth/refresh');
+  }
+
+  /** The address proves it holds our token's secret (services/serverMove.ts). No token is sent. */
+  prove(body: ProveBody) {
+    return this.request<ProveResponse>('POST', '/auth/prove', { body });
   }
 
   /* ----------------------------------------------------------------- me */

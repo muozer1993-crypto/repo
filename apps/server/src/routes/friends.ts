@@ -17,11 +17,12 @@ import {
   type VulgarityLevel,
 } from '@koydum/shared';
 import { newId, nowIso, type Database, type FriendshipRow, type UserRow } from '../db/index.js';
-import { badRequest, conflict, forbidden, notFound, parseBody, parseQuery } from '../errors.js';
+import { badRequest, conflict, forbidden, notFound, parseBody, parseQuery, tooMany } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { asVulgarityLevel, toPublicUser } from '../serialize.js';
 import { friendRows, friendshipBetween, incomingRequests, outgoingRequests } from '../services/friends.js';
 import { notify } from '../services/notifications.js';
+import { AttemptLimiter, retryAfterText } from '../services/throttle.js';
 
 // ---------------------------------------------------------------------------
 // Notification copy — always rendered at the RECIPIENT's vulgarity level
@@ -49,9 +50,18 @@ function levelOf(user: UserRow): VulgarityLevel {
 // Routes
 // ---------------------------------------------------------------------------
 
+/**
+ * New requests from one person to another. Taking a request back ("Geri çek")
+ * frees the pair for a fresh one, and each fresh one is a push on the other
+ * phone: without a cap, request → withdraw → request buzzed a lock screen
+ * every half minute for as long as somebody cared to.
+ */
+export const FRIEND_REQUESTS_PER_PAIR = { max: 3, windowMs: 24 * 60 * 60 * 1000 };
+
 export default async function friendRoutes(app: FastifyInstance): Promise<void> {
   const { db } = app;
   const auth = { preHandler: app.authenticate };
+  const requestsPerPair = new AttemptLimiter(FRIEND_REQUESTS_PER_PAIR.max, FRIEND_REQUESTS_PER_PAIR.windowMs);
 
   app.get('/friends', auth, async (request) => {
     const me = requireUser(request);
@@ -99,6 +109,13 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
       });
       return { status: 'accepted' as const, friendshipId: existing.id, user: toPublicUser(target) };
     }
+
+    const pairKey = `${me.id}|${target.id}`;
+    const waitMs = requestsPerPair.retryAfterMs(pairKey, now);
+    if (waitMs > 0) {
+      throw tooMany('too_many_requests', `Bu kişiye çok sık istek gönderdin. ${retryAfterText(waitMs)}`);
+    }
+    requestsPerPair.record(pairKey, now);
 
     const friendshipId = newId();
     db.prepare(

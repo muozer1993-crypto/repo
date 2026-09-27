@@ -156,10 +156,12 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const body = parseBody(ChangePasswordBodySchema, request.body);
+    // Counted BEFORE the (async) scrypt: recording only after it let a burst of
+    // guesses sent at once all pass the check above. A right one clears it.
+    passwordFailures.record(row.id, now);
     // A 400, never a 401: the app logs out on any 401, and a typo in this form
     // must not cost the session it was typed in.
     if (!(await verifyPassword(body.currentPassword, row.password_hash))) {
-      passwordFailures.record(row.id, now);
       throw badRequest('wrong_password', 'Mevcut şifren tutmadı.');
     }
     passwordFailures.reset(row.id);

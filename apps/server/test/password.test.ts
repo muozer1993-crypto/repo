@@ -6,8 +6,9 @@
  * token that still works; `/me/password` swaps the password without ever
  * answering 401 (the app logs out on any 401).
  */
+import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { AuthResponse } from '@koydum/shared';
+import { proveMessage, type AuthResponse } from '@koydum/shared';
 import { authed, DEFAULT_PASSWORD, makeApp, registerUser, type TestApp } from './helpers.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -129,5 +130,77 @@ describe('POST /me/password', () => {
 
     h.advance(15 * 60 * 1000);
     expect((await changePassword(ali.token, DEFAULT_PASSWORD, 'yepyeni42')).statusCode).toBe(200);
+  });
+
+  it('counts a burst of guesses sent at once, so it cannot outrun the limit', async () => {
+    const ali = await registerUser(h.app, 'ali');
+
+    // a hijacked token firing 40 guesses in parallel, the right one among them
+    const guesses = Array.from({ length: 40 }, (_, i) => (i === 30 ? DEFAULT_PASSWORD : `yanlis${i}`));
+    const answers = await Promise.all(guesses.map((guess) => changePassword(ali.token, guess, 'ele-gecirdim1')));
+    const codes = answers.map((response) => response.statusCode);
+
+    expect(codes.filter((code) => code === 429).length).toBeGreaterThanOrEqual(32);
+    expect(codes[30]).toBe(429);
+    expect(codes).not.toContain(200);
+    expect((await login('ali', DEFAULT_PASSWORD)).statusCode).toBe(200);
+  });
+});
+
+describe('POST /auth/login', () => {
+  it('counts a burst of guesses sent at once, so it cannot outrun the limit', async () => {
+    await registerUser(h.app, 'ali');
+
+    const guesses = Array.from({ length: 40 }, (_, i) => (i === 30 ? DEFAULT_PASSWORD : `yanlis${i}`));
+    const codes = (await Promise.all(guesses.map((guess) => login('ali', guess)))).map((r) => r.statusCode);
+
+    expect(codes.filter((code) => code === 429).length).toBeGreaterThanOrEqual(32);
+    expect(codes[30]).toBe(429);
+    expect(codes).not.toContain(200);
+  });
+});
+
+describe('POST /auth/prove', () => {
+  /** What the phone checks: HMAC(the token's own signature, nonce + origin). */
+  function expectedProof(token: string, nonce: string, origin: string): string {
+    const signature = Buffer.from(token.split('.')[2]!, 'base64url');
+    return createHmac('sha256', signature).update(proveMessage(nonce, origin)).digest('base64url');
+  }
+
+  it('answers for its own address with a MAC keyed by the token signature, which it never sends', async () => {
+    const ali = await registerUser(h.app, 'ali');
+    const [head, claims, signature] = ali.token.split('.') as [string, string, string];
+    const nonce = 'a'.repeat(32);
+
+    // no Authorization header: the token itself does not travel
+    const response = await h.app.inject({ method: 'POST', url: '/auth/prove', payload: { claims: `${head}.${claims}`, nonce } });
+    expect(response.statusCode).toBe(200);
+    const answer = response.json<{ origin: string; proof: string }>();
+    expect(answer.origin).toBe('http://test.local');
+    expect(answer.proof).toBe(expectedProof(ali.token, nonce, answer.origin));
+    expect(response.body).not.toContain(signature);
+
+    // another nonce, another answer: an old one cannot be replayed
+    const again = await h.app.inject({ method: 'POST', url: '/auth/prove', payload: { claims: `${head}.${claims}`, nonce: 'b'.repeat(32) } });
+    expect(again.json<{ proof: string }>().proof).not.toBe(answer.proof);
+  });
+
+  it('cannot be answered by a server with another secret', async () => {
+    const ali = await registerUser(h.app, 'ali');
+    const other = await makeApp({ config: { jwtSecret: 'baska-bir-sunucu' } });
+    try {
+      const [head, claims] = ali.token.split('.') as [string, string];
+      const nonce = 'c'.repeat(32);
+      const response = await other.app.inject({ method: 'POST', url: '/auth/prove', payload: { claims: `${head}.${claims}`, nonce } });
+      const answer = response.json<{ origin: string; proof: string }>();
+      expect(answer.proof).not.toBe(expectedProof(ali.token, nonce, answer.origin));
+    } finally {
+      await other.close();
+    }
+  });
+
+  it('refuses anything that is not a token prefix and a nonce', async () => {
+    const response = await h.app.inject({ method: 'POST', url: '/auth/prove', payload: { claims: 'x', nonce: 'kisa' } });
+    expect(response.statusCode).toBe(400);
   });
 });

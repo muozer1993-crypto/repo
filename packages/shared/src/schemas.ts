@@ -133,6 +133,36 @@ export const ChangePasswordBodySchema = z.object({
 });
 export type ChangePasswordBody = z.infer<typeof ChangePasswordBodySchema>;
 
+/**
+ * `POST /auth/prove`: a new address shows it holds the JWT secret before the
+ * phone sends it the token (apps/mobile/src/services/serverMove.ts).
+ * `claims` is the token's own `header.payload`, which is not secret; the
+ * signature never leaves the phone.
+ */
+export const ProveBodySchema = z.object({
+  claims: z
+    .string()
+    .max(2048)
+    .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/, 'Geçersiz istek'),
+  nonce: z
+    .string()
+    .min(16)
+    .max(128)
+    .regex(/^[A-Za-z0-9_-]+$/, 'Geçersiz istek'),
+});
+export type ProveBody = z.infer<typeof ProveBodySchema>;
+
+/** The answer: the address it vouches for, and HMAC(signature, nonce + origin) in base64url. */
+export interface ProveResponse {
+  origin: string;
+  proof: string;
+}
+
+/** What the proof's HMAC covers; the server and the phone must build it alike. */
+export function proveMessage(nonce: string, origin: string): string {
+  return `koydum-prove\n${nonce}\n${origin}`;
+}
+
 export const UpdateMeBodySchema = z.object({
   displayName: DisplayNameSchema.optional(),
   avatarEmoji: AvatarEmojiSchema.optional(),

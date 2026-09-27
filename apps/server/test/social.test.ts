@@ -662,6 +662,32 @@ describe('friends', () => {
     expect(inbox.map((n) => n.type)).toEqual(['friend_request']);
   });
 
+  it('does not let request → withdraw → request buzz somebody all day', async () => {
+    const h = await boot();
+    const asker = await registerUser(h.app, 'mustafa');
+    const target = await registerUser(h.app, 'kurban');
+    await registerUser(h.app, 'kemal');
+    const call = authed(h.app, asker.token);
+    const requests = () =>
+      h.db.prepare("SELECT * FROM notifications WHERE user_id = ? AND type = 'friend_request'").all(target.me.id);
+
+    for (let round = 0; round < 3; round += 1) {
+      expect((await call({ method: 'POST', url: '/friends/request', payload: { username: 'kurban' } })).statusCode).toBe(201);
+      await authed(h.app, target.token)({ method: 'POST', url: '/me/inbox/read', payload: { all: true } });
+      expect((await call({ method: 'DELETE', url: `/friends/${target.me.id}` })).statusCode).toBe(200);
+    }
+    const fourth = await call({ method: 'POST', url: '/friends/request', payload: { username: 'kurban' } });
+    expect(fourth.statusCode).toBe(429);
+    expect(fourth.json<{ error: { code: string; message: string } }>().error).toMatchObject({ code: 'too_many_requests' });
+    expect(fourth.json<{ error: { message: string } }>().error.message).toContain('Bu kişiye çok sık istek gönderdin');
+    expect(requests()).toHaveLength(3);
+
+    // somebody else is not held up by it, and a day later it may ask again
+    expect((await call({ method: 'POST', url: '/friends/request', payload: { username: 'kemal' } })).statusCode).toBe(201);
+    h.advance(24 * 60 * 60 * 1000);
+    expect((await call({ method: 'POST', url: '/friends/request', payload: { username: 'kurban' } })).statusCode).toBe(201);
+  });
+
   it('does not let the addressee delete an incoming request, only decline it', async () => {
     const h = await boot();
     const asker = await registerUser(h.app, 'mustafa');

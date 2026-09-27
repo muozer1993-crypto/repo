@@ -29,6 +29,14 @@ function sign(data: string, secret: string): string {
   return createHmac('sha256', secret).update(data).digest('base64url');
 }
 
+/**
+ * The raw signature a token with this `header.payload` carries. Only for
+ * `POST /auth/prove`, which keys a MAC with it and never hands it out.
+ */
+export function signatureBytes(claims: string, secret: string): Buffer {
+  return createHmac('sha256', secret).update(claims).digest();
+}
+
 /** Issues a token for `payload.sub`, valid for `ttlSeconds` (default 90 days). */
 export function signToken(payload: { sub: string }, secret: string, ttlSeconds: number = DEFAULT_TTL_SECONDS, now: Date = new Date()): string {
   const issuedAt = Math.floor(now.getTime() / 1000);

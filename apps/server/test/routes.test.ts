@@ -80,6 +80,7 @@ const SPEC_ENDPOINTS: [SpecMethod, string][] = [
   ['POST', '/auth/register'],
   ['POST', '/auth/login'],
   ['POST', '/auth/refresh'],
+  ['POST', '/auth/prove'],
   ['GET', '/me'],
   ['PATCH', '/me'],
   ['DELETE', '/me'],

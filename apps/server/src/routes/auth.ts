@@ -6,16 +6,24 @@
  * zod schema lowercases them), passwords go through scrypt, and the token is our
  * own HS256 JWT.
  */
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { LoginBodySchema, RegisterBodySchema, type AuthResponse } from '@koydum/shared';
-import { signToken } from '../auth/jwt.js';
+import {
+  LoginBodySchema,
+  ProveBodySchema,
+  RegisterBodySchema,
+  proveMessage,
+  type AuthResponse,
+  type ProveResponse,
+} from '@koydum/shared';
+import { signToken, signatureBytes } from '../auth/jwt.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { getUserByUsername } from '../db/index.js';
 import { conflict, parseBody, tooMany, unauthorized } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { toMe } from '../serialize.js';
 import { createUser, usernameTaken } from '../services/accounts.js';
+import { publicOrigin } from '../services/origin.js';
 import { AttemptLimiter, retryAfterText } from '../services/throttle.js';
 
 /**
@@ -93,11 +101,14 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     if (waitMs > 0) {
       throw tooMany('too_many_attempts', `Çok fazla deneme yaptın. ${retryAfterText(waitMs)}`);
     }
+    // Every attempt is counted BEFORE the (async) scrypt and a success wipes it
+    // again: recording only after a failure let a burst of guesses sent at once
+    // all pass the check above before the first one was written down.
+    loginByIp.record(ip, now);
+    loginByAccount.record(accountKey, now);
 
     const badCredentials = unauthorized('bad_credentials', 'Kullanıcı adı ya da şifre yanlış.');
     const fail = (): never => {
-      loginByIp.record(ip, now);
-      loginByAccount.record(accountKey, now);
       throw badCredentials;
     };
 
@@ -121,6 +132,28 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
       me: toMe(db, row, now),
     };
     return payload;
+  });
+
+  /**
+   * "I hold the secret that signed your token, and I am THIS address." A tunnel
+   * restart moves the server to a new address, and the app carries the session
+   * over (services/serverMove.ts) only after the new address answers this: the
+   * public `serverId` alone can be copied by anybody who once read /health.
+   *
+   * The phone sends its token's `header.payload` (not secret) and a fresh
+   * nonce. Recomputing the token's signature needs the JWT secret; it keys a MAC
+   * over the nonce and the address this server vouches for (`publicOrigin`:
+   * PUBLIC_URL when set). A copycat without the secret cannot answer, and one
+   * that relays the question here gets an answer for the real address, which
+   * the phone refuses. The signature itself never leaves either side.
+   */
+  app.post('/auth/prove', async (request): Promise<ProveResponse> => {
+    const body = parseBody(ProveBodySchema, request.body);
+    const origin = publicOrigin(request, config);
+    const proof = createHmac('sha256', signatureBytes(body.claims, config.jwtSecret))
+      .update(proveMessage(body.nonce, origin))
+      .digest('base64url');
+    return { origin, proof };
   });
 
   /**

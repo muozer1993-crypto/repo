@@ -1,10 +1,12 @@
-import type { Me } from '@koydum/shared';
+import { proveMessage, type Me, type ProveResponse } from '@koydum/shared';
 
 import { ApiClient, ApiError, type HealthResponse } from '@/lib/api';
 import { normalizeServerUrl } from '@/lib/config';
 import { queryClient } from '@/lib/query';
 import { flushQueue } from '@/services/offlineQueue';
 import { useAuth } from '@/store/auth';
+import { fromBase64Url, hmacSha256, toBase64Url, utf8 } from '@/utils/hmac';
+import { uuidV4 } from '@/utils/ids';
 
 /**
  * The same server at a new address.
@@ -19,13 +21,20 @@ import { useAuth } from '@/store/auth';
  *
  * moveSession carries the session over instead, once the new address has
  * shown it is the same server:
- *   1. /health answers and names itself with the `serverId` this session
- *      learned (store/auth). Any other answer, and the token is never sent.
- *   2. With no id to compare (a phone that never heard one), /me with the
- *      token has to answer as this very account. A server that did not issue
- *      the token answers 401.
- * It only ever runs on a tap: a link can come from anyone, and step 2 hands
- * the token to the address in it. Fine among friends, never behind their back.
+ *   1. /health answers. A `serverId` other than the one this session learned
+ *      (store/auth) is another server, and nothing more is sent. The id is
+ *      public (anybody who read /health or an invite link has it), so a match
+ *      proves nothing; it is only a quick way to say no.
+ *   2. /auth/prove: the address shows it holds the secret that signed our
+ *      token, for this very address. The phone sends only the token's
+ *      `header.payload` (not secret) and a fresh nonce; the answer has to be
+ *      HMAC(the token's signature, nonce + the address it vouches for), and
+ *      that address has to be the one we are moving to. A copycat without the
+ *      secret cannot compute it, and one that relays the question to the real
+ *      server gets an answer for the real server's address. Until this passes
+ *      the token never leaves the phone.
+ *   3. /me with the token answers as this very account.
+ * It only ever runs on a tap: a link can come from anyone.
  */
 
 export type MoveOutcome = 'moved' | 'different' | 'unreachable';
@@ -39,6 +48,31 @@ const TIMEOUT_MS = 8000;
  */
 export function isOtherServer(storedId: string | null, reportedId: string | null | undefined): boolean {
   return !!storedId && reportedId !== storedId;
+}
+
+/**
+ * Step 2 of `moveSession`: does `url` hold the secret behind `token`, and say
+ * so for `url` itself? Only the token's first two parts are sent.
+ */
+export async function provesSecret(url: string, token: string): Promise<'yes' | 'no' | 'unreachable'> {
+  const [head, payload, signature] = token.split('.');
+  const key = signature ? fromBase64Url(signature) : null;
+  if (!head || !payload || !key || key.length === 0) return 'no';
+
+  const nonce = uuidV4().replace(/-/g, '');
+  let answer: ProveResponse;
+  try {
+    answer = await new ApiClient({ baseUrl: url, timeoutMs: TIMEOUT_MS }).prove({ claims: `${head}.${payload}`, nonce });
+  } catch (error) {
+    if (error instanceof ApiError && (error.isNetwork || error.status >= 500)) return 'unreachable';
+    // an older server without /auth/prove, or one that cannot answer it
+    return 'no';
+  }
+  if (!answer || typeof answer.origin !== 'string' || typeof answer.proof !== 'string') return 'no';
+  // vouching for another address is somebody relaying the question
+  if (normalizeServerUrl(answer.origin)?.toLowerCase() !== url.toLowerCase()) return 'no';
+  const expected = toBase64Url(hmacSha256(key, utf8(proveMessage(nonce, answer.origin))));
+  return expected === answer.proof ? 'yes' : 'no';
 }
 
 export async function moveSession(rawUrl: string): Promise<MoveOutcome> {
@@ -58,6 +92,9 @@ export async function moveSession(rawUrl: string): Promise<MoveOutcome> {
   // client hands back as null: that is not a KOYDUM server answering.
   if (!health || typeof health !== 'object') return 'unreachable';
   if (isOtherServer(serverId, health.serverId)) return 'different';
+
+  const proven = await provesSecret(url, token);
+  if (proven !== 'yes') return proven === 'unreachable' ? 'unreachable' : 'different';
 
   let who: Me;
   try {

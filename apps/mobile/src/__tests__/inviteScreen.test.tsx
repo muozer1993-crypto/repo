@@ -30,6 +30,22 @@ const mockHealth = jest.fn(async (): Promise<{ ok: boolean; version: string; tim
   time: '',
 }));
 const mockMe = jest.fn(async () => ({ id: 'me-1' }));
+/** A session token signed the way the server signs one, with the server's secret. */
+const MOCK_SECRET = 'sunucunun-gizli-anahtari';
+function mockSignedToken(): string {
+  const { createHmac } = require('crypto') as typeof import('crypto');
+  const head = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const claims = Buffer.from(JSON.stringify({ sub: 'me-1', iat: 1, exp: 4_000_000_000 })).toString('base64url');
+  return `${head}.${claims}.${createHmac('sha256', MOCK_SECRET).update(`${head}.${claims}`).digest('base64url')}`;
+}
+const TOKEN = mockSignedToken();
+/** Our own server answering /auth/prove for the address it was asked at. */
+const mockProve = jest.fn(async (origin: string, body: { claims: string; nonce: string }) => {
+  const { createHmac } = require('crypto') as typeof import('crypto');
+  const { proveMessage } = require('@koydum/shared') as typeof import('@koydum/shared');
+  const key = createHmac('sha256', MOCK_SECRET).update(body.claims).digest();
+  return { origin, proof: createHmac('sha256', key).update(proveMessage(body.nonce, origin)).digest('base64url') };
+});
 /** every client the screen (or serverMove) built, and the token it carried */
 const mockClients: { baseUrl: string; token: string | null }[] = [];
 jest.mock('@/lib/api', () => {
@@ -38,8 +54,10 @@ jest.mock('@/lib/api', () => {
     invite = mockLookup;
     health = mockHealth;
     me = mockMe;
+    prove: (body: { claims: string; nonce: string }) => ReturnType<typeof mockProve>;
     constructor(options: { baseUrl: string; token?: string | null }) {
       mockClients.push({ baseUrl: options.baseUrl, token: options.token ?? null });
+      this.prove = (body) => mockProve(options.baseUrl, body);
     }
   }
   return { ...actual, ApiClient: FakeClient };
@@ -47,7 +65,7 @@ jest.mock('@/lib/api', () => {
 
 const mockRequestFriend = jest.fn(async () => ({ status: 'accepted' as const }));
 const mockAuth = {
-  token: 'token' as string | null,
+  token: null as string | null,
   me: { id: 'me-1' },
   serverUrl: 'http://192.168.1.142:4000',
   serverId: null as string | null,
@@ -142,7 +160,7 @@ beforeEach(async () => {
   mockHealth.mockResolvedValue({ ok: true, version: '1', time: '' });
   const AsyncStorage = require('@react-native-async-storage/async-storage');
   await AsyncStorage.clear();
-  mockAuth.token = 'token';
+  mockAuth.token = TOKEN;
   mockAuth.serverUrl = 'http://192.168.1.142:4000';
   mockAuth.serverId = null;
   mockSearchParams.code = 'abc234';
@@ -209,7 +227,9 @@ describe('invite screen, signed in, link from a new address', () => {
     expect(mockAuth.logout).not.toHaveBeenCalled();
     // the account was checked at the new address with the token it already had
     expect(mockMe).toHaveBeenCalledTimes(1);
-    expect(mockClients).toContainEqual({ baseUrl: NEW, token: 'token' });
+    expect(mockClients).toContainEqual({ baseUrl: NEW, token: TOKEN });
+    // after it proved, for this very address, that it holds the secret behind that token
+    expect(mockProve).toHaveBeenCalledWith(NEW, expect.objectContaining({ claims: TOKEN.split('.').slice(0, 2).join('.') }));
     // same server now: the ordinary card, request still only on a tap
     expect(buttons(tree)).toContain('Kanka isteği gönder');
     expect(text(tree)).toContain('yeni adrese geçtik');
