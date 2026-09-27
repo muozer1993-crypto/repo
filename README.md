@@ -151,8 +151,15 @@ evdeki Wi-Fi'da kalabilir; aynı sunucudur.
 * **Pencere açık kaldıkça çalışır.** Bilgisayar uyursa ya da pencereyi kapatırsan kankaların
   bağlanamaz; çelınc sonuçları sunucu tekrar açılınca hesaplanır.
 * **Adres her açılışta değişir.** Kapatıp açtıysan Paylaş'la yeni bağlantıyı gönder. Kankan
-  yeni bağlantıya dokununca uygulama "başka sunucu" der; **Çıkış yap, orada giriş yap**'a basıp
-  aynı kullanıcı adı ve şifreyle girer, hesabı ve çelınclar yerindedir.
+  yeni bağlantıya dokununca uygulama "Bu davet yeni bir adresten" der; **Yeni adrese geç (çıkış
+  yok)**'a basar, o kadar. Çıkış yapmaz, şifre yazmaz; hesabı, çelıncları ve bildirimleri
+  yerindedir. Bağlantıyı başka yerden gören kankan **Ayarlar → Sunucu**'ya yeni adresi ya da
+  bağlantının kendisini yapıştırır, aynısı olur. Uygulama adres değişse de aynı sunucu olduğunu
+  anlar: sunucu kendini JWT anahtarından (`apps/server/data/secret`) türeyen bir kimlikle
+  tanıtır. O dosyayı silmedikçe kimse dışarı atılmaz.
+* **Uygulaması eski sürüm olan** kankan bu düğmeyi görmez: bir kereliğine **Çıkış yap, orada
+  giriş yap**'a basıp aynı kullanıcı adı ve şifreyle girer. Yeni sürümü kurduktan sonra bir
+  daha gerekmez.
 
 Sabit bir adres ve 7/24 açık bir sunucu istersen aşağıdaki
 [Sunucuyu internete açmak](#sunucuyu-internete-açmak) bölümüne bak.
@@ -293,7 +300,9 @@ kurulmaz (imza farklı); onlar Play'den günceller.
 
 Giriş yapmış biri bağlantıya dokunursa uygulama önce kimin çağırdığını gösterir, istek ancak
 **Kanka isteği gönder**'e basınca gider. Uygulamayı yeni kurmuş biri için sunucu adresi
-bağlantıdan alınır; başka bir sunucuya bağlı olan birine ise geçmeden önce sorulur.
+bağlantıdan alınır; başka bir adrese bağlı olan birine ise geçmeden önce sorulur. Aynı sunucunun
+yeni adresiyse (tünel yeniden açıldıysa) **Yeni adrese geç (çıkış yok)** çıkar ve oturum
+yerinde kalır; gerçekten başka bir sunucuysa çıkış yapıp orada giriş yapmak gerekir.
 
 > Bağlantının kimde açılacağı sunucunun nerede olduğuna bağlı. Sunucu evdeki bilgisayardaysa
 > (`192.168.x.x`) bağlantı sadece aynı Wi-Fi'dakilerde açılır; uygulama bunu Kankalar sekmesinde
@@ -583,6 +592,12 @@ cd apps/mobile && npx expo export --platform web   # tarayıcıda hızlı deneme
 **"Sunucuya ulaşamadım" diyor.**
 Telefon ile bilgisayar aynı Wi-Fi'da mı? Bilgisayarın güvenlik duvarı 4000 portunu kapatıyor
 olabilir. Sunucu adresini elle yazıp "Bağlantıyı test et" ile dene.
+
+**Üstte "Adres değişmiş olabilir" yazıyor.**
+Uygulama iki dakikadır sunucuya ulaşamıyor. Çoğu zaman `npm run internet` kapanıp yeniden
+açılmıştır ve adres değişmiştir. Sunucuyu açan kişi yeni bağlantıyı Paylaş'la göndersin; kankan
+dokunup **Yeni adrese geç**'e basar ya da bağlantıyı **Ayarlar → Sunucu**'ya yapıştırır. Çıkış
+yapmadan devam eder.
 
 **Android'de bildirim gelmiyor.**
 Expo Go kullanıyorsan normal — yukarıdaki [Expo Go'nun sınırları](#expo-gonun-sınırları)

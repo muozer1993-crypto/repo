@@ -66,6 +66,16 @@ export const REMATCH_WINNER: Record<VulgarityLevel, string> = {
 };
 
 /**
+ * Toast once the session followed the server to its new address (the invite
+ * screen and Ayarlar both do it), so the two say the same thing.
+ */
+export const SERVER_MOVED: Record<VulgarityLevel, string> = {
+  1: 'Adres güncellendi, hesabın yerinde.',
+  2: 'Tamamdır, yeni adrese geçtik. Hesabın yerinde.',
+  3: 'Taşındık lan. Hesap da çelınclar da yerinde.',
+};
+
+/**
  * The app promises "nobody can talk to you above your level". That is true for
  * the ready-made templates (the server clamps them) but NOT for a friend's own
  * sentence, which only passes the banned-word filter. Say so wherever the

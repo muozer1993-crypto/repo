@@ -5,7 +5,8 @@
  * The two rules that came out of review: a signed-in reader sends (or, when the
  * code's owner already asked, ACCEPTS) only on a tap; and a fresh install on
  * the localhost fallback adopts the link's server instead of warning about a
- * "başka sunucu" it never chose.
+ * "başka sunucu" it never chose. And since tunnel restarts: a link from the
+ * same server at a new address moves the session instead of logging out.
  */
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
@@ -23,12 +24,23 @@ jest.mock('expo-router', () => ({
 }));
 
 const mockLookup = jest.fn(async () => ({ code: 'ABC234', inviter: { username: 'ali', displayName: 'Ali', avatarEmoji: '🐐' } }));
-const mockHealth = jest.fn(async () => ({ ok: true, version: '1', time: '' }));
+const mockHealth = jest.fn(async (): Promise<{ ok: boolean; version: string; time: string; serverId?: string }> => ({
+  ok: true,
+  version: '1',
+  time: '',
+}));
+const mockMe = jest.fn(async () => ({ id: 'me-1' }));
+/** every client the screen (or serverMove) built, and the token it carried */
+const mockClients: { baseUrl: string; token: string | null }[] = [];
 jest.mock('@/lib/api', () => {
   const actual = jest.requireActual('@/lib/api');
   class FakeClient {
     invite = mockLookup;
     health = mockHealth;
+    me = mockMe;
+    constructor(options: { baseUrl: string; token?: string | null }) {
+      mockClients.push({ baseUrl: options.baseUrl, token: options.token ?? null });
+    }
   }
   return { ...actual, ApiClient: FakeClient };
 });
@@ -36,19 +48,32 @@ jest.mock('@/lib/api', () => {
 const mockRequestFriend = jest.fn(async () => ({ status: 'accepted' as const }));
 const mockAuth = {
   token: 'token' as string | null,
+  me: { id: 'me-1' },
   serverUrl: 'http://192.168.1.142:4000',
-  setServerUrl: jest.fn(async () => {}),
+  serverId: null as string | null,
+  setServerUrl: jest.fn(async (url: string) => {
+    mockAuth.serverUrl = url;
+  }),
+  rememberServerId: jest.fn(async () => {}),
+  setMe: jest.fn(async () => {}),
   logout: jest.fn(async () => {}),
   client: () => ({ invite: mockLookup, requestFriend: mockRequestFriend }),
 };
 jest.mock('@/store/auth', () => ({
-  useAuth: (selector: (state: unknown) => unknown) => selector(mockAuth),
+  // serverMove reads the store outside React, the screen through the hook
+  useAuth: Object.assign((selector: (state: unknown) => unknown) => selector(mockAuth), {
+    getState: () => mockAuth,
+  }),
+  useLevel: () => 2,
 }));
 
 // eslint-disable-next-line import/first
 import { queryClient } from '@/lib/query';
 // eslint-disable-next-line import/first
 import { readPendingInvite } from '@/services/invite';
+
+/** unmounted after each test, so a toast's hide timer dies with its tree */
+const mounted: ReactTestRenderer[] = [];
 
 function render(element: ReactElement): ReactTestRenderer {
   let tree!: ReactTestRenderer;
@@ -61,8 +86,17 @@ function render(element: ReactElement): ReactTestRenderer {
       </SafeAreaProvider>
     );
   });
+  mounted.push(tree);
   return tree;
 }
+
+afterEach(() => {
+  for (const tree of mounted.splice(0)) {
+    act(() => {
+      tree.unmount();
+    });
+  }
+});
 
 async function settle() {
   for (let i = 0; i < 8; i += 1) {
@@ -82,6 +116,13 @@ function text(tree: ReactTestRenderer): string {
   return walk(tree.toJSON()).join(' ');
 }
 
+/** Button titles as passed in; the rendered label is upper-cased */
+function buttons(tree: ReactTestRenderer): string[] {
+  return tree.root
+    .findAll((node) => typeof node.props.onPress === 'function' && typeof node.props.title === 'string')
+    .map((node) => node.props.title as string);
+}
+
 function pressButton(tree: ReactTestRenderer, label: string) {
   const button = tree.root.findAll(
     (node) => typeof node.props.onPress === 'function' && JSON.stringify(node.props.title ?? '') === JSON.stringify(label)
@@ -96,10 +137,14 @@ const Screen = require('@/app/davet/[code]').default;
 
 beforeEach(async () => {
   jest.clearAllMocks();
+  mockClients.length = 0;
+  // a test that made the server name itself must not leak that into the next
+  mockHealth.mockResolvedValue({ ok: true, version: '1', time: '' });
   const AsyncStorage = require('@react-native-async-storage/async-storage');
   await AsyncStorage.clear();
   mockAuth.token = 'token';
   mockAuth.serverUrl = 'http://192.168.1.142:4000';
+  mockAuth.serverId = null;
   mockSearchParams.code = 'abc234';
   mockSearchParams.server = 'http://192.168.1.142:4000';
 });
@@ -138,6 +183,64 @@ describe('invite screen, signed in', () => {
     await settle();
     expect(text(tree)).not.toContain('Artık kankasınız');
     expect(text(tree)).toContain('XYZ789');
+  });
+});
+
+describe('invite screen, signed in, link from a new address', () => {
+  const OLD = 'https://eski-adres.trycloudflare.com';
+  const NEW = 'https://yeni-adres.trycloudflare.com';
+
+  beforeEach(() => {
+    mockAuth.serverUrl = OLD;
+    mockAuth.serverId = '0123456789abcdef';
+    mockSearchParams.server = NEW;
+  });
+
+  it('follows the same server to its new address and keeps the session', async () => {
+    mockHealth.mockResolvedValue({ ok: true, version: '1', time: '', serverId: '0123456789abcdef' });
+    const tree = render(<Screen />);
+    await settle();
+    expect(text(tree)).toContain('Sunucunun adresi değişmiş olabilir');
+    expect(text(tree)).toContain('yeni-adres.trycloudflare.com');
+
+    pressButton(tree, 'Yeni adrese geç (çıkış yok)');
+    await settle();
+    expect(mockAuth.setServerUrl).toHaveBeenCalledWith(NEW);
+    expect(mockAuth.logout).not.toHaveBeenCalled();
+    // the account was checked at the new address with the token it already had
+    expect(mockMe).toHaveBeenCalledTimes(1);
+    expect(mockClients).toContainEqual({ baseUrl: NEW, token: 'token' });
+    // same server now: the ordinary card, request still only on a tap
+    expect(buttons(tree)).toContain('Kanka isteği gönder');
+    expect(text(tree)).toContain('yeni adrese geçtik');
+    expect(mockRequestFriend).not.toHaveBeenCalled();
+  });
+
+  it('keeps the logout card for a server whose id is another one', async () => {
+    mockHealth.mockResolvedValue({ ok: true, version: '1', time: '', serverId: 'ffffffffffffffff' });
+    const tree = render(<Screen />);
+    await settle();
+    expect(text(tree)).toContain('başka bir sunucudan');
+    expect(buttons(tree)).not.toContain('Yeni adrese geç (çıkış yok)');
+    expect(buttons(tree)).toContain('Çıkış yap, orada giriş yap');
+    // nothing was sent with the token
+    expect(mockMe).not.toHaveBeenCalled();
+    expect(mockClients.every((client) => client.token === null)).toBe(true);
+  });
+
+  it('says so when the tap finds another account there, and still offers the way out', async () => {
+    mockAuth.serverId = null;
+    mockMe.mockResolvedValueOnce({ id: 'baska-biri' });
+    const tree = render(<Screen />);
+    await settle();
+
+    pressButton(tree, 'Yeni adrese geç (çıkış yok)');
+    await settle();
+    expect(text(tree)).toContain('Bu başka bir sunucu');
+    expect(buttons(tree)).not.toContain('Yeni adrese geç (çıkış yok)');
+    expect(buttons(tree)).toContain('Çıkış yap, orada kayıt ol');
+    expect(mockAuth.setServerUrl).not.toHaveBeenCalled();
+    expect(mockAuth.logout).not.toHaveBeenCalled();
   });
 });
 

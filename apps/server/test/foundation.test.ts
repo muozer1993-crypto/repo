@@ -10,7 +10,7 @@ import { loadConfig } from '../src/config.js';
 import { listInbox, markRead, notify, unreadCount } from '../src/services/notifications.js';
 import { computeUserStats, getBadges } from '../src/services/stats.js';
 import { conflict } from '../src/errors.js';
-import { makeApp, registerUser, type TestApp } from './helpers.js';
+import { TEST_SECRET, makeApp, registerUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
 
@@ -307,7 +307,33 @@ describe('GET /health', () => {
       app: null,
       // the harness's PUBLIC_URL is http://test.local: that is the address to share
       publicUrl: 'http://test.local',
+      serverId: expect.stringMatching(/^[0-9a-f]{16}$/),
     });
+  });
+
+  it('names the server by its secret, not by its address', async () => {
+    const serverIdOf = async (config: Parameters<typeof makeApp>[0]) => {
+      const built = await makeApp(config);
+      try {
+        const response = await built.app.inject({ method: 'GET', url: '/health' });
+        return { id: response.json<{ serverId: string }>().serverId, body: response.body };
+      } finally {
+        await built.close();
+      }
+    };
+
+    // a restart behind a new tunnel address: same secret, so old tokens still work
+    const first = await serverIdOf({ config: { publicUrl: 'https://eski-adres.trycloudflare.com' } });
+    const second = await serverIdOf({ config: { publicUrl: 'https://yeni-adres.trycloudflare.com' } });
+    expect(second.id).toBe(first.id);
+
+    // a new secret invalidates every token, and the id says so
+    const other = await serverIdOf({ config: { jwtSecret: 'baska-bir-sunucu' } });
+    expect(other.id).not.toBe(first.id);
+
+    // the id is a one-way derivative: the secret itself never leaves
+    expect(first.body).not.toContain(TEST_SECRET);
+    expect(other.body).not.toContain('baska-bir-sunucu');
   });
 
   it('renders unknown routes and auth failures as Turkish error envelopes', async () => {

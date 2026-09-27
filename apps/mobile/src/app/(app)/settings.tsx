@@ -18,13 +18,15 @@ import { UPDATE_HOW, useAppUpdate } from '@/components/UpdateBanner';
 import { useUpdateMe } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { ApiError } from '@/lib/api';
-import { serverUrlIsEditable } from '@/lib/config';
+import { normalizeServerUrl, serverUrlIsEditable } from '@/lib/config';
+import { serverFromInviteLink } from '@/services/invite';
 import { registerForPush, type PushRegistration } from '@/services/notifications';
 import {
   getScreenTimeAvailability,
   requestScreenTimePermission,
   type ScreenTimeAvailability,
 } from '@/services/screenTime';
+import { moveSession } from '@/services/serverMove';
 import {
   getStepAvailability,
   openHealthConnectSettingsIfPossible,
@@ -34,7 +36,7 @@ import {
 import { deviceTimezone, useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
-import { CUSTOM_TAUNT_CEILING_NOTE, byLevel } from '@/utils/levelCopy';
+import { CUSTOM_TAUNT_CEILING_NOTE, SERVER_MOVED, byLevel } from '@/utils/levelCopy';
 
 const PREVIEW_VARS: TauntVars = {
   winner: 'Mustafa',
@@ -229,6 +231,91 @@ function PasswordSheet({ visible, onClose }: { visible: boolean; onClose: () => 
   );
 }
 
+/**
+ * "Sunucu": a tunnel restart gives the same server a new address, and that
+ * must not cost a logout any more. The sheet takes a bare address or whatever
+ * invite link a friend sent (after a restart that link is how the new address
+ * travels) and moves the session when the server there is this one. Only a
+ * genuinely different server still means logging out, and only after asking.
+ */
+function ServerSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const serverUrl = useAuth((s) => s.serverUrl);
+  const setServerUrl = useAuth((s) => s.setServerUrl);
+  const logout = useAuth((s) => s.logout);
+  const level = useLevel();
+  const toast = useToast();
+  const [value, setValue] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const close = () => {
+    setValue('');
+    setError(null);
+    onClose();
+  };
+
+  const connect = async () => {
+    const url = serverFromInviteLink(value) ?? normalizeServerUrl(value);
+    if (!url) {
+      setError('Bunu adres olarak okuyamadım. Kankanın attığı bağlantıyı olduğu gibi yapıştır.');
+      return;
+    }
+    if (url === normalizeServerUrl(serverUrl)) {
+      setError('Zaten bu adrese bağlısın.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const result = await moveSession(url);
+    setBusy(false);
+    if (result === 'moved') {
+      close();
+      toast({ title: SERVER_MOVED[level], kind: 'success' });
+      return;
+    }
+    if (result === 'unreachable') {
+      setError('Bu adrese ulaşamadım. Sunucu açık mı, adres doğru mu?');
+      return;
+    }
+    const ok = await confirmTr(
+      'Bu başka bir sunucu',
+      'Hesabın o sunucuda geçmiyor. Oraya geçmek için bu hesaptan çıkış yapman lazım; orada hesabın varsa giriş yaparsın, yoksa yeni hesap açarsın. Çıkış yapayım mı?',
+      'Çıkış yap ve geç'
+    );
+    if (!ok) return;
+    close();
+    await logout();
+    // it answered /health a moment ago, so the login screen can start there
+    await setServerUrl(url);
+    router.replace('/(auth)/login');
+  };
+
+  return (
+    <Sheet visible={visible} onClose={close} title="Sunucu adresi">
+      <Input
+        label="Yeni adres ya da davet bağlantısı"
+        placeholder="https://….trycloudflare.com"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType={Platform.OS === 'web' ? 'default' : 'url'}
+        value={value}
+        onChangeText={(text) => {
+          setValue(text);
+          setError(null);
+        }}
+        returnKeyType="go"
+        onSubmitEditing={() => void connect()}
+        error={error}
+        hint="Kankan yeni bir davet bağlantısı attıysa olduğu gibi yapıştır, adresi ben ayıklarım."
+      />
+      <Button title="Bağlan" size="lg" fullWidth loading={busy} onPress={() => void connect()} />
+      <Text variant="micro" faint>
+        Aynı sunucuysa hesabın yerinde kalır, çıkış yapmazsın. Başka bir sunucuysa önce sorarım.
+      </Text>
+    </Sheet>
+  );
+}
+
 export default function SettingsScreen() {
   const me = useAuth((s) => s.me);
   const logout = useAuth((s) => s.logout);
@@ -254,6 +341,7 @@ export default function SettingsScreen() {
   const [screenTime, setScreenTime] = useState<ScreenTimeAvailability | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [serverOpen, setServerOpen] = useState(false);
 
   const pendingLevel: VulgarityLevel = levelOverride ?? me?.vulgarityMax ?? 2;
   const preview = renderTaunt(pickTaunt('win', pendingLevel, 1), PREVIEW_VARS);
@@ -403,17 +491,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const changeServer = async () => {
-    const ok = await confirmTr(
-      'Sunucu adresi',
-      'Adresi değiştirmek için oturumun kapanması gerekiyor. Sonra giriş ekranından yeni adresi yazarsın. Çıkış yapayım mı?',
-      'Çıkış yap ve değiştir'
-    );
-    if (!ok) return;
-    await logout();
-    router.replace('/(auth)/server');
-  };
-
   const doLogout = async () => {
     const ok = await confirmTr('Çıkış yap', t('logout_confirm', level), 'Çıkış yap');
     if (!ok) return;
@@ -558,14 +635,14 @@ export default function SettingsScreen() {
       {serverEditable ? (
       <Card>
         <Text variant="label">Sunucu</Text>
-        <Pressable accessibilityRole="button" onPress={() => void changeServer()}>
+        <Pressable accessibilityRole="button" onPress={() => setServerOpen(true)}>
           <View style={styles.rowBetween}>
             <View style={styles.rowText}>
               <Text variant="body" bold numberOfLines={1}>
                 {serverUrl.replace(/^https?:\/\//, '')}
               </Text>
               <Text variant="tiny" muted>
-                Adresi değiştirmek için dokun (çıkış yapman gerekir).
+                Adres değiştiyse dokun, yenisini yaz. Aynı sunucuysa çıkış yok.
               </Text>
             </View>
             <Text variant="title" muted>
@@ -744,6 +821,7 @@ export default function SettingsScreen() {
       </View>
 
       <PasswordSheet visible={passwordOpen} onClose={() => setPasswordOpen(false)} />
+      {serverEditable ? <ServerSheet visible={serverOpen} onClose={() => setServerOpen(false)} /> : null}
     </Screen>
   );
 }

@@ -242,6 +242,28 @@ yazım hatası o anki oturuma mal olmamalı. Buradaki tahmin hakkı da giriştek
 başına 15 dakikada 8 yanlış. Token'lar durumsuz olduğundan şifre değişince başka
 telefonlarda açık oturumlar kapanmaz; bunun için sunucunun iptal listesi tutması gerekirdi.
 
+### Aynı sunucu, yeni adres
+
+`npm run internet` her açılışta yeni bir trycloudflare adresi alır. JWT anahtarı
+`DATA_DIR/secret`'te durduğu için eski token'lar yeni adreste de geçerlidir, ama uygulama
+"aynı sunucu, yeni adres" ile "başka sunucu"yu ayıramıyordu ve her tünel yenilenişinde herkesi
+çıkışa zorluyordu. Şifre gidiyordu, önbellek ve gelen kutusu imleci de; arka plan senkronu ile
+bildirimler herkes şifresini yeniden yazana kadar ölü kalıyordu.
+
+Artık `/health` bir `serverId` döner: JWT anahtarının HMAC-SHA256'sı, ilk 16 hex karakter.
+Anahtar aynı kaldıkça aynıdır, eski token'lar tam da anahtar değişince ölür, yani kimlik
+token'ların nerede geçtiğini birebir söyler; tek yönlü olduğu için anahtarı ele vermez.
+Uygulama kimliği girişten hemen sonra ve her `/health` okumasında saklar, sadece oturum
+açıkken ve hâlâ kullandığı adres için (`store/auth.ts`, `rememberServerId`).
+
+Geçişi `services/serverMove.ts` yapar, hep bir dokunuşla (davet ekranı ya da Ayarlar →
+Sunucu): önce yeni adresin `/health`'i. Saklı bir kimlik varsa ve sunucu onu söylemiyorsa token
+oraya hiç gitmez. Kimlik bilinmiyorsa (kimliği hiç duymamış bir telefon) `/me` token'la sorulur;
+aynı hesap dönerse aynı sunucudur. `/me` burada `onUnauthorized`'sız bir istemciyle gider:
+başka bir sunucunun 401'i "burası değil" demektir, çıkış sebebi değil. Geçiş adresi ve kimliği
+yazar, bütün sorguları tazeler, çevrimdışı kuyruğu gönderir; oturum, gelen kutusu imleci ve push
+kaydı yerinde kalır. Bağlantı herkesten gelebileceği için kendiliğinden geçiş yok.
+
 ## Neden SQLite
 
 Bu uygulamanın kullanıcısı bir arkadaş grubudur, on binlerce kişi değil. Tek dosyalık bir

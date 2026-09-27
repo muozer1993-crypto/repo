@@ -147,7 +147,9 @@ async function main() {
     şehirdeki kankan dokununca uygulama bu sunucuya bağlanır.
   • Kendi telefonun evdeki Wi-Fi'da kalabilir, aynı sunucudur.
   • Bu pencere açık kaldıkça çalışır. Ctrl+C ile kapanır.
-  • Adres her açılışta değişir; kapatıp açarsan yeni bağlantı paylaş.
+  • Adres her açılışta değişir; kapatıp açarsan yeni bağlantı
+    paylaş. Kankan dokunup "Yeni adrese geç"e basar, çıkış yapmaz.
+    (Uygulaması eski sürümse bir kere yeniden giriş yapar.)
 ────────────────────────────────────────────────────────────
 `);
 }

@@ -11,6 +11,7 @@ import {
   readPendingInvite,
   savePendingInvite,
   sendInvite,
+  serverFromInviteLink,
 } from '@/services/invite';
 import { compareVersions, isLocalNetworkUrl, resolveServerUrl } from '@/utils/url';
 
@@ -30,6 +31,27 @@ describe('invite codes', () => {
     expect(normalizeInviteCode('AB')).toBeNull();
     expect(normalizeInviteCode('ab-c23')).toBeNull();
     expect(normalizeInviteCode(undefined)).toBeNull();
+  });
+});
+
+describe('the server inside a pasted invite link', () => {
+  it('reads the app link, the page link and a whole message around one', () => {
+    expect(serverFromInviteLink('koydum://davet/ABC234?server=https%3A%2F%2Fyeni-adres.trycloudflare.com')).toBe(
+      'https://yeni-adres.trycloudflare.com'
+    );
+    expect(serverFromInviteLink('https://yeni-adres.trycloudflare.com/davet/ABC234')).toBe(
+      'https://yeni-adres.trycloudflare.com'
+    );
+    expect(
+      serverFromInviteLink('Gel KOYDUM’da kapışalım: https://yeni-adres.trycloudflare.com/davet/ABC234 bekliyorum')
+    ).toBe('https://yeni-adres.trycloudflare.com');
+    expect(serverFromInviteLink('http://192.168.1.20:4000/indir?kod=ABC234')).toBe('http://192.168.1.20:4000');
+  });
+
+  it('leaves a bare address to the caller', () => {
+    expect(serverFromInviteLink('https://yeni-adres.trycloudflare.com')).toBeNull();
+    expect(serverFromInviteLink('192.168.1.20')).toBeNull();
+    expect(serverFromInviteLink('https://ornek.com/davetiye')).toBeNull();
   });
 });
 

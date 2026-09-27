@@ -3,7 +3,7 @@ import type { Me } from '@koydum/shared';
 import { create } from 'zustand';
 
 import { ApiClient } from '@/lib/api';
-import { guessServerUrl, serverUrlIsEditable } from '@/lib/config';
+import { guessServerUrl, serverUrlIsEditable, stripTrailingSlash } from '@/lib/config';
 import { queryClient } from '@/lib/query';
 import { StorageKeys, getJson, removeItem, setItem, setJson } from '@/lib/storage';
 import { markTokenRenewed, renewTokenIfDue } from '@/services/session';
@@ -13,6 +13,12 @@ interface AuthState {
   token: string | null;
   me: Me | null;
   serverUrl: string;
+  /**
+   * /health's `serverId` of the server this session was signed in on, once the
+   * phone has heard it. It is what lets a new tunnel address be recognised as
+   * the same server instead of costing everybody a logout (services/serverMove).
+   */
+  serverId: string | null;
   /** true while the initial /me refresh is in flight */
   refreshing: boolean;
   /**
@@ -26,6 +32,8 @@ interface AuthState {
   setSession: (token: string, me: Me) => Promise<void>;
   setMe: (me: Me) => Promise<void>;
   setServerUrl: (url: string) => Promise<void>;
+  /** Stores `id` as this session's server, if `forUrl` is still the address in use. */
+  rememberServerId: (id: string | null | undefined, forUrl: string) => Promise<void>;
   logout: () => Promise<void>;
   clearSessionEnded: () => void;
   client: () => ApiClient;
@@ -55,20 +63,23 @@ export const useAuth = create<AuthState>((set, get) => ({
   token: null,
   me: null,
   serverUrl: guessServerUrl(),
+  serverId: null,
   refreshing: false,
   sessionEnded: false,
 
   hydrate: async () => {
-    const [token, me, storedUrl] = await Promise.all([
+    const [token, me, storedUrl, serverId] = await Promise.all([
       getJson<string>(StorageKeys.token).then((value) =>
         typeof value === 'string' ? value : null
       ),
       getJson<Me>(StorageKeys.me),
       getJson<string>(StorageKeys.serverUrl),
+      getJson<string>(StorageKeys.serverId),
     ]);
     set({
       token,
       me: me ?? null,
+      serverId: typeof serverId === 'string' && serverId ? serverId : null,
       // a URL typed into an earlier (editable) build must not shadow the one a
       // production build has baked in — there would be no screen to change it
       serverUrl:
@@ -96,6 +107,14 @@ export const useAuth = create<AuthState>((set, get) => ({
     const previous = get().me;
     if (previous && previous.id !== me.id) queryClient.clear();
     set({ token, me, sessionEnded: false });
+    // The address was right a moment ago, so this is the time to learn which
+    // server it is: when the tunnel hands out a new address later, the id is
+    // what tells "same server" from "another one". Best effort, never awaited.
+    const url = get().serverUrl;
+    void new ApiClient({ baseUrl: url, timeoutMs: 8000 })
+      .health()
+      .then((health) => get().rememberServerId(health.serverId, url))
+      .catch(() => {});
     // every token handed to setSession was just signed, so the weekly renewal
     // has nothing to do for a while
     await Promise.all([setJson(StorageKeys.token, token), setJson(StorageKeys.me, me), markTokenRenewed()]);
@@ -109,6 +128,17 @@ export const useAuth = create<AuthState>((set, get) => ({
   setServerUrl: async (url) => {
     set({ serverUrl: url });
     await setItem(StorageKeys.serverUrl, JSON.stringify(url));
+  },
+
+  rememberServerId: async (id, forUrl) => {
+    const { token, serverUrl, serverId } = get();
+    // The id vouches for the server that issued the token, so it is kept only
+    // while signed in, and only for the address still in use: an answer that
+    // comes back after a move must not be filed under the new address.
+    if (!id || !token || id === serverId) return;
+    if (stripTrailingSlash(forUrl) !== stripTrailingSlash(serverUrl)) return;
+    set({ serverId: id });
+    await setJson(StorageKeys.serverId, id);
   },
 
   /**
@@ -128,13 +158,14 @@ export const useAuth = create<AuthState>((set, get) => ({
         .clearPushToken()
         .catch(() => {});
     }
-    set({ token: null, me: null });
+    set({ token: null, me: null, serverId: null });
     // the next account must not be served this one's challenges, inbox or badge
     queryClient.clear();
     await Promise.all([
       removeItem(StorageKeys.token),
       removeItem(StorageKeys.tokenRenewedAt),
       removeItem(StorageKeys.me),
+      removeItem(StorageKeys.serverId),
       removeItem(StorageKeys.pushToken),
       // otherwise the next account's first poll replays its history as local
       // notifications

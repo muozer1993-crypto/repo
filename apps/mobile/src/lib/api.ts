@@ -62,6 +62,12 @@ export interface HealthResponse {
   app?: { latestVersion: string | null; downloadUrl: string; notes: string | null } | null;
   /** the address friends elsewhere should use (set by `npm run internet` / PUBLIC_URL) */
   publicUrl?: string | null;
+  /**
+   * Stays the same across restarts and new addresses, changes exactly when the
+   * server's old tokens stop working (services/serverMove.ts). Older servers
+   * leave it out.
+   */
+  serverId?: string | null;
 }
 
 export interface InviteLookup {

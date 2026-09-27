@@ -84,4 +84,6 @@ export const StorageKeys = {
   stepRecordingSince: 'koydum.stepRecordingSince',
   /** when the stored token was last issued or renewed (see services/session) */
   tokenRenewedAt: 'koydum.tokenRenewedAt',
+  /** /health's serverId of the server this session belongs to (see services/serverMove) */
+  serverId: 'koydum.serverId',
 } as const;

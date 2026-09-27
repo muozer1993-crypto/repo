@@ -26,6 +26,26 @@ export function normalizeInviteCode(raw: unknown): string | null {
   return /^[A-Z0-9]{4,12}$/.test(code) ? code : null;
 }
 
+/**
+ * The server an invite link points at, from anything a friend may paste: the
+ * app link (`koydum://davet/ABC123?server=https%3A%2F%2F…`), the page link the
+ * share button sends (`https://….trycloudflare.com/davet/ABC123`, whose origin
+ * IS the server), or a whole WhatsApp message with one of them inside. Null
+ * when the text holds neither, so the caller can read it as a bare address.
+ */
+export function serverFromInviteLink(text: string): string | null {
+  const param = /[?&]server=([^&#\s]+)/i.exec(text);
+  if (param) {
+    try {
+      return normalizeServerUrl(decodeURIComponent(param[1]));
+    } catch {
+      return null;
+    }
+  }
+  const page = /(https?:\/\/[^/?#\s]+)\/(?:davet|indir)(?:[/?#\s]|$)/i.exec(text);
+  return page ? normalizeServerUrl(page[1]) : null;
+}
+
 export async function savePendingInvite(code: string, server: string | null): Promise<void> {
   const invite: PendingInvite = {
     code,

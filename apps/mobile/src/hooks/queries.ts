@@ -24,12 +24,22 @@ import { useAuth } from '@/store/auth';
 /**
  * What the server says about itself: its public address (for invite links) and
  * the Android build it offers (for "yeni sürüm var"). Cheap and rarely changes.
+ *
+ * It also says who it is (`serverId`), which the store keeps while signed in:
+ * a phone that already knows the id before the tunnel's next new address can
+ * tell that address is the same server (services/serverMove.ts).
  */
 export function useServerInfo() {
   const api = useApi();
+  const serverUrl = useAuth((s) => s.serverUrl);
+  const rememberServerId = useAuth((s) => s.rememberServerId);
   return useQuery({
     queryKey: qk.health,
-    queryFn: () => api.health(),
+    queryFn: async () => {
+      const health = await api.health();
+      void rememberServerId(health.serverId, serverUrl);
+      return health;
+    },
     staleTime: 5 * 60 * 1000,
     retry: false,
   });

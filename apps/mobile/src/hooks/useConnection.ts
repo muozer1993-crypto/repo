@@ -16,12 +16,20 @@ import { useAuth } from '@/store/auth';
 const HEALTHY_INTERVAL_MS = 60_000;
 const UNHEALTHY_INTERVAL_MS = 8_000;
 const FAILURES_BEFORE_OFFLINE = 2;
+/**
+ * A lift ride or a dropped Wi-Fi is over well before this. A laptop that went
+ * to sleep, or a tunnel restarted under a new address, is not: past this point
+ * the banner stops saying "wait" and says the address may have moved.
+ */
+const LONG_OFFLINE_MS = 2 * 60_000;
 
 export interface ConnectionState {
   online: boolean;
   /** null until the first probe finishes */
   checked: boolean;
   lastOkAt: number | null;
+  /** unreachable for LONG_OFFLINE_MS in a row */
+  longOffline: boolean;
   retry: () => void;
 }
 
@@ -31,7 +39,10 @@ export function useConnection(): ConnectionState {
   const [online, setOnline] = useState(true);
   const [checked, setChecked] = useState(false);
   const [lastOkAt, setLastOkAt] = useState<number | null>(null);
+  const [longOffline, setLongOffline] = useState(false);
   const failures = useRef(0);
+  // when the current run of failures began; a success ends the run
+  const failingSince = useRef<number | null>(null);
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
@@ -58,11 +69,15 @@ export function useConnection(): ConnectionState {
 
       if (ok) {
         failures.current = 0;
+        failingSince.current = null;
         setOnline(true);
+        setLongOffline(false);
         setLastOkAt(Date.now());
       } else {
         failures.current += 1;
+        failingSince.current ??= Date.now();
         if (failures.current >= FAILURES_BEFORE_OFFLINE) setOnline(false);
+        if (Date.now() - failingSince.current >= LONG_OFFLINE_MS) setLongOffline(true);
       }
       setChecked(true);
       timer = setTimeout(() => void probe(gen), ok ? HEALTHY_INTERVAL_MS : UNHEALTHY_INTERVAL_MS);
@@ -86,5 +101,5 @@ export function useConnection(): ConnectionState {
     };
   }, [serverUrl, nonce, token]);
 
-  return { online, checked, lastOkAt, retry: () => setNonce((n) => n + 1) };
+  return { online, checked, lastOkAt, longOffline, retry: () => setNonce((n) => n + 1) };
 }

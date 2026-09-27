@@ -65,6 +65,7 @@ jest.mock('@/store/auth', () => ({
       serverUrl: 'http://localhost:4000',
       refreshMe: jest.fn(),
       setSession: mockSetSession,
+      rememberServerId: jest.fn(async () => {}),
       sessionEnded: mockSession.ended,
       clearSessionEnded: mockClearSessionEnded,
     }),
