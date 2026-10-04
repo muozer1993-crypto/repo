@@ -109,7 +109,8 @@ describe('when expo-notifications refuses to load', () => {
       requestPermissionsAsync: jest.Mock;
     };
     permissions.requestPermissionsAsync.mockClear();
-    permissions.getPermissionsAsync.mockResolvedValueOnce({ status: 'denied' });
+    // a no the phone remembers (Android has stopped asking)
+    permissions.getPermissionsAsync.mockResolvedValueOnce({ status: 'denied', canAskAgain: false });
     expect(await pushPermissionStatus()).toBe('denied');
     permissions.getPermissionsAsync.mockResolvedValueOnce({ status: 'undetermined' });
     expect(await pushPermissionStatus()).toBe('undetermined');
