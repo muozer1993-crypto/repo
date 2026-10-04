@@ -16,15 +16,15 @@ import { Loading, Skeleton } from '@/components/Loading';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
-import { useFriendAction, useFriends, useServerInfo } from '@/hooks/queries';
+import { useFriendAction, useFriends } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
+import { useInviteLink } from '@/hooks/useInviteLink';
 import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
 import { byLevel } from '@/utils/levelCopy';
-import { isLocalNetworkUrl, isLoopbackUrl } from '@/utils/url';
 
 const MONO = Platform.select({ ios: 'Courier', android: 'monospace', default: 'monospace' });
 
@@ -34,16 +34,7 @@ const FRIENDS_FRESH_MS = 20_000;
 export default function FriendsScreen() {
   const level = useLevel();
   const me = useAuth((s) => s.me);
-  const serverUrl = useAuth((s) => s.serverUrl);
-  const serverInfo = useServerInfo();
-  // The page this link opens is served by our own server: it names the
-  // inviter, opens the app with the right address, and offers the APK. When
-  // the server is on the internet (npm run internet) its public address goes
-  // into the link even if this phone reaches it over the home Wi-Fi.
-  const linkBase = (serverInfo.data?.publicUrl ?? serverUrl).replace(/\/+$/, '');
-  const inviteLink = me?.inviteCode ? `${linkBase}/davet/${me.inviteCode}` : null;
-  const linkIsLoopback = isLoopbackUrl(linkBase);
-  const linkIsLocal = !linkIsLoopback && isLocalNetworkUrl(linkBase);
+  const { link: inviteLink, isLoopback: linkIsLoopback, isLocal: linkIsLocal } = useInviteLink();
   const api = useApi();
   const toast = useToast();
   const friends = useFriends();

@@ -1,9 +1,10 @@
 import type { ChallengeType, ParticipantView, Taunt, VulgarityLevel } from '@koydum/shared';
 import { getChallengeType, scoreLabel, t } from '@koydum/shared';
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, Share, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
@@ -18,6 +19,7 @@ import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import { useChallenge, useRematch, useResults } from '@/hooks/queries';
 import { ApiError } from '@/lib/api';
+import { useInviteLink } from '@/hooks/useInviteLink';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
@@ -34,6 +36,7 @@ import {
   TAUNT_DONE_CHIP,
   byLevel,
 } from '@/utils/levelCopy';
+import { MEDALS, resultShareText } from '@/utils/shareText';
 
 /* ------------------------------------------------------------------- copy */
 
@@ -169,6 +172,7 @@ export default function ResultsScreen() {
   const meId = me?.id ?? null;
   const tz = useTimezone();
   const toast = useToast();
+  const { link: inviteLink } = useInviteLink();
 
   const query = useResults(id);
   // the detail query is the authority on "one taunt per loser"; it is usually
@@ -313,6 +317,37 @@ export default function ResultsScreen() {
   const runnerUp = losers[0];
   const loserGap = winner && mine ? Math.abs(winner.score - mine.score) : 0;
   const winnerGap = mine && runnerUp ? Math.abs(mine.score - runnerUp.score) : 0;
+
+  // The group lives in WhatsApp: a screenshot carries the gloat but not the way
+  // in, so the text goes with my invite link for whoever is not on KOYDUM yet.
+  const shareResult = async () => {
+    const message = resultShareText({
+      level,
+      title: challenge.title || type?.nameTr || 'Çelınc',
+      typeEmoji: type?.emoji ?? '🎯',
+      range: dateRange(challenge.startsAt, challenge.endsAt, tz),
+      ranked: ranked.map((p) => ({ rank: p.rank, name: p.user.displayName, score: scoreText(p.score) })),
+      isTie,
+      winnerName: winner?.user.displayName ?? null,
+      iWon,
+      link: inviteLink,
+    });
+    if (Platform.OS === 'web') {
+      // react-native-web's Share is not reliable in every browser; copying always works
+      try {
+        await Clipboard.setStringAsync(message);
+        toast({ title: 'Kopyalandı', body: 'WhatsApp grubuna yapıştır gitsin.', kind: 'success' });
+      } catch {
+        toast({ title: 'Kopyalanamadı', body: 'Ekran görüntüsü alıp at, o da olur.', kind: 'danger' });
+      }
+      return;
+    }
+    try {
+      await Share.share({ message });
+    } catch {
+      toast({ title: 'Paylaşılamadı', body: 'Ekran görüntüsü alıp at, o da olur.', kind: 'danger' });
+    }
+  };
 
   return (
     <Screen
@@ -535,6 +570,17 @@ export default function ResultsScreen() {
             {LEFT_OUT_NOTE(level, leftOut.map((p) => p.user.displayName))}
           </Text>
         ) : null}
+        {isPlayer ? (
+          <Button
+            title={byLevel(level, 'Sonucu paylaş', 'Gruba at', 'Gruba at, herkes görsün')}
+            icon="📨"
+            variant="secondary"
+            size="lg"
+            fullWidth
+            style={styles.gap}
+            onPress={() => void shareResult()}
+          />
+        ) : null}
         <Button
           title="Çelınca dön"
           variant="ghost"
@@ -617,7 +663,6 @@ function NeutralHeader({ title, subtitle, emoji }: { title: string; subtitle: st
 const PLACE_COLOR = [Colors.yellow, Colors.textMuted, Colors.accentDim];
 const PLACE_HEIGHT = [104, 78, 60];
 const PLACE_AVATAR = [72, 52, 48];
-const MEDALS = ['🥇', '🥈', '🥉'];
 
 function Podium({
   ranked,

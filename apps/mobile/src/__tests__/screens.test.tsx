@@ -1418,6 +1418,70 @@ describe('a group rival who is not a friend', () => {
   });
 });
 
+describe('a result sent to the WhatsApp group', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const VELI = { id: 'u-3', username: 'veli', displayName: 'Veli', avatarEmoji: '🦊', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** Ali won a three-way çelınc over Veli; the reader came second, or only watched (`watching`). */
+  function finished(watching = false) {
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    return {
+      challenge: { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: ALI.id },
+      standings: [
+        { ...detail.me!, user: ALI, score: 15000, rank: 1, isWinner: true },
+        ...(watching ? [] : [{ ...detail.me!, score: 12430, rank: 2 }]),
+        { ...detail.me!, user: VELI, score: 3000, rank: watching ? 2 : 3 },
+      ],
+      taunts: [],
+    };
+  }
+
+  let share: jest.SpyInstance;
+  beforeEach(() => {
+    const { Share } = require('react-native') as typeof import('react-native');
+    share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' });
+    api.health = jest.fn(async () => ({
+      ok: true,
+      version: '1',
+      time: '',
+      app: null,
+      publicUrl: 'https://tatli-koydum.trycloudflare.com',
+    }));
+  });
+  afterEach(() => share.mockRestore());
+
+  it('hands the podium and my invite link to the share sheet', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => finished());
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    await act(async () => {
+      findWith(tree, 'title', 'Gruba at', 'onPress').props.onPress();
+    });
+
+    expect(share).toHaveBeenCalledTimes(1);
+    const { message } = share.mock.calls[0][0] as { message: string };
+    expect(message).toContain('🥇 Ali · 15.000 adım');
+    expect(message).toContain('🥈 Mustafa · 12.430 adım');
+    expect(message).toContain('Bu sefer Ali koydu, yedik.');
+    expect(message).toContain('https://tatli-koydum.trycloudflare.com/davet/KOY123');
+  });
+
+  it('is not offered to somebody who only watched', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => finished(true));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('ÇELINC BİTTİ');
+    expect(() => findWith(tree, 'title', 'Gruba at', 'onPress')).toThrow();
+  });
+});
+
 describe('the itiraz chip once the çelınc is over', () => {
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
 

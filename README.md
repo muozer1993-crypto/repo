@@ -436,6 +436,15 @@ final tablosunda adına dokunup profilinden ekleyebilirsin. Rövanş eskisi kaç
 gün sürer ve açanın saatiyle gece yarısı biter; reddedilen bir rövanş iptal olur ama yenisini
 açmana engel olmaz.
 
+**Sonucu WhatsApp grubuna atmak:** sonuç ekranında, rövanş düğmesinin altında **Gruba at** durur
+(seviyene göre "Sonucu paylaş" ya da "Gruba at, herkes görsün" yazar). Dokununca telefonun paylaş
+menüsü açılır, grubu seçersin. Giden mesajda kürsü yazı olarak durur (`🥇 Ali · 15.000 adım`),
+altında senin seviyende bir cümle ve senin davet bağlantın olur: uygulaması olmayan dokunup kurar,
+kanka isteği de sana kendiliğinden gelir. Sunucu `npm run server` ile sadece evde açıksa bağlantı
+mesaja girmez, o adres zaten sadece aynı Wi-Fi'da açılır; `npm run internet` açıkken girer.
+Mesajda sonuç ekranında görünenden fazlası yok: yarışanların adı ve skoru. Bilgisayardaki
+tarayıcıda paylaş menüsü yerine mesaj panoya kopyalanır.
+
 ---
 
 ## Sunucuyu internete açmak
