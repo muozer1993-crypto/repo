@@ -23,6 +23,11 @@ export type StepAvailability =
       approximate: boolean;
       /** why it is only approximate, when something the user can do would fix it */
       upgrade?: 'play-services';
+      /**
+       * Android: Health Connect is granted but nothing writes steps into it
+       * (it ships with Android 14+), so the phone's own count is the source
+       */
+      hcEmpty?: true;
     }
   | { available: false; reason: 'web' | 'no-sensor' | 'denied' | 'health-connect-missing' | 'error'; detail?: string };
 

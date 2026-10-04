@@ -604,17 +604,25 @@ fotoğraf yok.
 | Platform | Kaynak | Not |
 |---|---|---|
 | **iOS** | Core Motion (`Pedometer.getStepCountAsync`) | Son 7 günün geçmişi cihazda durur. Uygulamayı hiç açmasan da adımların sayılır; haftada bir açman yeter. |
-| **Android + Health Connect** | `react-native-health-connect` | Kesin günlük toplam. Geliştirme derlemesi ve Health Connect'e veri yazan bir uygulama (Samsung Health, Google Fit, Fitbit) gerekir. |
-| **Android, Health Connect yoksa** | Google Play hizmetlerinin **Recording API**'si (`modules/koydum-steps`) | Telefon adımları uygulama kapalıyken de sayar ve 10 gün saklar, iPhone'daki gibi. Hesap ya da internet gerekmez, sadece Fiziksel Aktivite izni. Kayıt, izin verildiği andan itibaren tutulur. |
+| **Android + Health Connect** | `react-native-health-connect` | Sadece içine adım yazan bir uygulama (Samsung Health, Google Fit, Fitbit) varsa işe yarar. Android 14 ve üstünde Health Connect telefonla birlikte gelir ama çoğu zaman boştur; son 7 günde içinde adım yoksa uygulama onu kaynak saymaz, telefonun kendi sayımına bakar. Geliştirme derlemesi gerekir. |
+| **Android, her telefonda** | Google Play hizmetlerinin **Recording API**'si (`modules/koydum-steps`) | Telefon adımları uygulama kapalıyken de sayar ve 10 gün saklar, iPhone'daki gibi. Hesap ya da internet gerekmez, sadece Fiziksel Aktivite izni. Kayıt, izin verildiği andan itibaren tutulur. Health Connect varken de çalışır. |
 | **Android, eski Play hizmetleri** | `Pedometer.watchStepCount` | Sadece uygulama açıkken sayar, cihazda birikir. Uygulama bunu "yaklaşık" diye işaretler ve Play hizmetlerini güncellemeyi önerir. |
 | **Web** | yok | Web derlemesi test amaçlıdır; adım gösterilmez. |
+
+Android'de bu kaynaklar yan yana okunur ve her gün için en büyüğü alınır. Hepsi ancak eksik
+sayabilir (Health Connect'te sadece başka uygulamaların yazdığı var, kayıt izinden sonra başlar,
+uygulamanın kendi sayımı uygulama kapanınca durur), toplamak da aynı adımı iki kere sayar.
+Health Connect'ten gelen 0 hiç gönderilmez: boş bir Health Connect her güne 0 der, o 0 kimsenin
+gerçek günü değildir.
 
 Android 10 ve üstünde adım sayacını okumak için **Fiziksel Aktivite** izni gerekiyor. Yeni
 kaydolan biri bu izni, bildirim izniyle birlikte, karşılama ekranının son sayfasında neden
 istendiğini okuyarak verir. O sayfayı izin düğmelerine basmadan geçerse uygulama adım saymaya
 başlamadan önce ana sayfada sorar. Orada "izin verme" dediyse aynı açılışta bir daha sormaz,
 uygulama bir sonraki açılışta sorar. Reddederse ayarlar ekranı "izin verilmedi" der, çıkan
-uyarıya dokununca da telefonun ayarları açılır.
+uyarıya dokununca da telefonun ayarları açılır. Telefonda Health Connect varsa **İzin ver**
+önce Health Connect'in izin ekranını, hemen ardından Fiziksel Aktivite iznini açar: Health
+Connect boş çıkabilir, telefonun kendi sayımı bu ikinci izinle başlar.
 İzni sormadan saymaya kalkan bir uygulama sıfır sayar ve bozuk görünür.
 
 Adımlar sunucuya günlük özet olarak gider (`POST /me/steps`), ham konum veya sensör verisi
@@ -734,7 +742,10 @@ kendiliğinden gider. Android iki kere "izin verme" denince bir daha sormuyor, y
 
 **Adımlar 0 görünüyor.**
 iOS'ta hareket izni verilmemiş olabilir (Ayarlar → Gizlilik → Hareket ve Fitness). Android'de
-Health Connect kurulu değilse uygulama yaklaşık sayıma düşer ve bunu ekranda yazar. Fiziksel
+Health Connect kurulu değilse uygulama yaklaşık sayıma düşer ve bunu ekranda yazar. Health
+Connect'e izin verdiysen ama ona adım yazan bir uygulama yoksa (Android 14 ve üstünde çoğu
+telefonda böyle) uygulama telefonun kendi sayımını kullanır; **Ayarlar → Adım sayacı** bunu
+"Health Connect'e adım yazan bir uygulama yok" diye söyler. Fiziksel
 aktivite izni reddedildiyse ana sayfadaki **İzin ver**'e bas; Android pencereyi artık açmıyorsa
 çıkan uyarıya dokun, telefonun ayarları açılır, oradan **Fiziksel aktivite**'yi aç.
 

@@ -3,21 +3,23 @@ import { Platform } from 'react-native';
 
 import { StorageKeys, getJson, setJson } from '@/lib/storage';
 import { ensureRecording, recordedDailySteps, recordingStartedToday, recordingStatus } from '@/services/recordingSteps';
-import type { DailySteps, StepAvailability } from '@/services/steps';
+import type { DailySteps, StepAvailability, StepSource } from '@/services/steps';
 
 /**
  * Step counting on device.
  *
  *  - iOS: Core Motion keeps seven days of history, so `getStepCountAsync` gives
  *    us real per-day totals even if the app was never opened.
- *  - Android, in order of preference:
- *      1. Health Connect, when installed and granted (Samsung Health, Fit...).
+ *  - Android, three sources read side by side, the largest one per day wins:
+ *      1. Health Connect, when granted (Samsung Health, Fit... write into it).
  *      2. Google Play services' Recording API (services/recordingSteps.ts):
  *         counted by the phone all day, app open or not.
  *      3. Counting while the app is in the foreground, persisted per day —
- *         surfaced in the UI as "yaklaşık". Kept running under 2 as well, and
- *         the larger of the two is used per day, so the day recording started
- *         does not lose what was counted before it.
+ *         surfaced in the UI as "yaklaşık" when it is all there is. It also
+ *         fills the morning of the day recording started.
+ *    Health Connect ships with Android 14+, so a granted one is often empty:
+ *    nothing on the phone writes steps into it. It is never trusted over the
+ *    other two, only next to them.
  */
 
 export type { DailySteps, StepAvailability, StepSource } from '@/services/steps';
@@ -115,16 +117,34 @@ async function healthConnectDailySteps(hc: HealthConnect, days: number): Promise
           endTime: (offset === 0 ? now : end).toISOString(),
         },
       });
-      out.push({
-        dayKey: localDayKey(day),
-        steps: Math.max(0, Math.round(result.COUNT_TOTAL ?? 0)),
-        source: 'health_connect',
-      });
+      const steps = Math.round(result.COUNT_TOTAL ?? 0);
+      // an empty Health Connect answers 0 for every day, so a 0 from it says
+      // nothing; the phone's own count speaks for a day nobody wrote in
+      if (steps > 0) out.push({ dayKey: localDayKey(day), steps, source: 'health_connect' });
     } catch {
       // ignore this day
     }
   }
   return out;
+}
+
+/**
+ * Whether anything wrote steps into Health Connect this past week. A granted
+ * but empty one must not be reported as the source: the screens would show it
+ * as exact, hide "Beyan et", and the zeros would look like a lazy week.
+ */
+async function healthConnectHasSteps(hc: HealthConnect): Promise<boolean> {
+  const now = new Date();
+  const { start } = dayBounds(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6));
+  try {
+    const result = await hc.aggregateRecord({
+      recordType: 'Steps',
+      timeRangeFilter: { operator: 'between', startTime: start.toISOString(), endTime: now.toISOString() },
+    });
+    return Math.round(result.COUNT_TOTAL ?? 0) > 0;
+  } catch {
+    return false;
+  }
 }
 
 /* ------------------------------------- Android foreground-only fallback */
@@ -285,20 +305,28 @@ export function startForegroundStepTracking(): () => void {
 }
 
 /**
- * Per day, the larger of what Play services recorded and what the app counted
- * in the foreground. Both only ever undercount (recording starts at the first
- * subscribe; the foreground count stops when the app closes), so the larger
- * one is the better answer and adding them would double count. Newest first.
+ * Per day, the largest of Health Connect, what Play services recorded and what
+ * the app counted in the foreground. Each only ever undercounts (Health Connect
+ * holds what other apps wrote; recording starts at the first subscribe; the
+ * foreground count stops when the app closes), so the largest is the better
+ * answer and adding them would double count. A row without a source is the
+ * phone's own count. On a tie the earlier list keeps the day. Newest first.
  */
-export function mergeLarger(recorded: DailySteps[] | { dayKey: string; steps: number }[], counted: DailySteps[], window: number): DailySteps[] {
-  const best = new Map<string, number>();
-  for (const row of [...recorded, ...counted]) {
-    best.set(row.dayKey, Math.max(best.get(row.dayKey) ?? 0, row.steps));
+export function mergeLarger(
+  window: number,
+  ...lists: readonly { dayKey: string; steps: number; source?: StepSource }[][]
+): DailySteps[] {
+  const best = new Map<string, DailySteps>();
+  for (const list of lists) {
+    for (const row of list) {
+      const current = best.get(row.dayKey);
+      if (current && current.steps >= row.steps) continue;
+      best.set(row.dayKey, { dayKey: row.dayKey, steps: row.steps, source: row.source ?? 'pedometer' });
+    }
   }
-  return [...best.entries()]
-    .sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0))
-    .slice(0, window)
-    .map(([dayKey, steps]) => ({ dayKey, steps, source: 'pedometer' as const }));
+  return [...best.values()]
+    .sort((a, b) => (a.dayKey < b.dayKey ? 1 : a.dayKey > b.dayKey ? -1 : 0))
+    .slice(0, window);
 }
 
 /* ----------------------------------------------------------- public API */
@@ -314,13 +342,20 @@ export async function getStepAvailability(): Promise<StepAvailability> {
     }
 
     const hc = await healthConnectReady();
-    if (hc) return { available: true, source: 'health_connect', approximate: false };
+    if (hc) {
+      // recording runs beside Health Connect: getDailySteps takes the larger
+      // per day, and Health Connect is only as good as what writes into it
+      await ensureRecording();
+      if (await healthConnectHasSteps(hc)) return { available: true, source: 'health_connect', approximate: false };
+    }
+    // granted but empty: the phone's own count below is what gets reported
+    const emptyHealthConnect = hc ? { hcEmpty: true as const } : {};
 
     const recording = await recordingStatus();
     if (recording === 'ok' && (await ensureRecording())) {
       // the day recording starts, the morning before it is missing: keep the
       // "yaklaşık" label and the Beyan et button for that one day
-      return { available: true, source: 'pedometer', approximate: await recordingStartedToday() };
+      return { available: true, source: 'pedometer', approximate: await recordingStartedToday(), ...emptyHealthConnect };
     }
 
     const available = await Pedometer.isAvailableAsync();
@@ -333,14 +368,22 @@ export async function getStepAvailability(): Promise<StepAvailability> {
       source: 'pedometer',
       approximate: true,
       ...(recording === 'play-services' ? { upgrade: 'play-services' as const } : {}),
+      ...emptyHealthConnect,
     };
   } catch (error) {
     return { available: false, reason: 'error', detail: error instanceof Error ? error.message : String(error) };
   }
 }
 
+/**
+ * The tap path (the welcome slide, home's İZİN VER, Ayarlar's İzin ver). On
+ * Android a Health Connect yes is not enough on its own: it may well be empty,
+ * so the physical activity permission is asked for right after it, which is
+ * what lets the phone count by itself.
+ */
 export async function requestStepPermission(): Promise<boolean> {
   try {
+    let hcGranted = false;
     if (Platform.OS === 'android') {
       const hc = loadHealthConnect();
       if (hc) {
@@ -349,10 +392,10 @@ export async function requestStepPermission(): Promise<boolean> {
           if (status === hc.SdkAvailabilityStatus.SDK_AVAILABLE) {
             await hc.initialize();
             const granted = await hc.requestPermission(HC_PERMISSIONS);
-            if (granted.length > 0) return true;
+            hcGranted = granted.length > 0;
           }
         } catch {
-          // fall through to the sensor permission
+          // the sensor permission below still counts
         }
       }
     }
@@ -360,7 +403,7 @@ export async function requestStepPermission(): Promise<boolean> {
       if (Platform.OS === 'android') {
         // the same ACTIVITY_RECOGNITION grant lets Play services record for us
         if (ok) await ensureRecording();
-        return ok;
+        return hcGranted || ok;
       }
       const result = await Pedometer.requestPermissionsAsync();
       return result.status === 'granted';
@@ -375,13 +418,10 @@ export async function getDailySteps(days: number): Promise<DailySteps[]> {
   try {
     if (Platform.OS === 'ios') return await iosDailySteps(window);
     const hc = await healthConnectReady();
-    if (hc) {
-      const fromHealthConnect = await healthConnectDailySteps(hc, window);
-      if (fromHealthConnect.length > 0) return fromHealthConnect;
-    }
+    const fromHealthConnect = hc ? await healthConnectDailySteps(hc, window) : [];
+    const recorded = (await ensureRecording()) ? await recordedDailySteps(window) : [];
     const counted = await cachedDailySteps(window);
-    if (!(await ensureRecording())) return counted;
-    return mergeLarger(await recordedDailySteps(window), counted, window);
+    return mergeLarger(window, fromHealthConnect, recorded, counted);
   } catch {
     return [];
   }

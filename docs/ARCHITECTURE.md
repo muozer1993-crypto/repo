@@ -307,11 +307,19 @@ Cihaz kaynağı (`pedometer`, `health_connect`, `usage_stats`) elle yazılmış 
 tersi yasaktır: telefonun okuduğu bir gün için `manual` yazmaya kalkan istek 409 `device_locked`
 alır. Kanıt fotoğrafı da sadece `manual` için zorunludur.
 
-Android'de adımın üç kaynağı var, sırayla: Health Connect (kuruluysa), Google Play hizmetlerinin
-Recording API'si (`apps/mobile/modules/koydum-steps/`) ve uygulama açıkken sayım. Android 9'dan
-beri arka plandaki bir uygulama adım sensöründen hiç olay almaz; bu yüzden uygulama kapalıyken
-saymanın tek yolu, sayımı Play hizmetlerinin yapması. Kayıt ilk izin anında başlar; o günün
-öncesini uygulamanın ön planda saydığı değer tamamlar, ikisinden büyük olan alınır.
+Android'de adımın üç kaynağı var: Health Connect (izin verildiyse), Google Play hizmetlerinin
+Recording API'si (`apps/mobile/modules/koydum-steps/`) ve uygulama açıkken sayım. Üçü yan yana
+okunur, her gün için en büyüğü alınır; hepsi ancak eksik sayar, toplamak aynı adımı iki kere
+sayar. Android 9'dan beri arka plandaki bir uygulama adım sensöründen hiç olay almaz; bu yüzden
+uygulama kapalıyken saymanın tek yolu, sayımı Play hizmetlerinin yapması. Kayıt ilk izin anında
+başlar; o günün öncesini uygulamanın ön planda saydığı değer tamamlar.
+
+Health Connect Android 14'ten beri telefonla gelir, ama içine adım yazan bir uygulama (Samsung
+Health, Google Fit) yoksa boştur ve her güne 0 der. O yüzden Health Connect'in 0'ı hiç
+gönderilmez, son 7 günde adım görmeyen bir Health Connect de kaynak sayılmaz:
+`getStepAvailability` o zaman telefonun kendi sayımını `hcEmpty: true` ile bildirir, ekranlar
+"yaklaşık" etiketini ve "Beyan et"i ona göre gösterir. İzin düğmesi Health Connect'in izninden
+sonra Fiziksel Aktivite iznini de ister; telefonun kendi sayımı bu izinle başlar.
 
 Ekran süresinin Android tarafı `apps/mobile/modules/koydum-screen-time/` altında yerel bir Expo
 modülüdür (Kotlin, `UsageStatsManager.queryEvents`). Uygulama onu adıyla arar
