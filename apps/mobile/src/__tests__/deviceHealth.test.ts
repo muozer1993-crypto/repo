@@ -34,10 +34,11 @@ jest.mock('expo-device', () => ({
 }));
 
 import { requireOptionalNativeModule } from 'expo-modules-core';
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 
 import {
   getBackgroundHealth,
+  openAppSettings,
   openExactAlarmSettings,
   requestBatteryExemption,
   resetDeviceHealthProvider,
@@ -131,5 +132,34 @@ describe('background health', () => {
     await getBackgroundHealth();
     await getBackgroundHealth();
     expect(lookup).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("KOYDUM's page in the phone's settings", () => {
+  let openSettings: jest.SpyInstance;
+
+  beforeEach(() => {
+    openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    openSettings.mockRestore();
+  });
+
+  it.each(['android', 'ios'])('opens it on %s, module or not', async (os) => {
+    (Platform as { OS: string }).OS = os;
+    expect(await openAppSettings()).toBe(true);
+    expect(openSettings).toHaveBeenCalledTimes(1);
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('says false on the web, which has no such page, and when the page will not open', async () => {
+    (Platform as { OS: string }).OS = 'web';
+    expect(await openAppSettings()).toBe(false);
+    expect(openSettings).not.toHaveBeenCalled();
+
+    (Platform as { OS: string }).OS = 'android';
+    openSettings.mockRejectedValueOnce(new Error('No Activity found to handle Intent'));
+    expect(await openAppSettings()).toBe(false);
   });
 });

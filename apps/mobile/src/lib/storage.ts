@@ -69,7 +69,6 @@ export const StorageKeys = {
   token: 'koydum.token',
   me: 'koydum.me',
   serverUrl: 'koydum.serverUrl',
-  onboarded: 'koydum.onboarded',
   pushToken: 'koydum.pushToken',
   stepCache: 'koydum.stepCache',
   focusSession: 'koydum.focusSession',
@@ -92,4 +91,6 @@ export const StorageKeys = {
   pushReason: 'koydum.pushReason',
   /** '1' once the home screen's battery card was closed (see components/BatteryBanner) */
   dismissedBatteryCard: 'koydum.dismissedBatteryCard',
+  /** '1' once the home screen's "bildirim izni kapalı" card was closed (see components/PermissionBanner) */
+  dismissedNotifCard: 'koydum.dismissedNotifCard',
 } as const;

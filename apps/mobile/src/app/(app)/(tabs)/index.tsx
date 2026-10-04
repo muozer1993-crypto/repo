@@ -12,6 +12,7 @@ import { ChallengeCard } from '@/components/ChallengeCard';
 import { Chip } from '@/components/Chip';
 import { EmptyState } from '@/components/EmptyState';
 import { Skeleton } from '@/components/Loading';
+import { PermissionBanner } from '@/components/PermissionBanner';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
@@ -19,6 +20,7 @@ import { UpdateBanner } from '@/components/UpdateBanner';
 import { useChallengeAction, useChallenges, useFriends } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { ApiError } from '@/lib/api';
+import { openAppSettings } from '@/services/deviceHealth';
 import {
   getStepAvailability,
   getTodaySteps,
@@ -114,6 +116,7 @@ export default function HomeScreen() {
         </View>
 
         <UpdateBanner />
+        <PermissionBanner />
         <BatteryBanner />
 
         <StepsHeader state={steps} />
@@ -388,10 +391,14 @@ function useStepsHeader(): StepsState {
     }
     const granted = await requestStepPermission();
     if (!granted) {
+      // after the second no Android does not show the dialog again, so this
+      // button alone would do nothing; the toast is the way to the switch
       toast({
         title: 'Adım izni verilmedi',
-        body: 'Telefonun ayarlarından hareket iznini açman gerekiyor.',
+        body: 'Dokun, ayarları açayım: Fiziksel aktivite iznini aç.',
         kind: 'danger',
+        durationMs: 8000,
+        onPress: () => void openAppSettings(),
       });
     }
     await reload();

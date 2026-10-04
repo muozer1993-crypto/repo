@@ -100,6 +100,8 @@ jest.mock('@/store/auth', () => ({
       rememberServerId: jest.fn(async () => {}),
       sessionEnded: mockSession.ended,
       clearSessionEnded: mockClearSessionEnded,
+      onboarding: false,
+      setOnboarding: jest.fn(),
     }),
   useLevel: () => 2,
   deviceTimezone: () => 'Europe/Istanbul',
@@ -114,9 +116,13 @@ jest.mock('@/services/steps', () => ({
   startForegroundStepTracking: () => () => {},
 }));
 
+/** What the phone says about the notification permission, read without asking (home's card). */
+const mockNotifPermission: { status: 'granted' | 'denied' | 'undetermined' | 'unknown' } = { status: 'granted' };
+
 // Ayarlar asks for push on mount; the real module would load expo-notifications
 jest.mock('@/services/notifications', () => ({
   registerForPush: jest.fn(async () => ({ token: null, reason: 'web' })),
+  pushPermissionStatus: async () => mockNotifPermission.status,
 }));
 
 /** The phone's own deadline alerts, as Ayarlar sees them (services/reminders has its own test). */
@@ -139,16 +145,20 @@ const mockDeviceHealth: {
   state: { batteryUnrestricted: boolean; exactAlarms: boolean; xiaomi: boolean } | null;
   requestBattery: jest.Mock;
   openAlarms: jest.Mock;
+  /** KOYDUM's page in the phone's settings (deviceHealth.test checks it really is Linking.openSettings) */
+  openSettings: jest.Mock;
 } = {
   state: null,
   requestBattery: jest.fn(async () => true),
   openAlarms: jest.fn(async () => true),
+  openSettings: jest.fn(async () => true),
 };
 
 jest.mock('@/services/deviceHealth', () => ({
   getBackgroundHealth: async () => (mockDeviceHealth.state ? { ...mockDeviceHealth.state } : null),
   requestBatteryExemption: () => mockDeviceHealth.requestBattery(),
   openExactAlarmSettings: () => mockDeviceHealth.openAlarms(),
+  openAppSettings: () => mockDeviceHealth.openSettings(),
 }));
 
 /* ------------------------------------------------------------------ setup */
@@ -233,6 +243,7 @@ const NETWORK_ERROR = new ApiError('network', 'Sunucuya ulaşamadım.', 0);
 beforeEach(() => {
   mockServer.url = 'http://localhost:4000';
   mockDeviceHealth.state = null;
+  mockNotifPermission.status = 'granted';
   delete searchParams.id;
   delete searchParams.with;
   delete searchParams.show;
@@ -1564,6 +1575,164 @@ describe('the battery card on the home screen', () => {
     await setItem(StorageKeys.pushReason, 'no-fcm');
     mockDeviceHealth.state = { batteryUnrestricted: true, exactAlarms: true, xiaomi: false };
     expect(rendered(await renderHome())).not.toContain('Laflar sana geç gelebilir');
+  });
+});
+
+describe('a permission the phone said no to', () => {
+  const storage = () => require('@/lib/storage') as typeof import('@/lib/storage');
+  const notifications = () => require('@/services/notifications') as { registerForPush: jest.Mock };
+  const steps = () => require('@/services/steps') as { requestStepPermission: jest.Mock };
+
+  type AppStateListener = Parameters<(typeof import('react-native'))['AppState']['addEventListener']>[1];
+  let appStateListeners: AppStateListener[] = [];
+  /** The preset's own addEventListener is a jest.fn; a spy's mockRestore would leave it returning undefined. */
+  const addEventListener = () =>
+    (require('react-native') as typeof import('react-native')).AppState.addEventListener as unknown as jest.Mock;
+  let preset: ((...args: unknown[]) => unknown) | undefined;
+
+  beforeEach(() => {
+    appStateListeners = [];
+    preset = addEventListener().getMockImplementation();
+    addEventListener().mockImplementation((_event: string, handler: AppStateListener) => {
+      appStateListeners.push(handler);
+      return {
+        remove: () => {
+          appStateListeners = appStateListeners.filter((candidate) => candidate !== handler);
+        },
+      };
+    });
+    mockDeviceHealth.openSettings.mockClear();
+    notifications().registerForPush.mockClear();
+  });
+
+  afterEach(async () => {
+    if (preset) addEventListener().mockImplementation(preset);
+    const { StorageKeys, removeItem } = storage();
+    await removeItem(StorageKeys.dismissedNotifCard);
+  });
+
+  /** The user comes back from the system page. */
+  async function comeBack(): Promise<void> {
+    await act(async () => {
+      for (const listener of [...appStateListeners]) listener('active');
+    });
+    await settle();
+  }
+
+  async function renderHome(): Promise<ReactTestRenderer> {
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+    return tree;
+  }
+
+  /** Taps the toast that is on screen, the one showing `body`. */
+  function tapToast(tree: ReactTestRenderer, body: string): void {
+    const [toast] = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityRole === 'button' &&
+        typeof node.props.onPress === 'function' &&
+        node.findAll((child) => child.props.children === body).length > 0
+    );
+    if (!toast) throw new Error(`"${body}" diyen bildirim yok`);
+    act(() => {
+      toast.props.onPress();
+    });
+  }
+
+  it('home says notifications are off, opens KOYDUM’s settings page, and goes once they are on', async () => {
+    mockNotifPermission.status = 'denied';
+    const tree = await renderHome();
+    expect(rendered(tree)).toContain('Bildirimlerin kapalı');
+    expect(rendered(tree)).toContain('check-in hatırlatmaları da çalmaz');
+
+    press(tree, 'Ayarları aç');
+    await settle();
+    expect(mockDeviceHealth.openSettings).toHaveBeenCalledTimes(1);
+
+    // switched on over there; the card reads it again on the way back
+    mockNotifPermission.status = 'granted';
+    await comeBack();
+    expect(rendered(tree)).not.toContain('Bildirimlerin kapalı');
+  });
+
+  it('home shows nothing while the permission is granted or was never asked', async () => {
+    expect(rendered(await renderHome())).not.toContain('Bildirimlerin kapalı');
+    mockNotifPermission.status = 'undetermined';
+    expect(rendered(await renderHome())).not.toContain('Bildirimlerin kapalı');
+  });
+
+  it('"Kalsın" puts the card away for good', async () => {
+    mockNotifPermission.status = 'denied';
+    const tree = await renderHome();
+    press(tree, 'Kalsın');
+    await settle();
+    expect(rendered(tree)).not.toContain('Bildirimlerin kapalı');
+    const { StorageKeys, getItem } = storage();
+    expect(await getItem(StorageKeys.dismissedNotifCard)).toBe('1');
+    expect(rendered(await renderHome())).not.toContain('Bildirimlerin kapalı');
+  });
+
+  it('says where the switch is when the settings page will not open', async () => {
+    mockNotifPermission.status = 'denied';
+    mockDeviceHealth.openSettings.mockResolvedValueOnce(false);
+    const tree = await renderHome();
+    press(tree, 'Ayarları aç');
+    await settle();
+    expect(rendered(tree)).toContain('Ayarlar açılamadı');
+    expect(rendered(tree)).toContain('KOYDUM → Bildirimler');
+  });
+
+  it('Ayarlar gives a denied push row the way to the settings page, and looks again on return', async () => {
+    notifications().registerForPush.mockResolvedValue({ token: null, granted: false, reason: 'denied' });
+    try {
+      const SettingsScreen = require('@/app/(app)/settings').default;
+      const tree = renderScreen(<SettingsScreen />);
+      await settle();
+      expect(rendered(tree)).toContain('“Ayarları aç”a bas');
+      const asked = notifications().registerForPush.mock.calls.length;
+
+      press(tree, 'Ayarları aç');
+      await settle();
+      expect(mockDeviceHealth.openSettings).toHaveBeenCalledTimes(1);
+
+      notifications().registerForPush.mockResolvedValue({ token: null, granted: true, reason: 'no-fcm' });
+      await comeBack();
+      expect(notifications().registerForPush.mock.calls.length).toBe(asked + 1);
+      expect(() => findWith(tree, 'title', 'Ayarları aç', 'onPress')).toThrow();
+    } finally {
+      notifications().registerForPush.mockResolvedValue({ token: null, reason: 'web' });
+    }
+  });
+
+  it('a step permission refused in Ayarlar leaves a toast that opens the settings page', async () => {
+    steps().requestStepPermission.mockResolvedValueOnce(false);
+    const SettingsScreen = require('@/app/(app)/settings').default;
+    const tree = renderScreen(<SettingsScreen />);
+    await settle();
+
+    press(tree, 'İzin ver');
+    await settle();
+    expect(rendered(tree)).toContain('İzin verilmedi');
+    tapToast(tree, 'Dokun, ayarları açayım: Fiziksel aktivite iznini aç.');
+    await settle();
+    expect(mockDeviceHealth.openSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('so does one refused from the home screen’s step card', async () => {
+    const stepsModule = require('@/services/steps') as { getStepAvailability: jest.Mock };
+    stepsModule.getStepAvailability.mockResolvedValue({ available: false, reason: 'denied' });
+    steps().requestStepPermission.mockResolvedValueOnce(false);
+    try {
+      const tree = await renderHome();
+      press(tree, 'İZİN VER');
+      await settle();
+      tapToast(tree, 'Dokun, ayarları açayım: Fiziksel aktivite iznini aç.');
+      await settle();
+      expect(mockDeviceHealth.openSettings).toHaveBeenCalledTimes(1);
+    } finally {
+      stepsModule.getStepAvailability.mockResolvedValue({ available: false, reason: 'web' });
+    }
   });
 });
 

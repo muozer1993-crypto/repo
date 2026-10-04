@@ -235,7 +235,6 @@ async function seedSession(page, webUrl, { token, me }) {
       window.localStorage.setItem('koydum.serverUrl', JSON.stringify(apiUrl));
       window.localStorage.setItem('koydum.token', JSON.stringify(tokenValue));
       window.localStorage.setItem('koydum.me', JSON.stringify(meValue));
-      window.localStorage.setItem('koydum.onboarded', '1');
     },
     [API_URL, token, me]
   );
@@ -418,7 +417,6 @@ async function main() {
     // on to change between runs — the app reads this key first anyway.
     await context.addInitScript((apiUrl) => {
       window.localStorage.setItem('koydum.serverUrl', JSON.stringify(apiUrl));
-      window.localStorage.setItem('koydum.onboarded', '1');
     }, API_URL);
     const page = await context.newPage();
     const consoleErrors = [];

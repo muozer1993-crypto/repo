@@ -51,6 +51,7 @@ const LEVEL_NOTE: Record<VulgarityLevel, string> = {
 
 export default function RegisterScreen() {
   const setSession = useAuth((s) => s.setSession);
+  const setOnboarding = useAuth((s) => s.setOnboarding);
   const makeClient = useAuth((s) => s.client);
   const serverUrl = useAuth((s) => s.serverUrl);
 
@@ -109,6 +110,9 @@ export default function RegisterScreen() {
         }
       }
 
+      // before the token lands: the bridge must not ask for notifications and
+      // steps over the first slide, the last one explains both
+      setOnboarding(true);
       await setSession(result.token, me);
       router.replace('/onboarding');
     } catch (err) {

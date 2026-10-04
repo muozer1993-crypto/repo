@@ -140,6 +140,27 @@ export async function registerForPush(): Promise<PushRegistration> {
   }
 }
 
+/**
+ * Where the notification permission stands, without ever asking for it:
+ * registerForPush asks, and the home screen's card reads this every time the
+ * app comes back to the front, where a dialog would come out of nowhere.
+ * 'unknown' where there is nothing to read (web, no module, a throw).
+ */
+export async function pushPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined' | 'unknown'> {
+  if (Platform.OS === 'web') return 'unknown';
+  const api = localNotifications();
+  if (!api) return 'unknown';
+  try {
+    const { status } = await api.getPermissionsAsync();
+    if (status === 'granted') return 'granted';
+    if (status === 'denied') return 'denied';
+    if (status === 'undetermined') return 'undetermined';
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 /** Fire a notification from the device itself (used when push is unavailable). */
 export async function fireLocal(
   title: string,

@@ -1,6 +1,6 @@
 import * as Device from 'expo-device';
 import { requireOptionalNativeModule } from 'expo-modules-core';
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 
 /**
  * What Android does to KOYDUM behind its back, and the two system switches
@@ -18,7 +18,8 @@ import { Platform } from 'react-native';
  * The native side is the local module `KoydumDevice` (modules/koydum-device),
  * looked up by name as services/screenTime does. iOS, the web and Expo Go have
  * no such module and nothing to switch, so every answer there is null / false
- * and the UI simply shows nothing.
+ * and the UI simply shows nothing. `openAppSettings` is the one page every
+ * phone has: where a permission the user said no to is switched back on.
  */
 
 /** The shape modules/koydum-device implements. */
@@ -91,6 +92,23 @@ export async function openExactAlarmSettings(): Promise<boolean> {
   if (!native) return false;
   try {
     return (await native.openExactAlarmSettings()) === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * KOYDUM's own page in the phone's settings, where a notification or physical
+ * activity permission is switched back on. Android stops showing its dialog
+ * after the second "no", so from then on this page is the only way back. Plain
+ * React Native, so unlike the rest of this file it works on iPhone too; false
+ * on the web, which has no such page, and when the page would not open.
+ */
+export async function openAppSettings(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  try {
+    await Linking.openSettings();
+    return true;
   } catch {
     return false;
   }

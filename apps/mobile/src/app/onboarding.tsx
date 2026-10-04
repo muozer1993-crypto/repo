@@ -1,6 +1,6 @@
 import { t, type VulgarityLevel } from '@koydum/shared';
 import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -12,17 +12,24 @@ import {
 } from 'react-native';
 
 import { Button } from '@/components/Button';
+import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
-import { StorageKeys, setJson } from '@/lib/storage';
-import { useLevel } from '@/store/auth';
+import { registerForPush } from '@/services/notifications';
+import { requestStepPermission } from '@/services/steps';
+import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Layout, Radius, Spacing } from '@/theme';
 
 interface Slide {
-  key: 'onboarding_1' | 'onboarding_2' | 'onboarding_3';
+  key: 'onboarding_1' | 'onboarding_2' | 'onboarding_3' | 'onboarding_4';
   art: string;
   titles: Record<VulgarityLevel, string>;
+  /** the slide that asks for the two permissions instead of only talking */
+  permissions?: true;
 }
+
+/** undefined until asked; then whether the phone said yes */
+type Answers = { push?: boolean; steps?: boolean };
 
 const SLIDES: Slide[] = [
   {
@@ -52,35 +59,71 @@ const SLIDES: Slide[] = [
       3: 'SAPIR SAPIR 🍆',
     },
   },
+  {
+    key: 'onboarding_4',
+    art: '🔔',
+    titles: {
+      1: 'İki izin lazım',
+      2: 'İki izin, o kadar',
+      3: 'İzni ver, kapışalım',
+    },
+    permissions: true,
+  },
 ];
 
 export default function OnboardingScreen() {
   const level = useLevel();
+  const setOnboarding = useAuth((s) => s.setOnboarding);
   const { width: windowWidth } = useWindowDimensions();
   const scroller = useRef<ScrollView>(null);
   const [index, setIndex] = useState(0);
+  const [answers, setAnswers] = useState<Answers>({});
+  const [asking, setAsking] = useState<keyof Answers | null>(null);
 
   const width = Math.min(windowWidth, Layout.maxWidth);
-  const isLast = index === SLIDES.length - 1;
+  const last = SLIDES.length - 1;
+  const isLast = index === last;
+
+  // However the slides go away (the buttons, Android's back), NotificationBridge
+  // must not stay on hold: that would leave the session without push and steps.
+  useEffect(() => () => setOnboarding(false), [setOnboarding]);
 
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = Math.round(event.nativeEvent.contentOffset.x / Math.max(1, width));
     if (next !== index && next >= 0 && next < SLIDES.length) setIndex(next);
   };
 
-  const finish = async () => {
-    await setJson(StorageKeys.onboarded, true);
+  const finish = () => {
+    // whatever was not answered here, the bridge now asks for on the home screen
+    setOnboarding(false);
     router.replace('/(app)/(tabs)');
   };
 
-  const next = () => {
-    if (isLast) {
-      void finish();
-      return;
-    }
-    const target = index + 1;
+  const goTo = (target: number) => {
     setIndex(target);
     scroller.current?.scrollTo({ x: target * width, animated: true });
+  };
+
+  const next = () => {
+    if (isLast) finish();
+    else goTo(index + 1);
+  };
+
+  // "Geç" skips the talk, not the permissions: skipped, they would pop up on
+  // the home screen with nothing to say why
+  const skip = () => {
+    if (isLast) finish();
+    else goTo(last);
+  };
+
+  const ask = async (which: keyof Answers) => {
+    setAsking(which);
+    try {
+      const granted = which === 'push' ? (await registerForPush()).granted : await requestStepPermission();
+      setAnswers((prev) => ({ ...prev, [which]: granted }));
+    } finally {
+      setAsking(null);
+    }
   };
 
   return (
@@ -89,7 +132,7 @@ export default function OnboardingScreen() {
         <Text variant="small" color={Colors.accent} black>
           KOYDUM
         </Text>
-        <Pressable accessibilityRole="button" onPress={() => void finish()} hitSlop={12}>
+        <Pressable accessibilityRole="button" onPress={skip} hitSlop={12}>
           <Text variant="small" muted>
             Geç
           </Text>
@@ -107,8 +150,9 @@ export default function OnboardingScreen() {
         contentContainerStyle={styles.pagerContent}>
         {SLIDES.map((slide) => (
           <View key={slide.key} style={[styles.slide, { width }]}>
-            <View style={styles.artWrap}>
-              <Text style={styles.art}>{slide.art}</Text>
+            {/* a smaller picture on the permission slide, so its two buttons fit a small phone */}
+            <View style={[styles.artWrap, slide.permissions && styles.artWrapSmall]}>
+              <Text style={[styles.art, slide.permissions && styles.artSmall]}>{slide.art}</Text>
             </View>
             <Text variant="huge" center style={styles.title}>
               {slide.titles[level]}
@@ -116,6 +160,41 @@ export default function OnboardingScreen() {
             <Text variant="lead" muted center>
               {t(slide.key, level)}
             </Text>
+            {slide.permissions ? (
+              <View style={styles.permissions}>
+                {answers.push ? (
+                  <Chip icon="✅" label="Bildirim izni verildi" color={Colors.success} style={styles.granted} />
+                ) : (
+                  <Button
+                    title="Bildirim izni"
+                    icon="🔔"
+                    variant="secondary"
+                    fullWidth
+                    loading={asking === 'push'}
+                    disabled={asking !== null}
+                    onPress={() => void ask('push')}
+                  />
+                )}
+                {answers.steps ? (
+                  <Chip icon="✅" label="Adım izni verildi" color={Colors.success} style={styles.granted} />
+                ) : (
+                  <Button
+                    title="Adım izni"
+                    icon="🚶"
+                    variant="secondary"
+                    fullWidth
+                    loading={asking === 'steps'}
+                    disabled={asking !== null}
+                    onPress={() => void ask('steps')}
+                  />
+                )}
+                {answers.push === false || answers.steps === false ? (
+                  <Text variant="tiny" faint center>
+                    Vermezsen de olur, sonra Ayarlar’dan açarsın.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         ))}
       </ScrollView>
@@ -171,8 +250,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: Spacing.lg,
   },
+  artWrapSmall: { width: 112, height: 112, marginBottom: Spacing.sm },
   art: { fontSize: 92, lineHeight: 108 },
+  artSmall: { fontSize: 60, lineHeight: 72 },
   title: { color: Colors.text },
+  permissions: { alignSelf: 'stretch', gap: Spacing.sm, marginTop: Spacing.md },
+  granted: { alignSelf: 'center' },
   dots: { flexDirection: 'row', gap: Spacing.sm, justifyContent: 'center', paddingVertical: Spacing.lg },
   dot: { width: 8, height: 8, borderRadius: Radius.pill, backgroundColor: Colors.border },
   dotActive: { width: 26, backgroundColor: Colors.accent },

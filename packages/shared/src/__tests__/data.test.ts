@@ -210,6 +210,14 @@ describe('copy and badges', () => {
     expect(TAGLINE.level2.length).toBeGreaterThan(0);
   });
 
+  it('explains both permissions on the last welcome slide, at every level', () => {
+    expect(MICROCOPY_KEYS).toContain('onboarding_4');
+    for (const level of [1, 2, 3] as const) {
+      expect(t('onboarding_4', level)).toMatch(/bildirim/i);
+      expect(t('onboarding_4', level)).toMatch(/adım/i);
+    }
+  });
+
   it('keeps polite copy free of the loud words', () => {
     for (const key of MICROCOPY_KEYS) {
       expect({ key, level1: MICROCOPY[key].level1 }).toEqual({

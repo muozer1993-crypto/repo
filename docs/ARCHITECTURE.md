@@ -354,6 +354,26 @@ kanalına gider. Tetikleyicisi `null` olan bir bildirim kütüphanenin İngilizc
 kanalına düşer; orayı susturan biri bütün lafları da susturmuş olurdu. O yüzden hemen gösterilecek
 bildirim de sadece `channelId` taşıyan bir tetikleyiciyle gönderilir.
 
+## İzinler
+
+Köprü (`NotificationBridge`) bildirim iznini push kaydında, fiziksel aktivite iznini de ön plandaki
+adım sayacını başlatırken ister. Eskiden ikisi de token gelir gelmez çalışıyordu: yeni kaydolan
+birinin önüne iki sistem penceresi, karşılama ekranının ilk sayfasının üstünde, ne olduğunu
+söyleyen tek kelime olmadan düşüyordu. Şimdi kayıt ekranı token'dan önce mağazadaki `onboarding`
+bayrağını kaldırır ve köprü, bayrak açıkken bu iki işi başlatmaz. Karşılama ekranının dördüncü
+sayfası iki izni neden istediğini söyleyip kendi düğmeleriyle sorar; "Geç" önce o sayfaya atlar.
+Sayfalar nasıl kapanırsa kapansın (düğme ya da Android'in geri tuşu) bayrak iner, cevaplanmamış
+izni köprü ana sayfada sorar. Bayrak saklanmaz: yarıda kapanan uygulama sonraki açılışta eskisi
+gibi sorar.
+
+Android bir izin iki kez reddedilince pencereyi bir daha göstermez; o andan sonra tek yol
+telefonun ayarlarındaki KOYDUM sayfası (`openAppSettings`, yani `Linking.openSettings()`). Bildirim
+izni kapalıyken telefonun kendi bildirimleri de (`fireLocal`, hatırlatmalar) sessizce düşer, yani
+kullanıcı bir şey kaçırdığını fark etmez. Bu yüzden ana sayfa bunu bir kartla söyler; izin hiç
+sormadan (`pushPermissionStatus`) her öne gelişte okunur, açılınca kart kendiliğinden gider.
+Ayarlar → Bildirimler'de aynı düğme durur. Reddedilen adım izninin uyarısına dokunmak da aynı
+sayfayı açar.
+
 ## Oturumlar
 
 Oturum, sunucunun imzaladığı durumsuz bir JWT'dir ve imzalandığı andan itibaren 90 gün geçerlidir.

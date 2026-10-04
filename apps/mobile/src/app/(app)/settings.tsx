@@ -32,6 +32,7 @@ import { ApiError } from '@/lib/api';
 import { normalizeServerUrl, serverUrlIsEditable } from '@/lib/config';
 import {
   getBackgroundHealth,
+  openAppSettings,
   openExactAlarmSettings,
   requestBatteryExemption,
   type BackgroundHealth,
@@ -89,7 +90,7 @@ const PUSH_REASONS: Record<NonNullable<PushRegistration['reason']>, string> = {
   simulator:
     'Simülatör/emülatör push token alamaz. Gerçek bir telefonda dene, orada sorunsuz çalışır.',
   denied:
-    'Bildirim iznini vermemişsin. Telefon ayarlarından KOYDUM’a bildirim izni ver, sonra “tekrar dene”ye bas.',
+    'Bildirim iznini vermemişsin. “Ayarları aç”a bas, açılan sayfada KOYDUM’un bildirimlerini aç ve geri gel.',
   'expo-go-android':
     'Expo Go’da Android push çalışmıyor (Expo’nun kuralı). Uygulama açıkken bildirimleri yine görürsün. Gerçek push için development build gerekiyor.',
   'no-project-id':
@@ -674,14 +675,42 @@ export default function SettingsScreen() {
     try {
       const granted = await requestStepPermission();
       await refreshSteps();
-      toast({
-        title: granted ? 'İzin alındı' : 'İzin verilmedi',
-        body: granted ? 'Adımların artık otomatik sayılabilir.' : 'Telefon ayarlarından da verebilirsin.',
-        kind: granted ? 'success' : 'danger',
-      });
+      if (granted) {
+        toast({ title: 'İzin alındı', body: 'Adımların artık otomatik sayılabilir.', kind: 'success' });
+      } else if (PLATFORM === 'web') {
+        toast({ title: 'İzin verilmedi', body: STEP_REASONS.web, kind: 'danger' });
+      } else {
+        // after the second no Android stops showing the dialog; a tap on the
+        // toast opens the page where the switch still is
+        toast({
+          title: 'İzin verilmedi',
+          body: 'Dokun, ayarları açayım: Fiziksel aktivite iznini aç.',
+          kind: 'danger',
+          durationMs: 8000,
+          onPress: () => void openAppSettings(),
+        });
+      }
     } finally {
       setStepsBusy(false);
     }
+  };
+
+  // The notification switch lives in system settings too: open KOYDUM's page,
+  // look again when the user comes back.
+  const openPushSettings = async () => {
+    if (!(await openAppSettings())) {
+      toast({
+        title: 'Ayarlar açılamadı',
+        body: 'Ayarlar → Uygulamalar → KOYDUM → Bildirimler yolundan aç.',
+        kind: 'danger',
+      });
+      return;
+    }
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      sub.remove();
+      void refreshPush();
+    });
   };
 
   // The switch lives in system settings; we can only open the page and look
@@ -969,14 +998,19 @@ export default function SettingsScreen() {
         <Text variant="tiny" muted style={styles.blockTop}>
           {pushStatus.detail}
         </Text>
-        <Button
-          title="Tekrar dene"
-          variant="secondary"
-          size="sm"
-          style={styles.selfStart}
-          loading={pushBusy}
-          onPress={() => void refreshPush()}
-        />
+        <View style={styles.buttonRow}>
+          {/* Android stops asking after the second no; from then on only this page can fix it */}
+          {push?.reason === 'denied' ? (
+            <Button title="Ayarları aç" size="sm" onPress={() => void openPushSettings()} />
+          ) : null}
+          <Button
+            title="Tekrar dene"
+            variant="secondary"
+            size="sm"
+            loading={pushBusy}
+            onPress={() => void refreshPush()}
+          />
+        </View>
       </Card>
 
       {/* ------------------------------------- background: Android build only */}

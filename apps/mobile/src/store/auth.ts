@@ -27,6 +27,14 @@ interface AuthState {
    * looking at it.
    */
   sessionEnded: boolean;
+  /**
+   * The welcome slides are on screen, right after sign-up. NotificationBridge
+   * holds back everything that raises a system dialog until they are gone, so
+   * the notification and activity prompts come from the slide that explains
+   * them, not on top of the first one. Never stored: an app restarted halfway
+   * through simply asks the way it always did.
+   */
+  onboarding: boolean;
 
   hydrate: () => Promise<void>;
   setSession: (token: string, me: Me) => Promise<void>;
@@ -36,6 +44,7 @@ interface AuthState {
   rememberServerId: (id: string | null | undefined, forUrl: string) => Promise<void>;
   logout: () => Promise<void>;
   clearSessionEnded: () => void;
+  setOnboarding: (on: boolean) => void;
   client: () => ApiClient;
   refreshMe: () => Promise<Me | null>;
 }
@@ -66,6 +75,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   serverId: null,
   refreshing: false,
   sessionEnded: false,
+  onboarding: false,
 
   hydrate: async () => {
     const [token, me, storedUrl, serverId] = await Promise.all([
@@ -174,6 +184,8 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
 
   clearSessionEnded: () => set({ sessionEnded: false }),
+
+  setOnboarding: (on) => set({ onboarding: on }),
 
   client: () => {
     const { serverUrl, token } = get();

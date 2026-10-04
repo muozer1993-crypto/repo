@@ -609,8 +609,11 @@ fotoğraf yok.
 | **Android, eski Play hizmetleri** | `Pedometer.watchStepCount` | Sadece uygulama açıkken sayar, cihazda birikir. Uygulama bunu "yaklaşık" diye işaretler ve Play hizmetlerini güncellemeyi önerir. |
 | **Web** | yok | Web derlemesi test amaçlıdır; adım gösterilmez. |
 
-Android 10 ve üstünde adım sayacını okumak için **Fiziksel Aktivite** izni gerekiyor. Uygulama
-bunu adım saymaya başlamadan önce istiyor; vermezsen ayarlar ekranı "izin verilmedi" der.
+Android 10 ve üstünde adım sayacını okumak için **Fiziksel Aktivite** izni gerekiyor. Yeni
+kaydolan biri bu izni, bildirim izniyle birlikte, karşılama ekranının son sayfasında neden
+istendiğini okuyarak verir. Orada vermezse uygulama adım saymaya başlamadan önce ana sayfada
+sorar; reddederse ayarlar ekranı "izin verilmedi" der, çıkan uyarıya dokununca da telefonun
+ayarları açılır.
 İzni sormadan saymaya kalkan bir uygulama sıfır sayar ve bozuk görünür.
 
 Adımlar sunucuya günlük özet olarak gider (`POST /me/steps`), ham konum veya sensör verisi
@@ -722,11 +725,16 @@ Expo Go kullanıyorsan normal — yukarıdaki [Expo Go'nun sınırları](#expo-g
 bölümüne bak. Geliştirme derlemesi al ve `eas init` çalıştırdığından emin ol. Ayarlar
 ekranı hangi aşamada takıldığını Türkçe olarak söyler. Geliyor ama saatler sonra geliyorsa
 **Ayarlar → Arka plan**'daki iki satıra bak ([Bildirimler](#bildirimler-gecikmeli-hazır-ve-anlık-firebase-ile)
-bölümünde anlattım).
+bölümünde anlattım). Ana sayfada **Bildirimlerin kapalı** kartı çıkıyorsa bildirim izni
+reddedilmiş: **Ayarları aç**'a bas, açılan sayfada KOYDUM'un bildirimlerini aç, geri dön; kart
+kendiliğinden gider. Android iki kere "izin verme" denince bir daha sormuyor, yol bu. Kartı
+**Kalsın** ile kapattıysan aynı düğme **Ayarlar → Bildirimler**'de de var.
 
 **Adımlar 0 görünüyor.**
 iOS'ta hareket izni verilmemiş olabilir (Ayarlar → Gizlilik → Hareket ve Fitness). Android'de
-Health Connect kurulu değilse uygulama yaklaşık sayıma düşer ve bunu ekranda yazar.
+Health Connect kurulu değilse uygulama yaklaşık sayıma düşer ve bunu ekranda yazar. Fiziksel
+aktivite izni reddedildiyse ana sayfadaki **İzin ver**'e bas; Android pencereyi artık açmıyorsa
+çıkan uyarıya dokun, telefonun ayarları açılır, oradan **Fiziksel aktivite**'yi aç.
 
 **Uygulama açılmıyor, kırmızı hata ekranı geliyor.**
 Depoyu güncelle (`git pull`) ve Metro önbelleğini temizleyerek başlat:

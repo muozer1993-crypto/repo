@@ -51,7 +51,7 @@ jest.mock('expo-notifications/build/NotificationChannelManager.types', () => ({
 }));
 
 import { localNotifications, pushNotifications, resetNotificationModuleCache } from '@/services/expoNotifications';
-import { fireLocal, registerForPush, routeForNotificationData } from '@/services/notifications';
+import { fireLocal, pushPermissionStatus, registerForPush, routeForNotificationData } from '@/services/notifications';
 import { syncReminders } from '@/services/reminders';
 
 beforeEach(() => {
@@ -101,6 +101,22 @@ describe('when expo-notifications refuses to load', () => {
     );
     expect(count).toBe(2);
     expect(mockSchedule).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the permission for the home card without ever asking for it', async () => {
+    const permissions = require('expo-notifications/build/NotificationPermissions') as {
+      getPermissionsAsync: jest.Mock;
+      requestPermissionsAsync: jest.Mock;
+    };
+    permissions.requestPermissionsAsync.mockClear();
+    permissions.getPermissionsAsync.mockResolvedValueOnce({ status: 'denied' });
+    expect(await pushPermissionStatus()).toBe('denied');
+    permissions.getPermissionsAsync.mockResolvedValueOnce({ status: 'undetermined' });
+    expect(await pushPermissionStatus()).toBe('undetermined');
+    expect(await pushPermissionStatus()).toBe('granted');
+    permissions.getPermissionsAsync.mockRejectedValueOnce(new Error('ReactContextLost'));
+    expect(await pushPermissionStatus()).toBe('unknown');
+    expect(permissions.requestPermissionsAsync).not.toHaveBeenCalled();
   });
 });
 

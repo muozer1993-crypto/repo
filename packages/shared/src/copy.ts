@@ -43,6 +43,7 @@ export const MICROCOPY: Record<MicrocopyKey, MicrocopyEntry> = {
   "onboarding_1": { level1: "Arkadaşlarınla çelınc aç: adım, odak, erken kalkma, su.", level2: "Kankalarla çelınc aç. Adım at, telefonu bırak, erken kalk.", level3: "Kankalarla çelınc aç. Bakalım kim kime koyacak." },
   "onboarding_2": { level1: "Skorlar otomatik ya da beyanla sayılır. Arkadaşların itiraz edebilir.", level2: "Skorlar sayılır. Yalan atarsan kankalar itiraz eder.", level3: "Her skor sayılır. Sayıyı şişirirsen itiraz yersin." },
   "onboarding_3": { level1: "Kazanan ödülü alır, kaybedene bir mesaj gider.", level2: "Kazanan 'KOYDUM MU?' der, kaybedenin telefonu öter.", level3: "Kazanan 'KOYDUM MU?' der, kaybedenin telefonuna 🍆 iner." },
+  "onboarding_4": { level1: "Bildirim izni verirsen kazanan sana yazınca haberin olur. Adım izni verirsen adımlarını telefon sayar, elle girmezsin.", level2: "Kanka sana koyunca duyman lazım, bildirime izin ver. Adımlarını da telefon saysın, elle yazmakla uğraşma.", level3: "Yediğin lafı duyman için bildirim, adımı elle sallamaman için adım izni. İkisini de ver 🍆" },
   "notification_daily_reminder": { level1: "Bugün henüz bir şey girmedin. Çelıncı unutma.", level2: "Bugün hâlâ sıfırdasın. Kalk bir şeyler yap.", level3: "Bugün sıfırdasın lan. Kankalar bakıyor." },
   "login_title": { level1: "Tekrar hoş geldin", level2: "Gel bakalım", level3: "Kim geldi lan?" },
   "register_title": { level1: "Aramıza katıl", level2: "Kayıt ol, başlayalım", level3: "Kayıt ol, kurbanını seç" },

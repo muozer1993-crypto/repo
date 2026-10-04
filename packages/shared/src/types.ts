@@ -219,6 +219,7 @@ export const MICROCOPY_KEYS = [
   'onboarding_1',
   'onboarding_2',
   'onboarding_3',
+  'onboarding_4',
   'notification_daily_reminder',
   'login_title',
   'register_title',

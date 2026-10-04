@@ -34,6 +34,10 @@ import { deliverNewInbox } from '@/services/inboxNotifier';
  *  - polls the inbox and raises a local notification when push is unavailable
  *    (Expo Go on Android, denied permission, no project id)
  *  - pushes step totals to the server in the foreground and in the background
+ *
+ * The two parts that can raise a system dialog (push registration asks for
+ * notifications, the foreground step counter for physical activity) wait while
+ * the welcome slides are up: the last slide asks for both, with a reason.
  */
 export function NotificationBridge() {
   const token = useAuth((s) => s.token);
@@ -44,6 +48,7 @@ export function NotificationBridge() {
   const serverUrl = useAuth((s) => s.serverUrl);
   const makeClient = useAuth((s) => s.client);
   const refreshMe = useAuth((s) => s.refreshMe);
+  const onboarding = useAuth((s) => s.onboarding);
   const toast = useToast();
   const level = useLevel();
   const tz = useTimezone();
@@ -57,6 +62,7 @@ export function NotificationBridge() {
       pushTokenSent.current = null;
       return;
     }
+    if (onboarding) return;
     let cancelled = false;
     let busy = false;
     installNotificationHandler();
@@ -97,7 +103,7 @@ export function NotificationBridge() {
       cancelled = true;
       sub.remove();
     };
-  }, [token, serverUrl, makeClient]);
+  }, [token, serverUrl, makeClient, onboarding]);
 
   // --- an invite link opened before this account existed -----------------
   useEffect(() => {
@@ -214,7 +220,7 @@ export function NotificationBridge() {
 
   // --- steps: foreground counter + background sync ----------------------
   useEffect(() => {
-    if (!token) return;
+    if (!token || onboarding) return;
     const stopTracking = startForegroundStepTracking();
 
     const syncSteps = async () => {
@@ -300,7 +306,7 @@ export function NotificationBridge() {
       setBackgroundHandler(null);
       sub.remove();
     };
-  }, [token, serverUrl, makeClient, queryClient, level, tz, refreshMe, toast]);
+  }, [token, serverUrl, makeClient, queryClient, level, tz, refreshMe, toast, onboarding]);
 
   return null;
 }
