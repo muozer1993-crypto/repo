@@ -286,6 +286,29 @@ Cihaza dokunan her modül web'de de derlenir: `steps.ts` (web) ve `steps.native.
 çifti Metro tarafından platforma göre seçilir. Bu sayede `expo export --platform web` çalışır ve
 uçtan uca test tarayıcıda koşabilir.
 
+## Bağlantı yokken
+
+Giriş en çok çekmeyen yerde yapılır: bodrumdaki spor salonu, metro, merdiven boşluğu. Sunucuya
+ulaşamayan (ya da 5xx alan) bir giriş atılmaz, `services/offlineQueue.ts` kuyruğuna girer; ilk
+başarılı yazışta, uygulama açılınca, öne gelince ve arka plan görevinde sırayla gönderilir.
+Sunucunun 4xx ile reddettiği giriş kesin reddir, kullanıcıya bir kez sebebiyle söylenir.
+
+Kanıt fotoğrafı da bu yoldan gider. Bağlantı yokken seçilen fotoğraf yüklenemez; giriş ekranı onu
+telefonda tutar, "Kaydet"e izin verir ve giriş fotoğrafın telefondaki yeriyle (`proofLocalUri`)
+kuyruğa girer. Kuyruk önce fotoğrafı yükler ve dönen adresi girişe yazıp saklar (giriş yarıda
+kalırsa fotoğraf ikinci kez yüklenmez), sonra girişi gönderir. Bu yer, fotoğraf seçicinin kendi
+önbellek dosyasıdır ve telefon o önbelleği istediği an silebilir. Yüklenemeyecek bir fotoğraf
+(dosya gitmiş, sunucu reddetmiş) girişten düşer ve giriş fotoğrafsız gider: fotoğraf isteğe bağlıysa
+giriş sayılır, zorunluysa sunucu reddeder ve kullanıcı "Kanıt fotoğrafı telefonda bulunamadı."
+diye duyar. React Native okuyamadığı dosyayı bağlantı yokmuş gibi bildirir; kuyruk ikisini
+`/health`'e sorarak ayırır: sunucu cevap verdiği halde fotoğraf iki kez gitmiyorsa sorun dosyadadır.
+İtiraza "Kanıt ekle" ile verilen cevabın arkasında kuyruk yok, o sadece bağlantı varken çalışır.
+
+Ekranlar da bağlantı gidince ellerindekini bırakmaz. TanStack Query başarısız bir arka plan
+yenilemesinden sonra `isError` der ama son veriyi tutar; çelınc ekranı, giriş ekranı ve odak
+seansı bu durumda son bilinen hali göstermeye devam eder (ilk ikisi bunu küçük bir satırla söyler).
+Hata ekranı yalnızca hiç yüklenmemiş, ya da sunucunun 404 dediği çelınc içindir.
+
 ## Telefonun kendi okuduğu değerler
 
 İki metrik elle girilmez, telefon söyler: adımlar ve (Android'de) ekran süresi. İkisi de aynı

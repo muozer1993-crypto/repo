@@ -17,8 +17,8 @@ const body = (dayKey: string, value: number) => ({
   clientTime: '2026-09-08T10:00:00.000Z',
 });
 
-function fakeClient(addEntry: jest.Mock) {
-  return { addEntry } as unknown as Parameters<typeof flushQueue>[0];
+function fakeClient(addEntry: jest.Mock, extra: { uploadPhoto?: jest.Mock; health?: jest.Mock } = {}) {
+  return { addEntry, ...extra } as unknown as Parameters<typeof flushQueue>[0];
 }
 
 describe('offline entry queue', () => {
@@ -116,5 +116,113 @@ describe('offline entry queue', () => {
     const addEntry = jest.fn();
     expect(await flushQueue(fakeClient(addEntry))).toEqual({ sent: 0, dropped: 0, remaining: 0 });
     expect(addEntry).not.toHaveBeenCalled();
+  });
+});
+
+describe('an entry parked with a photo still on the phone', () => {
+  // the image picker's cache file, as the entry modal hands it over
+  const PHOTO = 'file:///data/user/0/com.koydum.app/cache/ImagePicker/abc.jpeg';
+  const NETWORK = () => new ApiError('network', 'Sunucuya ulaşamadım.', 0);
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  it('uploads the photo first and posts the entry with its server path', async () => {
+    await enqueueEntry('c1', body('2026-09-08', 5), 'a', PHOTO);
+    const uploadPhoto = jest.fn().mockResolvedValue({ url: '/uploads/p1.jpg' });
+    const addEntry = jest.fn().mockResolvedValue({});
+    const result = await flushQueue(fakeClient(addEntry, { uploadPhoto }));
+
+    // the picker's own name, so a png is not sent as a jpeg
+    expect(uploadPhoto).toHaveBeenCalledWith(PHOTO, 'abc.jpeg');
+    expect(addEntry).toHaveBeenCalledWith('c1', { ...body('2026-09-08', 5), proofUrl: '/uploads/p1.jpg' });
+    // the phone-side path never reaches the server
+    expect(JSON.stringify(addEntry.mock.calls[0])).not.toContain('file://');
+    expect(result).toEqual({ sent: 1, dropped: 0, remaining: 0 });
+    expect(await readQueue()).toEqual([]);
+  });
+
+  it('stays parked with its photo while there is no connection', async () => {
+    await enqueueEntry('c1', body('2026-09-08', 5), 'a', PHOTO);
+    const uploadPhoto = jest.fn().mockRejectedValue(NETWORK());
+    const health = jest.fn().mockRejectedValue(NETWORK());
+    const addEntry = jest.fn();
+    const result = await flushQueue(fakeClient(addEntry, { uploadPhoto, health }));
+
+    expect(addEntry).not.toHaveBeenCalled();
+    expect(result).toEqual({ sent: 0, dropped: 0, remaining: 1 });
+    const [item] = await readQueue();
+    expect(item?.proofLocalUri).toBe(PHOTO);
+    expect(item?.body.proofUrl).toBeUndefined();
+    expect(item?.failedReason).toBeUndefined();
+  });
+
+  it('keeps the uploaded path when the entry itself does not get through, so the photo goes up once', async () => {
+    await enqueueEntry('c1', body('2026-09-08', 5), 'a', PHOTO);
+    const uploadPhoto = jest.fn().mockResolvedValue({ url: '/uploads/p1.jpg' });
+    const addEntry = jest.fn().mockRejectedValueOnce(NETWORK()).mockResolvedValue({});
+    const client = fakeClient(addEntry, { uploadPhoto });
+
+    expect(await flushQueue(client)).toEqual({ sent: 0, dropped: 0, remaining: 1 });
+    const [item] = await readQueue();
+    expect(item?.body.proofUrl).toBe('/uploads/p1.jpg');
+    expect(item?.proofLocalUri).toBeUndefined();
+
+    expect(await flushQueue(client)).toEqual({ sent: 1, dropped: 0, remaining: 0 });
+    expect(uploadPhoto).toHaveBeenCalledTimes(1);
+    expect(addEntry).toHaveBeenLastCalledWith('c1', { ...body('2026-09-08', 5), proofUrl: '/uploads/p1.jpg' });
+  });
+
+  it('drops a photo the server refuses and lets the entry go on its own', async () => {
+    await enqueueEntry('c1', body('2026-09-08', 5), 'a', PHOTO);
+    const uploadPhoto = jest
+      .fn()
+      .mockRejectedValue(new ApiError('file_too_large', 'Dosya çok büyük (en fazla 5 MB).', 413));
+    const addEntry = jest.fn().mockResolvedValue({});
+    const result = await flushQueue(fakeClient(addEntry, { uploadPhoto }));
+
+    // an optional photo: the count is what matters
+    expect(addEntry).toHaveBeenCalledWith('c1', body('2026-09-08', 5));
+    expect(result).toEqual({ sent: 1, dropped: 0, remaining: 0 });
+  });
+
+  it('says what happened to the photo when a çelınc that requires one refuses the entry without it', async () => {
+    await enqueueEntry('c1', body('2026-09-08', 5), 'a', PHOTO);
+    // the OS cleared the picker's cache: React Native fails that form like a
+    // request with no signal, while the server answers /health just fine
+    const uploadPhoto = jest.fn().mockRejectedValue(NETWORK());
+    const health = jest.fn().mockResolvedValue({ ok: true });
+    const addEntry = jest
+      .fn()
+      .mockRejectedValue(new ApiError('proof_required', 'Bu çelıncta kanıt fotoğrafı zorunlu.', 400));
+    const result = await flushQueue(fakeClient(addEntry, { uploadPhoto, health }));
+
+    // one more try before calling the file gone
+    expect(uploadPhoto).toHaveBeenCalledTimes(2);
+    expect(addEntry).toHaveBeenCalledWith('c1', body('2026-09-08', 5));
+    expect(result).toEqual({ sent: 0, dropped: 1, remaining: 0 });
+    const [item] = await readQueue();
+    expect(item?.failedReason).toBe('Kanıt fotoğrafı telefonda bulunamadı. Bu çelıncta kanıt fotoğrafı zorunlu.');
+    expect(item?.proofLocalUri).toBeUndefined();
+
+    // told once, never retried
+    await flushQueue(fakeClient(addEntry, { uploadPhoto, health }));
+    expect(uploadPhoto).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits out the hourly photo limit instead of dropping anything', async () => {
+    await enqueueEntry('c1', body('2026-09-08', 5), 'a', PHOTO);
+    const uploadPhoto = jest
+      .fn()
+      .mockRejectedValue(new ApiError('upload_limit', 'Bu saatlik fotoğraf hakkın doldu.', 429));
+    const addEntry = jest.fn();
+    const result = await flushQueue(fakeClient(addEntry, { uploadPhoto }));
+
+    expect(addEntry).not.toHaveBeenCalled();
+    expect(result).toEqual({ sent: 0, dropped: 0, remaining: 1 });
+    const [item] = await readQueue();
+    expect(item?.proofLocalUri).toBe(PHOTO);
+    expect(item?.attempts).toBe(1);
   });
 });

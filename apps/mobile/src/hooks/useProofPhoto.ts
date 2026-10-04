@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 
 import { useToast } from '@/components/Toast';
 import { useApi } from '@/hooks/useApi';
-import type { ApiClient } from '@/lib/api';
+import { ApiError, type ApiClient } from '@/lib/api';
 import { errorText } from '@/utils/errors';
 
 /**
@@ -26,19 +26,33 @@ async function uploadProof(api: ApiClient, asset: ImagePicker.ImagePickerAsset):
   return result.url;
 }
 
+export interface PickedProof {
+  /** the server path, once the photo went up */
+  url: string | null;
+  /** the photo on this phone, when it could not go up for lack of a connection (`keepOffline` only) */
+  localUri: string | null;
+}
+
 /**
  * Taking or choosing a proof photo and uploading it: the entry modal attaches
  * one to a new entry, the feed's "Kanıt ekle" answers an itiraz with one.
  *
- * `pick` resolves to the uploaded path, or null when the user backed out or a
- * permission was refused (a toast has already said why).
+ * `pick` resolves to the uploaded path, or null when the user backed out, a
+ * permission was refused or the upload failed (a toast has already said why).
+ *
+ * With `keepOffline` (the entry modal, on a phone) a photo that could not go up
+ * for lack of a connection comes back as `localUri` instead: the entry is
+ * parked with it and the offline queue uploads it later. The feed's answer to
+ * an itiraz stays online-only; it has no queue behind it.
  */
-export function useProofPhoto() {
+export function useProofPhoto(options: { keepOffline?: boolean } = {}) {
+  const { keepOffline = false } = options;
   const api = useApi();
   const toast = useToast();
   const [uploading, setUploading] = useState(false);
 
-  const pick = async (from: 'camera' | 'library'): Promise<string | null> => {
+  const pick = async (from: 'camera' | 'library'): Promise<PickedProof | null> => {
+    let asset: ImagePicker.ImagePickerAsset | undefined;
     try {
       if (from === 'camera') {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -59,12 +73,18 @@ export function useProofPhoto() {
           ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 })
           : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
       if (result.canceled) return null;
-      const asset = result.assets[0];
+      asset = result.assets[0];
       if (!asset) return null;
 
       setUploading(true);
-      return await uploadProof(api, asset);
+      return { url: await uploadProof(api, asset), localUri: null };
     } catch (err) {
+      // The picker's own cache file, not a copy: the OS may clear that cache
+      // before the connection comes back, and the queue drops the photo then.
+      // A browser's object URL would not outlive the page at all.
+      if (keepOffline && asset && Platform.OS !== 'web' && err instanceof ApiError && err.isNetwork) {
+        return { url: null, localUri: asset.uri };
+      }
       toast({ title: 'Fotoğraf gitmedi', body: errorText(err, 'Yükleme başarısız.'), kind: 'danger' });
       return null;
     } finally {

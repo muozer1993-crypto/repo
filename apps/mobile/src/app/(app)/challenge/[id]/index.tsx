@@ -206,9 +206,13 @@ export default function ChallengeDetailScreen() {
     );
   }
 
-  if (query.isError || !detail) {
-    const err = query.error;
-    const missing = err instanceof ApiError && err.status === 404;
+  // A failed background refetch keeps the last detail (TanStack sets `isError`
+  // but leaves `data`): the 45 s poll failing in a tunnel used to swap the whole
+  // screen for "Çelınc gelmedi". Only a çelınc never loaded, or one the server
+  // now says is gone, gets this screen.
+  const err = query.error;
+  const missing = err instanceof ApiError && err.status === 404;
+  if (!detail || missing) {
     return (
       <Screen scroll contentStyle={styles.content}>
         <Header onBack={back} title="Çelınc" />
@@ -269,6 +273,7 @@ export default function ChallengeDetailScreen() {
   const awaitingProof = detail.feed.some(
     (item) => item.status === 'disputed' && !!item.answerBy && Date.parse(item.answerBy) > clock
   );
+  const canEnter = challenge.status === 'active' && !settling && isPlayer && !!type;
 
   return (
     <Screen
@@ -279,6 +284,12 @@ export default function ChallengeDetailScreen() {
       contentStyle={styles.content}
       bottomInset={Spacing.xxl}>
       <Header onBack={back} title={type?.nameTr ?? 'Çelınc'} />
+      {query.isRefetchError ? (
+        <Text variant="tiny" faint style={styles.stale}>
+          Sunucuya ulaşamıyorum, gördüğün son bilinen hali.
+          {canEnter ? ' Girişin sıraya alınır, bağlantı gelince gider.' : ''}
+        </Text>
+      ) : null}
 
       {/* --------------------------------------------------------- hero */}
       <Card glow={challenge.status === 'active'} edgeColor={status.color}>
@@ -410,7 +421,7 @@ export default function ChallengeDetailScreen() {
       ) : null}
 
       {/* ------------------------------------------------------- actions */}
-      {challenge.status === 'active' && !settling && isPlayer && type ? (
+      {canEnter && type ? (
         <ActionArea
           id={id}
           detail={detail}
@@ -1437,8 +1448,8 @@ function Feed({
   };
 
   const pickProof = async (from: 'camera' | 'library') => {
-    const url = await photo.pick(from);
-    if (url) setPickedUrl(url);
+    const picked = await photo.pick(from);
+    if (picked?.url) setPickedUrl(picked.url);
   };
 
   const sendProof = async () => {
@@ -2014,6 +2025,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   headerTitle: { flex: 1 },
+  stale: { marginTop: -Spacing.sm },
 
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   heroEmoji: { fontSize: 38 },

@@ -163,6 +163,22 @@ jest.mock('@/services/deviceHealth', () => ({
   openAppSettings: () => mockDeviceHealth.openSettings(),
 }));
 
+/** The photo the picker hands back, from the camera or the gallery alike (its cache file on a phone). */
+const mockPickedPhoto = { uri: 'file:///data/user/0/com.koydum.app/cache/ImagePicker/kanit-1.jpeg' };
+
+jest.mock('expo-image-picker', () => {
+  const picked = async () => ({
+    canceled: false,
+    assets: [{ uri: mockPickedPhoto.uri, fileName: 'kanit-1.jpeg', width: 1200, height: 900 }],
+  });
+  return {
+    requestCameraPermissionsAsync: async () => ({ granted: true }),
+    requestMediaLibraryPermissionsAsync: async () => ({ granted: true }),
+    launchCameraAsync: picked,
+    launchImageLibraryAsync: picked,
+  };
+});
+
 /* ------------------------------------------------------------------ setup */
 
 const SAFE_AREA = {
@@ -774,6 +790,177 @@ describe('the entry modal', () => {
   });
 });
 
+describe('a background refetch that fails', () => {
+  /** Runs the 45 s poll by hand, now against whatever `api.challenge` does. */
+  async function refetch(tree: ReactTestRenderer): Promise<void> {
+    await act(async () => {
+      await clientOf(tree).refetchQueries({ queryKey: ['challenge', 'c-1'] });
+    });
+    await settle();
+  }
+
+  it('keeps the çelınc on screen with a "son bilinen hali" line', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => challengeDetail());
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(rendered(tree)).not.toContain('son bilinen hali');
+
+    api.challenge = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    await refetch(tree);
+
+    const text = rendered(tree);
+    expect(text).toContain('Haftalık Adım');
+    expect(text).toContain('SENİN SIRAN');
+    expect(text).toContain('Sunucuya ulaşamıyorum, gördüğün son bilinen hali.');
+    expect(text).toContain('Girişin sıraya alınır');
+    expect(text).not.toContain('Çelınc gelmedi');
+
+    // the line goes once the server answers again
+    api.challenge = jest.fn(async () => challengeDetail());
+    await refetch(tree);
+    expect(rendered(tree)).not.toContain('son bilinen hali');
+  });
+
+  it('still says "Bu çelınc sende yok" when the server answers 404', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => challengeDetail());
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    api.challenge = jest.fn(async () => {
+      throw new ApiError('not_found', 'Bulunamadı.', 404);
+    });
+    await refetch(tree);
+
+    const text = rendered(tree);
+    expect(text).toContain('Bu çelınc sende yok');
+    expect(text).not.toContain('Haftalık Adım');
+  });
+
+  it('keeps the entry form and the value being typed', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => challengeDetail());
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+    act(() => {
+      findWith(tree, 'placeholder', '0', 'onChangeText').props.onChangeText('8400');
+    });
+
+    api.challenge = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    await refetch(tree);
+
+    const text = rendered(tree);
+    expect(text).not.toContain('Giriş yapılamıyor');
+    expect(text).toContain('son bilinen hali. Kaydedersen giriş sıraya alınır');
+    expect(findWith(tree, 'placeholder', '0', 'onChangeText').props.value).toBe('8400');
+    expect(findWith(tree, 'title', 'Kaydet', 'onPress').props.disabled).toBe(false);
+  });
+});
+
+describe('a proof photo with no connection', () => {
+  const { readQueue, removeFromQueue } = require('@/services/offlineQueue') as typeof import('@/services/offlineQueue');
+
+  /** A run whose photo the creator made compulsory (the catalog's default for it). */
+  function runDetail() {
+    const detail = challengeDetail();
+    return {
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        typeKey: 'kosu_km',
+        metricType: 'manual_count' as const,
+        unit: 'km',
+        title: 'Koşu haftası',
+        proofRequired: true,
+      },
+    };
+  }
+
+  afterEach(async () => {
+    for (const item of await readQueue()) await removeFromQueue(item.id);
+  });
+
+  it('keeps the photo on the phone, lets Kaydet through and parks the entry with it', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => runDetail());
+    api.uploadPhoto = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    api.addEntry = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    act(() => {
+      findWith(tree, 'placeholder', '0', 'onChangeText').props.onChangeText('5,2');
+    });
+    await act(async () => {
+      await findWith(tree, 'title', 'Galeri', 'onPress').props.onPress();
+    });
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Fotoğraf telefonda');
+    expect(text).toContain('Fotoğraf henüz gitmedi, telefonda bekliyor.');
+    expect(text).not.toContain('Fotoğraf gitmedi');
+    expect(findWith(tree, 'title', 'Kaydet', 'onPress').props.disabled).toBe(false);
+
+    await act(async () => {
+      await findWith(tree, 'title', 'Kaydet', 'onPress').props.onPress();
+    });
+    await settle();
+
+    // the photo was tried once more on Kaydet; the entry never went without it
+    expect(api.uploadPhoto).toHaveBeenCalledTimes(2);
+    expect(api.addEntry).not.toHaveBeenCalled();
+    const queue = await readQueue();
+    expect(queue).toHaveLength(1);
+    expect(queue[0]).toMatchObject({ challengeId: 'c-1', proofLocalUri: mockPickedPhoto.uri });
+    expect(queue[0]?.body).toMatchObject({ value: 5.2, source: 'manual' });
+    expect(queue[0]?.body.proofUrl).toBeUndefined();
+    expect(rendered(tree)).toContain('Sıraya alındı');
+  });
+
+  it('sends the photo first when the connection is back by Kaydet', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => runDetail());
+    api.uploadPhoto = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    api.addEntry = jest.fn(async () => ({ entry: {}, standings: [] }));
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    act(() => {
+      findWith(tree, 'placeholder', '0', 'onChangeText').props.onChangeText('5');
+    });
+    await act(async () => {
+      await findWith(tree, 'title', 'Galeri', 'onPress').props.onPress();
+    });
+    api.uploadPhoto = jest.fn(async () => ({ url: '/uploads/p1.jpg' }));
+    await act(async () => {
+      await findWith(tree, 'title', 'Kaydet', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(api.uploadPhoto).toHaveBeenCalledWith(mockPickedPhoto.uri, 'kanit-1.jpeg');
+    expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ value: 5, proofUrl: '/uploads/p1.jpg' }));
+    expect(JSON.stringify((api.addEntry as jest.Mock).mock.calls[0])).not.toContain('file://');
+    expect(await readQueue()).toEqual([]);
+  });
+});
+
 describe('an itiraz on the feed', () => {
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
 
@@ -860,6 +1047,31 @@ describe('an itiraz on the feed', () => {
     const sheet = rendered(tree);
     expect(sheet).toContain('Fotoğrafı koy, itiraz kapansın');
     expect(sheet).toContain('GALERİ'); // button titles render in Turkish capitals
+  });
+
+  it('keeps no photo for later in "Kanıt ekle": an answer to an itiraz has no queue behind it', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => withDispute('ali'));
+    api.uploadPhoto = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    act(() => {
+      findWith(tree, 'label', 'Kanıt ekle', 'onPress').props.onPress();
+    });
+    await act(async () => {
+      await findWith(tree, 'title', 'Galeri', 'onPress').props.onPress();
+    });
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Fotoğraf gitmedi');
+    expect(text).not.toContain('Fotoğraf telefonda');
+    // nothing picked: the sheet still offers the camera and the gallery
+    expect(text).toContain('GALERİ');
   });
 
   it('says no majority yet instead of a clock when nobody is on one', async () => {

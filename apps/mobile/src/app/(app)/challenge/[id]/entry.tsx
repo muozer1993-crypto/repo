@@ -18,6 +18,7 @@ import { useToast } from '@/components/Toast';
 import { useAddEntry, useChallenge } from '@/hooks/queries';
 import { useProofPhoto } from '@/hooks/useProofPhoto';
 import { useTimezone } from '@/hooks/useTimezone';
+import { ApiError } from '@/lib/api';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
 import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
@@ -52,7 +53,7 @@ export default function EntryModalScreen() {
   const tz = useTimezone();
   const serverUrl = useAuth((s) => s.serverUrl);
   const toast = useToast();
-  const photo = useProofPhoto();
+  const photo = useProofPhoto({ keepOffline: true });
 
   const query = useChallenge(id);
   const detail = query.data;
@@ -80,6 +81,8 @@ export default function EntryModalScreen() {
   const [raw, setRaw] = useState('');
   const [note, setNote] = useState('');
   const [proofUrl, setProofUrl] = useState<string | null>(null);
+  // a photo picked with no connection: it goes up with the entry, now or from the queue
+  const [proofLocalUri, setProofLocalUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const uploading = photo.uploading;
 
@@ -108,14 +111,18 @@ export default function EntryModalScreen() {
     );
   }
 
-  if (query.isError || !detail || !type) {
+  // Only when nothing was ever loaded, or the server says the çelınc is gone: a
+  // failed background refetch (TanStack sets `isError` but keeps `data`) used to
+  // swap the form for this screen and take the value being typed with it.
+  const missing = query.error instanceof ApiError && query.error.status === 404;
+  if (!detail || !type || missing) {
     return (
       <Screen scroll contentStyle={styles.content}>
         <EmptyState
           emoji="🫥"
           title="Giriş yapılamıyor"
           subtitle={
-            query.isError ? errorText(query.error, 'Çelınc bilgisi gelmedi.') : 'Bu çelıncın tipi tanınmadı.'
+            !detail || missing ? errorText(query.error, 'Çelınc bilgisi gelmedi.') : 'Bu çelıncın tipi tanınmadı.'
           }
           actionLabel="Kapat"
           onAction={close}
@@ -170,10 +177,21 @@ export default function EntryModalScreen() {
 
   const pick = async (from: 'camera' | 'library') => {
     setError(null);
-    const url = await photo.pick(from);
-    if (!url) return;
-    setProofUrl(url);
-    toast({ title: 'Kanıt yüklendi', body: 'Fotoğraf girişe eklendi.', kind: 'success' });
+    const picked = await photo.pick(from);
+    if (picked?.url) {
+      setProofUrl(picked.url);
+      setProofLocalUri(null);
+      toast({ title: 'Kanıt yüklendi', body: 'Fotoğraf girişe eklendi.', kind: 'success' });
+    } else if (picked?.localUri) {
+      setProofLocalUri(picked.localUri);
+      setProofUrl(null);
+      toast({ title: 'Fotoğraf telefonda', body: 'Bağlantı gelince girişle birlikte gider.', kind: 'info' });
+    }
+  };
+
+  const removeProof = () => {
+    setProofUrl(null);
+    setProofLocalUri(null);
   };
 
   const submit = async () => {
@@ -199,7 +217,7 @@ export default function EntryModalScreen() {
       );
       return;
     }
-    if (proofRequired && !proofUrl) {
+    if (proofRequired && !proofUrl && !proofLocalUri) {
       setError(t('proof_needed', level));
       return;
     }
@@ -210,6 +228,7 @@ export default function EntryModalScreen() {
         source: 'manual',
         note: note.trim() ? note.trim() : undefined,
         proofUrl: proofUrl ?? undefined,
+        proofLocalUri: proofUrl ? undefined : (proofLocalUri ?? undefined),
         clientTime: new Date().toISOString(),
         // append metrics get an idempotency key: a request that timed out on the
         // way back and is replayed from the queue must not count twice
@@ -249,6 +268,11 @@ export default function EntryModalScreen() {
         </View>
         <Button title="Kapat" variant="ghost" size="sm" onPress={close} />
       </View>
+      {query.isRefetchError ? (
+        <Text variant="tiny" faint style={styles.stale}>
+          Sunucuya ulaşamıyorum, bilgiler son bilinen hali. Kaydedersen giriş sıraya alınır, bağlantı gelince gider.
+        </Text>
+      ) : null}
 
       {notActive || notPlaying || dayLocked ? (
         <Card edgeColor={Colors.danger}>
@@ -359,20 +383,20 @@ export default function EntryModalScreen() {
           </Text>
         ) : null}
 
-        {proofUrl ? (
+        {proofUrl || proofLocalUri ? (
           <View style={styles.proofWrap}>
             <Image
-              source={{ uri: resolveServerUrl(proofUrl, serverUrl) }}
+              source={{ uri: proofUrl ? resolveServerUrl(proofUrl, serverUrl) : (proofLocalUri as string) }}
               style={styles.proofPreview}
               contentFit="cover"
               transition={120}
             />
-            <Button
-              title="Fotoğrafı kaldır"
-              variant="ghost"
-              size="sm"
-              onPress={() => setProofUrl(null)}
-            />
+            {!proofUrl ? (
+              <Text variant="tiny" faint>
+                Fotoğraf henüz gitmedi, telefonda bekliyor. Kaydedince girişle birlikte gider.
+              </Text>
+            ) : null}
+            <Button title="Fotoğrafı kaldır" variant="ghost" size="sm" onPress={removeProof} />
           </View>
         ) : (
           <View style={styles.row}>
@@ -460,4 +484,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceHigh,
   },
   error: { marginTop: -Spacing.sm },
+  stale: { marginTop: -Spacing.sm },
 });

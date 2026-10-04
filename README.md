@@ -597,6 +597,13 @@ düğmesini de sadece bu sürede gösterir. Fotoğraf kanıtı, bir
 sayı yazılan türlerde çelıncı açan kişi isterse zorunlu olur; evet/hayır günleri ve check-in'lerde
 fotoğraf yok.
 
+Çekmeyen yerde (bodrumdaki spor salonu, metro) giriş yine yapılır: telefonda sıraya girer, bağlantı
+gelince kendiliğinden gider. Kanıt fotoğrafı da öyle: yüklenemezse uygulama "Fotoğraf telefonda"
+der, **Kaydet** açık kalır ve fotoğraf girişle birlikte gider. Bekleyen fotoğraf, uygulamanın
+telefonda tuttuğu geçici bir kopyadır; telefon yer açmak için onu silerse giriş fotoğrafsız gider,
+fotoğraf zorunluysa düşer ve uygulama "Kanıt fotoğrafı telefonda bulunamadı" der. Bağlantı
+koptuğunda açık olan çelınc ekranı kapanmaz, son bilinen hali gösterir; yazdığın sayı silinmez.
+
 ---
 
 ## Adım sayımı nasıl çalışıyor

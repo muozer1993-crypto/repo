@@ -482,6 +482,7 @@ components/OfflineBanner.tsx shown after two failed /health probes (hooks/useCon
 services/session.ts    renewTokenIfDue(client, onToken?): when tokenRenewedAt is missing, in the future or ≥ 7 days old → POST /auth/refresh, store the token (only if the stored one is still the token that asked, so a logout mid-request is not undone), stamp tokenRenewedAt, onToken(token). Never throws. Called from hydrate and from the headless task
 store/ui.ts            vulgarity level used for UI copy (mirrors me.vulgarityMax)
 hooks/*.ts             useMe, useChallenges(status), useChallenge(id), useFriends, useInbox, useUnreadCount (30 s poll while foreground), mutations
+services/offlineQueue.ts entry writes that fail with no connection or a 5xx are parked (useAddEntry) and replayed oldest first on every successful write, mount, foreground and background run; a 4xx is final and NotificationBridge toasts its reason once ("Bir giriş gönderilemedi"). An entry may be parked with `proofLocalUri`, a proof photo the entry modal could not upload: the image picker's own cache file, never sent to the server. The flush uploads it first and stores the returned path in `body.proofUrl` before the POST (a failed POST does not upload it again); no connection keeps it, 429/5xx count an attempt. A photo that can never go up (400/413, or a status-0 failure twice while /health answers: the OS cleared the cache) is dropped and the entry goes without it; when the çelınc then refuses it (`proof_required`) the reason starts "Kanıt fotoğrafı telefonda bulunamadı."
 services/steps.ts      getDailySteps(days: number): Promise<{ dayKey, steps, source }[]> + syncSteps(); platform files: steps.native.ts (ios Pedometer.getStepCountAsync per day; android: per day the largest of Health Connect (aggregate per day; a 0 day is dropped, since an empty Health Connect answers 0 everywhere), the Recording API and Pedometer.watchStepCount accumulated per day in AsyncStorage; a row keeps source 'health_connect' only for a day Health Connect won. getStepAvailability names Health Connect as the source only when it holds steps from the last 7 days, otherwise it reports the phone's own count with `hcEmpty: true` (Health Connect ships with Android 14+ and is often empty). requestStepPermission asks Health Connect, then ACTIVITY_RECOGNITION, then starts recording, and is true when either was granted), steps.web.ts (returns [])
 services/recordingSteps.ts Android steps recorded by Google Play services' Recording API (local module `KoydumSteps`, modules/koydum-steps, play-services-fitness 21.3.0): status() / subscribe() / dailySteps(days ≤ 10). Read by steps.native.ts beside Health Connect and the foreground counter; per day the largest of the three wins (all undercount; never summed). Since Android 9 a background app gets no step-sensor events, so this is the only way to count while the app is closed.
 services/screenTime.ts   getScreenTimeAvailability() / requestScreenTimePermission() / getDailyScreenMinutes(days): looks up the local Expo module `KoydumScreenTime` by name (requireOptionalNativeModule); Android + usage access → real numbers, everywhere else `available: false` with a reason (ios | web | needs-native-module | permission | error)
@@ -547,7 +548,10 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             "laf sok" per rival you lead, before `endsAt` — opens a sheet of rendered `poke` lines to choose from,
                             invited → "Varım" / "Yokum" ("Yokum" asks first, like the home card); declined while it
                             still runs → "Reddetmiştin..." card with "Katıl" (accept),
-                            leave/cancel; finished → button to results
+                            leave/cancel; finished → button to results;
+                            a failed refetch keeps the last detail with a faint "Sunucuya ulaşamıyorum, gördüğün son bilinen hali."
+                            line ("Girişin sıraya alınır…" while I can enter); "Çelınc gelmedi" is only for a çelınc never loaded,
+                            and a 404 still shows "Bu çelınc sende yok"
 (app)/challenge/[id]/results.tsx   winner view: podium + "KOYDUM MU?" CTA per loser (or "Hepsine koy") → taunt picker; loser view: shame screen
                             (big TauntBubble if received, else "bekliyor..." — and 24 h after `finalizedAt`, counted from the
                             last fetch, "unuttu galiba, rövanş aç, bu sefer sen koy" instead; the header only says the laf is
@@ -560,7 +564,12 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
 (app)/challenge/[id]/entry.tsx     modal: log manual value (numeric pad, quick +1/+5 chips per unit), note, proof photo (camera/gallery → /uploads), day selector
                             (today/yesterday; an auto_steps çelınc offers every window day back to STEPS_BACKFILL_DAYS as chips
                             labelled by formatDayKeyFriendly), the `day` param preselects a day it offers; a step day with an
-                            upheld itiraz is locked like a device_locked one (server 409 `day_rejected`)
+                            upheld itiraz is locked like a device_locked one (server 409 `day_rejected`);
+                            on a phone, a photo that cannot go up for lack of a connection stays on the phone ("Fotoğraf telefonda",
+                            previewed with "henüz gitmedi"), counts as the required proof for Kaydet, and goes up with the entry:
+                            right then if the connection is back, else from the offline queue (`proofLocalUri`). The feed's
+                            "Kanıt ekle" stays online-only. A failed refetch keeps the form and what was typed, with a
+                            "son bilinen hali" line; "Giriş yapılamıyor" is only for a çelınc never loaded or a 404
 (app)/focus/[id].tsx        full-screen timer (pick 15/25/45/60 min), big countdown, "elini telefondan çek" copy, leaving app → abandoned state with copy focus_abandoned; completion posts entry;
                             while the timer runs, Android back (and any other pop: usePreventRemove) opens the same "Seansı bitirelim mi?" sheet as "Vazgeç" instead of leaving;
                             a failed refetch keeps the last detail and the timer (the "Seans açılmadı" screen is only for a çelınc never loaded)

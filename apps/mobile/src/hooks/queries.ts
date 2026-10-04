@@ -15,9 +15,9 @@ import type {
 import { LIMITS } from '@koydum/shared';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import { ApiError } from '@/lib/api';
+import { ApiError, type ApiClient } from '@/lib/api';
 import { qk } from '@/lib/query';
-import { enqueueEntry, flushQueue } from '@/services/offlineQueue';
+import { enqueueEntry, flushQueue, uploadLocalPhoto } from '@/services/offlineQueue';
 import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/store/auth';
 
@@ -271,6 +271,13 @@ export function useChallengeAction(id: string) {
 }
 
 /**
+ * An entry write. `proofLocalUri` is a proof photo the entry modal could not
+ * upload for lack of a connection: it goes up first, and when it still cannot,
+ * the entry is parked with it and the offline queue sends both later.
+ */
+export type AddEntryVariables = Parameters<ApiClient['addEntry']>[1] & { proofLocalUri?: string };
+
+/**
  * Posting an entry is the one write that must not be lost: it is what the user
  * walked, drank or read. When the server cannot be reached the entry is parked
  * in `services/offlineQueue` and replayed later, and the mutation resolves as if
@@ -285,17 +292,29 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
   const api = useApi();
   const invalidate = useInvalidator();
   const { append = false } = options;
-  return useMutation<AddEntryResult, Error, Parameters<typeof api.addEntry>[1]>({
-    mutationFn: async (body) => {
+  return useMutation<AddEntryResult, Error, AddEntryVariables>({
+    mutationFn: async ({ proofLocalUri, ...body }) => {
+      const key = `${id}:${body.dayKey}:${body.source}:${body.sessionId ?? ''}${append ? `:${body.clientTime}` : ''}`;
+      const parkable = (error: unknown) => error instanceof ApiError && (error.isNetwork || error.status >= 500);
+      let send = body;
+      if (proofLocalUri && !body.proofUrl) {
+        try {
+          const { url } = await uploadLocalPhoto(api, proofLocalUri);
+          send = { ...body, proofUrl: url };
+        } catch (error) {
+          if (!parkable(error)) throw error;
+          await enqueueEntry(id, body, key, proofLocalUri);
+          return { entry: null, standings: null, queued: true };
+        }
+      }
       try {
-        const result = await api.addEntry(id, body);
+        const result = await api.addEntry(id, send);
         // a successful write is a good moment to drain anything parked earlier
         void flushQueue(api).catch(() => {});
         return { ...result, queued: false };
       } catch (error) {
-        if (error instanceof ApiError && (error.isNetwork || error.status >= 500)) {
-          const key = `${id}:${body.dayKey}:${body.source}:${body.sessionId ?? ''}${append ? `:${body.clientTime}` : ''}`;
-          await enqueueEntry(id, body, key);
+        if (parkable(error)) {
+          await enqueueEntry(id, send, key);
           return { entry: null, standings: null, queued: true };
         }
         throw error;
