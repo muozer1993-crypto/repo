@@ -115,13 +115,11 @@ const BEHIND_THE_TIE: Record<VulgarityLevel, string> = {
  */
 type Mode = 'win' | 'reply' | 'tie';
 
-/** Same titles the server gives a typed laf: "KOYDU" is only true from the winner. */
+/** Same titles the server gives a typed laf: "SANA SAPLADI" is only true from the winner. */
 const customTitleFor = (mode: Mode, level: VulgarityLevel, name: string): string => {
   if (mode === 'reply') return byLevel(level, `${name} cevap verdi`, `${name} boş durmadı`, `${name} lafı geri soktu 🍆`);
   if (mode === 'tie') return byLevel(level, `${name} bir mesaj bıraktı`, `${name} laf attı`, `${name} laf soktu 🍆`);
-  if (level === 1) return `${name} bir not bıraktı`;
-  if (level === 3) return `${name} KOYDU 🍆`;
-  return `${name} laf soktu`;
+  return byLevel(level, `${name} bir mesaj bıraktı`, `${name} laf soktu`, `${name} SANA SAPLADI 🍆`);
 };
 
 /* ------------------------------------------------------------------ utils */

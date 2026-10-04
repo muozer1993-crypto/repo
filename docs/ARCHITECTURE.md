@@ -555,8 +555,9 @@ Yedek de onun işi (`services/backup.ts`). Zamanlayıcı her gün `db.backup()` 
 `data/backups`'a bir kopya yazar. O klasör veritabanıyla aynı diskte durduğu için `BACKUP_DIR`
 (OneDrive klasörü gibi) verilmişse aynı dosyalar oraya da kopyalanır. Bu kopya turdan ayrı
 koşar: buluttaki ya da ağdaki bir klasör takılırsa çelınc bitirme ve hatırlatmalar beklemez,
-hata da sadece bir uyarı satırıdır ve saatte bir yeniden denenir. `yonet -- geri-yukle` canlı
-veritabanını hiç açmaz; sunucu açıkken çalışmaz: önce `/health`'e sorar, sonra dosyanın
-`-wal`'ının bizim bağlantımız kapanınca da durup durmadığına bakar (SQLite WAL dosyasını son
-bağlantı kapanırken siler). Yedeği veritabanının yanına kopyalayıp orada sınar, eskisini
+hata da sadece bir uyarı satırıdır ve saatte bir yeniden denenir. `BACKUP_DIR`'da da son 7 gün
+kalır, oradaki daha eski `koydum-YYYY-AA-GG.db` dosyaları silinir. `yonet -- geri-yukle` sunucu
+açıkken çalışmaz: önce `/health`'e sorar, sonra canlı dosyayı bir an açıp kapatır ve `-wal`'ının
+hâlâ durup durmadığına bakar (SQLite WAL dosyasını son bağlantı kapanırken siler; duruyorsa dosyayı
+başka biri tutuyordur). Yedeği veritabanının yanına kopyalayıp orada sınar, eskisini
 `koydum-onceki-*.db` diye kenara koyar; hiçbir şey silinmez.

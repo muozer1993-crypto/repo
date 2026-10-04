@@ -241,8 +241,9 @@ async function main(argv: string[]): Promise<number> {
   }
 
   const config = ownerConfig();
-  // these two never open the live database: geri-yukle needs it closed, and a
-  // connection of ours would hold its -wal open
+  // these two keep no connection to the live database: geri-yukle needs it
+  // closed (restoreBackup only opens it for a moment, to see whether somebody
+  // else holds it), and a connection of ours would hold its -wal open
   if (command === 'backups') {
     printBackups(config);
     return 0;

@@ -573,9 +573,11 @@ BACKUP_DIR=C:\Users\ArisK\OneDrive\KOYDUM yedek
 
 Tırnak gerekmez, boşluklu ve Türkçe harfli yol da olur; klasör yoksa sunucu kendisi açar.
 Sunucuyu kapatıp aç: her yedeğin bir kopyası oraya da gider (ilk seferde elindeki bütün hafta),
-OneDrive da buluta taşır. Klasöre ulaşamazsa (OneDrive'dan çıkış yapılmış, harici disk takılı
-değil) sunucu penceresine bir uyarı düşer ve saatte bir yeniden dener; o günün yedeği yine
-`data\backups`'a yazılır, sunucu da çalışmaya devam eder.
+OneDrive da buluta taşır. Orada da son 7 gün durur, daha eski `koydum-YYYY-AA-GG.db` dosyalarını
+sunucu siler; ayrıca saklamak istediğin bir yedek varsa adını değiştir ya da başka klasöre taşı.
+Klasöre ulaşamazsa (OneDrive'dan çıkış yapılmış, harici disk takılı değil) sunucu penceresine bir
+uyarı düşer ve saatte bir yeniden dener; o günün yedeği yine `data\backups`'a yazılır, sunucu da
+çalışmaya devam eder.
 
 `npm run yonet -- yedekler` iki klasördekileri de tarihi ve boyutuyla listeler.
 
