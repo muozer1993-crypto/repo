@@ -10,7 +10,7 @@ import {
 } from './types';
 import { LIMITS } from './scoring';
 import { DAY_KEY_REGEX, HHMM_REGEX, DEFAULT_TIMEZONE, isValidDayKey, isValidTimeZone } from './time';
-import { countGraphemes, hasVisibleChar, stripInvisible } from './text';
+import { countGraphemes, foldUsername, hasVisibleChar, stripInvisible } from './text';
 import { getChallengeType } from './catalog';
 
 export { DAY_KEY_REGEX, HHMM_REGEX };
@@ -21,12 +21,23 @@ export { DAY_KEY_REGEX, HHMM_REGEX };
 
 export const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
 
-/** Trimmed, lowercased, then validated — so `" MuStAfA "` is accepted as `mustafa`. */
+/**
+ * Folded (`foldUsername`), then validated — so `" MuStAfA "` is accepted as `mustafa`
+ * and "Şeyma" as `seyma`. Register, login and a friend request by username all go
+ * through here, so an older app that lowercases "İsmail" with a combining dot left on
+ * the i (i + U+0307) logs in again as soon as the server is updated.
+ */
 export const UsernameSchema = z
   .string()
-  .trim()
-  .toLowerCase()
-  .regex(USERNAME_REGEX, 'Kullanıcı adı 3-20 karakter olmalı: küçük harf, rakam ve alt çizgi');
+  .transform(foldUsername)
+  .pipe(
+    z
+      .string()
+      .regex(
+        USERNAME_REGEX,
+        'Kullanıcı adı 3-20 karakter olmalı: harf, rakam ve alt çizgi. Türkçe harfler kendiliğinden çevrilir (ş→s, ı→i).',
+      ),
+  );
 
 export const PasswordSchema = z
   .string()

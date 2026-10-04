@@ -30,19 +30,7 @@
  *     while "piç", "PIÇ", "piçi", "piçsin", "piç kurusu" are caught.
  */
 
-import { INVISIBLE_CHARS_REGEX } from './text';
-
-const TURKISH_FOLD: Record<string, string> = {
-  ı: 'i',
-  ş: 's',
-  ğ: 'g',
-  ü: 'u',
-  ö: 'o',
-  ç: 'c',
-  â: 'a',
-  î: 'i',
-  û: 'u',
-};
+import { INVISIBLE_CHARS_REGEX, TURKISH_FOLD } from './text';
 
 const LEET_FOLD: Record<string, string> = {
   '@': 'a',

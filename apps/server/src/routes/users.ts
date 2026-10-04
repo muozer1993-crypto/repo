@@ -7,7 +7,7 @@
  * hit, no profile, no friend request, no challenge invite.
  */
 import type { FastifyInstance } from 'fastify';
-import { ReportBodySchema, UserSearchQuerySchema, type PublicUser } from '@koydum/shared';
+import { foldUsername, ReportBodySchema, UserSearchQuerySchema, type PublicUser } from '@koydum/shared';
 import { newId, nowIso, type Database, type UserRow } from '../db/index.js';
 import { badRequest, notFound, parseBody, parseQuery } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
@@ -31,12 +31,13 @@ function trLower(value: string): string {
  * Turkish letter in it — and the dotted/dotless i pair in particular, where "ist" must
  * match "İstanbul" — cannot be resolved in SQL. We therefore cut the prefix at the
  * first character SQL cannot be trusted with; an empty prefix simply means "scan and
- * let JavaScript decide". `%`, `_` and `\` are escaped (the query uses ESCAPE '\').
+ * let JavaScript decide". A space counts too: the folded username match drops it, so
+ * "ali veli" has to reach `aliveli`. `%`, `_` and `\` are escaped (the query uses ESCAPE '\').
  */
 function sqlPrefix(query: string): string {
   let prefix = '';
   for (const ch of trLower(query)) {
-    if (ch.charCodeAt(0) > 127 || ch === 'i') break;
+    if (ch.charCodeAt(0) > 127 || ch === 'i' || /\s/.test(ch)) break;
     prefix += ch;
   }
   return prefix.replace(/[\\%_]/g, (m) => `\\${m}`);
@@ -62,10 +63,17 @@ function searchCandidates(db: Database, meId: string, query: string): UserRow[] 
     .all(meId, like, like, meId, meId, SEARCH_SCAN_LIMIT) as UserRow[];
 }
 
-/** Prefix match on either field, in Turkish casing and in plain casing. */
+/**
+ * Prefix match on either field, in Turkish casing and in plain casing. The username is
+ * also tried in the spelling it is stored in (`foldUsername`), so "şey" finds @seyma
+ * even when her display name is spelled some other way.
+ */
 function matchesPrefix(row: UserRow, query: string): boolean {
   const tr = trLower(query);
   const plain = query.toLowerCase();
+  const folded = foldUsername(query);
+  // a query of nothing but invisible characters folds to '', a prefix of everybody
+  if (folded !== '' && row.username.startsWith(folded)) return true;
   const fields = [row.username, row.display_name];
   return fields.some((field) => trLower(field).startsWith(tr) || field.toLowerCase().startsWith(plain));
 }

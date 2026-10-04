@@ -128,6 +128,27 @@ describe('POST /auth/register', () => {
     expect(me.json<Me>().id).toBe(body.me.id);
   });
 
+  it('folds Turkish letters into the stored username instead of refusing them', async () => {
+    const h = await boot();
+    const response = await h.app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: 'Şeyma', password: 'sifre123', displayName: 'Şeyma' },
+    });
+    expect(response.statusCode).toBe(201);
+    const me = response.json<{ me: Me }>().me;
+    expect(me.username).toBe('seyma');
+    // the name people see keeps its letters
+    expect(me.displayName).toBe('Şeyma');
+
+    const again = await h.app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: 'seyma', password: 'baskasifre', displayName: 'Başkası' },
+    });
+    expect(again.statusCode).toBe(409);
+  });
+
   it('gives every user a different invite code', async () => {
     const h = await boot();
     const a = await registerUser(h.app, 'ali');
@@ -171,6 +192,26 @@ describe('POST /auth/login', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json<{ me: Me }>().me.username).toBe('mustafa');
+  });
+
+  it('finds a Turkish-spelled username however the keyboard capitalised it', async () => {
+    const h = await boot();
+    await registerUser(h.app, 'Şeyma', { password: 'cokgizli' });
+    await registerUser(h.app, 'İsmail', { password: 'cokgizli' });
+    const login = (username: string) =>
+      h.app.inject({ method: 'POST', url: '/auth/login', payload: { username, password: 'cokgizli' } });
+
+    for (const username of ['ŞEYMA', 'şeyma', 'seyma']) {
+      const response = await login(username);
+      expect(response.statusCode).toBe(200);
+      expect(response.json<{ me: Me }>().me.username).toBe('seyma');
+    }
+    // 'İsmail'.toLowerCase() is i + U+0307 + 'smail': what the 1.0 app sends
+    for (const username of ['İsmail', 'İsmail'.toLowerCase(), 'ISMAIL']) {
+      const response = await login(username);
+      expect(response.statusCode).toBe(200);
+      expect(response.json<{ me: Me }>().me.username).toBe('ismail');
+    }
   });
 
   it('rejects a wrong password and an unknown user with 401 bad_credentials', async () => {
@@ -814,6 +855,13 @@ describe('GET /users/search', () => {
     // "İsmail" lowercases to "ismail" only under Turkish rules.
     const turkish = await call({ method: 'GET', url: '/users/search?q=%C4%B0sm' });
     expect(turkish.json<{ username: string }[]>().map((u) => u.username)).toEqual(['ismail']);
+
+    // usernames are stored folded; the Turkish spelling of one still finds it
+    await registerUser(h.app, 'cagri', { displayName: 'Cagri K.' });
+    const folded = await call({ method: 'GET', url: `/users/search?q=${encodeURIComponent('Çağ')}` });
+    expect(folded.json<{ username: string }[]>().map((u) => u.username)).toEqual(['cagri']);
+    const spaced = await call({ method: 'GET', url: `/users/search?q=${encodeURIComponent('ca gri')}` });
+    expect(spaced.json<{ username: string }[]>().map((u) => u.username)).toEqual(['cagri']);
 
     const byDisplayName = await call({ method: 'GET', url: '/users/search?q=Kem' });
     expect(byDisplayName.json<{ username: string }[]>().map((u) => u.username)).toEqual(['kemal']);

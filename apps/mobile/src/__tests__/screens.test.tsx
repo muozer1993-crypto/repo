@@ -74,6 +74,11 @@ const mockClearSessionEnded = jest.fn(() => {
   mockSession.ended = false;
 });
 const mockSetSession = jest.fn(async () => {});
+/** the ApiClient the auth screens build from the store */
+const mockLogin = jest.fn(async (_body: { username: string; password: string }) => ({
+  token: 'token',
+  me: { ...ME, timezone: 'Europe/Istanbul' },
+}));
 const mockSetMe = jest.fn(async () => {});
 /** the address the screens see; a fresh install sits on the localhost fallback */
 const mockServer = { url: 'http://localhost:4000' };
@@ -91,6 +96,7 @@ jest.mock('@/store/auth', () => ({
       refreshMe: jest.fn(),
       setSession: mockSetSession,
       setMe: mockSetMe,
+      client: () => ({ login: mockLogin }),
       rememberServerId: jest.fn(async () => {}),
       sessionEnded: mockSession.ended,
       clearSessionEnded: mockClearSessionEnded,
@@ -1209,6 +1215,34 @@ describe('auth screens before a server is chosen', () => {
     await settle();
     expect(rendered(tree)).toContain('Bunu adres olarak okuyamadım.');
     expect(health).not.toHaveBeenCalled();
+  });
+});
+
+describe('usernames with Turkish letters', () => {
+  beforeEach(() => {
+    mockServer.url = 'http://192.168.1.20:4000';
+    mockLogin.mockClear();
+  });
+
+  it('register shows the folded name while it is typed', async () => {
+    const RegisterScreen = require('@/app/(auth)/register').default;
+    const tree = renderScreen(<RegisterScreen />);
+    await settle();
+    typeInto(tree, 'Kullanıcı adı', 'Şeyma Nur');
+    expect(findWith(tree, 'label', 'Kullanıcı adı', 'onChangeText').props.value).toBe('seymanur');
+    expect(rendered(tree)).toContain('Türkçe harfler çevrilir (ş→s, ı→i).');
+    expect(rendered(tree)).not.toContain('küçük harf');
+  });
+
+  it('login sends a capitalised İ as the plain i the server stores', async () => {
+    const LoginScreen = require('@/app/(auth)/login').default;
+    const tree = renderScreen(<LoginScreen />);
+    await settle();
+    typeInto(tree, 'Kullanıcı adı', 'İsmail');
+    typeInto(tree, 'Şifre', 'cokgizli');
+    press(tree, 'Gir bakalım');
+    await settle();
+    expect(mockLogin).toHaveBeenCalledWith({ username: 'ismail', password: 'cokgizli' });
   });
 });
 

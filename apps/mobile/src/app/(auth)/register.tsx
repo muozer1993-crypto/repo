@@ -1,8 +1,10 @@
 import {
+  foldUsername,
   formatNumberTr,
   pickTaunt,
   renderTaunt,
   t,
+  USERNAME_REGEX,
   type TauntVars,
   type VulgarityLevel,
 } from '@koydum/shared';
@@ -47,8 +49,6 @@ const LEVEL_NOTE: Record<VulgarityLevel, string> = {
   3: 'Ağır abi modu 🍆 Sana gelen bildirimler de bu ağızdan olur.',
 };
 
-const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
-
 export default function RegisterScreen() {
   const setSession = useAuth((s) => s.setSession);
   const makeClient = useAuth((s) => s.client);
@@ -72,11 +72,11 @@ export default function RegisterScreen() {
       setError('Önce yukarıdan sunucuyu seç.');
       return;
     }
-    const name = username.trim().toLowerCase();
+    const name = foldUsername(username);
     const display = displayName.trim();
 
-    if (!USERNAME_RE.test(name)) {
-      setError('Kullanıcı adı 3-20 karakter olmalı. Sadece küçük harf, rakam ve alt çizgi.');
+    if (!USERNAME_REGEX.test(name)) {
+      setError('Kullanıcı adı 3-20 karakter olmalı. Harf, rakam ve alt çizgi olur; nokta, tire, emoji olmaz.');
       return;
     }
     if (display.length < 1 || display.length > 30) {
@@ -134,6 +134,7 @@ export default function RegisterScreen() {
       <PendingInviteBanner action="register" />
 
       <View style={styles.form}>
+        {/* folded as typed, so the field already shows what gets saved: "Şeyma" → seyma */}
         <Input
           label="Kullanıcı adı"
           placeholder="mustafa_42"
@@ -141,8 +142,8 @@ export default function RegisterScreen() {
           autoCorrect={false}
           autoComplete="username"
           value={username}
-          onChangeText={setUsername}
-          hint="Kankalar seni bu adla bulacak. Küçük harf, rakam, alt çizgi."
+          onChangeText={(text) => setUsername(foldUsername(text))}
+          hint="Kankalar seni bu adla bulacak. Türkçe harfler çevrilir (ş→s, ı→i). Görünen adında Türkçe harf kullanabilirsin."
           returnKeyType="next"
         />
         <Input

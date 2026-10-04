@@ -40,6 +40,7 @@ taunts.ts         TAUNTS: TauntTemplate[], pickTaunt(), renderTaunt(), clampLeve
 copy.ts           MICROCOPY (keyed, 3 levels), BADGES, TAGLINE, t(key, level)
 scoring.ts        computeScores(), rankParticipants(), day helpers, validation constants
 banned.ts         BANNED_PATTERNS (regex list) + containsBanned(text)
+text.ts           stripInvisible(), countGraphemes(), TURKISH_FOLD, foldUsername()
 time.ts           dayKeyInTz(date, tz), localTimeHHmm(date, tz), dayKeysBetween(), isValidDayKey()
 ```
 
@@ -142,14 +143,14 @@ Rule grammar: `<statKey><op><number>` with op in `>=`, `>`, `==`, `<=`; multiple
 ### 1.6 Zod schemas (`schemas.ts`) — the API contract
 
 ```ts
-RegisterBody { username: /^[a-z0-9_]{3,20}$/ (lowercased), password: min 6 max 72, displayName: 1..30, timezone: string (default 'Europe/Istanbul') }
-LoginBody { username, password }
+RegisterBody { username: /^[a-z0-9_]{3,20}$/ after foldUsername (lowercase, Turkish letters to ASCII, İ/I → i, other accents, spaces and invisible chars dropped: "Şeyma" → seyma, "İsmail" → ismail), password: min 6 max 72, displayName: 1..30, timezone: string (default 'Europe/Istanbul') }
+LoginBody { username (same fold), password }
 ChangePasswordBody { currentPassword: 1..72 (login rule), newPassword: min 6 max 72 (sign-up rule) }
 UpdateMeBody { displayName?, avatarEmoji? (1..4 chars), vulgarityMax? (1|2|3), timezone?, reminderHour? (0..23 | null), nudgesEnabled? (boolean), recapEnabled? (boolean) }
 PushTokenBody { token: string, platform: 'ios'|'android'|'web' }
 StepsSyncBody { days: { dayKey, steps: int 0..100000, source: 'pedometer'|'health_connect' }[] (max 14) }
 ScreenTimeSyncBody { days: { dayKey, minutes: int 0..1440 }[] (max 14) }   // Android usage access; entries get source 'usage_stats'
-FriendRequestBody { username?: string, inviteCode?: string } (exactly one)
+FriendRequestBody { username?: string (same fold), inviteCode?: string } (exactly one)
 CreateChallengeBody {
   typeKey: string; title?: string (max 40);
   startsAt: ISO (>= now-5min); endsAt: ISO (> startsAt + 1h, <= startsAt + 60d);
@@ -294,7 +295,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | (scheduler) reminders | daily reminder only to users with no non-rejected entry today in any active challenge; nudges only to `accepted` participants with `nudges_enabled` (checked before the `nudges_sent` claim, so switching it back on the same day still gets that day's nudge) |
 | (scheduler) recaps | weekly `recap` to users with `recap_enabled` (switched off → no row, no `recaps_sent` claim) from Sunday 20:00 until Monday 12:00 in the reader's timezone, once per week (`recaps_sent`): wins/losses/ties of çelınclar finalized since the previous recap (that recap's `sent_at` when it is ≤ 9 days back — covers a Monday make-up and a DST night — otherwise the last 7 days), Monday–Sunday steps, the king of the week among the reader and their friends (most wins, then steps; exact ties share) and the clear step leader. A Monday make-up says "geçen hafta" / "bu hafta rövanş". Nothing to tell → no row |
 | GET /me/inbox/unread | `{ count, latestId }` |
-| GET /users/search?q= | prefix match on username or display_name, excludes self, blocked; max 20 |
+| GET /users/search?q= | prefix match on username or display_name (Turkish and plain casing), and the query folded like a username against the username ("Çağ" finds cagri); excludes self, blocked; max 20 |
 | GET /users/blocked | `PublicUser[]`: the people I blocked, newest block first (Ayarlar → Engellediklerin). Only blocks I placed, never the ones placed on me; deleted accounts left out |
 | GET /users/:id | `PublicUser` + public stats (wins/losses/challengesPlayed) + badges |
 | POST /users/:id/block, /unblock, /report | block sets/creates friendship row status 'blocked' with requester = blocker; blocked users can't see or invite each other. unblock lifts only my own block (`{ status: 'none', userId, removed }`, idempotent) and does not bring a friendship back. report stores a `reports` row and logs a `warn` line (`YENİ ŞİKAYET`) for the owner; nothing in the app reads reports |
@@ -416,7 +417,7 @@ inbox read/unread, account deletion, uploads (multipart), badges awarded.
 
 Daily backup (`services/backup.ts`, run from the scheduler tick): `db.backup()` into `<DATA_DIR>/backups/koydum-YYYY-MM-DD.db` (Istanbul date) once per day, written aside and renamed, last 7 kept; skipped for `:memory:`.
 
-Owner CLI (`npm run yonet`, root script → workspace script, so the cwd is `apps/server` and the default `./data` is the server's database): `kullanicilar` (username, name, created, last seen in Istanbul time, accepted active çelınclar, deleted last), `sikayetler` (reporter, reported, reason, newest first), `sifre <kullanici>` (new random password from `abcdefghjkmnpqrstuvwxyz23456789`, stored as scrypt, printed once; unknown or deleted → Turkish error, exit 1). No argument → Turkish help (exit 0); unknown command → help on stderr, exit 1. Refuses when the DB file does not exist rather than creating one, and never writes a JWT secret. Safe beside a running server (WAL + busy_timeout). There is no email and no reset endpoint: a forgotten password is reset by the owner; existing tokens stay valid. A signed-in user changes their own (including the temporary one) in Ayarlar → Hesap → "Şifreni değiştir" (`POST /me/password`).
+Owner CLI (`npm run yonet`, root script → workspace script, so the cwd is `apps/server` and the default `./data` is the server's database): `kullanicilar` (username, name, created, last seen in Istanbul time, accepted active çelınclar, deleted last), `sikayetler` (reporter, reported, reason, newest first), `sifre <kullanici>` (name folded like a login, so `sifre Şeyma` finds seyma; new random password from `abcdefghjkmnpqrstuvwxyz23456789`, stored as scrypt, printed once; unknown or deleted → Turkish error, exit 1). No argument → Turkish help (exit 0); unknown command → help on stderr, exit 1. Refuses when the DB file does not exist rather than creating one, and never writes a JWT secret. Safe beside a running server (WAL + busy_timeout). There is no email and no reset endpoint: a forgotten password is reset by the owner; existing tokens stay valid. A signed-in user changes their own (including the temporary one) in Ayarlar → Hesap → "Şifreni değiştir" (`POST /me/password`).
 
 Shutdown (`src/index.ts`): SIGINT, SIGTERM, SIGHUP (a closed console window, Windows too), SIGBREAK on Windows, an
 IPC message `{ type: 'shutdown' }` and a lost IPC channel all run the same path: await the scheduler stop, `app.close()`,
@@ -503,7 +504,7 @@ utils/format.ts          formatNumber (tr-TR), formatDuration, relativeTime (tr)
 _layout.tsx                 providers (QueryClientProvider, GestureHandlerRootView, SafeAreaProvider), hydrate auth,
                             notifications setup, Stack with <Stack.Protected guard={!token}> (auth) and guard={!!token} (app)
 (auth)/login.tsx            username/password, link to register, forgot-password hint (ask the server's owner), "Sunucu adresi" link; after a 401 logout shows "Oturumun düşmüş, bir daha gir." once (store `sessionEnded`, cleared on mount); ChooseServerCard on top while no server is chosen (3.2)
-(auth)/register.tsx         + display name, vulgarity level picker (with live preview of a taunt at that level); ChooseServerCard like login
+(auth)/register.tsx         + display name (the username field folds as typed: "Şeyma" shows as seyma), vulgarity level picker (with live preview of a taunt at that level); ChooseServerCard like login
 (auth)/server.tsx           edit server URL or paste an invite link (parsePastedInvite; a code in it is parked as the pending invite on "Kaydet"), "Bağlantıyı test et" → GET /health; "Tahminimi kullan" hidden on a phone when the guess is loopback
 onboarding.tsx              3 slides (copy onboarding_1..3), shown once after register
 (app)/(tabs)/_layout.tsx    Tabs: index "Çelınclar", friends "Kankalar", inbox "Gelen Kutusu" (badge = unread), profile "Ben"

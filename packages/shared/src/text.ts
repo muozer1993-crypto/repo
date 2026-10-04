@@ -20,6 +20,41 @@ export function stripInvisible(text: string): string {
   return text.replace(INVISIBLE_CHARS_REGEX, '');
 }
 
+/**
+ * Turkish letters to their plain Latin twins (plus the circumflexed ones of
+ * loanwords). Shared by the banned-word filter and `foldUsername`.
+ */
+export const TURKISH_FOLD: Record<string, string> = {
+  ı: 'i',
+  ş: 's',
+  ğ: 'g',
+  ü: 'u',
+  ö: 'o',
+  ç: 'c',
+  â: 'a',
+  î: 'i',
+  û: 'u',
+};
+
+/**
+ * The one spelling a username is stored, looked up and compared in: ASCII, lowercase,
+ * no spaces. To a Turkish speaker ş IS a lowercase letter, so "Şeyma" becomes `seyma`
+ * instead of being told to use "küçük harf".
+ *
+ * `toLowerCase()` alone turns "İsmail" into "i̇smail" (i + U+0307), which matched
+ * nobody: a friend whose keyboard capitalised the first letter could not log in.
+ * Stripping the combining marks after NFD drops that dot along with any other accent
+ * (José → jose). Whatever is left may still be invalid ("a.b"); the schema decides.
+ */
+export function foldUsername(raw: string): string {
+  return stripInvisible(raw)
+    .toLowerCase()
+    .replace(/[ışğüöçâîû]/g, (ch) => TURKISH_FOLD[ch] ?? ch)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '');
+}
+
 /** True when `text` contains at least one letter, digit, punctuation or symbol (emoji are symbols). */
 export function hasVisibleChar(text: string): boolean {
   return /[\p{L}\p{N}\p{P}\p{S}]/u.test(text);

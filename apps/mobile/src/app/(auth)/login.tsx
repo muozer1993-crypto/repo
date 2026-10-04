@@ -1,3 +1,4 @@
+import { foldUsername } from '@koydum/shared';
 import { Link, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -42,7 +43,9 @@ export default function LoginScreen() {
       setError('Önce yukarıdan sunucuyu seç.');
       return;
     }
-    const name = username.trim().toLowerCase();
+    // the spelling the server stores; toLowerCase() left a combining dot on the i of
+    // "İsmail", and that name matched nobody
+    const name = foldUsername(username);
     if (name.length < 3 || password.length < 6) {
       setError('Kullanıcı adı en az 3, şifre en az 6 karakter olmalı.');
       return;

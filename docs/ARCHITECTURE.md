@@ -372,6 +372,16 @@ yazım hatası o anki oturuma mal olmamalı. Buradaki tahmin hakkı da giriştek
 başına 15 dakikada 8 yanlış. Token'lar durumsuz olduğundan şifre değişince başka
 telefonlarda açık oturumlar kapanmaz; bunun için sunucunun iptal listesi tutması gerekirdi.
 
+Kullanıcı adının tek bir yazımı var: `foldUsername` (`packages/shared/src/text.ts`) küçültür,
+Türkçe harfleri ASCII'ye çevirir (ş→s, ı→i, İ→i), kalan aksanları, boşlukları ve görünmez
+karakterleri atar. Kayıt, giriş ve kullanıcı adıyla arkadaşlık isteği şemada bundan geçer,
+`npm run yonet -- sifre` de aynısını kullanır. Kayıt ekranı kutuya yazılanı anında çevirir, kişi
+neyin kaydedileceğini görür. Eskiden "şeyma" "küçük harf olmalı" diye reddediliyordu, oysa ş da
+küçük harf. `toLowerCase()` ise "İsmail"i i + U+0307 + "smail" yapıyordu, bu da hiçbir hesapla
+eşleşmiyordu. 1.0 uygulaması hâlâ öyle gönderir, sunucu çevirdiği için girer.
+Var olan adlar zaten ASCII, geçiş gerekmedi. Arama da sorguyu böyle çevirip kullanıcı adına bakar:
+"Çağ" yazan @cagri'yi bulur. Görünen ad Türkçe harfleriyle kalır.
+
 ### Aynı sunucu, yeni adres
 
 `npm run internet` her açılışta yeni bir trycloudflare adresi alır. JWT anahtarı

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { approximateGraphemeCount, countGraphemes, hasVisibleChar, stripInvisible } from '../text';
+import { approximateGraphemeCount, countGraphemes, foldUsername, hasVisibleChar, stripInvisible } from '../text';
 
 const ZWJ = String.fromCharCode(0x200d);
 const ZWSP = String.fromCharCode(0x200b);
@@ -23,6 +23,38 @@ describe('stripInvisible / hasVisibleChar', () => {
     expect(hasVisibleChar('')).toBe(false);
     expect(hasVisibleChar('   ')).toBe(false);
     expect(hasVisibleChar(ZWJ + ZWSP)).toBe(false);
+  });
+});
+
+describe('foldUsername', () => {
+  const COMBINING_DOT = String.fromCharCode(0x307);
+
+  it('folds Turkish letters instead of leaving them for the regex to refuse', () => {
+    expect(foldUsername('Şeyma')).toBe('seyma');
+    expect(foldUsername('Çağrı_99')).toBe('cagri_99');
+    expect(foldUsername('ÖMÜR')).toBe('omur');
+    expect(foldUsername('Işık')).toBe('isik');
+    expect(foldUsername('Âlim')).toBe('alim');
+  });
+
+  it('turns both capital i spellings into a plain i', () => {
+    expect(foldUsername(' İSMAİL ')).toBe('ismail');
+    // what toLowerCase() made of "İsmail", and what the 1.0 app still sends
+    expect(foldUsername(`i${COMBINING_DOT}smail`)).toBe('ismail');
+    expect('İsmail'.toLowerCase()).toBe(`i${COMBINING_DOT}smail`);
+  });
+
+  it('drops spaces, invisible characters and other accents', () => {
+    expect(foldUsername('ali veli')).toBe('aliveli');
+    expect(foldUsername(`ali${ZWSP}${SOFT_HYPHEN}`)).toBe('ali');
+    expect(foldUsername('José')).toBe('jose');
+  });
+
+  it('leaves what is no letter at all for the schema to refuse', () => {
+    expect(foldUsername('a.b')).toBe('a.b');
+    expect(foldUsername('🍆🍆🍆')).toBe('🍆🍆🍆');
+    expect(foldUsername('mustafa_42')).toBe('mustafa_42');
+    expect(foldUsername(foldUsername('Şeyma'))).toBe('seyma');
   });
 });
 

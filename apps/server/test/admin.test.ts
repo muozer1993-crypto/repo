@@ -49,6 +49,13 @@ describe('resetPassword', () => {
     expect((await login(h.app, 'ali', DEFAULT_PASSWORD)).statusCode).toBe(401);
   });
 
+  it('finds a username the owner typed with Turkish letters', async () => {
+    await registerUser(h.app, 'seyma', { displayName: 'Şeyma' });
+    const reset = await resetPassword(h.db, 'Şeyma');
+    expect(reset).toMatchObject({ username: 'seyma', displayName: 'Şeyma' });
+    expect((await login(h.app, 'Şeyma', reset.password)).statusCode).toBe(200);
+  });
+
   it('refuses an unknown name and a deleted account', async () => {
     const veli = await registerUser(h.app, 'veli');
     expect((await authed(h.app, veli.token)({ method: 'DELETE', url: '/me' })).statusCode).toBe(200);

@@ -9,6 +9,7 @@
  * the tests drive them against the in-memory database.
  */
 import { randomInt } from 'node:crypto';
+import { foldUsername } from '@koydum/shared';
 import { hashPassword } from '../auth/password.js';
 import type { Database, UserRow } from '../db/index.js';
 
@@ -93,7 +94,8 @@ export function listReports(db: Database): AdminReport[] {
  * already signed in stay signed in: tokens are stateless and outlive a new hash.
  */
 export async function resetPassword(db: Database, username: string): Promise<PasswordReset> {
-  const name = username.trim().replace(/^@/, '').toLowerCase();
+  // the spelling the app stores, so "sifre Şeyma" finds seyma
+  const name = foldUsername(username).replace(/^@/, '');
   const row = db.prepare('SELECT * FROM users WHERE username = ?').get(name) as UserRow | undefined;
   if (!row) throw new Error(`"${name}" diye bir kullanıcı yok. Liste için: npm run yonet -- kullanicilar`);
   if (row.deleted_at !== null) throw new Error(`"${name}" hesabını silmiş, sıfırlanacak bir şifre kalmadı.`);

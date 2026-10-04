@@ -37,10 +37,21 @@ describe('RegisterBody', () => {
     expect(r.data).toEqual({ username: 'mustafa_01', password: 'secret1', displayName: 'Musti', timezone: 'Europe/Istanbul' });
   });
 
-  it('rejects bad usernames even after lowercasing', () => {
+  it('folds Turkish letters and spaces instead of refusing them', () => {
+    const parse = (username: string) =>
+      RegisterBodySchema.safeParse({ username, password: 'secret1', displayName: 'Şeyma' }).data?.username;
+    expect(parse('Şeyma')).toBe('seyma');
+    expect(parse('İbrahim')).toBe('ibrahim');
+    expect(parse('has space')).toBe('hasspace');
+  });
+
+  it('rejects bad usernames even after folding', () => {
     expect(RegisterBodySchema.safeParse({ username: 'ab', password: 'secret1', displayName: 'x' }).success).toBe(false);
-    expect(RegisterBodySchema.safeParse({ username: 'has space', password: 'secret1', displayName: 'x' }).success).toBe(false);
-    expect(RegisterBodySchema.safeParse({ username: 'İbrahim', password: 'secret1', displayName: 'x' }).success).toBe(false);
+    expect(RegisterBodySchema.safeParse({ username: 'a.b', password: 'secret1', displayName: 'x' }).success).toBe(false);
+    expect(RegisterBodySchema.safeParse({ username: 'ali-veli', password: 'secret1', displayName: 'x' }).success).toBe(false);
+    expect(RegisterBodySchema.safeParse({ username: '🍆🍆🍆', password: 'secret1', displayName: 'x' }).success).toBe(false);
+    // "ş ı" folds to two letters, still too short
+    expect(RegisterBodySchema.safeParse({ username: 'ş ı', password: 'secret1', displayName: 'x' }).success).toBe(false);
     expect(RegisterBodySchema.safeParse({ username: 'a'.repeat(21), password: 'secret1', displayName: 'x' }).success).toBe(false);
     expect(USERNAME_REGEX.test('ok_name1')).toBe(true);
   });
@@ -71,6 +82,9 @@ describe('RegisterBody', () => {
 describe('LoginBody', () => {
   it('normalises the username and requires a password', () => {
     expect(LoginBodySchema.parse({ username: 'ADMIN', password: 'x' })).toEqual({ username: 'admin', password: 'x' });
+    // a capitalised İ, typed now or lowercased by the 1.0 app into i + U+0307
+    expect(LoginBodySchema.parse({ username: 'İsmail', password: 'x' }).username).toBe('ismail');
+    expect(LoginBodySchema.parse({ username: 'İsmail'.toLowerCase(), password: 'x' }).username).toBe('ismail');
     expect(LoginBodySchema.safeParse({ username: 'admin', password: '' }).success).toBe(false);
   });
 });
@@ -143,6 +157,7 @@ describe('PushTokenBody / StepsSyncBody', () => {
 describe('FriendRequestBody', () => {
   it('requires exactly one of username / inviteCode', () => {
     expect(FriendRequestBodySchema.safeParse({ username: 'Ali' }).data).toEqual({ username: 'ali' });
+    expect(FriendRequestBodySchema.safeParse({ username: 'Şeyma' }).data).toEqual({ username: 'seyma' });
     expect(FriendRequestBodySchema.safeParse({ inviteCode: 'K7X2' }).success).toBe(true);
     expect(FriendRequestBodySchema.safeParse({}).success).toBe(false);
     expect(FriendRequestBodySchema.safeParse({ username: 'ali', inviteCode: 'K7X2' }).success).toBe(false);

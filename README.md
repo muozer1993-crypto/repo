@@ -520,6 +520,8 @@ oradan değiştirir. Bu düğme yeni sürümde (1.1); 1.0'daki kanka önce günc
 verdiğin şifreyle kalır.
 
 * Kullanıcı adını hatırlamıyorsa önce `npm run yonet -- kullanicilar` ile bak.
+* Türkçe harfle yazsan da bulur: `npm run yonet -- sifre Şeyma` hesabı `seyma` diye arar.
+  Kullanıcı adlarında Türkçe harf olmaz, uygulama kayıtta ş'yi s'ye, ı'yı i'ye çevirir.
 * Başka bir telefonda açık kalmış oturumu varsa o kapanmaz; şifre sıfırlamak kimseyi dışarı atmaz.
 * Çok yanlış deneme yaptıysa uygulama "Çok fazla deneme yaptın" der; yazdığı süre kadar beklesin.
 
@@ -753,6 +755,12 @@ Ana sayfa bitenlerin sadece son beşini gösterir; altındaki **Hepsini gör** h
 düğmelerle koyduklarını, yediklerini, berabereleri ya da iptal olanları ayırırsın. Bir kankanın
 profilinde "Aranızdaki hesap" kartına dokununca sadece onunla oynadıkların gelir. Gelen kutusunda
 aşağı indikçe eski bildirimler yüklenir.
+
+**Kanka "Kullanıcı adı ya da şifre yanlış" diyor, ama şifresi doğru.**
+Adını büyük İ ile yazıyorsa ("İsmail") ve sunucu eskiyse budur: eski sunucu büyük İ'yi kimseyle
+eşleştiremiyordu. Depoyu güncelle (`git pull`), sunucuyu kapatıp aç; kankanın uygulamayı
+güncellemesi gerekmez, aynı yazışla girer. O zamana kadar adını küçük harfle yazsın. Kullanıcı
+adının tam yazımını `npm run yonet -- kullanicilar` gösterir.
 
 **Kanka şifresini unuttu, giremiyor.**
 Yeni hesap açmasın, her şeyi sıfırdan başlar. Sen `npm run yonet -- sifre <kullanici-adi>`
