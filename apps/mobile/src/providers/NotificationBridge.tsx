@@ -293,6 +293,8 @@ export function NotificationBridge() {
       } catch {
         // offline: the next run tries again
       }
+      // an app parked in the background for days never comes to the front
+      await scheduleReminders();
     });
     void registerBackgroundSync();
 

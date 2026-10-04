@@ -390,8 +390,10 @@ kod istediği için yeni APK ile gelir; eski APK'da Ayarlar'da hiç görünmez.
 Bazı bildirimler fazla geliyorsa kanalı kapatma, uygulamada **Ayarlar → Bildirim tercihleri**'ne
 gir: gün ortası dürtmeyi ("sana fark koymuş"), pazar akşamı haftalık özeti ve telefonun kendi
 kurduğu saatli uyarıları (check-in'e yarım saat kala, çelıncın son saati) ayrı ayrı kapatabilirsin.
-Saatli uyarılar ayarı sadece o telefonda geçerli. "KOYDUM MU?" lafları, kankanın elle dürtmesi,
-davetler ve sonuçlar her zaman gelir.
+Saatli uyarılar ayarı sadece o telefonda geçerli. Check-in uyarısı sadece katıldığın çelınclarda,
+çelınc sürdüğü günlerde ve o gün daha "Geldim" demediysen çalar; çelınc bitince ya da iptal olunca
+kendiliğinden susar. "KOYDUM MU?" lafları, kankanın elle dürtmesi, davetler ve sonuçlar her zaman
+gelir.
 
 **Anlık olsun istersen** (laf atıldığı saniye telefon titresin), Android'e Google'ın push servisi
 (Firebase Cloud Messaging) gerekir. Bir kerelik iş, ücretsiz:

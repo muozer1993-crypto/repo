@@ -46,7 +46,8 @@ export function installNotificationHandler(): void {
   }
 }
 
-async function ensureAndroidChannel(): Promise<void> {
+/** Creates (or updates) the KOYDUM channel; a notification aimed at a missing one is never shown. */
+export async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
   const api = localNotifications();
   if (!api) return;

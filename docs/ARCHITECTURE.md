@@ -364,9 +364,11 @@ açık değildir; orada elle giriş kalıcıdır.
 `services/background.ts` on beş dakikada bir uyanan sistem görevini tanımlar. Uygulama açıkken
 `NotificationBridge` bu göreve kendi işleyicisini verir; uygulama kaydırılıp kapatıldıktan sonra
 görev **başsız** çalışır: JS paketi yüklenir ama React hiç kurulmaz, dolayısıyla hiçbir provider
-yoktur. Bu durumda `services/backgroundWork.ts` oturumu doğrudan depodan okur ve aynı üç işi
+yoktur. Bu durumda `services/backgroundWork.ts` oturumu doğrudan depodan okur ve aynı işleri
 yapar: adım ve ekran süresi okumalarını gönderir, çevrimdışı kuyruğunu boşaltır, gelen kutusu
-sayısını rozete yazar. "Kimse uygulamayı açmasa da çelınc puan toplar" sözü buna dayanır.
+sayısını rozete yazar, telefonun kendi hatırlatmalarını da depodaki profilin seviyesi ve saat
+dilimiyle yeniden kurar (zustand mağazası bu çalışmada yüklenmez). "Kimse uygulamayı açmasa da
+çelınc puan toplar" sözü buna dayanır.
 Sırası gelmişse işe oturumu yenileyerek başlar (aşağıda "Oturumlar"): sadece bu görevle uyanan
 bir telefon da 90. gün dışarıda kalmaz.
 
@@ -392,7 +394,21 @@ kısıtlaması açıksa ana sayfa bunu bir kereliğine söyler: köprü her push
 Telefonun kendi çıkardığı bildirimler (`fireLocal`, hatırlatmalar) Android'de `koydum`
 kanalına gider. Tetikleyicisi `null` olan bir bildirim kütüphanenin İngilizce "Miscellaneous"
 kanalına düşer; orayı susturan biri bütün lafları da susturmuş olurdu. O yüzden hemen gösterilecek
-bildirim de sadece `channelId` taşıyan bir tetikleyiciyle gönderilir.
+bildirim de sadece `channelId` taşıyan bir tetikleyiciyle gönderilir. Kanalı eskiden sadece push
+kaydı açıyordu; Android var olmayan bir kanala gönderilen bildirimi göstermez, o yüzden hatırlatmalar
+da kurulmadan önce kanalı kendisi açar.
+
+Check-in uyarısı eskiden her gün tekrarlayan tek bir alarmdı ve çelıncın başını sonunu bilmiyordu:
+çelınc bittikten ya da iptal olduktan sonra da, uygulama bir daha açılana kadar her sabah 06:30'da
+öterdi. Onu susturmak için kanalı kapatan "KOYDUM MU?" laflarını da susturmuş olurdu. Şimdi
+çelıncın kalan her günü için ayrı, tarihli bir alarm kurulur (en fazla 14 gün ileriye, toplamda en
+fazla 60 bildirim; iPhone en yakın 64'ünü tutup gerisini sessizce atar). Başlangıçtan önce ya da
+bitişten sonra alarm yoktur, gün anahtarları da sunucunun saydığı gibi hesabın saat diliminde
+sayılır. Sadece kabul edilmiş çelınclara kurulur, cevaplanmamış bir davet çalmaz. "Geldim"e
+basılınca, giriş sunucuya gitse de çevrimdışı sıraya alınsa da, o günün alarmı silinir; sunucu
+sıraya alınmış check-in'i kuyruk boşalınca öğrendiği için, uygulama açık kaldıkça sonraki yenilemeler
+de o günü geri kurmaz. Alarmlar her ön plana dönüşte, arka plan görevinde (uygulama kapalıyken
+de) ve Ayarlar'daki anahtarda baştan kurulur.
 
 ## İzinler
 

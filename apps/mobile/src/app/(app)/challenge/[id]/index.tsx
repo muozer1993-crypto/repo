@@ -55,6 +55,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { useTimezone } from '@/hooks/useTimezone';
 import { recordingSince } from '@/services/recordingSteps';
+import { skipTodayCheckinReminder } from '@/services/reminders';
 import {
   getScreenTimeAvailability,
   getTodayScreenMinutes,
@@ -860,6 +861,8 @@ function CheckinAction({ id, detail, level, today, tz }: ActionProps) {
         source: 'checkin',
         clientTime: nowIso(),
       });
+      // sent or parked, today is done: the 30-minutes-left poke must not ring
+      void skipTodayCheckinReminder(id, tz);
       if (response.queued || !response.entry) {
         // offline: the check-in is parked and will be sent when we are back
         setResult('ok');

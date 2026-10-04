@@ -17,7 +17,12 @@ jest.mock('@/services/stepSync', () => ({
 }));
 jest.mock('@/services/screenTimeSync', () => ({ syncScreenTimeNow: jest.fn(async () => {}) }));
 jest.mock('@/services/offlineQueue', () => ({ flushQueue: jest.fn(async () => {}) }));
-jest.mock('@/services/inboxNotifier', () => ({ deliverNewInbox: jest.fn(async () => {}) }));
+const mockDeliverNewInbox = jest.fn(async () => {});
+jest.mock('@/services/inboxNotifier', () => ({ deliverNewInbox: () => mockDeliverNewInbox() }));
+const mockRefreshReminders = jest.fn(async (_client: ApiClient, _level: number, _tz: string) => 0);
+jest.mock('@/services/reminders', () => ({
+  refreshReminders: (client: ApiClient, level: number, tz: string) => mockRefreshReminders(client, level, tz),
+}));
 
 const NOW = new Date('2026-09-27T10:00:00.000Z');
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -33,6 +38,9 @@ async function renewedDaysAgo(days: number): Promise<void> {
 beforeEach(async () => {
   await AsyncStorage.clear();
   await setJson(StorageKeys.token, 'eski');
+  mockSyncStepsNow.mockClear();
+  mockDeliverNewInbox.mockClear();
+  mockRefreshReminders.mockClear();
 });
 
 afterAll(async () => {
@@ -119,5 +127,37 @@ describe('the headless background task', () => {
     expect(String((fetchSpy.mock.calls[0] as unknown[])[0])).toMatch(/\/auth\/refresh$/);
     expect(await getJson<string>(StorageKeys.token)).toBe('yeni');
     expect(mockSyncStepsNow.mock.calls[0]?.[0].client.token).toBe('yeni');
+  });
+
+  it('plans the reminders again at the stored profile\'s level and zone', async () => {
+    await setJson(StorageKeys.tokenRenewedAt, new Date().toISOString());
+    await setJson(StorageKeys.me, { id: 'me-1', vulgarityMax: 3, timezone: 'Europe/Berlin' });
+
+    await runBackgroundWork();
+
+    expect(mockRefreshReminders).toHaveBeenCalledTimes(1);
+    const [usedClient, level, tz] = mockRefreshReminders.mock.calls[0] ?? [];
+    expect(usedClient?.token).toBe('eski');
+    expect(level).toBe(3);
+    expect(tz).toBe('Europe/Berlin');
+  });
+
+  it('leaves the reminders alone without a stored profile', async () => {
+    await setJson(StorageKeys.tokenRenewedAt, new Date().toISOString());
+
+    await runBackgroundWork();
+
+    expect(mockRefreshReminders).not.toHaveBeenCalled();
+    expect(mockDeliverNewInbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('gets through the run when the reminders cannot be planned', async () => {
+    await setJson(StorageKeys.tokenRenewedAt, new Date().toISOString());
+    await setJson(StorageKeys.me, { id: 'me-1', vulgarityMax: 2, timezone: 'Europe/Istanbul' });
+    mockRefreshReminders.mockRejectedValueOnce(new ApiError('network', 'Sunucuya ulaşamadım.', 0));
+
+    await expect(runBackgroundWork()).resolves.toBeUndefined();
+    expect(mockSyncStepsNow).toHaveBeenCalledTimes(1);
+    expect(mockDeliverNewInbox).toHaveBeenCalledTimes(1);
   });
 });

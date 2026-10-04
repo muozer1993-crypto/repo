@@ -1,3 +1,4 @@
+import type { Me } from '@koydum/shared';
 import { QueryClient } from '@tanstack/react-query';
 
 import { ApiClient } from '@/lib/api';
@@ -5,9 +6,11 @@ import { StorageKeys, getJson } from '@/lib/storage';
 import { guessServerUrl, serverUrlIsEditable } from '@/lib/config';
 import { deliverNewInbox } from '@/services/inboxNotifier';
 import { flushQueue } from '@/services/offlineQueue';
+import { refreshReminders } from '@/services/reminders';
 import { syncScreenTimeNow } from '@/services/screenTimeSync';
 import { renewTokenIfDue } from '@/services/session';
 import { syncStepsNow } from '@/services/stepSync';
+import { resolveTimezone } from '@/utils/datetime';
 
 /**
  * The work the periodic background task does when the app itself is not
@@ -20,8 +23,11 @@ import { syncStepsNow } from '@/services/stepSync';
  * app entry, `index.ts`, imports `services/background`). Without this fallback the
  * task was a no-op exactly in the situation it exists for ("a çelınc keeps
  * scoring even when nobody opens the app"). So the session is read straight
- * from storage and the same three things happen: device readings go up, parked
- * entries drain, the badge reflects the inbox.
+ * from storage and the same things happen: device readings go up, parked
+ * entries drain, the badge reflects the inbox, and the phone's own reminders
+ * are planned again from the stored profile (the zustand store is not loaded
+ * here). A phone nobody opens would otherwise keep the alarms it had the last
+ * time somebody did, for a çelınc that has since been cancelled.
  */
 export async function runBackgroundWork(): Promise<void> {
   const [token, storedUrl] = await Promise.all([
@@ -61,5 +67,19 @@ export async function runBackgroundWork(): Promise<void> {
     await deliverNewInbox(client, 'system');
   } catch {
     // offline: the next run tries again
+  }
+  try {
+    // the same level and zone the app would use (see useLevel / useTimezone);
+    // the "Saatli çelınc uyarıları" switch is honoured inside
+    const me = await getJson<Me>(StorageKeys.me);
+    if (me) {
+      await refreshReminders(
+        client,
+        me.vulgarityMax ?? 2,
+        resolveTimezone(me.timezone, Intl.DateTimeFormat().resolvedOptions().timeZone)
+      );
+    }
+  } catch {
+    // the alarms already set stay; the next run tries again
   }
 }

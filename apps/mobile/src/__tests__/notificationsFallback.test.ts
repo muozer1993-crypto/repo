@@ -43,7 +43,7 @@ jest.mock('expo-notifications/build/setBadgeCountAsync', () => ({
   setBadgeCountAsync: jest.fn(async () => true),
 }));
 jest.mock('expo-notifications/build/Notifications.types', () => ({
-  SchedulableTriggerInputTypes: { DAILY: 'daily', TIME_INTERVAL: 'timeInterval' },
+  SchedulableTriggerInputTypes: { DAILY: 'daily', DATE: 'date', TIME_INTERVAL: 'timeInterval' },
 }));
 jest.mock('expo-notifications/build/NotificationChannelManager.types', () => ({
   AndroidImportance: { MAX: 5 },
@@ -86,18 +86,23 @@ describe('when expo-notifications refuses to load', () => {
   });
 
   it('still schedules reminders', async () => {
+    // 06:00 in Istanbul: today's 06:30 check-in poke and the last hour are both ahead
+    const now = new Date('2026-10-05T03:00:00.000Z');
     const count = await syncReminders(
       [
         {
           id: 'c1',
           title: 'Sabah Kalkma',
-          endsAt: new Date(Date.now() + 5 * 60 * 60_000).toISOString(),
+          startsAt: new Date(now.getTime() - 2 * 86_400_000).toISOString(),
+          endsAt: new Date(now.getTime() + 5 * 60 * 60_000).toISOString(),
           metricType: 'checkin_deadline',
           deadlineTime: '07:00',
           doneToday: false,
         },
       ],
-      3
+      3,
+      'Europe/Istanbul',
+      now
     );
     expect(count).toBe(2);
     expect(mockSchedule).toHaveBeenCalledTimes(2);

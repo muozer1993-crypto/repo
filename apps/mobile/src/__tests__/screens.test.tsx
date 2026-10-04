@@ -134,12 +134,14 @@ const mockReminders = {
     mockReminders.enabled = on;
   }),
   refresh: jest.fn(async (..._args: unknown[]) => 0),
+  skipToday: jest.fn(async (_challengeId: string, _tz: string) => {}),
 };
 
 jest.mock('@/services/reminders', () => ({
   deviceRemindersEnabled: async () => mockReminders.enabled,
   setDeviceRemindersEnabled: (on: boolean) => mockReminders.set(on),
   refreshReminders: (...args: unknown[]) => mockReminders.refresh(...args),
+  skipTodayCheckinReminder: (challengeId: string, tz: string) => mockReminders.skipToday(challengeId, tz),
 }));
 
 /** Android's battery and alarm switches (services/deviceHealth has its own test); null = not Android. */
@@ -958,6 +960,87 @@ describe('a proof photo with no connection', () => {
     expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ value: 5, proofUrl: '/uploads/p1.jpg' }));
     expect(JSON.stringify((api.addEntry as jest.Mock).mock.calls[0])).not.toContain('file://');
     expect(await readQueue()).toEqual([]);
+  });
+});
+
+describe('a check-in', () => {
+  const { readQueue, removeFromQueue } = require('@/services/offlineQueue') as typeof import('@/services/offlineQueue');
+
+  function checkinDetail() {
+    const detail = challengeDetail();
+    return {
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        typeKey: 'erken_kus',
+        metricType: 'checkin_deadline' as const,
+        unit: 'gün',
+        title: 'Erken Kalkan Koyar',
+        deadlineTime: '07:00',
+      },
+    };
+  }
+
+  beforeEach(() => {
+    mockReminders.skipToday.mockClear();
+  });
+
+  afterEach(async () => {
+    for (const item of await readQueue()) await removeFromQueue(item.id);
+  });
+
+  it('takes back today\'s 30-minutes-left poke once the server has it', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => checkinDetail());
+    api.addEntry = jest.fn(async () => ({ entry: { value: 1, late: false }, standings: [] }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    await act(async () => {
+      await findWith(tree, 'title', 'Geldim', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ source: 'checkin' }));
+    expect(mockReminders.skipToday).toHaveBeenCalledWith('c-1', expect.any(String));
+  });
+
+  it('takes it back as well when the check-in is parked offline', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => checkinDetail());
+    api.addEntry = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    await act(async () => {
+      await findWith(tree, 'title', 'Geldim', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(await readQueue()).toHaveLength(1);
+    expect(mockReminders.skipToday).toHaveBeenCalledWith('c-1', expect.any(String));
+  });
+
+  it('leaves the poke alone when the server turns the check-in down', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => checkinDetail());
+    api.addEntry = jest.fn(async () => {
+      throw new ApiError('checkin_too_early', "Bu check-in 04:00'den sonra sayılıyor. Biraz erken geldin.", 400);
+    });
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    await act(async () => {
+      await findWith(tree, 'title', 'Geldim', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(mockReminders.skipToday).not.toHaveBeenCalled();
   });
 });
 
