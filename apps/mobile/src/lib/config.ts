@@ -37,22 +37,34 @@ export function stripTrailingSlash(url: string): string {
   return url.trim().replace(/\/+$/, '');
 }
 
-/** Accepts "192.168.1.20", "192.168.1.20:4000", "https://x.dev" and normalises them. */
+/**
+ * Accepts "192.168.1.20", "192.168.1.20:4000", "abc.trycloudflare.com",
+ * "https://x.dev" and normalises them.
+ */
 export function normalizeServerUrl(input: string): string | null {
   const raw = input.trim();
   if (!raw) return null;
-  const withScheme = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
+  const typedScheme = /^https?:\/\//i.test(raw);
+  const withScheme = typedScheme ? raw : `http://${raw}`;
   try {
     const url = new URL(withScheme);
     if (!url.hostname) return null;
     // "192.168.1.20" or "localhost" almost always means the default port;
-    // a real hostname like "koydum.example.com" is left alone.
+    // a real hostname like "koydum.example.com" is left alone. A name with no
+    // dot at all ("macbook") can only be a machine on this network.
     const looksLocal =
       /^\d{1,3}(\.\d{1,3}){3}$/.test(url.hostname) ||
       url.hostname === 'localhost' ||
-      url.hostname.endsWith('.local');
+      url.hostname.endsWith('.local') ||
+      !url.hostname.includes('.');
     if (!url.port && url.protocol === 'http:' && looksLocal) {
       url.port = String(DEFAULT_PORT);
+    }
+    // A bare domain is a tunnel or a real deployment, and those speak https:
+    // "abc.trycloudflare.com" read as http never reaches the server. One typed
+    // with a port is somebody's Node process answering plain http, so it keeps it.
+    if (!typedScheme && !looksLocal && !url.port) {
+      url.protocol = 'https:';
     }
     return stripTrailingSlash(url.toString());
   } catch {

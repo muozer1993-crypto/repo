@@ -12,6 +12,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { PendingInviteBanner } from '@/components/PendingInviteBanner';
 import { Button } from '@/components/Button';
+import { ChooseServerCard, needsServerChoice } from '@/components/ChooseServerCard';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
@@ -59,12 +60,18 @@ export default function RegisterScreen() {
   const [level, setLevel] = useState<VulgarityLevel>(2);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const chooseFirst = needsServerChoice(serverUrl);
 
   // React Compiler memoises this for us: the preview follows the picker live.
   const preview = renderTaunt(pickTaunt('win', level, 1), PREVIEW_VARS);
 
   const submit = async () => {
     setError(null);
+    // the keyboard's "go" still reaches here while the button is disabled
+    if (chooseFirst) {
+      setError('Önce yukarıdan sunucuyu seç.');
+      return;
+    }
     const name = username.trim().toLowerCase();
     const display = displayName.trim();
 
@@ -121,6 +128,8 @@ export default function RegisterScreen() {
           {t('register_title', level)}
         </Text>
       </View>
+
+      {chooseFirst ? <ChooseServerCard /> : null}
 
       <PendingInviteBanner action="register" />
 
@@ -193,7 +202,21 @@ export default function RegisterScreen() {
         </View>
       ) : null}
 
-      <Button title="Kaydol ve başla" size="lg" fullWidth loading={busy} onPress={submit} />
+      <View style={styles.submit}>
+        <Button
+          title="Kaydol ve başla"
+          size="lg"
+          fullWidth
+          loading={busy}
+          disabled={chooseFirst}
+          onPress={submit}
+        />
+        {chooseFirst ? (
+          <Text variant="tiny" faint center>
+            Önce sunucuyu seç
+          </Text>
+        ) : null}
+      </View>
 
       <View style={styles.footer}>
         <Link href="/(auth)/login" asChild>
@@ -229,6 +252,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     padding: Spacing.md,
   },
+  submit: { gap: Spacing.sm },
   footer: { alignItems: 'center', gap: Spacing.md },
   link: { textAlign: 'center' },
 });

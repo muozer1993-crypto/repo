@@ -14,15 +14,20 @@ import { Colors, Spacing } from '@/theme';
  */
 export function PendingInviteBanner({ action }: { action: 'register' | 'login' }) {
   const makeClient = useAuth((s) => s.client);
+  const serverUrl = useAuth((s) => s.serverUrl);
   const [code, setCode] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
 
+  // Read again when the address changes: a link pasted into "Önce sunucuyu
+  // seç" parks its code while this banner is already on screen.
   useEffect(() => {
     let alive = true;
     void (async () => {
       const pending = await readPendingInvite();
       if (!alive || !pending) return;
       setCode(pending.code);
+      // the name found for an earlier code must not stay on a new one
+      setName(null);
       try {
         const found = await makeClient().invite(pending.code);
         if (alive) setName(found.inviter.displayName);
@@ -33,7 +38,7 @@ export function PendingInviteBanner({ action }: { action: 'register' | 'login' }
     return () => {
       alive = false;
     };
-  }, [makeClient]);
+  }, [makeClient, serverUrl]);
 
   if (!code) return null;
   return (

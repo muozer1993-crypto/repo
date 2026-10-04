@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { PendingInviteBanner } from '@/components/PendingInviteBanner';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { ChooseServerCard, needsServerChoice } from '@/components/ChooseServerCard';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
@@ -32,9 +33,15 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const chooseFirst = needsServerChoice(serverUrl);
 
   const submit = async () => {
     setError(null);
+    // the keyboard's "go" still reaches here while the button is disabled
+    if (chooseFirst) {
+      setError('Önce yukarıdan sunucuyu seç.');
+      return;
+    }
     const name = username.trim().toLowerCase();
     if (name.length < 3 || password.length < 6) {
       setError('Kullanıcı adı en az 3, şifre en az 6 karakter olmalı.');
@@ -77,6 +84,8 @@ export default function LoginScreen() {
         </Text>
       </View>
 
+      {chooseFirst ? <ChooseServerCard /> : null}
+
       {sessionNote ? (
         <Card edgeColor={Colors.yellow}>
           <Text variant="small" bold>
@@ -109,7 +118,19 @@ export default function LoginScreen() {
           returnKeyType="go"
           error={error}
         />
-        <Button title="Gir bakalım" size="lg" fullWidth loading={busy} onPress={submit} />
+        <Button
+          title="Gir bakalım"
+          size="lg"
+          fullWidth
+          loading={busy}
+          disabled={chooseFirst}
+          onPress={submit}
+        />
+        {chooseFirst ? (
+          <Text variant="tiny" faint center>
+            Önce sunucuyu seç
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.footer}>

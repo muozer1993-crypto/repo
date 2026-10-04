@@ -8,9 +8,11 @@ import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { ApiClient, ApiError } from '@/lib/api';
-import { DEFAULT_PORT, guessServerUrl, normalizeServerUrl } from '@/lib/config';
+import { DEFAULT_PORT, guessServerUrl } from '@/lib/config';
+import { parsePastedInvite, savePendingInvite } from '@/services/invite';
 import { useAuth } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
+import { isLoopbackUrl } from '@/utils/url';
 
 type TestState =
   | { kind: 'idle' }
@@ -18,12 +20,17 @@ type TestState =
   | { kind: 'ok'; url: string; ms: number; version: string }
   | { kind: 'error'; message: string };
 
-/** How to find the laptop's LAN address, per platform. */
+/** Where the address comes from: the tunnel's link, or the laptop's LAN address per platform. */
 const HOW_TO: { emoji: string; title: string; body: string }[] = [
+  {
+    emoji: '🌍',
+    title: 'İnternetten (tünel)',
+    body: 'Sunucuyu açan kanka npm run internet ile açtıysa sana içinde …trycloudflare.com geçen bir bağlantı atar. Onu olduğu gibi yapıştır.',
+  },
   {
     emoji: '📶',
     title: 'Aynı Wi-Fi',
-    body: 'Telefon ile sunucunun çalıştığı bilgisayar aynı Wi-Fi ağında olmalı. Mobil veriyle olmaz.',
+    body: '192.168… gibi bir adresle bağlanıyorsan telefon ile sunucunun çalıştığı bilgisayar aynı Wi-Fi ağında olmalı. Mobil veriyle olmaz.',
   },
   {
     emoji: '🍎',
@@ -59,12 +66,13 @@ export default function ServerScreen() {
   };
 
   const test = async () => {
-    const normalized = normalizeServerUrl(value);
+    const { server: normalized, code } = parsePastedInvite(value);
     if (!normalized) {
       setState({ kind: 'error', message: 'Bu adresi anlayamadım. Örnek: 192.168.1.20:4000' });
       return;
     }
-    setValue(normalized);
+    // a pasted invite stays as it is, or "Kaydet" would lose its code
+    if (!code) setValue(normalized);
     setState({ kind: 'testing' });
     const started = Date.now();
     try {
@@ -88,12 +96,15 @@ export default function ServerScreen() {
   };
 
   const save = async () => {
-    const normalized = normalizeServerUrl(value);
+    const { server: normalized, code } = parsePastedInvite(value);
     if (!normalized) {
       setState({ kind: 'error', message: 'Bu adresi anlayamadım. Örnek: 192.168.1.20:4000' });
       return;
     }
-    setValue(normalized);
+    if (!code) setValue(normalized);
+    // parked before the address changes, so the login screen's banner finds
+    // it and the request goes out right after sign-up
+    if (code) await savePendingInvite(code, normalized);
     await setServerUrl(normalized);
     setSaved(true);
     if (router.canGoBack()) router.back();
@@ -112,13 +123,14 @@ export default function ServerScreen() {
         </Pressable>
         <Text variant="title">Sunucu adresi</Text>
         <Text variant="small" muted>
-          KOYDUM kendi sunucunda çalışır. Sunucunun çalıştığı bilgisayarın adresini buraya yaz.
+          KOYDUM kendi sunucunda çalışır. Kankanın attığı davet bağlantısını yapıştır ya da sunucunun
+          çalıştığı bilgisayarın adresini yaz.
         </Text>
       </View>
 
       <Input
-        label="Adres"
-        placeholder={`192.168.1.20:${DEFAULT_PORT}`}
+        label="Adres ya da davet bağlantısı"
+        placeholder={`Davet bağlantısı ya da 192.168.1.20:${DEFAULT_PORT}`}
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType={Platform.OS === 'web' ? 'default' : 'url'}
@@ -169,7 +181,7 @@ export default function ServerScreen() {
       ) : null}
 
       <Card>
-        <Text variant="label">LAN adresi nasıl bulunur?</Text>
+        <Text variant="label">Adres nereden bulunur?</Text>
         <View style={styles.howList}>
           {HOW_TO.map((item) => (
             <View key={item.title} style={styles.howRow}>
@@ -191,11 +203,14 @@ export default function ServerScreen() {
         <Text variant="tiny" faint>
           Şu an kayıtlı: {serverUrl}
         </Text>
-        <Pressable accessibilityRole="button" onPress={() => change(guessed)} hitSlop={8}>
-          <Text variant="tiny" color={Colors.accent} bold>
-            Tahminimi kullan: {guessed}
-          </Text>
-        </Pressable>
+        {/* on a phone localhost is the fallback, not a guess: it is the phone itself */}
+        {Platform.OS !== 'web' && isLoopbackUrl(guessed) ? null : (
+          <Pressable accessibilityRole="button" onPress={() => change(guessed)} hitSlop={8}>
+            <Text variant="tiny" color={Colors.accent} bold>
+              Tahminimi kullan: {guessed}
+            </Text>
+          </Pressable>
+        )}
       </View>
     </Screen>
   );

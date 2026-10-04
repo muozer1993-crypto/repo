@@ -5,7 +5,8 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider } from '@/components/Toast';
-import { ApiError } from '@/lib/api';
+import { ApiClient, ApiError } from '@/lib/api';
+import { clearPendingInvite, readPendingInvite } from '@/services/invite';
 
 /**
  * Every list screen has to survive the three states the server actually
@@ -74,13 +75,19 @@ const mockClearSessionEnded = jest.fn(() => {
 });
 const mockSetSession = jest.fn(async () => {});
 const mockSetMe = jest.fn(async () => {});
+/** the address the screens see; a fresh install sits on the localhost fallback */
+const mockServer = { url: 'http://localhost:4000' };
+const mockSetServerUrl = jest.fn(async (url: string) => {
+  mockServer.url = url;
+});
 
 jest.mock('@/store/auth', () => ({
   useAuth: (selector: (state: unknown) => unknown) =>
     selector({
       me: ME,
       token: 'token',
-      serverUrl: 'http://localhost:4000',
+      serverUrl: mockServer.url,
+      setServerUrl: mockSetServerUrl,
       refreshMe: jest.fn(),
       setSession: mockSetSession,
       setMe: mockSetMe,
@@ -218,6 +225,7 @@ function rendered(tree: ReactTestRenderer): string {
 const NETWORK_ERROR = new ApiError('network', 'Sunucuya ulaşamadım.', 0);
 
 beforeEach(() => {
+  mockServer.url = 'http://localhost:4000';
   mockDeviceHealth.state = null;
   delete searchParams.id;
   delete searchParams.with;
@@ -1125,6 +1133,84 @@ function typeInto(tree: ReactTestRenderer, label: string, text: string): void {
     findWith(tree, 'label', label, 'onChangeText').props.onChangeText(text);
   });
 }
+
+describe('auth screens before a server is chosen', () => {
+  const SCREENS = [
+    { name: 'login', load: () => require('@/app/(auth)/login').default, submit: 'Gir bakalım' },
+    { name: 'register', load: () => require('@/app/(auth)/register').default, submit: 'Kaydol ve başla' },
+  ];
+  const PASTE = 'Davet bağlantısı ya da 192.168.1.20';
+
+  function paste(tree: ReactTestRenderer, text: string): void {
+    act(() => {
+      findWith(tree, 'placeholder', PASTE, 'onChangeText').props.onChangeText(text);
+    });
+  }
+
+  let health: jest.SpyInstance | null = null;
+  afterEach(async () => {
+    health?.mockRestore();
+    health = null;
+    mockSetServerUrl.mockClear();
+    await clearPendingInvite();
+  });
+
+  it.each(SCREENS)('$name asks for the invite link first and holds the submit button', async ({ load, submit }) => {
+    const AuthScreen = load();
+    const tree = renderScreen(<AuthScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('Önce sunucuyu seç');
+    expect(rendered(tree)).toContain('Kankanın attığı davet bağlantısını olduğu gibi yapıştır.');
+    expect(findWith(tree, 'title', submit, 'onPress').props.disabled).toBe(true);
+  });
+
+  it.each(SCREENS)('$name shows no such card on a LAN address', async ({ load, submit }) => {
+    mockServer.url = 'http://192.168.1.20:4000';
+    const AuthScreen = load();
+    const tree = renderScreen(<AuthScreen />);
+    await settle();
+    expect(rendered(tree)).not.toContain('Önce sunucuyu seç');
+    expect(findWith(tree, 'title', submit, 'onPress').props.disabled).toBeFalsy();
+  });
+
+  it('adopts the server of a pasted WhatsApp message once it answers, and parks its code', async () => {
+    health = jest.spyOn(ApiClient.prototype, 'health').mockResolvedValue({
+      ok: true,
+      version: '1.1.0',
+      time: '',
+      app: null,
+      publicUrl: null,
+    } as never);
+    const LoginScreen = SCREENS[0]!.load();
+    const tree = renderScreen(<LoginScreen />);
+    paste(tree, 'Gel lan, KOYDUM’da kapışalım: https://abc.trycloudflare.com/davet/AB12CD');
+    press(tree, 'Bağlan');
+    await settle();
+    expect(health).toHaveBeenCalledTimes(1);
+    expect(mockSetServerUrl).toHaveBeenCalledWith('https://abc.trycloudflare.com');
+    expect(await readPendingInvite()).toMatchObject({ code: 'AB12CD', server: 'https://abc.trycloudflare.com' });
+  });
+
+  it('keeps the fallback and says why when the pasted server does not answer', async () => {
+    health = jest.spyOn(ApiClient.prototype, 'health').mockRejectedValue(NETWORK_ERROR);
+    const LoginScreen = SCREENS[0]!.load();
+    const tree = renderScreen(<LoginScreen />);
+    paste(tree, 'https://abc.trycloudflare.com/davet/AB12CD');
+    press(tree, 'Bağlan');
+    await settle();
+    expect(rendered(tree)).toContain('Bu adrese ulaşamadım.');
+    expect(mockSetServerUrl).not.toHaveBeenCalled();
+    expect(await readPendingInvite()).toBeNull();
+
+    // and something that is no address at all never reaches the network
+    health.mockClear();
+    paste(tree, 'Gel lan, KOYDUM’da kapışalım');
+    press(tree, 'Bağlan');
+    await settle();
+    expect(rendered(tree)).toContain('Bunu adres olarak okuyamadım.');
+    expect(health).not.toHaveBeenCalled();
+  });
+});
 
 describe('settings password sheet', () => {
   function openSheet(): ReactTestRenderer {

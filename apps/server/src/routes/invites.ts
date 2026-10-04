@@ -10,11 +10,15 @@
  *
  * The open button carries this server's address (`server=`) so the app can
  * point itself at it — the friend never types an IP. The app asks before it
- * switches servers; see apps/mobile/src/app/davet/[code].tsx.
+ * switches servers; see apps/mobile/src/app/davet/[code].tsx. Android's
+ * installer ends on its own "Aç", which starts the app with no link, so the
+ * page also offers the link for copying: the app's login and register screens
+ * take it pasted (ChooseServerCard).
  *
  * Lookups are rate-limited per IP: a code is only six characters and the page
  * answers with a display name, so it must not be an enumeration oracle.
  */
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { UserRow } from '../db/index.js';
@@ -27,6 +31,34 @@ export const INVITE_LOOKUPS_PER_IP = { max: 120, windowMs: 10 * 60 * 1000 } as c
 
 const CODE_RE = /^[A-Za-z0-9]{4,12}$/;
 const ANDROID_PACKAGE = 'com.koydum.app';
+
+/**
+ * The page's one script: "Bağlantıyı kopyala". The clipboard API only exists
+ * on https and localhost, and a LAN page is plain http, so without it the link
+ * is selected (and execCommand tried) for a long press to copy. It is allowed
+ * by its hash, not by 'unsafe-inline': nothing else on the page may run.
+ */
+const COPY_SCRIPT = `(function () {
+  var button = document.getElementById('copy');
+  var field = document.getElementById('link');
+  if (!button || !field) return;
+  function select() {
+    field.focus();
+    field.select();
+    field.setSelectionRange(0, field.value.length);
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (e) { copied = false; }
+    button.textContent = copied ? 'Kopyalandı' : 'Seçtim, basılı tutup kopyala';
+  }
+  button.addEventListener('click', function () {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(field.value).then(function () { button.textContent = 'Kopyalandı'; }, select);
+    } else {
+      select();
+    }
+  });
+})();`;
+const COPY_SCRIPT_HASH = `sha256-${createHash('sha256').update(COPY_SCRIPT).digest('base64')}`;
 
 function escapeHtml(value: string): string {
   return value
@@ -85,15 +117,27 @@ function renderPage(input: PageInput): string {
     ? `<a class="btn secondary" href="${escapeHtml(release.downloadUrl)}">Uygulamayı indir (Android)${escapeHtml(version + size)}</a>`
     : `<p class="note">Uygulama sende yoksa seni davet edene yaz, APK'yı o göndersin.</p>`;
 
+  // What the app's "Önce sunucuyu seç" card reads: the server, and the code
+  // when there is one. Built here rather than read from the address bar, so
+  // the fallback /indir?kod= page hands over the same link as /davet.
+  const link = code ? `${input.origin}/davet/${encodeURIComponent(code)}` : `${input.origin}/indir`;
+  const copy = `<div class="copy">
+          <span>Yükleyicideki <b>Aç</b>'a bastıysan: bu bağlantıyı kopyala, uygulamada yapıştır.</span>
+          <input id="link" readonly value="${escapeHtml(link)}" aria-label="Davet bağlantısı">
+          <button id="copy" type="button">Bağlantıyı kopyala</button>
+        </div>`;
+
   const steps = code
     ? `<ol class="steps">
         <li>Uygulama telefonunda yoksa önce indirip kur. Android "bilinmeyen kaynak" diye sorarsa bir kere izin ver.</li>
-        <li>Bu sayfaya geri dön, <b>KOYDUM'da aç</b>'a dokun.</li>
+        <li>Bu sayfaya geri dön, <b>KOYDUM'da aç</b>'a dokun.
+        ${copy}</li>
         <li>Kayıt ol. Kanka isteğin kendiliğinden gider.</li>
       </ol>`
     : `<ol class="steps">
         <li>Uygulamayı indirip kur. Android "bilinmeyen kaynak" diye sorarsa bir kere izin ver.</li>
-        <li>Seni davet eden kişinin bağlantısına tekrar dokun ya da uygulamada kodunu yaz.</li>
+        <li>Seni davet eden kişinin bağlantısına tekrar dokun ya da uygulamada kodunu yaz.
+        ${copy}</li>
       </ol>`;
 
   // without a code there is nothing for the app to open (koydum://davet has no screen)
@@ -145,6 +189,11 @@ function renderPage(input: PageInput): string {
   .manual b { display: block; overflow-wrap: anywhere; }
   .code { color: #FFD400; letter-spacing: 3px; font-size: 20px; }
   .note { font-size: 13px; }
+  .copy { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+  .copy input { width: 100%; background: #0B0B0F; color: #F5F5F7; border: 1px solid #2A2A33;
+    border-radius: 10px; padding: 10px 12px; font: inherit; }
+  .copy button { align-self: flex-start; background: #2A2A33; color: #F5F5F7; border: 0;
+    border-radius: 10px; padding: 10px 14px; font: inherit; font-weight: 800; }
 </style>
 </head>
 <body>
@@ -159,6 +208,7 @@ function renderPage(input: PageInput): string {
   ${manual}
   <p class="note">iPhone sürümü şimdilik yok, KOYDUM'u Android telefona kurabilirsin.</p>
 </main>
+<script>${COPY_SCRIPT}</script>
 </body>
 </html>`;
 }
@@ -195,8 +245,12 @@ export default async function inviteRoutes(app: FastifyInstance): Promise<void> 
       .header('cache-control', 'no-store')
       .header('x-content-type-options', 'nosniff')
       .header('referrer-policy', 'no-referrer')
-      // nothing on the page runs code or loads anything from elsewhere
-      .header('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'")
+      // nothing on the page loads anything from elsewhere, and the copy
+      // button's script is the only code allowed to run
+      .header(
+        'content-security-policy',
+        `default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; script-src '${COPY_SCRIPT_HASH}'`,
+      )
       .send(html);
 
   app.get<{ Params: { code: string } }>('/invites/:code', async (request) => {

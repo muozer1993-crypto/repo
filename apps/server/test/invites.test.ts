@@ -3,6 +3,7 @@
  * download and the "latest version" the app compares itself against.
  */
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -107,7 +108,36 @@ describe('GET /davet/:code', () => {
       url: `/davet/${ali.me.inviteCode}`,
       headers: { host: 'a"><script>x</script>' },
     });
-    expect(hostile.body).not.toContain('<script>');
+    // the page's own copy script is there; the Host's never is
+    expect(hostile.body).not.toContain('<script>x');
+  });
+
+  it('hands the link over for pasting, for a friend who opened the app from the installer', async () => {
+    harness = await appWith(tempAppDir());
+    const ali = await registerUser(harness.app, 'ali');
+    const page = await harness.app.inject({
+      method: 'GET',
+      url: `/davet/${ali.me.inviteCode.toLowerCase()}`,
+      headers: { host: 'abc.trycloudflare.com', 'x-forwarded-proto': 'https', 'user-agent': 'Android' },
+    });
+    expect(page.body).toContain("Yükleyicideki <b>Aç</b>'a bastıysan: bu bağlantıyı kopyala, uygulamada yapıştır.");
+    expect(page.body).toContain(`value="https://abc.trycloudflare.com/davet/${ali.me.inviteCode}"`);
+    expect(page.body).toContain('Bağlantıyı kopyala');
+
+    // the strict CSP lets exactly this script run, and nothing inline besides
+    const scripts = [...page.body.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+    expect(scripts).toHaveLength(1);
+    const hash = createHash('sha256').update(scripts[0]!).digest('base64');
+    const csp = String(page.headers['content-security-policy']);
+    const scriptSrc = csp.split(';').map((part) => part.trim()).find((part) => part.startsWith('script-src'));
+    expect(scriptSrc).toBe(`script-src 'sha256-${hash}'`);
+    expect(csp).toContain("default-src 'none'");
+
+    // the download fallback hands over the same link, and a bare /indir the server alone
+    const fallback = await harness.app.inject({ method: 'GET', url: `/indir?kod=${ali.me.inviteCode}`, headers: { host: 'x.test' } });
+    expect(fallback.body).toContain(`value="http://x.test/davet/${ali.me.inviteCode}"`);
+    const bare = await harness.app.inject({ method: 'GET', url: '/indir', headers: { host: 'x.test' } });
+    expect(bare.body).toContain('value="http://x.test/indir"');
   });
 });
 

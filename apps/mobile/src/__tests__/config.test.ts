@@ -17,6 +17,16 @@ describe('server URL normalisation', () => {
     expect(normalizeServerUrl('http://koydum.example.com')).toBe('http://koydum.example.com');
   });
 
+  it('reads a bare domain as https and a bare LAN address as http', () => {
+    // a tunnel only answers on https; as http it never reached the server
+    expect(normalizeServerUrl('abc.trycloudflare.com')).toBe('https://abc.trycloudflare.com');
+    expect(normalizeServerUrl('koydum.example.com/')).toBe('https://koydum.example.com');
+    expect(normalizeServerUrl('192.168.1.20')).toBe('http://192.168.1.20:4000');
+    expect(normalizeServerUrl('macbook')).toBe('http://macbook:4000');
+    // a port typed by hand is a Node process on plain http
+    expect(normalizeServerUrl('koydum.example.com:4000')).toBe('http://koydum.example.com:4000');
+  });
+
   it('keeps a path prefix and drops the trailing slash', () => {
     expect(normalizeServerUrl('https://example.com/api/')).toBe('https://example.com/api');
   });

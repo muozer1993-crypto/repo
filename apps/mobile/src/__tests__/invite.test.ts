@@ -8,6 +8,7 @@ import { ApiError, type ApiClient } from '@/lib/api';
 import {
   applyPendingInvite,
   normalizeInviteCode,
+  parsePastedInvite,
   readPendingInvite,
   savePendingInvite,
   sendInvite,
@@ -52,6 +53,40 @@ describe('the server inside a pasted invite link', () => {
     expect(serverFromInviteLink('https://yeni-adres.trycloudflare.com')).toBeNull();
     expect(serverFromInviteLink('192.168.1.20')).toBeNull();
     expect(serverFromInviteLink('https://ornek.com/davetiye')).toBeNull();
+  });
+});
+
+describe('a paste on a phone that has no server yet', () => {
+  it('takes the server and the code out of the WhatsApp message', () => {
+    expect(parsePastedInvite('Gel lan: https://abc.trycloudflare.com/davet/AB12CD')).toEqual({
+      server: 'https://abc.trycloudflare.com',
+      code: 'AB12CD',
+    });
+    expect(parsePastedInvite('koydum://davet/ab12cd?server=http%3A%2F%2F192.168.1.20%3A4000')).toEqual({
+      server: 'http://192.168.1.20:4000',
+      code: 'AB12CD',
+    });
+    // the page the download falls back to
+    expect(parsePastedInvite('http://192.168.1.20:4000/indir?kod=AB12CD')).toEqual({
+      server: 'http://192.168.1.20:4000',
+      code: 'AB12CD',
+    });
+  });
+
+  it('reads a bare address, alone or inside a sentence, with no code', () => {
+    expect(parsePastedInvite('192.168.1.20')).toEqual({ server: 'http://192.168.1.20:4000', code: null });
+    expect(parsePastedInvite('abc.trycloudflare.com')).toEqual({ server: 'https://abc.trycloudflare.com', code: null });
+    expect(parsePastedInvite('Adres bu: https://abc.trycloudflare.com.')).toEqual({
+      server: 'https://abc.trycloudflare.com',
+      code: null,
+    });
+  });
+
+  it('gives nothing for text with no address in it', () => {
+    expect(parsePastedInvite('Gel lan, KOYDUM’da kapışalım')).toEqual({ server: null, code: null });
+    expect(parsePastedInvite('   ')).toEqual({ server: null, code: null });
+    // too long to be a code: not cut down to one
+    expect(parsePastedInvite('https://x.test/davet/ABCDEFGHIJKLMN').code).toBeNull();
   });
 });
 

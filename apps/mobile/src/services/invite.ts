@@ -46,6 +46,23 @@ export function serverFromInviteLink(text: string): string | null {
   return page ? normalizeServerUrl(page[1]) : null;
 }
 
+/**
+ * Whatever a friend pastes before the app knows any server: the WhatsApp
+ * message with the invite link, the link alone, or a bare address. Android's
+ * installer ends on "Aç", which starts the app with no link, so this paste is
+ * how both the server and the code reach a fresh install. The code comes from
+ * `/davet/CODE` (or the `/indir?kod=CODE` page the download falls back to).
+ */
+export function parsePastedInvite(text: string): { server: string | null; code: string | null } {
+  // "Adres bu: https://abc.trycloudflare.com." — a bare address inside a
+  // sentence, without the sentence's last full stop
+  const inline = /https?:\/\/[^\s]+/i.exec(text)?.[0].replace(/[.,;:!?)]+$/, '');
+  const server =
+    serverFromInviteLink(text) ?? normalizeServerUrl(text) ?? (inline ? normalizeServerUrl(inline) : null);
+  const found = /(?:\/davet\/|[?&]kod=)([A-Za-z0-9]{4,12})(?![A-Za-z0-9])/i.exec(text);
+  return { server, code: found ? normalizeInviteCode(found[1]) : null };
+}
+
 export async function savePendingInvite(code: string, server: string | null): Promise<void> {
   const invite: PendingInvite = {
     code,

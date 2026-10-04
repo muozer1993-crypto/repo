@@ -120,7 +120,9 @@ hostname -I | awk '{print $1}'
 ```
 
 Çıkan adresi (`192.168.1.20` gibi) uygulamadaki **Sunucu adresi** ekranına yaz. Port yazmazsan
-otomatik `:4000` eklenir. "Bağlantıyı test et" düğmesi yeşil yanıyorsa tamamdır.
+otomatik `:4000` eklenir. "Bağlantıyı test et" düğmesi yeşil yanıyorsa tamamdır. APK'yı yeni kurmuş
+bir telefonda giriş ekranının en üstünde **Önce sunucuyu seç** kartı çıkar; adresi oraya da
+yazabilirsin.
 
 ### Arkadaşların farklı ağdaysa: `npm run internet`
 
@@ -218,10 +220,12 @@ gönder. Arkadaşın kurarken Android "bilinmeyen kaynak" uyarısı verir, bir k
 yeterli.
 
 `preview` profili bilerek **uygulama içi sunucu adresi ekranını açık bırakır** — arkadaşın
-uygulamayı açtığında adresi kendisi yazabilir. `production` profili adresi derlemeye gömer ve o
-ekranı gizler; onu kullanacaksan `apps/mobile/eas.json` içindeki `EXPO_PUBLIC_KOYDUM_API_URL`
-değerini **önce kendi adresinle değiştir**, yoksa açılmayan bir sunucuya bakan bir uygulama
-çıkar.
+uygulamayı açtığında adresi kendisi yazabilir. Henüz sunucu seçilmemişse giriş ve kayıt ekranları
+en üstte **Önce sunucuyu seç** der ve sunucu seçilene kadar giriş düğmesine basılamaz; arkadaşın
+senin attığın davet mesajını olduğu gibi yapıştırır, sunucu da davet kodu da oradan okunur.
+`production` profili adresi derlemeye gömer ve o ekranı gizler; onu kullanacaksan
+`apps/mobile/eas.json` içindeki `EXPO_PUBLIC_KOYDUM_API_URL` değerini **önce kendi adresinle
+değiştir**, yoksa açılmayan bir sunucuya bakan bir uygulama çıkar.
 
 > **Düz HTTP hakkında:** Android 9'dan beri şifresiz `http://` bağlantıları varsayılan olarak
 > engelli. Bu uygulama kendi sunucusuna bağlanmak zorunda ve o sunucu çoğu zaman ev ağındaki bir
@@ -301,6 +305,12 @@ Arkadaşın bağlantıya dokununca sunucunun kendi sayfası açılır:
 * "Mustafa seni KOYDUM'a çağırıyor" yazar (WhatsApp önizlemesinde de görünür),
 * **KOYDUM'da aç** uygulamayı açar ve sunucu adresini uygulamaya kendisi verir; arkadaşın IP yazmaz,
 * uygulama yoksa aynı sayfadan APK indirilir,
+* kurulum bitince Android'in kendi **Aç** düğmesine basan arkadaşın uygulamayı bağlantısız açar;
+  sayfadaki **Bağlantıyı kopyala** bunun için var. Uygulama giriş ekranında **Önce sunucuyu seç**
+  der, arkadaşın kopyaladığı bağlantıyı (ya da WhatsApp mesajının tamamını) oraya yapıştırır.
+  Bu kart bir sonraki `eas build` ile gelir; ondan önceki APK'da arkadaşın giriş ekranının
+  altındaki **Sunucu: localhost:4000 · değiştir**'e basıp sadece adresi yazar (`/davet/…` kısmı
+  olmadan),
 * kayıt olunca kanka isteği kendiliğinden gider.
 
 APK'yı sunucuya koymak için expo.dev'den indirdiğin dosyayı bir kere yayınla:
@@ -679,6 +689,13 @@ cd apps/mobile && npx expo export --platform web   # tarayıcıda hızlı deneme
 ---
 
 ## Sık karşılaşılan sorunlar
+
+**Giriş ekranında "Önce sunucuyu seç" yazıyor.**
+Uygulama hangi sunucuya bağlanacağını bilmiyor: APK davet bağlantısıyla değil, yükleyicideki
+**Aç**'la ya da ana ekrandan açılmış. Davet mesajını olduğu gibi kopyalayıp karta yapıştır ya da
+davet sayfasındaki **Bağlantıyı kopyala** ile kopyalayıp yapıştır. "Bu adrese ulaşamadım" derse
+sunucu kapalıdır ya da tünel yeniden açılıp adres değişmiştir; sunucuyu açan kişi yeni bağlantıyı
+göndersin.
 
 **"Sunucuya ulaşamadım" diyor.**
 Telefon ile bilgisayar aynı Wi-Fi'da mı? Bilgisayarın güvenlik duvarı 4000 portunu kapatıyor
