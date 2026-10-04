@@ -206,6 +206,9 @@ async function cachedDailySteps(days: number): Promise<DailySteps[]> {
   return out;
 }
 
+/** Set once this run of the app has put the physical activity dialog up. */
+let askedThisRun = false;
+
 /**
  * Android's step counter needs ACTIVITY_RECOGNITION from API 29 on, and asking
  * for it is on us: `Pedometer.isAvailableAsync()` only reports whether the
@@ -213,14 +216,17 @@ async function cachedDailySteps(days: number): Promise<DailySteps[]> {
  * so an app that never asks subscribes happily and then counts zero forever.
  *
  * Returns true when we may read steps. Never throws; on iOS the permission is
- * handled by CoreMotion at query time.
+ * handled by CoreMotion at query time. With `askAgain` false it leaves the
+ * dialog alone once this run has shown it (see startForegroundStepTracking).
  */
-async function ensureAndroidStepPermission(): Promise<boolean> {
+async function ensureAndroidStepPermission(askAgain = true): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
   try {
     const existing = await Pedometer.getPermissionsAsync();
     if (existing.status === 'granted') return true;
     if (!existing.canAskAgain) return false;
+    if (!askAgain && askedThisRun) return false;
+    askedThisRun = true;
     const asked = await Pedometer.requestPermissionsAsync();
     return asked.status === 'granted';
   } catch {
@@ -236,7 +242,10 @@ async function ensureAndroidStepPermission(): Promise<boolean> {
  *
  * The permission check happens first and asynchronously, so the returned
  * unsubscribe function has to survive being called before the subscription
- * exists — hence the `stopped` flag rather than a plain null check.
+ * exists — hence the `stopped` flag rather than a plain null check. It asks
+ * at most once a run: NotificationBridge starts this again whenever its inputs
+ * change, and a no on the welcome slide's "Adım izni" (or the home screen's
+ * İZİN VER) must not bring the same dialog straight back.
  */
 export function startForegroundStepTracking(): () => void {
   if (Platform.OS !== 'android') return () => {};
@@ -245,7 +254,7 @@ export function startForegroundStepTracking(): () => void {
   let subscription: { remove: () => void } | null = null;
 
   void (async () => {
-    if (!(await ensureAndroidStepPermission())) return;
+    if (!(await ensureAndroidStepPermission(false))) return;
     if (stopped) return;
     try {
       subscription = Pedometer.watchStepCount((result) => {

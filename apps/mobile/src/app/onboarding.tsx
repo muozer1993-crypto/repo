@@ -65,7 +65,7 @@ const SLIDES: Slide[] = [
     titles: {
       1: 'İki izin lazım',
       2: 'İki izin, o kadar',
-      3: 'İzni ver, kapışalım',
+      3: 'İzinleri ver, kapışalım',
     },
     permissions: true,
   },

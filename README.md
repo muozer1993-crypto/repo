@@ -309,8 +309,8 @@ Arkadaşın bağlantıya dokununca sunucunun kendi sayfası açılır:
   sayfadaki **Bağlantıyı kopyala** bunun için var. Uygulama giriş ekranında **Önce sunucuyu seç**
   der, arkadaşın kopyaladığı bağlantıyı (ya da WhatsApp mesajının tamamını) oraya yapıştırır.
   Bu kart bir sonraki `eas build` ile gelir; ondan önceki APK'da arkadaşın giriş ekranının
-  altındaki **Sunucu: localhost:4000 · değiştir**'e basıp sadece adresi yazar (`/davet/…` kısmı
-  olmadan),
+  altındaki **Sunucu: localhost:4000 · değiştir**'e basıp sadece adresi yazar (baştaki `https://`
+  dahil, sondaki `/davet/…` kısmı olmadan; eski sürüm `https://` yazılmayan adresi `http://` sanar),
 * kayıt olunca kanka isteği kendiliğinden gider.
 
 APK'yı sunucuya koymak için expo.dev'den indirdiğin dosyayı bir kere yayınla:
@@ -611,9 +611,10 @@ fotoğraf yok.
 
 Android 10 ve üstünde adım sayacını okumak için **Fiziksel Aktivite** izni gerekiyor. Yeni
 kaydolan biri bu izni, bildirim izniyle birlikte, karşılama ekranının son sayfasında neden
-istendiğini okuyarak verir. Orada vermezse uygulama adım saymaya başlamadan önce ana sayfada
-sorar; reddederse ayarlar ekranı "izin verilmedi" der, çıkan uyarıya dokununca da telefonun
-ayarları açılır.
+istendiğini okuyarak verir. O sayfayı izin düğmelerine basmadan geçerse uygulama adım saymaya
+başlamadan önce ana sayfada sorar. Orada "izin verme" dediyse aynı açılışta bir daha sormaz,
+uygulama bir sonraki açılışta sorar. Reddederse ayarlar ekranı "izin verilmedi" der, çıkan
+uyarıya dokununca da telefonun ayarları açılır.
 İzni sormadan saymaya kalkan bir uygulama sıfır sayar ve bozuk görünür.
 
 Adımlar sunucuya günlük özet olarak gider (`POST /me/steps`), ham konum veya sensör verisi
@@ -725,8 +726,9 @@ Expo Go kullanıyorsan normal — yukarıdaki [Expo Go'nun sınırları](#expo-g
 bölümüne bak. Geliştirme derlemesi al ve `eas init` çalıştırdığından emin ol. Ayarlar
 ekranı hangi aşamada takıldığını Türkçe olarak söyler. Geliyor ama saatler sonra geliyorsa
 **Ayarlar → Arka plan**'daki iki satıra bak ([Bildirimler](#bildirimler-gecikmeli-hazır-ve-anlık-firebase-ile)
-bölümünde anlattım). Ana sayfada **Bildirimlerin kapalı** kartı çıkıyorsa bildirim izni
-reddedilmiş: **Ayarları aç**'a bas, açılan sayfada KOYDUM'un bildirimlerini aç, geri dön; kart
+bölümünde anlattım). Ana sayfada bildirimlerin kapalı olduğunu söyleyen kırmızı kenarlı bir kart
+(seviyeye göre **Bildirim izni kapalı**, **Bildirimlerin kapalı** ya da **Sana koyanı duyamazsın**)
+çıkıyorsa bildirim izni reddedilmiş: **Ayarları aç**'a bas, açılan sayfada KOYDUM'un bildirimlerini aç, geri dön; kart
 kendiliğinden gider. Android iki kere "izin verme" denince bir daha sormuyor, yol bu. Kartı
 **Kalsın** ile kapattıysan aynı düğme **Ayarlar → Bildirimler**'de de var.
 

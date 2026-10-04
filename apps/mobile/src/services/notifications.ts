@@ -83,7 +83,16 @@ function projectId(): string | undefined {
 const MISSING_FIREBASE =
   /Default FirebaseApp is not initialized|Unable to get Firebase Messaging instance|googleServicesFile|google-services\.json/i;
 
-export async function registerForPush(): Promise<PushRegistration> {
+/**
+ * Set once this run of the app has put the notification dialog up. The bridge
+ * registers on every return to the front and asks only while this is unset: a
+ * no on the welcome slide must not be met by the same dialog on the home
+ * screen, with nothing to say why, and on Android that second no is the last
+ * one the phone allows. A tap (the slide, Ayarlar) always asks.
+ */
+let askedThisRun = false;
+
+export async function registerForPush(options: { askAgain?: boolean } = {}): Promise<PushRegistration> {
   if (Platform.OS === 'web') return { token: null, granted: false, reason: 'web' };
 
   try {
@@ -99,7 +108,8 @@ export async function registerForPush(): Promise<PushRegistration> {
 
     const existing = await api.getPermissionsAsync();
     let status = existing.status;
-    if (status !== 'granted') {
+    if (status !== 'granted' && (options.askAgain !== false || !askedThisRun)) {
+      askedThisRun = true;
       const asked = await api.requestPermissionsAsync();
       status = asked.status;
     }

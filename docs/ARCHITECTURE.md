@@ -364,7 +364,11 @@ bayrağını kaldırır ve köprü, bayrak açıkken bu iki işi başlatmaz. Kar
 sayfası iki izni neden istediğini söyleyip kendi düğmeleriyle sorar; "Geç" önce o sayfaya atlar.
 Sayfalar nasıl kapanırsa kapansın (düğme ya da Android'in geri tuşu) bayrak iner, cevaplanmamış
 izni köprü ana sayfada sorar. Bayrak saklanmaz: yarıda kapanan uygulama sonraki açılışta eskisi
-gibi sorar.
+gibi sorar. Köprü bir izni uygulamanın her açılışında en fazla bir kez sorar; o açılışta pencere
+zaten çıktıysa (sayfadaki düğme, ana sayfadaki "İZİN VER") bir daha çıkarmaz. Yoksa sayfada
+"izin verme" diyen biri ana sayfada aynı pencereyi, neden istendiğini söyleyen tek kelime olmadan,
+hemen bir daha görürdü; Android'de o ikinci "hayır" da son hak demek. Bir düğmeye basmak her zaman
+sorar.
 
 Android bir izin iki kez reddedilince pencereyi bir daha göstermez; o andan sonra tek yol
 telefonun ayarlarındaki KOYDUM sayfası (`openAppSettings`, yani `Linking.openSettings()`). Bildirim

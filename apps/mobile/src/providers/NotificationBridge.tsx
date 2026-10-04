@@ -74,7 +74,9 @@ export function NotificationBridge() {
       if (busy || cancelled) return;
       busy = true;
       try {
-        const registration = await registerForPush();
+        // asks only if nothing has this run: after a no on the welcome slide,
+        // home's card points to the settings page instead of the same dialog
+        const registration = await registerForPush({ askAgain: false });
         if (cancelled) return;
         // Home's battery card has to know this phone lives on the background
         // check ('no-fcm'); it reads it from here, since asking again is what

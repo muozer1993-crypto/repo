@@ -25,10 +25,14 @@ jest.mock('expo-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-const mockRegisterForPush = jest.fn(async () => ({ token: null, granted: true, reason: 'no-fcm' as const }));
+const mockRegisterForPush = jest.fn(async (_options?: { askAgain?: boolean }) => ({
+  token: null,
+  granted: true,
+  reason: 'no-fcm' as const,
+}));
 
 jest.mock('@/services/notifications', () => ({
-  registerForPush: () => mockRegisterForPush(),
+  registerForPush: (options?: { askAgain?: boolean }) => mockRegisterForPush(options),
   installNotificationHandler: () => {},
   addResponseListener: () => ({ remove: () => {} }),
   addReceivedListener: () => ({ remove: () => {} }),
@@ -166,6 +170,8 @@ describe('the bridge during the welcome slides', () => {
     });
     await settle();
     expect(mockRegisterForPush).toHaveBeenCalledTimes(1);
+    // without a second dialog when the slide already asked (permissionPrompts.test)
+    expect(mockRegisterForPush).toHaveBeenCalledWith({ askAgain: false });
     expect(mockStartTracking).toHaveBeenCalledTimes(1);
   });
 
