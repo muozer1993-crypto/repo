@@ -6,7 +6,9 @@
  */
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import { createRequire } from 'node:module';
+import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -15,6 +17,7 @@ import { hashPassword } from '../src/auth/password.js';
 import { openDb } from '../src/db/index.js';
 import { createUser } from '../src/services/accounts.js';
 import { listReports, listUsers, resetPassword } from '../src/services/admin.js';
+import { backupIfDue, copyBackupIfDue } from '../src/services/backup.js';
 import { authed, befriend, DEFAULT_PASSWORD, makeApp, registerUser, type TestApp } from './helpers.js';
 
 const serverRoot = path.resolve(__dirname, '..');
@@ -130,11 +133,15 @@ describe('listUsers', () => {
 });
 
 describe('npm run yonet', () => {
-  function run(dataDir: string, args: string[]): Promise<{ code: number | null; out: string; err: string }> {
+  function run(
+    dataDir: string,
+    args: string[],
+    env: NodeJS.ProcessEnv = {},
+  ): Promise<{ code: number | null; out: string; err: string }> {
     return new Promise((resolve) => {
       const child = spawn(process.execPath, [tsxCli, 'src/cli/yonet.ts', ...args], {
         cwd: serverRoot,
-        env: { ...process.env, DATA_DIR: dataDir, JWT_SECRET: '' },
+        env: { ...process.env, DATA_DIR: dataDir, JWT_SECRET: '', BACKUP_DIR: '', ...env },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let out = '';
@@ -188,5 +195,78 @@ describe('npm run yonet', () => {
     expect(result.code).toBe(1);
     expect(result.err).toContain('Veritabanı bulunamadı');
     expect(fs.readdirSync(dataDir)).toEqual([]);
+  }, 60_000);
+
+  /** A database with ali in its backup and veli only after it, the backup also in BACKUP_DIR. */
+  async function withBackups(): Promise<{ dataDir: string; dbPath: string; copyDir: string }> {
+    const dataDir = tempDataDir();
+    const copyDir = path.join(tempDataDir(), 'OneDrive Şükrü', 'KOYDUM yedek');
+    const dbPath = path.join(dataDir, 'koydum.db');
+    const db = openDb(dbPath);
+    createUser(db, { username: 'ali', displayName: 'Ali', passwordHash: 'x', timezone: 'Europe/Istanbul' });
+    await backupIfDue(db, { dataDir, dbPath }, new Date());
+    await copyBackupIfDue({ dataDir, dbPath, backupCopyDir: copyDir }, new Date());
+    createUser(db, { username: 'veli', displayName: 'Veli', passwordHash: 'x', timezone: 'Europe/Istanbul' });
+    db.close();
+    return { dataDir, dbPath, copyDir };
+  }
+
+  function usersIn(dbPath: string): string[] {
+    const db = openDb(dbPath);
+    try {
+      return listUsers(db).map((u) => u.username);
+    } finally {
+      db.close();
+    }
+  }
+
+  /** A port nothing listens on, so no server on the test machine answers for ours. */
+  async function freePort(): Promise<number> {
+    const server = http.createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    await new Promise((resolve) => server.close(resolve));
+    return port;
+  }
+
+  it('lists the backups and puts the newest back from BACKUP_DIR when the local ones are gone', async () => {
+    const { dataDir, dbPath, copyDir } = await withBackups();
+    // the data folder lost its backups (deleted by mistake): OneDrive still has them
+    fs.rmSync(path.join(dataDir, 'backups'), { recursive: true });
+    const env = { BACKUP_DIR: copyDir, PORT: String(await freePort()) };
+
+    const listed = await run(dataDir, ['yedekler'], env);
+    expect(listed.err).toBe('');
+    expect(listed.code).toBe(0);
+    expect(listed.out).toContain(`BACKUP_DIR: ${copyDir}`);
+    expect(listed.out).toMatch(/geri-yukle koydum-\d{4}-\d{2}-\d{2}\.db/);
+
+    const restored = await run(dataDir, ['GERİ-YÜKLE'], env);
+    expect(restored.err).toBe('');
+    expect(restored.code).toBe(0);
+    expect(restored.out).toContain('Şimdi sunucuyu aç.');
+    expect(usersIn(dbPath)).toEqual(['ali']);
+    const aside = fs.readdirSync(dataDir).filter((name) => name.startsWith('koydum-onceki-'));
+    expect(aside).toHaveLength(1);
+    expect(restored.out).toContain(`geri-yukle "${path.join(dataDir, aside[0]!)}"`);
+    expect(usersIn(path.join(dataDir, aside[0]!)).sort()).toEqual(['ali', 'veli']);
+  }, 60_000);
+
+  it('refuses geri-yukle while the server answers on its port', async () => {
+    const { dataDir, dbPath } = await withBackups();
+    const stub = http.createServer((_request, response) => {
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true, version: '1.0.0' }));
+    });
+    await new Promise<void>((resolve) => stub.listen(0, '127.0.0.1', resolve));
+    try {
+      const result = await run(dataDir, ['geri-yukle'], { PORT: String((stub.address() as AddressInfo).port) });
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('Sunucu açık');
+      expect(fs.readdirSync(dataDir).filter((name) => name.startsWith('koydum-onceki-'))).toEqual([]);
+      expect(usersIn(dbPath).sort()).toEqual(['ali', 'veli']);
+    } finally {
+      await new Promise((resolve) => stub.close(resolve));
+    }
   }, 60_000);
 });

@@ -8,7 +8,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Config } from '../config.js';
 import type { Database } from '../db/index.js';
-import { backupIfDue } from './backup.js';
+import { backupIfDue, copyBackupIfDue } from './backup.js';
 import { runSchedulerOnce } from './challenges.js';
 import { createPushSender, type PushSender } from './push.js';
 
@@ -20,6 +20,13 @@ export const SCHEDULER_INTERVAL_MS = 30_000;
  * connection cannot hold the shutdown (npm run internet kills at 15 s).
  */
 export const STOP_WAIT_MS = 10_000;
+
+/**
+ * After a failed copy to BACKUP_DIR (OneDrive signed out, a USB disk unplugged),
+ * how long until the next try. Every pass would fill the owner's window with the
+ * same warning twice a minute.
+ */
+export const BACKUP_COPY_RETRY_MS = 60 * 60_000;
 
 export interface SchedulerOptions {
   /** Stand-in for the Expo sender; tests hold a flush open to watch stop() wait for it. */
@@ -39,6 +46,8 @@ export function startScheduler(
 ): () => Promise<void> {
   const push = options.push ?? createPushSender(config);
   let inFlight: Promise<void> | null = null;
+  let copyInFlight: Promise<void> | null = null;
+  let copyRetryAt = 0;
   // A phone-counted çelınc that ended while this server was off waits a full
   // hour from now, not from its end, so the phones get to report before anybody wins.
   const bootAt = app.now();
@@ -79,6 +88,22 @@ export function startScheduler(
     } catch (err) {
       app.log.error({ err }, 'database backup failed');
     }
+
+    // The second copy runs on its own: a cloud or network folder that hangs must
+    // not hold up the next pass, and when it fails the day still has its backup.
+    if (config.backupCopyDir && !copyInFlight && app.now().getTime() >= copyRetryAt) {
+      copyInFlight = copyBackupIfDue(config, app.now())
+        .then((copied) => {
+          if (copied) app.log.info({ file: copied }, 'database backup copied to BACKUP_DIR');
+        })
+        .catch((err: unknown) => {
+          copyRetryAt = app.now().getTime() + BACKUP_COPY_RETRY_MS;
+          app.log.warn({ err, dir: config.backupCopyDir }, 'database backup copy to BACKUP_DIR failed, trying again in an hour');
+        })
+        .finally(() => {
+          copyInFlight = null;
+        });
+    }
   };
 
   const run = (): void => {
@@ -96,10 +121,15 @@ export function startScheduler(
 
   return async () => {
     clearInterval(timer);
-    if (!inFlight) return;
+    if (!inFlight && !copyInFlight) return;
     let waited: NodeJS.Timeout | undefined;
     const gaveUp = await Promise.race([
-      inFlight.then(() => false),
+      (async () => {
+        await inFlight;
+        // read only now: the pass that was running may just have started a copy
+        await copyInFlight;
+        return false;
+      })(),
       new Promise<boolean>((resolve) => {
         waited = setTimeout(() => resolve(true), STOP_WAIT_MS);
       }),

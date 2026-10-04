@@ -47,6 +47,13 @@ export interface Config {
    */
   appDownloadUrl?: string;
   appLatestVersion?: string;
+  /**
+   * BACKUP_DIR: a second home for the daily backups, typically a OneDrive or
+   * Google Drive folder. `<DATA_DIR>/backups` sits on the same disk as the
+   * database, so a dead disk or a deleted data folder takes both; a synced
+   * folder outlives the PC. Unset → the local copies only.
+   */
+  backupCopyDir?: string;
   /** Fastify log level. */
   logLevel: string;
   /** HS256 secret for API tokens. */
@@ -162,6 +169,10 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     overrides.appLatestVersion ??
     (env.APP_LATEST_VERSION && env.APP_LATEST_VERSION.trim() !== '' ? env.APP_LATEST_VERSION.trim() : undefined);
 
+  // a test's in-memory config never picks up the owner's real backup folder
+  const backupCopyDir =
+    overrides.backupCopyDir ?? (!memory && env.BACKUP_DIR && env.BACKUP_DIR.trim() !== '' ? env.BACKUP_DIR.trim() : undefined);
+
   const logLevel = overrides.logLevel ?? readString(env.LOG_LEVEL, DEFAULTS.logLevel);
 
   const jwtSecret =
@@ -198,6 +209,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     appDir,
     appDownloadUrl,
     appLatestVersion,
+    backupCopyDir,
     logLevel,
     jwtSecret,
     expoAccessToken,

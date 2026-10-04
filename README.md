@@ -481,14 +481,8 @@ npm start -w apps/server
 
 Önüne nginx/Caddy koyup HTTPS ver. Tek dosyalık SQLite veritabanı `DATA_DIR` altında.
 
-**Yedek kendiliğinden alınır.** Sunucu her gün ilk açıldığında ve gün dönünce veritabanının bir
-kopyasını `DATA_DIR/backups/koydum-YYYY-AA-GG.db` olarak yazar, son 7 günü tutar. Bir şey bozulursa:
-
-1. Sunucuyu kapat.
-2. `DATA_DIR` içinde `koydum.db-wal` ve `koydum.db-shm` varsa sil. Kalırlarsa geri yüklenen dosyayı bozarlar.
-3. En yeni yedeği `DATA_DIR/koydum.db` üzerine kopyala, sunucuyu aç.
-
-Evdeki bilgisayarda bu klasör `apps/server/data`, yedekler `apps/server/data/backups` altında.
+**Yedek kendiliğinden alınır:** her gün bir tane, `DATA_DIR/backups` altına. Geri yüklemek ve
+yedeklerin bilgisayar bozulsa da kalması için [Yedekler](#yedekler)'e bak.
 
 ### Ortam değişkenleri
 
@@ -503,6 +497,7 @@ Docker'da bu dosya okunmaz (imaja hiç girmez): orada ayarları `docker-compose.
 | `HOST` | `0.0.0.0` | Yerel ağdan erişim için böyle bırak |
 | `DATA_DIR` | `./data` | SQLite veritabanı ve JWT anahtarı |
 | `UPLOAD_DIR` | `<DATA_DIR>/uploads` | Kanıt fotoğrafları |
+| `BACKUP_DIR` | boş | Günlük yedeklerin ikinci kopyası buraya da gider. OneDrive ya da Google Drive'daki bir klasörü yaz, PC bozulsa da yedekler kalır ([Yedekler](#yedekler)). |
 | `PUBLIC_URL` | boş | Sunucunun internetteki adresi. Boşsa davet sayfası bağlantıları gelen isteğin adresinden kurar, evde de tünelde de doğru çıkar. |
 | `JWT_SECRET` | otomatik üretilir | Elle vermek istersen |
 | `LOG_LEVEL` | `info` | Sunucu penceresine ne yazılsın. Her istek tek tek yazılmaz; açılış, hatalar, 2 saniyeden uzun süren istekler ve zamanlayıcının yaptıkları görünür. `warn` sadece sorunları gösterir. |
@@ -517,13 +512,15 @@ Docker'da bu dosya okunmaz (imaja hiç girmez): orada ayarları `docker-compose.
 ## Yönetim komutları
 
 Sunucuyu açan sensin, hesapların anahtarı da sende. Birkaç iş için tek komut var. Sunucu açıkken de
-çalışır; ikinci bir PowerShell penceresi aç, depo klasöründe çalıştır:
+çalışır (`geri-yukle` hariç); ikinci bir PowerShell penceresi aç, depo klasöründe çalıştır:
 
 ```powershell
 cd C:\Users\ArisK\koydum
 npm run yonet -- kullanicilar     # herkes: ne zaman katıldı, en son ne zaman girdi, kaç çelıncı sürüyor
 npm run yonet -- sikayetler       # gelen şikayetler, en yenisi en üstte
 npm run yonet -- sifre ali        # şifresini unutan ali'ye yeni şifre
+npm run yonet -- yedekler         # günlük yedekler: hangileri var, nerede duruyorlar
+npm run yonet -- geri-yukle       # en yeni yedeği geri yükler (önce sunucuyu kapat)
 ```
 
 Hep depo klasöründen `npm run yonet` ile çalıştır. Sunucunun kullandığı veritabanını
@@ -550,6 +547,51 @@ gerekirse engellemesini söylersin.
 Docker'da çalıştırıyorsan komutun başına `docker compose exec koydum` ekle:
 `docker compose exec koydum npm run yonet -- sifre ali`. VPS'te sunucuyu `DATA_DIR` ile
 açtıysan komuta da aynısını ver: `DATA_DIR=/var/lib/koydum npm run yonet -- sifre ali`.
+
+### Yedekler
+
+Hesaplar, kankalıklar, çelınclar, atılan bütün KOYDUM'lar tek bir dosyada:
+`apps/server/data/koydum.db`. Sunucu her gün ilk açıldığında ve gün dönünce bunun bir kopyasını
+`apps/server/data/backups/koydum-YYYY-AA-GG.db` olarak yazar, son 7 günü tutar.
+
+**Bilgisayar bozulsa da kalsın: `BACKUP_DIR`.** O klasör veritabanıyla aynı diskte. Disk giderse
+ya da `data` klasörünü yanlışlıkla silersen yedekler de onunla gider. `apps/server/.env`
+dosyasına OneDrive'da (ya da Google Drive'da) bir klasör yaz:
+
+```
+BACKUP_DIR=C:\Users\ArisK\OneDrive\KOYDUM yedek
+```
+
+Tırnak gerekmez, boşluklu ve Türkçe harfli yol da olur; klasör yoksa sunucu kendisi açar.
+Sunucuyu kapatıp aç: her yedeğin bir kopyası oraya da gider (ilk seferde elindeki bütün hafta),
+OneDrive da buluta taşır. Klasöre ulaşamazsa (OneDrive'dan çıkış yapılmış, harici disk takılı
+değil) sunucu penceresine bir uyarı düşer ve saatte bir yeniden dener; o günün yedeği yine
+`data\backups`'a yazılır, sunucu da çalışmaya devam eder.
+
+`npm run yonet -- yedekler` iki klasördekileri de tarihi ve boyutuyla listeler.
+
+**Geri yüklemek:**
+
+1. Sunucunun penceresini kapat (ya da o pencerede Ctrl+C). Açıkken yüklenen yedek veritabanını
+   bozar; komut sunucuyu açık bulursa hiçbir şeye dokunmadan söyler.
+2. `npm run yonet -- geri-yukle` iki klasördeki en yeni yedeği yükler. Belli bir günü
+   istiyorsan tarihini yaz: `npm run yonet -- geri-yukle 2026-10-03`.
+3. Sunucuyu aç.
+
+Komut yedeği yüklemeden önce sağlam mı diye bakar; bozuksa ya da KOYDUM'un değilse dokunmaz.
+Eski veritabanını silmez, `data\koydum-onceki-<tarih-saat>.db` diye kenara koyar ve yanlış
+yedeği seçtiysen onu nasıl geri koyacağını ekrana yazar. Eski `koydum.db-wal` ve `koydum.db-shm`
+dosyalarını kendisi halleder, elle bir şey silme. Kenara konan dosyalar birikir; işin bitince
+silebilirsin.
+
+**Yeni bilgisayarda:** depoyu indirip `npm install` yap, `apps/server/.env` dosyasına aynı
+`BACKUP_DIR` satırını yaz, OneDrive klasörü inene kadar bekle, sonra `npm run yonet -- geri-yukle`
+ve sunucuyu aç. Herkes uygulamaya bir kez yeniden giriş yapar (kullanıcı adı ve şifresiyle), çünkü
+oturum anahtarı (`data\secret`) yedeğe girmez; eski bilgisayardan o dosyayı kurtardıysan yeni
+`data` klasörüne koy, kimse çıkış yapmaz. Kanıt fotoğrafları (`data\uploads`) da yedeğe girmez.
+
+Docker'da önce sunucuyu durdur, yedeği öyle yükle: `docker compose stop`, sonra
+`docker compose run --rm koydum npm run yonet -- geri-yukle`, sonra `docker compose start`.
 
 ---
 

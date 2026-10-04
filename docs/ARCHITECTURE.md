@@ -541,3 +541,13 @@ bağlantıyla açar. WAL ikinci bağlantıyı içeri alır, `busy_timeout` sunuc
 yani sunucu açıkken çalışır. Oturumlar durumsuz JWT olduğundan yeni şifre açık oturumları
 kapatmaz. Şikayetler de aynı yoldan okunur (`sikayetler`): uygulamada onları okuyan bir ekran yok,
 sunucu her yeni şikayette kendi penceresine bir `warn` satırı düşer.
+
+Yedek de onun işi (`services/backup.ts`). Zamanlayıcı her gün `db.backup()` ile
+`data/backups`'a bir kopya yazar. O klasör veritabanıyla aynı diskte durduğu için `BACKUP_DIR`
+(OneDrive klasörü gibi) verilmişse aynı dosyalar oraya da kopyalanır. Bu kopya turdan ayrı
+koşar: buluttaki ya da ağdaki bir klasör takılırsa çelınc bitirme ve hatırlatmalar beklemez,
+hata da sadece bir uyarı satırıdır ve saatte bir yeniden denenir. `yonet -- geri-yukle` canlı
+veritabanını hiç açmaz; sunucu açıkken çalışmaz: önce `/health`'e sorar, sonra dosyanın
+`-wal`'ının bizim bağlantımız kapanınca da durup durmadığına bakar (SQLite WAL dosyasını son
+bağlantı kapanırken siler). Yedeği veritabanının yanına kopyalayıp orada sınar, eskisini
+`koydum-onceki-*.db` diye kenara koyar; hiçbir şey silinmez.
