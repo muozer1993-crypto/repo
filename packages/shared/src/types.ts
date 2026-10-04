@@ -91,7 +91,11 @@ export interface RecapData {
   highlights: string[];
 }
 
-export const TAUNT_CONTEXTS = ['win', 'win_big', 'win_close', 'tie', 'poke', 'streak', 'revenge'] as const;
+/**
+ * `reply` is the loser's one answer to the winner's laf, written by the loser to
+ * {winner}: the template keeps {winner} the real winner and {loser} the sender.
+ */
+export const TAUNT_CONTEXTS = ['win', 'win_big', 'win_close', 'tie', 'poke', 'streak', 'revenge', 'reply'] as const;
 export type TauntContext = (typeof TAUNT_CONTEXTS)[number];
 
 export const DISPUTE_STATUSES = ['open', 'upheld', 'dismissed'] as const;

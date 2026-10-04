@@ -646,6 +646,31 @@ describe('scheduler: nobody pokes into a result that is only waiting', () => {
     expect(poke.json<{ error: { code: string } }>().error.code).toBe('challenge_ended');
     expect(listByType(harness.db, veli.me.id, 'poke')).toHaveLength(0);
   });
+
+  it('keeps the co-leaders of a tie quiet until the phones have had their hour', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+    at(harness, MIDNIGHT_END, -2 * HOUR);
+    await phoneSync(harness, ali, { '2026-01-06': 10_000 });
+    await phoneSync(harness, veli, { '2026-01-06': 10_000 });
+    const tieTaunt = () =>
+      authed(harness!.app, ali.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/taunt`,
+        payload: { toUserId: veli.me.id, templateId: 'l2_tie_01' },
+      });
+
+    at(harness, MIDNIGHT_END, 20 * MINUTE);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    const early = await tieTaunt();
+    expect(early.statusCode).toBe(400);
+    expect(early.json<{ error: { code: string } }>().error.code).toBe('challenge_not_finished');
+
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS);
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+    expect(challengeRow(harness, challengeId).is_tie).toBe(1);
+    expect((await tieTaunt()).statusCode).toBe(201);
+  });
 });
 
 /** Ali and `names` in a live water çelınc that ends at local midnight, all accepted. */
@@ -902,10 +927,36 @@ describe('scheduler: a winner who never says "KOYDUM MU?"', () => {
     });
   });
 
+  it('is not quieted by a loser answering back', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId, finishedAt } = await finishedWater(harness, [8, 5, 3]);
+    const [ali, veli, ayse] = players as [RegisteredUser, RegisteredUser, RegisteredUser];
+    await taunt(harness, ali, veli, challengeId);
+    // Veli's one answer goes to Ali: it is not Ali's laf to Ayşe, nor a second one to Veli
+    await taunt(harness, veli, ali, challengeId);
+
+    at(harness, finishedAt, 2 * HOUR);
+    expect(tick(harness)).toMatchObject({ tauntFollowups: 1 });
+    expect(followups(harness, ali)[0]?.body).toBe('Ayşe ağzını açmanı bekliyor.');
+    for (const loser of [veli, ayse]) expect(followups(harness, loser)).toHaveLength(0);
+  });
+
   it('has nobody to remind after a tie', async () => {
     harness = await makeApp({ now: NOW });
     const { players, challengeId, finishedAt } = await finishedWater(harness, [5, 5]);
     expect(challengeRow(harness, challengeId).is_tie).toBe(1);
+
+    at(harness, finishedAt, 2 * HOUR);
+    expect(tick(harness)).toMatchObject({ tauntFollowups: 0 });
+    for (const player of players) expect(followups(harness, player)).toHaveLength(0);
+  });
+
+  it('reminds nobody when the co-leaders of a tie had a go at each other', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId, finishedAt } = await finishedWater(harness, [5, 5, 3]);
+    const [ali, veli] = players as [RegisteredUser, RegisteredUser, RegisteredUser];
+    await taunt(harness, ali, veli, challengeId);
+    await taunt(harness, veli, ali, challengeId);
 
     at(harness, finishedAt, 2 * HOUR);
     expect(tick(harness)).toMatchObject({ tauntFollowups: 0 });

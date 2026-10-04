@@ -23,7 +23,7 @@ import { containsBanned } from '../banned';
 import { pickTaunt, renderTaunt, resolveTauntForRecipient, tauntsFor } from '../taunts';
 import type { BadgeStats, TauntContext, VulgarityLevel } from '../types';
 
-const CONTEXTS: TauntContext[] = ['win', 'win_big', 'win_close', 'tie', 'poke', 'streak', 'revenge'];
+const CONTEXTS: TauntContext[] = ['win', 'win_big', 'win_close', 'tie', 'poke', 'streak', 'revenge', 'reply'];
 const LEVELS: VulgarityLevel[] = [1, 2, 3];
 
 const emptyStats: BadgeStats = {
@@ -161,11 +161,24 @@ describe('taunts', () => {
     const resolved = resolveTauntForRecipient(harsh?.id, 'win', 1, 3);
     expect(resolved.level).toBeLessThanOrEqual(1);
   });
+
+  it('gives the loser an answer at every level, addressed to the winner and signed by them', () => {
+    for (const level of LEVELS) {
+      const pool = TAUNTS.filter((x) => x.context === 'reply' && x.level === level);
+      expect(pool.length, `level ${level}`).toBeGreaterThanOrEqual(2);
+      for (const template of pool) {
+        // the reader is the winner: the line talks to them and the title says who answered
+        expect(template.body, template.id).toContain('{winner}');
+        expect(template.title, template.id).toContain('{loser}');
+        expect(template.metrics, template.id).toBeUndefined();
+      }
+    }
+  });
 });
 
 describe('taunts fit the çelınc they land on', () => {
   const WALKING = /yürü|koştur|dolaş|telefonu (evde|buzdolabına)|geziyor|koltuğa|kanepe/i;
-  const CONTEXTS: TauntContext[] = ['win', 'win_big', 'win_close', 'tie', 'poke', 'streak', 'revenge'];
+  const CONTEXTS: TauntContext[] = ['win', 'win_big', 'win_close', 'tie', 'poke', 'streak', 'revenge', 'reply'];
   const OTHER_METRICS = ['focus_minutes', 'checkin_deadline', 'daily_boolean', 'manual_count', 'manual_lower_is_better'] as const;
 
   it('never offers a walking line on a çelınc that is not about steps', () => {

@@ -69,7 +69,7 @@ export interface RecapData {
   wins: number; losses: number; ties: number; steps: number; active: number;
   highlights: string[]; // "👑 Haftanın kralı ...", already at the reader's level
 }
-export type TauntContext = 'win' | 'win_big' | 'win_close' | 'tie' | 'poke' | 'streak' | 'revenge';
+export type TauntContext = 'win' | 'win_big' | 'win_close' | 'tie' | 'poke' | 'streak' | 'revenge' | 'reply';
 ```
 
 ### 1.2 ChallengeType (catalog)
@@ -130,6 +130,8 @@ export function pickTaunt(context: TauntContext, level: VulgarityLevel, seed?: n
 export function clampLevel(requested: VulgarityLevel, recipientMax: VulgarityLevel): VulgarityLevel
 ```
 Placeholders: `{winner} {loser} {metric} {winnerScore} {loserScore} {diff} {unit} {challenge}`.
+`reply` templates are the loser's answer, read by the winner: `{winner}` is still the winner (the reader)
+and `{loser}` the one answering, whose name is in the title ("Veli boş durmadı").
 Unknown placeholders are left as-is. Numbers are formatted with `tr-TR` locale (12.430).
 
 ### 1.5 Copy (`copy.ts`)
@@ -320,7 +322,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | DELETE /challenges/:id/entries/:entryId/dispute | the caller takes back their own OPEN dispute (404 `dispute_not_found` otherwise): it becomes `dismissed`, and the entry goes back to `ok` when no open dispute is left; when open ones remain but no longer make a majority, the owner's clock stops. Active only (the settle wait included). Returns `{ dispute, entry, standings }`. A withdrawn dispute cannot be filed again until the entry's value or photo changes |
 | POST /challenges/:id/entries/:entryId/proof | `EntryProofBody`. Entry owner only (403 `not_your_entry`), entry `disputed` (409 `not_disputed`, 409 `already_rejected`), çelınc `active` (the settle wait included, 400 `challenge_not_active`). Sets `proof_url`, marks every open dispute `dismissed`, entry back to `ok` (clock cleared); each disputer (not deleted, not blocked) gets a `dispute` notification with data `{ challengeId, entryId, kind: 'proof' }` ("{ad} kanıt ekledi, bir bak."). Returns `{ entry, standings }`. The 1.0 app has no button for it: its owner re-posting a `disputed` upsert day through `POST /challenges/:id/entries` with a `proofUrl` is the same answer (and when the value changed with it, the disputers may file again) |
 | POST /challenges/:id/poke | active only and before `endsAt` (400 `challenge_ended` while a result waits; `pokeTargets` is empty then); target must be a participant the sender is strictly AHEAD of, else 403 `not_ahead`; rate limit 1 per (from,to,challenge) per 2h → 429 `poke_cooldown`. Template from `poke` context clamped to target's level (or default pick). Notification type `poke` |
-| POST /challenges/:id/taunt | finished only; sender must be winner (`winnerId`), target must be a loser (accepted, not winner); one per target (409 `already_taunted`); template clamped to target's `vulgarity_max` — if requested template level > target max, pick deterministic template same context at target max; `customBody` allowed (level = sender-chosen ≤ target max, checked by `containsBanned` → 400 `banned_content`). Notification type `taunt` with data `{ challengeId, tauntId }` |
+| POST /challenges/:id/taunt | finished only (400 `challenge_not_finished`, the settle hour and an itiraz's wait included); one row per (challenge, from, to). Three ways to talk: (a) the winner (`winnerId`) to a loser (accepted, not winner), context from 2.3 (409 `already_taunted`); (b) a loser's one answer: an accepted loser to the winner, only once the winner's taunt to them exists (403 `not_winner` "Önce o konuşsun, sonra cevap verirsin." before), context `reply` with `{winner}` kept the winner, a second one 409 `already_replied` ("Cevabını verdin, bir tane yeter."); (c) a tie (`isTie`): an accepted player with `final_rank` 1 to another rank-1 player, context `tie` (409 `already_taunted`; a rank-1 player at somebody behind → 403 `not_winner` "Berabere bitti, laf sadece berabere kalanlar arasında."). Anything else → 403 `not_winner`; a block either way → 403 `blocked`. In (b) and (c) a template of another context is swapped for one of the mode's own. Template clamped to target's `vulgarity_max` — if requested template level > target max, pick deterministic template same context at target max; `customBody` allowed (level = sender-chosen ≤ target max, checked by `containsBanned` → 400 `banned_content`; its title by mode: "{ad} laf soktu" / "{ad} boş durmadı" / "{ad} laf attı" at level 2). Notification type `taunt` with data `{ challengeId, tauntId, fromUserId }`. `canTaunt`, `tauntContexts`, `tauntTemplatesForWinner` and the follow-up reminder (2.4, 3b) stay about the winner's own taunts |
 | POST /challenges/:id/rematch | 201, returns the new bare `Challenge`. Finished only, any accepted participant; one open (not `cancelled`) rematch per creator per çelınc (409 `already_rematched`); clones settings (same type, reward, and number of local days: the original's window in its own creator's pinned zone, where the wizard snapped it, a day its end cut in half not counted), startsAt = now + 5 min, endsAt = the last millisecond of the last of those days in the rematch creator's zone, like the wizard (when that is not more than `MIN_DURATION_MS` away, the end of the next day), invites the previous accepted participants who are still friends (no block either way, not deleted; nobody left → 400 `no_participants`), `rematch_of_id`; notification `rematch` |
 | GET /challenges/:id/results | `{ challenge, standings: ParticipantView[], taunts, tauntTemplatesForWinner?: TauntTemplate[] (rendered previews per loser), tauntContexts?: Record<userId, TauntContext> (winner only: each accepted loser's context, 2.3), rematchLeftOut?: string[] (accepted players of a finished çelınc: the others a rematch opened by the reader would skip for not being friends; deleted accounts and blocks are skipped too but never listed) }` |
 | GET /leaderboard | friends + me ranked by wins, then tauntsSent |
@@ -402,7 +404,7 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    and no `reminders_sent` row for today → `reminder` notification with copy `notification_daily_reminder`.
 3b. Taunt follow-up (`sendTauntFollowups`): a `finished` çelınc with a winner (not a tie), finalized between 48 h and
    2 h ago, where some accepted, non-deleted loser who is not blocked with the winner (either way) has no `taunts` row
-   from the winner → one `reminder` to the winner, data `{ challengeId, kind: 'taunt_followup' }`, at the winner's
+   from the winner (a loser's answer goes the other way and never counts) → one `reminder` to the winner, data `{ challengeId, kind: 'taunt_followup' }`, at the winner's
    level, naming only the losers still waiting ("Veli hâlâ bekliyor" / "Koymayacak mısın? Veli ağzını açmanı
    bekliyor." / "KOYMADIN DAHA 🍆"; several → "Veli ve Ayşe …"). Only while the winner's local hour (profile
    timezone) is within the nudge window, 12:00–22:00, and checked before the `taunt_followups (challenge_id, 1)`
@@ -416,7 +418,7 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
 Cover: register/login/duplicate; friends request/accept/auto-accept/block; create challenge (immediate + future start),
 accept, entries per metric type incl. validation errors and caps, checkin late logic (inject `now` via `app.decorate('now')`
 or an injectable clock in `buildApp({ clock })`), steps sync fan-out, scheduler activation/finalization/tie/underfilled
-cancel, taunt: winner only / one per loser / level clamp / banned content, poke cooldown, dispute threshold, rematch,
+cancel, taunt: winner / one per loser / the loser's one answer / a tie's co-leaders / level clamp / banned content, poke cooldown, dispute threshold, rematch,
 inbox read/unread, account deletion, uploads (multipart), badges awarded.
 
 ### 2.6 Ops
@@ -529,7 +531,8 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             A refused "İZİN VER" toasts "Dokun, ayarları açayım" (8 s); the tap → openAppSettings
 (app)/(tabs)/friends.tsx    list friends (tap → user/[id]), incoming/outgoing requests (an outgoing one has "Geri çek":
                             confirm → DELETE /friends/:userId?only=request), search by username, my invite code (copy/share)
-(app)/(tabs)/inbox.tsx      inbox list grouped by day; taunt items rendered as TauntBubble (big, red, shame); tap → challenge or friends; "Hepsini okundu yap";
+(app)/(tabs)/inbox.tsx      inbox list grouped by day; taunt items rendered as TauntBubble (big, red, shame) under the sender's name and
+                            avatar (`data.fromUserId`, else the winner); tap → challenge or friends; "Hepsini okundu yap";
                             pages of 30 (useInfiniteQuery on qk.inbox): reaching the end, or "Daha eskileri göster", loads the next
                             older page with `before` = the last row's createdAt + 1 ms (rows sharing that millisecond come again and
                             are shown once); a failed older page keeps the list, says "Eskiler gelmedi" and only the button retries
@@ -566,9 +569,13 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
 (app)/challenge/[id]/results.tsx   winner view: podium + "KOYDUM MU?" CTA per loser (or "Hepsine koy") → taunt picker; loser view: shame screen
                             (big TauntBubble if received, else "bekliyor..." — and 24 h after `finalizedAt`, counted from the
                             last fetch, "unuttu galiba, rövanş aç, bu sefer sen koy" instead; the header only says the laf is
-                            "aşağıda" once there is one), rewards/penalty text, "Rövanş" button with a note naming `rematchLeftOut`
+                            "aşağıda" once there is one; under a received laf "Cevap ver" (L1 "Cevap yaz", L3 "Lafı geri sok 🍆") →
+                            taunt picker `to` the winner, or, once answered, my answer as a smaller TauntBubble; the winner's
+                            loser rows show each loser's answer under the name, "💬 …"), rewards/penalty text, "Rövanş" button with a note naming `rematchLeftOut`
                             ("Veli kankan değil, rövanşa çağrılmaz. Tablodan adına dokun, ekle."; final-table rows open profiles),
-                            and a success toast naming whoever the new çelınc really invited (read back from its detail); tie view;
+                            and a success toast naming whoever the new çelınc really invited (read back from its detail); tie view
+                            (a rank-1 player sees the lafs the other co-leaders sent them and "Laf at" (L1 "Mesaj bırak") → picker,
+                            `to` the one other co-leader or, with more, no `to`; then "Lafını attın, sıra onda."; nothing behind the tie);
                             every player (not a watcher) also gets "Gruba at" (level 1 "Sonucu paylaş"): resultShareText
                             (utils/shareText.ts) writes "🚶 Haftalık Adım bitti (7 Eylül – 10 Eylül)", one line per player
                             who raced (🥇🥈🥉 by rank, so a tie has two 🥇, then "4." on; display name · score), a verdict at
@@ -576,7 +583,9 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             link (useInviteLink) unless it is loopback or a home-network address. Phone → Share.share
                             ("Paylaşılamadı" toast on a throw), web → clipboard ("Kopyalandı")
 (app)/challenge/[id]/taunt.tsx     picker: target chip(s), a context chip per loser from `tauntContexts` (RÖVANŞ / SERİ / EZİCİ FARK / NORMAL FARK / KIL PAYI;
-                            without the field, the margin), list of templates of that context rendered with real names/scores (levels ≤ target max; higher ones shown locked with
+                            without the field, the margin); a loser answering gets the winner as the only target and the CEVAP
+                            (`reply`) pool ("Önce o konuşsun" before the winner's laf, "Cevabını verdin" after the answer), a
+                            co-leader of a tie the other rank-1 players and the BERABERE pool; list of templates of that context rendered with real names/scores (levels ≤ target max; higher ones shown locked with
                             "X bunu kaldıramaz" note), custom text field (banned-word check client side), preview, "GÖNDER" → success animation
 (app)/challenge/[id]/entry.tsx     modal: log manual value (numeric pad, quick +1/+5 chips per unit), note, proof photo (camera/gallery → /uploads), day selector
                             (today/yesterday; an auto_steps çelınc offers every window day back to STEPS_BACKFILL_DAYS as chips

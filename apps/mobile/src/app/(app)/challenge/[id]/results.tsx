@@ -116,6 +116,26 @@ const LEFT_OUT_NOTE = (level: VulgarityLevel, names: string[]): string => {
   );
 };
 
+/** Under the winner's laf: the loser's one answer (the server allows exactly one). */
+const REPLY_CTA: Record<VulgarityLevel, string> = {
+  1: 'Cevap yaz',
+  2: 'Cevap ver',
+  3: 'Lafı geri sok 🍆',
+};
+
+/** In a tie the co-leaders may have a go at each other, once each. */
+const TIE_CTA: Record<VulgarityLevel, string> = {
+  1: 'Mesaj bırak',
+  2: 'Laf at',
+  3: 'Laf at 🍆',
+};
+
+const TIE_DONE: Record<VulgarityLevel, string> = {
+  1: 'Mesajını bıraktın.',
+  2: 'Lafını attın, sıra onda.',
+  3: 'Lafını soktun, sıra onda 🍆',
+};
+
 /**
  * After this long without a word, "bekle" stops being honest: the winner has
  * had their reminder (the server sends it from two hours on) and ignored it.
@@ -182,8 +202,9 @@ export default function ResultsScreen() {
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)'));
 
-  const openTaunt = (to: string) => {
-    router.push({ pathname: '/challenge/[id]/taunt', params: { id, to } });
+  /** Without `to` the picker asks who it is for. */
+  const openTaunt = (to?: string) => {
+    router.push({ pathname: '/challenge/[id]/taunt', params: to ? { id, to } : { id } });
   };
 
   const openProfile = (userId: string) => {
@@ -302,7 +323,25 @@ export default function ResultsScreen() {
   for (const sent of taunts) if (sent.fromUserId === meId) taunted.add(sent.toUserId);
   const pendingLosers = losers.filter((l) => !taunted.has(l.user.id));
 
-  const received: Taunt | undefined = meId ? taunts.find((x) => x.toUserId === meId) : undefined;
+  // the winner's laf to me; replies and a tie's lafs travel the other ways
+  const received: Taunt | undefined =
+    meId && challenge.winnerId
+      ? taunts.find((x) => x.toUserId === meId && x.fromUserId === challenge.winnerId)
+      : undefined;
+  // my one answer to it, once given
+  const myReply: Taunt | undefined =
+    meId && challenge.winnerId
+      ? taunts.find((x) => x.fromUserId === meId && x.toUserId === challenge.winnerId)
+      : undefined;
+  // the winner's view: each loser's answer, by who gave it
+  const replies = new Map<string, Taunt>();
+  if (iWon) for (const x of taunts) if (x.toUserId === meId) replies.set(x.fromUserId, x);
+  // A tie gives nobody "KOYDUM MU?", but whoever shares first place may have a
+  // go at the others who do; somebody behind them has nothing to talk about.
+  const coLeaders =
+    isTie && isPlayer && mine?.rank === 1 ? ranked.filter((p) => p.user.id !== meId && p.rank === 1) : [];
+  const tiePending = coLeaders.filter((p) => !taunted.has(p.user.id));
+  const tieReceived = coLeaders.length > 0 ? taunts.filter((x) => x.toUserId === meId) : [];
   // the server's list (an older one sends none, and then nothing is claimed)
   const leftOut = ranked.filter((p) => p.user.id !== meId && (rematchLeftOut ?? []).includes(p.user.id));
   const senderOf = (taunt: Taunt): ParticipantView | undefined =>
@@ -387,14 +426,35 @@ export default function ResultsScreen() {
       {/* -------------------------------------------------- taunt received */}
       {!iWon && !isTie && isPlayer ? (
         received ? (
-          <TauntBubble
-            loud
-            title={received.title}
-            body={received.body}
-            fromName={senderOf(received)?.user.displayName ?? winner?.user.displayName}
-            fromEmoji={senderOf(received)?.user.avatarEmoji ?? winner?.user.avatarEmoji}
-            timeLabel={relativeTime(received.createdAt)}
-          />
+          <>
+            <TauntBubble
+              loud
+              title={received.title}
+              body={received.body}
+              fromName={senderOf(received)?.user.displayName ?? winner?.user.displayName}
+              fromEmoji={senderOf(received)?.user.avatarEmoji ?? winner?.user.avatarEmoji}
+              timeLabel={relativeTime(received.createdAt)}
+            />
+            {myReply ? (
+              <TauntBubble
+                title={myReply.title}
+                body={myReply.body}
+                fromName={mine?.user.displayName ?? me?.displayName}
+                fromEmoji={mine?.user.avatarEmoji ?? me?.avatarEmoji}
+                timeLabel={relativeTime(myReply.createdAt)}
+                style={styles.replyBubble}
+              />
+            ) : (
+              <Button
+                title={REPLY_CTA[level]}
+                icon="💬"
+                variant="secondary"
+                size="lg"
+                fullWidth
+                onPress={() => openTaunt(received.fromUserId)}
+              />
+            )}
+          </>
         ) : (
           <Card edgeColor={Colors.accentDim}>
             <Text variant="title">Daha sesi çıkmadı</Text>
@@ -404,6 +464,18 @@ export default function ResultsScreen() {
           </Card>
         )
       ) : null}
+
+      {/* ------------------------------------------- a tie's lafs to me */}
+      {tieReceived.map((taunt) => (
+        <TauntBubble
+          key={taunt.id}
+          title={taunt.title}
+          body={taunt.body}
+          fromName={senderOf(taunt)?.user.displayName}
+          fromEmoji={senderOf(taunt)?.user.avatarEmoji}
+          timeLabel={relativeTime(taunt.createdAt)}
+        />
+      ))}
 
       {/* ------------------------------------------------------ standings */}
       <Card>
@@ -447,6 +519,7 @@ export default function ResultsScreen() {
             <View style={styles.loserList}>
               {losers.map((loser) => {
                 const done = taunted.has(loser.user.id);
+                const reply = replies.get(loser.user.id);
                 return (
                   <View key={loser.user.id} style={styles.loserRow}>
                     <Avatar
@@ -462,6 +535,11 @@ export default function ResultsScreen() {
                       <Text variant="tiny" muted numberOfLines={1}>
                         {loser.rank}. · {scoreText(loser.score)}
                       </Text>
+                      {reply ? (
+                        <Text variant="tiny" color={Colors.info} numberOfLines={3} style={styles.replyLine}>
+                          💬 {reply.body}
+                        </Text>
+                      ) : null}
                     </View>
                     {done ? (
                       <Chip
@@ -509,9 +587,26 @@ export default function ResultsScreen() {
             {isTie ? 'Ortada kalan hesap' : 'Ceza'}
           </Text>
           {isTie ? (
-            <Text variant="small" muted>
-              {TIE_SUB[level]}
-            </Text>
+            <>
+              <Text variant="small" muted>
+                {TIE_SUB[level]}
+              </Text>
+              {tiePending.length > 0 ? (
+                <Button
+                  title={TIE_CTA[level]}
+                  icon="💬"
+                  size="lg"
+                  fullWidth
+                  style={styles.gap}
+                  // one co-leader is the usual tie; more and the picker asks who
+                  onPress={() => openTaunt(tiePending.length === 1 ? tiePending[0].user.id : undefined)}
+                />
+              ) : coLeaders.length > 0 ? (
+                <Text variant="small" color={Colors.success} bold style={styles.gap}>
+                  {TIE_DONE[level]}
+                </Text>
+              ) : null}
+            </>
           ) : (
             <>
               <Text variant="small" color={Colors.danger}>
@@ -938,6 +1033,9 @@ const styles = StyleSheet.create({
 
   loserList: { marginTop: Spacing.lg, gap: Spacing.md },
   loserRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  replyLine: { marginTop: 2 },
+  // my answer sits under the winner's laf, a step in, like a reply in a chat
+  replyBubble: { marginLeft: Spacing.xl },
 
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   summaryEmoji: { fontSize: 34 },

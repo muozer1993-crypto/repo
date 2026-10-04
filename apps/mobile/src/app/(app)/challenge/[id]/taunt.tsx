@@ -48,6 +48,7 @@ const CONTEXT_LABEL: Record<string, string> = {
   tie: 'BERABERE',
   revenge: 'RÖVANŞ',
   streak: 'SERİ',
+  reply: 'CEVAP',
 };
 
 const CONTEXT_COLOR: Partial<Record<TauntContext, string>> = {
@@ -55,6 +56,8 @@ const CONTEXT_COLOR: Partial<Record<TauntContext, string>> = {
   win_close: Colors.yellow,
   revenge: Colors.accent,
   streak: Colors.yellow,
+  tie: Colors.info,
+  reply: Colors.info,
 };
 
 /**
@@ -98,7 +101,24 @@ const NOT_WINNER: Record<VulgarityLevel, string> = {
   3: 'Koyma hakkı kazananın 🍆 Sen kazanmadın, sıraya gir.',
 };
 
-const customTitleFor = (level: VulgarityLevel, name: string): string => {
+/** A tie: the co-leaders may talk, whoever finished behind them may not. */
+const BEHIND_THE_TIE: Record<VulgarityLevel, string> = {
+  1: 'Mesaj hakkı berabere kalanlarda. İstersen rövanş aç.',
+  2: 'Laf hakkı berabere kalanlarda, sen arkada kaldın. Rövanş aç.',
+  3: 'Laf hakkı öndekilerde, sen arkada kaldın 🍆 Rövanş aç.',
+};
+
+/**
+ * Who is talking after the whistle (the server's rules, social.ts): the
+ * winner's "KOYDUM MU?", a loser's one answer to it, or one co-leader of a tie
+ * at another.
+ */
+type Mode = 'win' | 'reply' | 'tie';
+
+/** Same titles the server gives a typed laf: "KOYDU" is only true from the winner. */
+const customTitleFor = (mode: Mode, level: VulgarityLevel, name: string): string => {
+  if (mode === 'reply') return byLevel(level, `${name} cevap verdi`, `${name} boş durmadı`, `${name} lafı geri soktu 🍆`);
+  if (mode === 'tie') return byLevel(level, `${name} bir mesaj bıraktı`, `${name} laf attı`, `${name} laf soktu 🍆`);
   if (level === 1) return `${name} bir not bıraktı`;
   if (level === 3) return `${name} KOYDU 🍆`;
   return `${name} laf soktu`;
@@ -231,14 +251,28 @@ export default function TauntPickerScreen() {
     );
   }
 
-  if (!meId || challenge.winnerId !== meId) {
+  const mine = standings.find((p) => p.user.id === meId);
+  const played = mine?.status === 'accepted';
+  const winnerView = challenge.winnerId
+    ? standings.find((p) => p.user.id === challenge.winnerId && p.status === 'accepted')
+    : undefined;
+  const mode: Mode | null =
+    meId && challenge.winnerId === meId
+      ? 'win'
+      : played && challenge.isTie && mine.rank === 1
+        ? 'tie'
+        : played && winnerView
+          ? 'reply'
+          : null;
+
+  if (!mode) {
     return (
       <Screen scroll contentStyle={styles.content}>
         <Header title="Laf seç" onClose={close} />
         <EmptyState
           emoji={challenge.isTie ? '🤝' : '🤐'}
           title={challenge.isTie ? 'Berabere bitti' : 'Bu hak sende değil'}
-          subtitle={challenge.isTie ? 'Kazanan olmadığı için laf hakkı da yok. Rövanş aç.' : NOT_WINNER[level]}
+          subtitle={challenge.isTie ? BEHIND_THE_TIE[level] : NOT_WINNER[level]}
           actionLabel="Kapat"
           onAction={close}
         />
@@ -246,43 +280,105 @@ export default function TauntPickerScreen() {
     );
   }
 
-  const mine = standings.find((p) => p.user.id === meId);
-  const myScore = mine?.score ?? 0;
-  const myName = mine?.user.displayName ?? me?.displayName ?? 'Kazanan';
-
-  const losers = standings.filter(
-    (p) => p.status === 'accepted' && p.user.id !== meId && !p.isWinner
-  );
-  const taunted = new Set<string>();
-  for (const row of detail.data?.canTaunt ?? []) if (row.done) taunted.add(row.toUserId);
-  for (const done of taunts) if (done.fromUserId === meId) taunted.add(done.toUserId);
-  const available = losers.filter((p) => !taunted.has(p.user.id));
-
-  if (losers.length === 0 || available.length === 0) {
+  // an answer needs something to answer: the winner's laf comes first
+  if (mode === 'reply' && !taunts.some((x) => x.fromUserId === challenge.winnerId && x.toUserId === meId)) {
     return (
       <Screen scroll contentStyle={styles.content}>
         <Header title="Laf seç" onClose={close} />
         <EmptyState
-          emoji={losers.length === 0 ? '🫥' : '✅'}
+          emoji="🤐"
+          title={byLevel(level, 'Önce o yazsın', 'Önce o konuşsun', 'Önce o koysun 🍆')}
+          subtitle={byLevel(
+            level,
+            `${winnerView?.user.displayName ?? 'Kazanan'} bir şey yazınca cevap verebilirsin.`,
+            `${winnerView?.user.displayName ?? 'Kazanan'} lafını soksun, sonra cevabını verirsin.`,
+            `${winnerView?.user.displayName ?? 'Kazanan'} önce koysun, sonra sen geri sokarsın 🍆`
+          )}
+          actionLabel="Kapat"
+          onAction={close}
+        />
+      </Screen>
+    );
+  }
+
+  const myScore = mine?.score ?? 0;
+  const myName = mine?.user.displayName ?? me?.displayName ?? 'Kazanan';
+
+  // the winner talks to every loser, a loser only back to the winner, a tie's
+  // co-leaders only to each other
+  const targets =
+    mode === 'reply'
+      ? winnerView
+        ? [winnerView]
+        : []
+      : standings.filter(
+          (p) =>
+            p.status === 'accepted' &&
+            p.user.id !== meId &&
+            (mode === 'tie' ? p.rank === 1 : !p.isWinner)
+        );
+  const taunted = new Set<string>();
+  for (const row of detail.data?.canTaunt ?? []) if (row.done) taunted.add(row.toUserId);
+  for (const done of taunts) if (done.fromUserId === meId) taunted.add(done.toUserId);
+  const available = targets.filter((p) => !taunted.has(p.user.id));
+
+  if (mode === 'reply' && available.length === 0) {
+    return (
+      <Screen scroll contentStyle={styles.content}>
+        <Header title="Laf seç" onClose={close} />
+        <EmptyState
+          emoji="✅"
+          title={byLevel(level, 'Cevabını yazdın', 'Cevabını verdin', 'Cevabını soktun 🍆')}
+          subtitle={byLevel(
+            level,
+            'Bir cevap hakkın vardı, kullandın. Gerisi rövanşta.',
+            'Bir tane yeter. Gerisini rövanşta konuşursunuz.',
+            'Bir tane yeter. Gerisini rövanşta sahada konuşun 🍆'
+          )}
+          actionLabel="Kapat"
+          onAction={close}
+        />
+      </Screen>
+    );
+  }
+
+  if (targets.length === 0 || available.length === 0) {
+    const tie = mode === 'tie';
+    return (
+      <Screen scroll contentStyle={styles.content}>
+        <Header title="Laf seç" onClose={close} />
+        <EmptyState
+          emoji={targets.length === 0 ? '🫥' : '✅'}
           title={
-            losers.length === 0
-              ? 'Kaybeden yok'
-              : byLevel(level, 'Hepsine gönderdin', 'Hepsine koydun', 'Hepsine sapladın 🍆')
+            targets.length === 0
+              ? tie
+                ? 'Berabere kalan yok'
+                : 'Kaybeden yok'
+              : tie
+                ? byLevel(level, 'Hepsine yazdın', 'Hepsine laf attın', 'Hepsine soktun 🍆')
+                : byLevel(level, 'Hepsine gönderdin', 'Hepsine koydun', 'Hepsine sapladın 🍆')
           }
           subtitle={
-            losers.length === 0
+            targets.length === 0
               ? byLevel(
                   level,
                   'Bu çelıncta mesaj gönderecek kimse kalmamış.',
                   'Bu çelıncta laf sokacak kimse kalmamış.',
                   'Bu çelıncta saplayacak kimse kalmamış 🍆'
                 )
-              : byLevel(
-                  level,
-                  'Herkese bir kere gönderdin. İkincisi yok.',
-                  'Herkese bir kere koydun. İkincisi yok.',
-                  'Herkese bir kere sapladın. İkincisi yok.'
-                )
+              : tie
+                ? byLevel(
+                    level,
+                    'Berabere kaldığın herkese bir kere yazdın. İkincisi yok.',
+                    'Berabere kaldığın herkese bir kere laf attın. İkincisi yok.',
+                    'Berabere kaldığın herkese bir kere soktun. İkincisi yok 🍆'
+                  )
+                : byLevel(
+                    level,
+                    'Herkese bir kere gönderdin. İkincisi yok.',
+                    'Herkese bir kere koydun. İkincisi yok.',
+                    'Herkese bir kere sapladın. İkincisi yok.'
+                  )
           }
           actionLabel="Kapat"
           onAction={close}
@@ -301,18 +397,20 @@ export default function TauntPickerScreen() {
    * Everybody finished with their own gap, so everybody gets their own context.
    * The server's word comes first: only it knows a rematch was won back or that
    * this is the third win in a row over the same friend. An older server sends
-   * none, and the gap is all there is.
+   * none, and the gap is all there is. An answer and a tie have one pool each.
    */
-  const contextFor = (participant: ParticipantView): TauntContext =>
-    tauntContexts?.[participant.user.id] ??
-    (challenge.isTie
-      ? 'tie'
-      : tauntContextForMargin(
-          winMargin({ direction: challenge.direction }, myScore, participant.score)
-        ));
+  const contextFor = (participant: ParticipantView): TauntContext => {
+    if (mode === 'reply') return 'reply';
+    if (mode === 'tie') return 'tie';
+    return (
+      tauntContexts?.[participant.user.id] ??
+      tauntContextForMargin(winMargin({ direction: challenge.direction }, myScore, participant.score))
+    );
+  };
 
   const theirScore = chosen?.score ?? 0;
-  const context: TauntContext = chosen ? contextFor(chosen) : challenge.isTie ? 'tie' : 'win';
+  // the mode names its own pool ('win' / 'reply' / 'tie') until somebody is picked
+  const context: TauntContext = chosen ? contextFor(chosen) : mode;
   const templates = tauntsAtLevel(context, tauntLevel, challenge.metricType);
   const active: TauntTemplate | undefined =
     templates.find((tpl) => tpl.id === templateId) ?? templates[0];
@@ -335,12 +433,15 @@ export default function TauntPickerScreen() {
   /** true when at least one other recipient will get a different template */
   const mixedContexts = recipients.some((target) => contextFor(target) !== context);
 
+  // an answer is written by the loser, but {winner} stays the winner it answers
+  const theirName = chosen?.user.displayName ?? 'kanka';
+  const reply = mode === 'reply';
   const vars: TauntVars = {
-    winner: myName,
-    loser: chosen?.user.displayName ?? 'kanka',
+    winner: reply ? theirName : myName,
+    loser: reply ? myName : theirName,
     metric: type?.nameTr ?? challenge.unit,
-    winnerScore: formatNumberTr(myScore),
-    loserScore: formatNumberTr(theirScore),
+    winnerScore: formatNumberTr(reply ? theirScore : myScore),
+    loserScore: formatNumberTr(reply ? myScore : theirScore),
     diff: formatNumberTr(Math.abs(myScore - theirScore)),
     unit: challenge.unit,
     challenge: challenge.title || type?.nameTr || 'çelınc',
@@ -350,7 +451,7 @@ export default function TauntPickerScreen() {
   const banned = customText.length > 0 && containsBanned(customText);
   const preview =
     useCustom
-      ? { title: customTitleFor(tauntLevel, myName), body: customText }
+      ? { title: customTitleFor(mode, tauntLevel, myName), body: customText }
       : active
         ? renderTaunt(active, vars)
         : null;
@@ -397,7 +498,14 @@ export default function TauntPickerScreen() {
 
   return (
     <Screen scroll keyboard contentStyle={styles.content} bottomInset={Spacing.xxl}>
-      <Header title={t('taunt_picker_title', level)} onClose={close} />
+      <Header
+        title={
+          reply
+            ? byLevel(level, 'Cevabını seç', 'Ne cevap verelim?', 'Nasıl geri sokalım? 🍆')
+            : t('taunt_picker_title', level)
+        }
+        onClose={close}
+      />
 
       {/* --------------------------------------------------------- target */}
       <Card>

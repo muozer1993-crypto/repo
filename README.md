@@ -49,7 +49,7 @@ Bu görüntüler uçtan uca test çalışırken gerçek veriyle çekildi (<code>
 |---|---|
 | `apps/mobile` | Telefon uygulaması. Expo SDK 57, expo-router, TypeScript. |
 | `apps/server` | Sunucu. Fastify + SQLite. Tek dosyalık veritabanı, ORM yok. |
-| `packages/shared` | İki tarafın da kullandığı tipler, doğrulama şemaları, puanlama, çelınc kataloğu, 84 laf sokma metni ve üç seviyelik arayüz metinleri. |
+| `packages/shared` | İki tarafın da kullandığı tipler, doğrulama şemaları, puanlama, çelınc kataloğu, 95 laf sokma metni ve üç seviyelik arayüz metinleri. |
 | `SPEC.md` | Teknik şartname. Veri modeli, API sözleşmesi, ekran listesi. Kod değiştirirken buraya bak. |
 | `docs/ARCHITECTURE.md` | Kodun neden böyle bölündüğü: zaman/gün mantığı, çelıncın ömrü, puanlama, laf sokma zinciri. |
 
@@ -427,6 +427,13 @@ dokununca sonuç ekranı açılır. Gece gitmez: kazananın saatiyle 12:00–22:
 gece yarısı biten çelıncın hatırlatması ertesi öğlen gelir. İki gün geçtiyse hiç gitmez.
 Kazananın adına otomatik laf atılmaz. Kaybeden taraf bir gün boyunca laf gelmezse sonuç
 ekranında "unuttu galiba, rövanş aç" yazısını görür.
+
+**Cevap hakkı ve beraberlik:** kazanan sana laf soktuysa sonuç ekranında lafın hemen altında
+**Cevap ver** durur. Bir kere ve sadece kazanana cevap verebilirsin ("Yedim, kabul Ali. Rövanşta
+o lafı sana yediririm lan."); kazanan da cevabını kendi sonuç ekranında, senin adının altında
+görür. Berabere biten çelıncta birinciliği paylaşanlar birbirine birer laf atabilir (**Laf at**),
+arkadan gelenler atamaz. Telefonlar sonucu hâlâ bekliyorsa (bitişten sonraki bir saat, itiraz)
+kimse konuşamaz, sonuç yazılınca açılır.
 
 **Rövanş ve seri lafları:** rövanşı ilk çelıncı kaybeden kazanırsa laf seçicide **RÖVANŞ**
 lafları çıkar. Aynı kankayı üst üste üçüncü kez yenersen **SERİ** lafları çıkar; arada bir

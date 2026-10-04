@@ -145,6 +145,18 @@ de saymaz. İkisi de değilse farka bakılır: `win_big`, `win` ya da `win_close
 kelimeyi kazanana her kaybeden için `tauntContexts` ile verir. Seçici RÖVANŞ ve SERİ laflarını
 ancak böyle gösterebilir, çünkü telefon yalnızca skorları bilir.
 
+Laf tek yönlü kalmaz. Kazanan konuştuktan sonra kaybeden **bir kere** cevap verebilir: yalnızca
+kazanana ve yalnızca kazananın lafı ona ulaştıktan sonra. Cevap için ayrı bir tablo yok; `taunts`
+satırı ters yönde yazılır ve `UNIQUE(challenge_id, from_user_id, to_user_id)` ikincisine izin
+vermez (409 `already_replied`). `reply` şablonları kaybedenin ağzından yazılır ama `{winner}` yine
+kazanandır, `{loser}` cevap veren. Beraberlikte kimse kazanmaz; birinciliği paylaşanlar birbirine
+birer laf atabilir (`tie` şablonları), arkadan gelen kimseye bir şey diyemez. Kimin kime hangi
+hakla konuştuğuna rota karar verir (`tauntModeFor`). Cevapta ve beraberlikte başka havuzdan istenen
+bir şablon o durumun kendi havuzundan biriyle değiştirilir: berabere biten çelıncta "Ali koydu"
+yalan olurdu. Bildirim kimden geldiğini taşır (`fromUserId`), gelen kutusu yüzü oradan bulur.
+Sonuç bekleyen bir çelınc (telefonların saati, itiraz) `finished` olmadığı için bu haklar da o
+zamana kadar kapalıdır.
+
 Rövanş eski kadroyu olduğu gibi çağırmaz, `POST /challenges` ile aynı kapıdan geçer. Hâlâ kanka
 olanlar davet edilir; engelli ikili ve silinen hesaplar dışarıda kalır. Grup çelıncında başkası
 üzerinden tanıştığın biri bu yüzden rövanşa gelmez. Sonuç ekranı bunu önceden söyler
@@ -182,7 +194,9 @@ mısın? Veli ağzını açmanı bekliyor." Kurallar:
   talebinden **önce** kontrol edilir; gece yarısı biten çelıncın hatırlatması yanmaz, öğlen gider;
 * bitişten 48 saat sonra artık gitmez;
 * beraberlikte gitmez; lafı zaten almış, hesabını silmiş ya da kazananla arasında engel olan
-  kaybeden de beklemiyor sayılır. Metin yalnızca hâlâ bekleyenlerin adını sayar.
+  kaybeden de beklemiyor sayılır. Metin yalnızca hâlâ bekleyenlerin adını sayar;
+* yalnızca kazananın attığı laflar sayılır. Bir kaybedenin cevabı ters yönde gider, ne
+  hatırlatmayı susturur ne de tetikler.
 
 Kazananın adına otomatik laf **atılmaz**; "KOYDUM MU?" kazananın hakkı, onun ağzından başkası
 konuşmaz. Kaybedenin sonuç ekranı da dürüst olur: bitişten 24 saat sonra "bekle" yerine

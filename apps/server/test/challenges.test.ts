@@ -811,6 +811,136 @@ describe('POST /challenges/:id/taunt', () => {
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('validation');
   });
+
+  /** Ali, Veli and Cem, finished: Ali first, Cem last; with `tie` Veli ends level with Ali. */
+  async function threeWay(h: TestApp, tie: boolean) {
+    const ali = await registerUser(h.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(h.app, 'veli', { displayName: 'Veli' });
+    const cem = await registerUser(h.app, 'cem', { displayName: 'Cem' });
+    befriend(h.app, ali.me.id, veli.me.id);
+    befriend(h.app, ali.me.id, cem.me.id);
+    const created = await createChallenge(h, ali, { participantIds: [veli.me.id, cem.me.id] });
+    const challengeId = created.json<Challenge>().id;
+    for (const user of [veli, cem]) {
+      await authed(h.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    }
+    const day = today(h);
+    const scores: [RegisteredUser, number][] = [[ali, 12430], [veli, tie ? 12430 : 8000], [cem, 900]];
+    for (const [user, value] of scores) {
+      await postEntry(h, user, challengeId, { dayKey: day, value, source: 'pedometer', clientTime: iso(h) });
+    }
+    expect((await h.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` })).statusCode).toBe(200);
+    return { ali, veli, cem, challengeId };
+  }
+
+  const tauntAs = (user: RegisteredUser, challengeId: string, payload: Record<string, unknown>) =>
+    authed(harness!.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/taunt`, payload });
+
+  it('lets the loser answer the winner once, after the winner spoke', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await finishedChallenge(harness);
+
+    const early = await tauntAs(veli, challengeId, { toUserId: ali.me.id, templateId: 'l2_reply_01' });
+    expect(early.statusCode).toBe(403);
+    expect(early.json().error.message).toBe('Önce o konuşsun, sonra cevap verirsin.');
+
+    expect((await tauntAs(ali, challengeId, { toUserId: veli.me.id, templateId: 'l2_win_01' })).statusCode).toBe(201);
+
+    // a winner's line sent back is swapped for an answer: "Ali koydu" from Veli would be a lie
+    const reply = await tauntAs(veli, challengeId, { toUserId: ali.me.id, templateId: 'l2_win_01' });
+    expect(reply.statusCode).toBe(201);
+    const taunt = reply.json<{ taunt: { fromUserId: string; toUserId: string; title: string; body: string } }>().taunt;
+    expect(taunt).toMatchObject({ fromUserId: veli.me.id, toUserId: ali.me.id });
+    // {winner} stays the real winner, {loser} the one answering
+    expect(taunt.body).toContain('Ali');
+    expect(taunt.title).toContain('Veli');
+    expect(taunt.body).not.toMatch(/\{\w+\}/);
+
+    const inbox = listByType(harness.db, ali.me.id, 'taunt');
+    expect(inbox).toHaveLength(1);
+    expect(JSON.parse(inbox[0].data)).toMatchObject({ challengeId, fromUserId: veli.me.id });
+    // the winner's own laf says who sent it too
+    expect(JSON.parse(listByType(harness.db, veli.me.id, 'taunt')[0].data)).toMatchObject({ fromUserId: ali.me.id });
+
+    const again = await tauntAs(veli, challengeId, { toUserId: ali.me.id, customBody: 'bir daha' });
+    expect(again.statusCode).toBe(409);
+    expect(again.json().error.code).toBe('already_replied');
+
+    // the winner already said theirs: no second round
+    const winnerAgain = await tauntAs(ali, challengeId, { toUserId: veli.me.id, templateId: 'l2_win_02' });
+    expect(winnerAgain.statusCode).toBe(409);
+    expect(winnerAgain.json().error.code).toBe('already_taunted');
+
+    // both directions show on both result screens
+    const results = await authed(harness.app, veli.token)({ method: 'GET', url: `/challenges/${challengeId}/results` });
+    // (the injected clock stands still, so both rows share one instant: order is not the point)
+    expect(results.json<ChallengeResults>().taunts.map((t) => t.fromUserId).sort()).toEqual(
+      [ali.me.id, veli.me.id].sort(),
+    );
+  });
+
+  it('titles a typed answer as an answer, not as a win', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await finishedChallenge(harness);
+    await tauntAs(ali, challengeId, { toUserId: veli.me.id, templateId: 'l2_win_01' });
+
+    const reply = await tauntAs(veli, challengeId, { toUserId: ali.me.id, customBody: 'haftaya bak sen {winner}' });
+    expect(reply.statusCode).toBe(201);
+    expect(reply.json<{ taunt: { title: string; body: string } }>().taunt).toMatchObject({
+      title: 'Veli boş durmadı',
+      body: 'haftaya bak sen Ali',
+    });
+  });
+
+  it('gives a loser nobody to answer but the winner, and nothing across a block', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, cem, challengeId } = await threeWay(harness, false);
+    await tauntAs(ali, challengeId, { toUserId: veli.me.id, templateId: 'l2_win_01' });
+    await tauntAs(ali, challengeId, { toUserId: cem.me.id, templateId: 'l2_win_01' });
+
+    const sideways = await tauntAs(veli, challengeId, { toUserId: cem.me.id, templateId: 'l2_reply_01' });
+    expect(sideways.statusCode).toBe(403);
+    expect(sideways.json().error.code).toBe('not_winner');
+
+    await authed(harness.app, cem.token)({ method: 'POST', url: `/users/${ali.me.id}/block` });
+    const blocked = await tauntAs(cem, challengeId, { toUserId: ali.me.id, templateId: 'l2_reply_01' });
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json().error.code).toBe('blocked');
+    expect(listByType(harness.db, ali.me.id, 'taunt')).toHaveLength(0);
+  });
+
+  it('lets the co-leaders of a tie have a go at each other, and nobody behind them', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, cem, challengeId } = await threeWay(harness, true);
+
+    // the picker only offers tie lines; a win line asked for is swapped for one
+    const fromAli = await tauntAs(ali, challengeId, { toUserId: veli.me.id, templateId: 'l2_win_01' });
+    expect(fromAli.statusCode).toBe(201);
+    expect(fromAli.json<{ taunt: { body: string } }>().taunt.body).not.toContain('koydu');
+    const fromVeli = await tauntAs(veli, challengeId, { toUserId: ali.me.id, templateId: 'l2_tie_02' });
+    expect(fromVeli.statusCode).toBe(201);
+    expect(fromVeli.json<{ taunt: { body: string } }>().taunt.body).toBe(
+      'Veli ve Ali eşit bitirdi. Bu uygulama bunun için yapılmadı lan.',
+    );
+    expect(JSON.parse(listByType(harness.db, ali.me.id, 'taunt')[0].data)).toMatchObject({ fromUserId: veli.me.id });
+
+    const twice = await tauntAs(ali, challengeId, { toUserId: veli.me.id, templateId: 'l2_tie_01' });
+    expect(twice.statusCode).toBe(409);
+    expect(twice.json().error.code).toBe('already_taunted');
+
+    const fromBehind = await tauntAs(cem, challengeId, { toUserId: ali.me.id, templateId: 'l2_tie_01' });
+    expect(fromBehind.statusCode).toBe(403);
+    expect(fromBehind.json().error.code).toBe('not_winner');
+
+    const atBehind = await tauntAs(ali, challengeId, { toUserId: cem.me.id, templateId: 'l2_tie_01' });
+    expect(atBehind.statusCode).toBe(403);
+    expect(atBehind.json().error.code).toBe('not_winner');
+    expect(listByType(harness.db, cem.me.id, 'taunt')).toHaveLength(0);
+
+    // nobody won: the winner-only lists stay empty for the co-leaders
+    const detail = await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+    expect(detail.json<ChallengeDetail>().canTaunt).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

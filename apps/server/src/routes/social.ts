@@ -27,7 +27,7 @@ import {
   type VulgarityLevel,
 } from '@koydum/shared';
 import { badRequest, conflict, forbidden, notFound, parseBody } from '../errors.js';
-import { newId, nowIso, type ChallengeRow, type Database, type UserRow } from '../db/index.js';
+import { newId, nowIso, type ChallengeRow, type Database, type ParticipantRow, type UserRow } from '../db/index.js';
 import { toPublicUser, toTaunt } from '../serialize.js';
 import { challengeWindow, computeStandings, dayOverByEnd, participantTimezone } from '../services/challenges.js';
 import { notify } from '../services/notifications.js';
@@ -46,7 +46,13 @@ import {
   tauntsForUser,
 } from '../services/challengeViews.js';
 import { areFriends, assertNotBlocked, isBlockedBetween } from '../services/friends.js';
-import { sendPoke, sendTaunt, tauntContextsForWinner, tauntPreviewsForWinner } from '../services/taunts.js';
+import {
+  sendPoke,
+  sendTaunt,
+  tauntContextsForWinner,
+  tauntPreviewsForWinner,
+  type TauntMode,
+} from '../services/taunts.js';
 
 interface IdParams {
   id: string;
@@ -81,6 +87,34 @@ function requireTarget(db: Database, challenge: ChallengeRow, userId: string): U
   const user = getUserRow(db, userId);
   if (!user) throw notFound('participant_not_found', 'Bu kişi çelıncta değil.');
   return user;
+}
+
+/**
+ * What gives the caller (`me`, their row in this finished çelınc) the right to
+ * talk to `toUserId` after the whistle, or the 403 that says why not.
+ *
+ * "KOYDUM MU?" is the winner's. Two smaller rights sit next to it, so the
+ * comeback does not move to WhatsApp: a loser may answer the winner, only once
+ * the winner's laf has landed and only once (`sendTaunt` keeps it to one row);
+ * and in a tie the players sharing first place may have a go at each other.
+ * Whoever finished behind a tie has nothing to talk about, and a loser has
+ * nobody to answer but the winner. Neither right touches the winner's reminder
+ * (`sendTauntFollowups`), which only counts taunts sent BY the winner.
+ */
+function tauntModeFor(db: Database, challenge: ChallengeRow, me: ParticipantRow, toUserId: string): TauntMode {
+  if (challenge.winner_id !== null && challenge.winner_id === me.user_id) return 'win';
+  const notWinner = () => forbidden('not_winner', 'Laf sokma hakkı kazananın.');
+  if (me.status !== 'accepted') throw notWinner();
+  if (challenge.is_tie) {
+    if (me.final_rank !== 1) throw notWinner();
+    return 'tie';
+  }
+  if (!challenge.winner_id || toUserId !== challenge.winner_id) throw notWinner();
+  const spoke = db
+    .prepare('SELECT 1 FROM taunts WHERE challenge_id = ? AND from_user_id = ? AND to_user_id = ?')
+    .get(challenge.id, challenge.winner_id, me.user_id);
+  if (!spoke) throw forbidden('not_winner', 'Önce o konuşsun, sonra cevap verirsin.');
+  return 'reply';
 }
 
 /**
@@ -207,18 +241,20 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     const body = parseBody(TauntBodySchema, request.body);
 
     const challenge = requireChallengeRow(db, id);
-    requireMembership(db, challenge, me.id);
+    const membership = requireMembership(db, challenge, me.id);
 
+    // a result still waiting (the phones' hour, an itiraz) keeps everybody quiet
     if (challenge.status !== 'finished') {
       throw badRequest('challenge_not_finished', 'Çelınc bitmeden laf sokamazsın.');
     }
-    // Only the winner earns the right to "KOYDUM MU?" — a tie leaves nobody with it.
-    if (!challenge.winner_id || challenge.winner_id !== me.id) {
-      throw forbidden('not_winner', 'Laf sokma hakkı kazananın.');
-    }
+    const mode = tauntModeFor(db, challenge, membership, body.toUserId);
     if (body.toUserId === me.id) throw badRequest('self_taunt', 'Kendine koyamazsın.');
 
     const target = requireTarget(db, challenge, body.toUserId);
+    // a tie is between the ones sharing first place, not at whoever finished behind
+    if (mode === 'tie' && getParticipant(db, challenge.id, target.id)?.final_rank !== 1) {
+      throw forbidden('not_winner', 'Berabere bitti, laf sadece berabere kalanlar arasında.');
+    }
     assertNotBlocked(db, me.id, target.id);
 
     const { taunt } = sendTaunt(db, {
@@ -227,6 +263,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       to: target,
       templateId: body.templateId,
       customBody: body.customBody,
+      mode,
       now: app.now(),
     });
 

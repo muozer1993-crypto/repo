@@ -1228,6 +1228,8 @@ describe('a loser still waiting for the winner to talk', () => {
     // the header does not point at a laf that is not there
     expect(text).toContain('Laf gelirse aşağıda görürsün, şimdilik ses yok.');
     expect(text).not.toContain('Kazanan sana laf soktu, aşağıda.');
+    // nothing to answer yet
+    expect(() => findWith(tree, 'title', 'Cevap ver', 'onPress')).toThrow();
   });
 
   it('says the laf is below once it is', async () => {
@@ -1268,6 +1270,203 @@ describe('a loser still waiting for the winner to talk', () => {
     const text = rendered(tree);
     expect(text).toContain('Ali unuttu galiba. Rövanş aç, bu sefer sen koy.');
     expect(text).not.toContain('Beklemede kal');
+  });
+});
+
+describe('answering back, and a tie', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const VELI = { id: 'u-3', username: 'veli', displayName: 'Veli', avatarEmoji: '🦊', createdAt: '2026-09-01T00:00:00.000Z' };
+  const at = new Date(Date.now() - 60_000).toISOString();
+  const aliToMe = {
+    id: 't-1', challengeId: 'c-1', fromUserId: ALI.id, toUserId: 'me-1', level: 2 as const,
+    title: 'Koydu', body: 'Ali koydu: 12.430 adım karşısında 8.000. Afiyet olsun Mustafa.', createdAt: at,
+  };
+  const meToAli = {
+    id: 't-2', challengeId: 'c-1', fromUserId: 'me-1', toUserId: ALI.id, level: 2 as const,
+    title: 'Mustafa boş durmadı', body: 'Tamam Ali, 4.430 adım için bu kadar konuşma. Rövanş geliyor.', createdAt: at,
+  };
+
+  /** Ali beat the reader an hour ago; `taunts` is what went back and forth. */
+  function lostToAli(taunts: unknown[]) {
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    return {
+      challenge: { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: ALI.id },
+      standings: [
+        { ...detail.me!, user: ALI, score: 12430, rank: 1, isWinner: true },
+        { ...detail.me!, score: 8000, rank: 2 },
+      ],
+      taunts,
+    };
+  }
+
+  /** The reader and Ali tied at the top, Veli behind; `meRank` 3 puts the reader behind instead. */
+  function tied(meRank: 1 | 3 = 1, taunts: unknown[] = []) {
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    const third = meRank === 1 ? VELI : detail.me!.user;
+    const leader = meRank === 1 ? detail.me!.user : VELI;
+    return {
+      challenge: { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, isTie: true },
+      standings: [
+        { ...detail.me!, user: leader, score: 9000, rank: 1 },
+        { ...detail.me!, user: ALI, score: 9000, rank: 1 },
+        { ...detail.me!, user: third, score: 3000, rank: 3 },
+      ],
+      taunts,
+    };
+  }
+
+  beforeEach(() => {
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.push!.mockClear();
+  });
+
+  it('offers the loser one answer under the winner\'s laf', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => lostToAli([aliToMe]));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Afiyet olsun Mustafa.');
+    press(tree, 'Cevap ver');
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/challenge/[id]/taunt', params: { id: 'c-1', to: ALI.id } });
+  });
+
+  it('shows the answer once it went, and no second button', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => lostToAli([aliToMe, meToAli]));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Afiyet olsun Mustafa.');
+    expect(text).toContain('Rövanş geliyor.');
+    expect(() => findWith(tree, 'title', 'Cevap ver', 'onPress')).toThrow();
+  });
+
+  it('shows the winner each loser\'s answer under their name', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    api.results = jest.fn(async () => ({
+      challenge: { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: 'me-1' },
+      standings: [
+        { ...detail.me!, isWinner: true },
+        { ...detail.me!, user: ALI, score: 8000, rank: 2 },
+      ],
+      taunts: [
+        { ...aliToMe, fromUserId: 'me-1', toUserId: ALI.id },
+        { ...meToAli, fromUserId: ALI.id, toUserId: 'me-1', body: 'Yedim, kabul Mustafa. Rövanşta o lafı sana yediririm lan.' },
+      ],
+    }));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Yedim, kabul Mustafa. Rövanşta o lafı sana yediririm lan.');
+  });
+
+  it('lets a co-leader of a tie have a go at the other, and nobody behind them', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => tied());
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    press(tree, 'Laf at');
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/challenge/[id]/taunt', params: { id: 'c-1', to: ALI.id } });
+
+    api.results = jest.fn(async () => tied(3));
+    const behind = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(rendered(behind)).toContain('BERABERE LAN');
+    expect(() => findWith(behind, 'title', 'Laf at', 'onPress')).toThrow();
+  });
+
+  it('shows a co-leader the laf the other one threw, and that theirs went', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () =>
+      tied(1, [
+        { ...aliToMe, title: 'Sıkıcı oldu', body: 'Ali ve Mustafa eşit bitirdi. Bu uygulama bunun için yapılmadı lan.' },
+        { ...meToAli, title: 'Kimse koyamadı', body: '9.000 - 9.000. Berabere. Bir daha oynayın.' },
+      ])
+    );
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Bu uygulama bunun için yapılmadı lan.');
+    expect(text).toContain('Lafını attın, sıra onda.');
+    expect(() => findWith(tree, 'title', 'Laf at', 'onPress')).toThrow();
+  });
+
+  it('the picker offers answer lines addressed to the winner, once the winner spoke', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => lostToAli([]));
+    const TauntScreen = require('@/app/(app)/challenge/[id]/taunt').default;
+    const early = renderScreen(<TauntScreen />);
+    await settle();
+    expect(rendered(early)).toContain('Önce o konuşsun');
+
+    api.results = jest.fn(async () => lostToAli([aliToMe]));
+    const tree = renderScreen(<TauntScreen />);
+    await settle();
+    const text = rendered(tree);
+    expect(text).toContain('Ne cevap verelim?');
+    expect(text).toContain('CEVAP');
+    // {winner} is Ali, {loser} is me: "Mustafa boş durmadı"
+    expect(text).toContain('Mustafa boş durmadı');
+    expect(text).toContain('Tamam Ali, 4.430 adım için bu kadar konuşma. Rövanş geliyor.');
+    expect(text).not.toContain('Afiyet olsun Ali');
+  });
+
+  it('the picker offers the tie lines to a co-leader', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => tied());
+    const TauntScreen = require('@/app/(app)/challenge/[id]/taunt').default;
+    const tree = renderScreen(<TauntScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('BERABERE');
+    expect(text).toContain('Mustafa ve Ali eşit bitirdi.');
+    expect(text).not.toContain('Kazanan olmadığı için');
+  });
+
+  it('the inbox puts the sender\'s face on an answer, not the winner\'s', async () => {
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    api.challenges = jest.fn(async () => [
+      {
+        challenge: { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: 'me-1' },
+        participants: [{ ...detail.me!, isWinner: true }, { ...detail.me!, user: ALI, score: 8000, rank: 2 }],
+        me: { ...detail.me!, isWinner: true },
+        unreadTaunts: 1,
+      },
+    ]);
+    api.inbox = jest.fn(async () => [
+      {
+        id: 'n-1',
+        type: 'taunt',
+        title: 'Ali boş durmadı',
+        body: 'Tamam Mustafa, bu kadar konuşma.',
+        data: { challengeId: 'c-1', tauntId: 't-2', fromUserId: ALI.id },
+        readAt: null,
+        createdAt: at,
+      },
+    ]);
+    const InboxScreen = require('@/app/(app)/(tabs)/inbox').default;
+    const tree = renderScreen(<InboxScreen />);
+    await settle();
+
+    const bubble = tree.root.findAll((node) => node.props.title === 'Ali boş durmadı' && node.props.fromName !== undefined);
+    expect(bubble[0]?.props.fromName).toBe('Ali');
   });
 });
 

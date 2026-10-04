@@ -12,6 +12,7 @@ import {
   clampLevel,
   containsBanned,
   formatScore,
+  getTaunt,
   renderTaunt,
   resolveTauntForRecipient,
   tauntContextForMargin,
@@ -171,10 +172,28 @@ export function tauntContextsForWinner(
   return contexts;
 }
 
-function customTitle(level: VulgarityLevel, winner: string): string {
-  if (level === 1) return `${winner} bir mesaj bıraktı`;
-  if (level === 3) return `${winner} SANA SAPLADI 🍆`;
-  return `${winner} laf soktu`;
+/**
+ * Who is talking after the whistle. `win` is the winner's "KOYDUM MU?"; `reply`
+ * is a loser's one answer to it; `tie` is one co-leader of a tie at another.
+ * The route decides which one applies (social.ts); this file only writes it.
+ */
+export type TauntMode = 'win' | 'reply' | 'tie';
+
+/** Title of a typed laf: "SANA SAPLADI" is only true coming from the winner. */
+function customTitle(mode: TauntMode, level: VulgarityLevel, sender: string): string {
+  if (mode === 'reply') {
+    if (level === 1) return `${sender} cevap verdi`;
+    if (level === 3) return `${sender} lafı geri soktu 🍆`;
+    return `${sender} boş durmadı`;
+  }
+  if (mode === 'tie') {
+    if (level === 1) return `${sender} bir mesaj bıraktı`;
+    if (level === 3) return `${sender} laf soktu 🍆`;
+    return `${sender} laf attı`;
+  }
+  if (level === 1) return `${sender} bir mesaj bıraktı`;
+  if (level === 3) return `${sender} SANA SAPLADI 🍆`;
+  return `${sender} laf soktu`;
 }
 
 export interface SendTauntInput {
@@ -183,6 +202,8 @@ export interface SendTauntInput {
   to: UserRow;
   templateId?: string;
   customBody?: string;
+  /** `win` when left out */
+  mode?: TauntMode;
   now: Date;
 }
 
@@ -193,22 +214,39 @@ export interface SendTauntResult {
 
 /**
  * Writes one taunt, notifies the target and refreshes both users' badges.
- * Caller has already checked that `from` is the winner and `to` an accepted loser.
+ * Caller has already checked that `from` may talk to `to` in this `mode`.
+ *
+ * One row per (challenge, from, to) in every mode, so a loser's answer is the
+ * one row going the other way and nothing more.
  */
 export function sendTaunt(db: Database, input: SendTauntInput): SendTauntResult {
   const { challenge, from, to, templateId, customBody, now } = input;
+  const mode = input.mode ?? 'win';
 
   const already = db
     .prepare('SELECT id FROM taunts WHERE challenge_id = ? AND from_user_id = ? AND to_user_id = ?')
     .get(challenge.id, from.id, to.id) as { id: string } | undefined;
-  if (already) throw conflict('already_taunted', 'Bu kankaya zaten koydun.');
+  if (already) {
+    if (mode === 'reply') throw conflict('already_replied', 'Cevabını verdin, bir tane yeter.');
+    throw conflict('already_taunted', mode === 'tie' ? 'Bu kankaya zaten laf attın.' : 'Bu kankaya zaten koydun.');
+  }
 
   const type = typeForChallenge(challenge);
   const standings = computeStandings(db, challenge, now);
-  const vars = tauntVars(type, challenge, from, to, standings);
+  // a reply is written by the loser, but {winner} stays the real winner
+  const vars =
+    mode === 'reply'
+      ? tauntVars(type, challenge, to, from, standings)
+      : tauntVars(type, challenge, from, to, standings);
   const recipientMax = levelOf(to);
-  const context = contextAgainst(db, type, challenge, standings, from.id, to.id);
+  const context: TauntContext =
+    mode === 'reply' ? 'reply' : mode === 'tie' ? 'tie' : contextAgainst(db, type, challenge, standings, from.id, to.id);
   const seed = seedFrom(challenge.id, from.id, to.id);
+  // A reply or a tie only speaks from its own pool: "Ali koydu" in a tie, or the
+  // winner's gloat sent back by the loser, would be a lie. The winner's picker
+  // keeps its older freedom (an old client may pick a margin line for a revenge).
+  const requestedId =
+    mode === 'win' || (templateId !== undefined && getTaunt(templateId)?.context === context) ? templateId : undefined;
 
   let level: VulgarityLevel;
   let title: string;
@@ -220,7 +258,7 @@ export function sendTaunt(db: Database, input: SendTauntInput): SendTauntResult 
       throw badRequest('banned_content', 'Bu laf fazla ağır. Aile, tehdit ve nefret içeren sözler yasak.');
     }
     level = clampLevel(levelOf(from), recipientMax);
-    const rendered = renderTaunt({ title: customTitle(level, from.display_name), body: customBody }, vars);
+    const rendered = renderTaunt({ title: customTitle(mode, level, from.display_name), body: customBody }, vars);
     // the placeholders expand to names and titles other people typed; the
     // finished sentence is what the recipient reads, so it is checked too
     if (containsBanned(rendered.body) || containsBanned(rendered.title)) {
@@ -229,7 +267,7 @@ export function sendTaunt(db: Database, input: SendTauntInput): SendTauntResult 
     title = rendered.title;
     body = rendered.body;
   } else {
-    template = resolveTauntForRecipient(templateId, context, recipientMax, seed, type.metricType);
+    template = resolveTauntForRecipient(requestedId, context, recipientMax, seed, type.metricType);
     level = clampLevel(template.level, recipientMax);
     const rendered = renderTaunt(template, vars);
     title = rendered.title;
@@ -259,7 +297,8 @@ export function sendTaunt(db: Database, input: SendTauntInput): SendTauntResult 
       type: 'taunt',
       title,
       body,
-      data: { challengeId: challenge.id, tauntId: row.id },
+      // who said it: the winner, a loser answering or a co-leader of a tie
+      data: { challengeId: challenge.id, tauntId: row.id, fromUserId: from.id },
       createdAt: iso,
     });
   });

@@ -5,6 +5,9 @@
  * RECIPIENT's maximum level always
  * wins, so a level 3 sender writing to a level 1 friend gets a level 1
  * template (see `clampLevel` and the server's taunt route).
+ *
+ * `reply` lines go the other way: the loser's one answer, sent to the winner.
+ * {winner} is still the winner (now the reader) and {loser} the one talking back.
  */
 import { clampLevel } from './levels';
 import type { MetricType, TauntContext, TauntTemplate, TauntVars, VulgarityLevel } from './types';
@@ -39,6 +42,8 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l1_streak_02", level: 1, context: "streak", title: "Yine {winner}", body: "{winner} üst üste kazanıyor. {winnerScore} - {loserScore}." },
   { id: "l1_revenge_01", level: 1, context: "revenge", title: "Rövanş alındı", body: "{winner} geçen seferin hesabını sordu: {winnerScore} - {loserScore}. Sıra sende {loser}." },
   { id: "l1_revenge_02", level: 1, context: "revenge", title: "Ödeştiniz", body: "{winner} {challenge} rövanşını kazandı. {winnerScore} - {loserScore}." },
+  { id: "l1_reply_01", level: 1, context: "reply", title: "{loser} cevap verdi", body: "Bu sefer sen aldın {winner}, {diff} {unit} fark. Rövanşta görüşürüz." },
+  { id: "l1_reply_02", level: 1, context: "reply", title: "{loser} tebrik etti", body: "Helal olsun {winner}, {winnerScore} - {loserScore}. Bir dahakine ben alırım." },
   { id: "l2_win_01", level: 2, context: "win", title: "Koydu", body: "{winner} koydu: {winnerScore} {unit} karşısında {loserScore}. Afiyet olsun {loser}." },
   { id: "l2_win_02", level: 2, context: "win", title: "Yedin kanka", body: "{winner} {challenge} çelıncında sana {diff} {unit} fark attı. Hani sen iddialıydın?" },
   { id: "l2_win_03", level: 2, context: "win", title: "Ağır mı geldi?", body: "{winner} {winnerScore} {unit} yaptı, sen {loserScore}. {metric} sana ağır geldi galiba lan." },
@@ -69,6 +74,8 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l2_streak_02", level: 2, context: "streak", title: "Seri devam", body: "{winner} bir daha koydu. {loser} her seferinde yiyor, sofra hiç kalkmıyor lan." },
   { id: "l2_revenge_01", level: 2, context: "revenge", title: "Rövanşı aldı", body: "{winner} geçen sefer yemişti, bu sefer koydu: {winnerScore} - {loserScore}. Hesap kapandı {loser}." },
   { id: "l2_revenge_02", level: 2, context: "revenge", title: "Ödeştik", body: "{winner} {challenge} rövanşında {diff} {unit} fark attı. Geçen seferki lafları geri al {loser}." },
+  { id: "l2_reply_01", level: 2, context: "reply", title: "{loser} boş durmadı", body: "Tamam {winner}, {diff} {unit} için bu kadar konuşma. Rövanş geliyor." },
+  { id: "l2_reply_02", level: 2, context: "reply", title: "{loser} yedi ama susmadı", body: "Yedim, kabul {winner}. Rövanşta o lafı sana yediririm lan." },
   { id: "l3_win_01", level: 3, context: "win", title: "KOYDUM MU?", body: "{winner} sana sapır sapır sapladı 🍆 {winnerScore} {unit} karşısında {loserScore} {unit}. Yedin {loser}." },
   { id: "l3_win_02", level: 3, context: "win", title: "Dağıttı", body: "{winner} {challenge} çelıncında seni dağıttı: {winnerScore} - {loserScore}. Otur da dinlen {loser}." },
   { id: "l3_win_03", level: 3, context: "win", title: "Sapır sapır", body: "{winner} sana {diff} {unit} fark attı. Sapır sapır {loser}." },
@@ -99,6 +106,8 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l3_streak_02", level: 3, context: "streak", title: "Gelenek oldu", body: "{winner} bir daha koydu. {loser} kaçıncı olduğunu unuttu bile." },
   { id: "l3_revenge_01", level: 3, context: "revenge", title: "Rövanşta sapladı", body: "{winner} geçen sefer yemişti. Bu sefer {diff} {unit} ile geri koydu {loser}." },
   { id: "l3_revenge_02", level: 3, context: "revenge", title: "Soğuk yedin", body: "{winner} bekledi ve {challenge} rövanşında sapladı: {winnerScore} - {loserScore}." },
+  { id: "l3_reply_01", level: 3, context: "reply", title: "{loser} lafı geri soktu 🍆", body: "{diff} {unit} farkla bu kadar havaya girme {winner} 🍆 Rövanşta sıra sende." },
+  { id: "l3_reply_02", level: 3, context: "reply", title: "{loser} kafa tuttu", body: "Bu sefer sapladın {winner}, eyvallah. Rövanşta faiziyle geri alırım 🍆" },
 ] as const;
 
 export const TAGLINE = {

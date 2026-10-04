@@ -1,4 +1,10 @@
-import { addDays, getChallengeType, type Notification, type NotificationType } from '@koydum/shared';
+import {
+  addDays,
+  getChallengeType,
+  type ChallengeSummary,
+  type Notification,
+  type NotificationType,
+} from '@koydum/shared';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { Pressable, SectionList, type SectionListData, StyleSheet, View } from 'react-native';
@@ -80,14 +86,23 @@ const END_OF_INBOX: Record<1 | 2 | 3, string> = {
 };
 
 /**
- * What a taunt bubble needs in its header. The server's taunt notification only
- * carries `{ challengeId, tauntId }`, so the sender is resolved from the
- * çelınc itself — only its winner is allowed to send one.
+ * What a taunt bubble needs in its header. The notification names its sender
+ * (`fromUserId`: the winner, a loser answering back or a co-leader of a tie);
+ * a row from an older server carries only `{ challengeId, tauntId }`, and then
+ * it can only be the winner's.
  */
 interface TauntContextInfo {
   title: string;
   fromName: string;
   fromEmoji: string | null;
+}
+
+/** The çelınc's players and what to fall back on, to put a face on a taunt row. */
+interface TauntSource {
+  title: string;
+  typeEmoji: string | null;
+  winnerId: string | null;
+  players: ChallengeSummary['participants'];
 }
 
 interface DaySection {
@@ -177,19 +192,27 @@ export default function InboxScreen() {
   const yesterday = addDays(today, -1);
 
   const challenges = useChallenges();
-  const tauntContext = new Map<string, TauntContextInfo>();
+  const tauntSources = new Map<string, TauntSource>();
   for (const summary of challenges.data ?? []) {
     const type = getChallengeType(summary.challenge.typeKey);
-    const title = summary.challenge.title || type?.nameTr || 'Çelınc';
-    const winner = summary.challenge.winnerId
-      ? summary.participants.find((p) => p.user.id === summary.challenge.winnerId)?.user
-      : undefined;
-    tauntContext.set(summary.challenge.id, {
-      title,
-      fromName: winner?.displayName ?? title,
-      fromEmoji: winner?.avatarEmoji ?? type?.emoji ?? null,
+    tauntSources.set(summary.challenge.id, {
+      title: summary.challenge.title || type?.nameTr || 'Çelınc',
+      typeEmoji: type?.emoji ?? null,
+      winnerId: summary.challenge.winnerId,
+      players: summary.participants,
     });
   }
+  const tauntContext = (item: Notification): TauntContextInfo | undefined => {
+    const source = tauntSources.get(dataString(item.data, 'challengeId') ?? '');
+    if (!source) return undefined;
+    const fromId = dataString(item.data, 'fromUserId') ?? source.winnerId;
+    const sender = fromId ? source.players.find((p) => p.user.id === fromId)?.user : undefined;
+    return {
+      title: source.title,
+      fromName: sender?.displayName ?? source.title,
+      fromEmoji: sender?.avatarEmoji ?? source.typeEmoji,
+    };
+  };
 
   // Only the loaded pages can be counted here, the server counts every row; the
   // larger wins, so the header never says "Okunmamış bildirim yok" under a badge.
@@ -344,7 +367,7 @@ export default function InboxScreen() {
           <InboxRow
             item={item}
             onPress={open}
-            context={tauntContext.get(dataString(item.data, 'challengeId') ?? '')}
+            context={item.type === 'taunt' ? tauntContext(item) : undefined}
           />
         )}
       />
