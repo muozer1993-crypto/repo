@@ -22,7 +22,7 @@ jest.mock('@/services/inboxNotifier', () => ({ deliverNewInbox: () => mockDelive
 const mockRefreshReminders = jest.fn(async (_client: ApiClient, _level: number, _tz: string) => 0);
 jest.mock('@/services/reminders', () => ({
   refreshReminders: (client: ApiClient, level: number, tz: string) => mockRefreshReminders(client, level, tz),
-  cancelAllReminders: async () => {},
+  clearReminders: async () => {},
 }));
 
 const NOW = new Date('2026-09-27T10:00:00.000Z');

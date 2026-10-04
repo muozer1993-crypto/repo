@@ -8,6 +8,10 @@
  *
  * `reply` lines go the other way: the loser's one answer, sent to the winner.
  * {winner} is still the winner (now the reader) and {loser} the one talking back.
+ *
+ * `tie` lines are one co-leader of a tie talking to another: {winner} is the
+ * sender, {loser} the reader. The title names the sender, because on a lock
+ * screen (or an old app's inbox) the title is all that says who wrote it.
  */
 import { clampLevel } from './levels';
 import type { MetricType, TauntContext, TauntTemplate, TauntVars, VulgarityLevel } from './types';
@@ -29,8 +33,8 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l1_winclose_02", level: 1, context: "win_close", title: "Fotofiniş", body: "{winnerScore} - {loserScore}. {winner} son metrelerde öne geçti." },
   { id: "l1_winclose_03", level: 1, context: "win_close", title: "Az kaldı {loser}", body: "{diff} {unit} fark var. {winner} zor kazandı." },
   { id: "l1_winclose_04", level: 1, context: "win_close", title: "Son anda", body: "{winner} son anda öne geçti: {winnerScore} - {loserScore}. Sen de iyiydin." },
-  { id: "l1_tie_01", level: 1, context: "tie", title: "Berabere", body: "{winner} ve {loser} tam {winnerScore} {unit} ile eşit bitirdi. Kimsenin diyeceği bir şey yok." },
-  { id: "l1_tie_02", level: 1, context: "tie", title: "Eşitlik", body: "{challenge} berabere bitti: {winnerScore} - {loserScore}. İsterseniz rövanş açın." },
+  { id: "l1_tie_01", level: 1, context: "tie", title: "{winner} bir mesaj bıraktı", body: "Berabere kaldık {loser}, ikimiz de {winnerScore} {unit}. Rövanşta görüşürüz." },
+  { id: "l1_tie_02", level: 1, context: "tie", title: "{winner} elini uzattı", body: "{challenge} {winnerScore} - {loserScore} bitti, iyi oyundu {loser}. İstersen bir rövanş açalım." },
   { id: "l1_poke_01", level: 1, context: "poke", title: "Küçük bir dürtme", body: "{winner} seni dürttü. {challenge} devam ediyor, sen {loserScore} {unit} seviyesindesin." },
   { id: "l1_poke_02", level: 1, context: "poke", title: "Hareket zamanı", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore}. Bugün biraz eklemenin vakti." },
   { id: "l1_poke_03", level: 1, context: "poke", title: "Hatırlatma", body: "{challenge} hâlâ açık. {winner} bugün çalıştı, sıra sende." },
@@ -60,8 +64,8 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l2_winclose_02", level: 2, context: "win_close", title: "Ucundan koydu", body: "{winnerScore} - {loserScore}. {winner} son anda geçti {loser}." },
   { id: "l2_winclose_03", level: 2, context: "win_close", title: "Rahatlamıştın galiba", body: "{winner} son anda {diff} {unit} öne geçti. Tam rahatlamıştın lan." },
   { id: "l2_winclose_04", level: 2, context: "win_close", title: "Burun farkı", body: "{winner} {winnerScore}, sen {loserScore}. Fark burun kadar ama burnun sürtüldü {loser}." },
-  { id: "l2_tie_01", level: 2, context: "tie", title: "Kimse koyamadı", body: "{winnerScore} - {loserScore}. Berabere. Bir daha oynayın." },
-  { id: "l2_tie_02", level: 2, context: "tie", title: "Sıkıcı oldu", body: "{winner} ve {loser} eşit bitirdi. Bu uygulama bunun için yapılmadı lan." },
+  { id: "l2_tie_01", level: 2, context: "tie", title: "{winner} laf attı", body: "{winnerScore} - {loserScore}, berabere {loser}. Rövanşta ayırırız bu işi." },
+  { id: "l2_tie_02", level: 2, context: "tie", title: "{winner} bırakmıyor", body: "Eşit bitti ama bu iş bitmedi {loser}. Rövanşı aç da kim koyuyor görelim lan." },
   { id: "l2_poke_01", level: 2, context: "poke", title: "Kalk yürü", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore} ile yatıyorsun. Koltuğa yapıştın.", metrics: ["auto_steps"] },
   { id: "l2_poke_02", level: 2, context: "poke", title: "Dürtüldün", body: "{winner} seni dürttü. {challenge} bitmedi, {metric} tarafında bir hareket göreyim." },
   { id: "l2_poke_03", level: 2, context: "poke", title: "Hayatta mısın {loser}?", body: "Sabahtan beri {loserScore} {unit}. {winner} soruyor: nabız var mı lan?" },
@@ -92,8 +96,8 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l3_winclose_02", level: 3, context: "win_close", title: "Kapıda yedin", body: "{winnerScore} - {loserScore}. Kurtuluyordun, {winner} son anda yakaladı {loser}." },
   { id: "l3_winclose_03", level: 3, context: "win_close", title: "Bir gayret eksik", body: "{winner} seni {diff} {unit} ile geçti lan. Bir hareket daha etseydin olmayacaktı." },
   { id: "l3_winclose_04", level: 3, context: "win_close", title: "90+5", body: "{winner} son dakikada koydu: {winnerScore} - {loserScore}. Erken sevinmiştin {loser}." },
-  { id: "l3_tie_01", level: 3, context: "tie", title: "Kimse koyamadı", body: "{winnerScore} - {loserScore}. Berabere lan. Ortadaki 🍆 sahipsiz kaldı." },
-  { id: "l3_tie_02", level: 3, context: "tie", title: "Eşit bitti", body: "{winner} ve {loser} aynı skorda kaldı. Rövanş açın." },
+  { id: "l3_tie_01", level: 3, context: "tie", title: "{winner} laf soktu 🍆", body: "Berabere kaldık {loser} ama ortadaki 🍆 bende kalacak. Rövanşı aç da görelim." },
+  { id: "l3_tie_02", level: 3, context: "tie", title: "{winner} kafa tuttu", body: "{winnerScore} - {loserScore}, bu sefer ikimiz de koyamadık {loser}. Rövanşta sapır sapır sana koyacağım 🍆" },
   { id: "l3_poke_01", level: 3, context: "poke", title: "Kalk yürü lan!", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore}. Koltuğa yapıştın, akşama yersin.", metrics: ["auto_steps"] },
   { id: "l3_poke_02", level: 3, context: "poke", title: "Dürtüldün {loser}", body: "{winner} seni dürttü. {diff} {unit} geride yatıyorsun. Gece bildirim gelir 🍆" },
   { id: "l3_poke_03", level: 3, context: "poke", title: "Donmuşsun", body: "{loser}, {loserScore} {unit} ile donup kalmışsın. {winner} çoktan gitti." },

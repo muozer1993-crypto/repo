@@ -636,6 +636,126 @@ describe('device readings versus typed declarations', () => {
     expect(fresh.statusCode).toBe(201);
   });
 
+  it('a phone reading during the itiraz leaves the typed number to it, and takes its place once it is upheld', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await livePair(harness, 'adim_yarisi');
+    const call = authed(harness.app, ali.token);
+    const day = today(harness);
+
+    await call({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 8000, source: 'manual', clientTime: iso(harness) },
+    });
+    const entryId = stepRow(harness, challengeId, ali.me.id).id;
+    const disputed = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'sekiz bin mi' },
+    });
+    expect(disputed.statusCode).toBe(201);
+
+    // the phone catches up an hour later: the typed row is the itiraz's, not the phone's
+    harness.advance(60 * 60_000);
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 9100, source: 'pedometer' }] } });
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ value: 8000, source: 'manual', status: 'disputed' });
+
+    // upheld: the typed number goes, the phone's reading already on the server counts
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS);
+    expect(runSchedulerOnce(harness.db, harness.now()).disputes).toBe(1);
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ value: 9100, source: 'pedometer', status: 'ok' });
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 12000, source: 'pedometer' }] } });
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ value: 12000, status: 'ok' });
+
+    const typed = await call({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 15000, source: 'manual', clientTime: iso(harness) },
+    });
+    expect(errorCode(typed)).toBe('day_rejected');
+    expect(typed.json<{ error: { message: string } }>().error.message).toContain('sadece telefonun saydığı adım');
+  });
+
+  it('the friend who won the itiraz can question the phone reading that took the day back', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await livePair(harness, 'adim_yarisi');
+    const call = authed(harness.app, ali.token);
+    const day = today(harness);
+
+    await call({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 30000, source: 'manual', clientTime: iso(harness) },
+    });
+    const entryId = stepRow(harness, challengeId, ali.me.id).id;
+    await throwOut(harness, veli, challengeId, entryId);
+    expect(computeUserStats(harness.db, veli.me.id, harness.now()).disputesWon).toBe(1);
+
+    // the "phone" says the same 30000
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 30000, source: 'health_connect' }] } });
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ value: 30000, status: 'ok' });
+
+    const again = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'telefon da yalan söylüyor' },
+    });
+    expect(again.statusCode).toBe(201);
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ status: 'disputed' });
+    // the first win still counts, and the day stays closed to typing meanwhile
+    expect(computeUserStats(harness.db, veli.me.id, harness.now()).disputesWon).toBe(1);
+    const typed = await call({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 30000, source: 'manual', clientTime: iso(harness) },
+    });
+    expect(errorCode(typed)).toBe('day_rejected');
+
+    // unanswered, the phone reading goes too, for good
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS);
+    expect(runSchedulerOnce(harness.db, harness.now()).disputes).toBe(1);
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ status: 'rejected', source: 'health_connect' });
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 31000, source: 'health_connect' }] } });
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ status: 'rejected' });
+    expect(computeUserStats(harness.db, veli.me.id, harness.now()).disputesWon).toBe(1);
+  });
+
+  it('a step day thrown out after the end still gets the phone reading before the result', async () => {
+    // 12:00 on 5 Jan to midnight on 8 Jan, Istanbul: the last day is over by the end
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await livePair(harness, 'adim_yarisi', { endsAt: '2026-01-07T21:00:00.000Z' });
+    harness.advance(Date.parse('2026-01-07T19:00:00.000Z') - harness.now().getTime()); // 22:00 on the last day
+    const day = today(harness);
+
+    await authed(harness.app, ali.token)({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 5000, source: 'pedometer' }] } });
+    const veliCall = authed(harness.app, veli.token);
+    await veliCall({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 30000, source: 'manual', clientTime: iso(harness) },
+    });
+    await veliCall({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 11800, source: 'pedometer' }] } });
+    harness.advance(30 * 60_000);
+    const veliRow = stepRow(harness, challengeId, veli.me.id);
+    const disputed = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${veliRow.id}/dispute`,
+      payload: { reason: 'otuz bin mi' },
+    });
+    expect(disputed.statusCode).toBe(201);
+
+    // past the end and the phones' hour, the result waits for the answer window
+    harness.advance(3 * 60 * 60_000);
+    expect(runSchedulerOnce(harness.db, harness.now()).finalized).toBe(0);
+
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS);
+    const pass = runSchedulerOnce(harness.db, harness.now());
+    expect(pass).toMatchObject({ disputes: 1, finalized: 1 });
+    const challenge = harness.db.prepare('SELECT status, winner_id FROM challenges WHERE id = ?').get(challengeId);
+    expect(challenge).toEqual({ status: 'finished', winner_id: veli.me.id });
+    expect(stepRow(harness, challengeId, veli.me.id)).toMatchObject({ value: 11800, source: 'pedometer', status: 'ok' });
+  });
+
   it('a typed screen time is always replaced by the phone reading (lower is better, the phone is honest)', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await livePair(harness, 'ekran_suresi_beyani');

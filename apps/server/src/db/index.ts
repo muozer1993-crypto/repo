@@ -185,6 +185,8 @@ export interface DisputeRow {
   reason: string;
   status: string;
   created_at: string;
+  /** 1 once a won itiraz was filed again on the phone's reading (migration 010). */
+  won_before?: number;
 }
 
 export interface TauntRow {

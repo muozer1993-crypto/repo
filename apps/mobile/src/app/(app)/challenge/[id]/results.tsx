@@ -136,6 +136,13 @@ const TIE_DONE: Record<VulgarityLevel, string> = {
   3: 'Lafını soktun, sıra onda 🍆',
 };
 
+/** Both sides had their one go: nobody's turn any more. */
+const TIE_EVEN: Record<VulgarityLevel, string> = {
+  1: 'Mesajını bıraktın, ödeştiniz.',
+  2: 'Lafını attın, ödeştiniz.',
+  3: 'Lafını soktun, ödeştiniz 🍆',
+};
+
 /**
  * After this long without a word, "bekle" stops being honest: the winner has
  * had their reminder (the server sends it from two hours on) and ignored it.
@@ -342,6 +349,10 @@ export default function ResultsScreen() {
     isTie && isPlayer && mine?.rank === 1 ? ranked.filter((p) => p.user.id !== meId && p.rank === 1) : [];
   const tiePending = coLeaders.filter((p) => !taunted.has(p.user.id));
   const tieReceived = coLeaders.length > 0 ? taunts.filter((x) => x.toUserId === meId) : [];
+  // every co-leader already had their one go at me: it is nobody's turn
+  const tieAnswered =
+    coLeaders.length > 0 &&
+    coLeaders.every((p) => taunts.some((x) => x.fromUserId === p.user.id && x.toUserId === meId));
   // the server's list (an older one sends none, and then nothing is claimed)
   const leftOut = ranked.filter((p) => p.user.id !== meId && (rematchLeftOut ?? []).includes(p.user.id));
   const senderOf = (taunt: Taunt): ParticipantView | undefined =>
@@ -603,7 +614,7 @@ export default function ResultsScreen() {
                 />
               ) : coLeaders.length > 0 ? (
                 <Text variant="small" color={Colors.success} bold style={styles.gap}>
-                  {TIE_DONE[level]}
+                  {tieAnswered ? TIE_EVEN[level] : TIE_DONE[level]}
                 </Text>
               ) : null}
             </>

@@ -69,7 +69,10 @@ sihirbazda seçilmiş gibi `invited` girer ve aynı kapıdan kabul eder. Kapı d
 kapanır (`acceptClosesAt`: bitişten bir saat önce, kısa çelıncta sürenin son dörtte biri); kabul
 edilemeyecek bir davet boş bir bildirimdir. Bitişten sonraki bekleyişte kimse eklenmez. Reddeden
 yeniden çağrılabilir ve yeni bir davet bildirimi alır; oynayıp ayrılan çağrılamaz, kabul kuralıyla
-aynı sebepten.
+aynı sebepten. Çelınctaki biriyle (kabul etmiş ya da davetli) arasında engel olan da çağrılamaz
+(`blocked_in_challenge`): sihirbazda herkes kimlerle oynayacağını kabul etmeden görüyordu, sonradan
+gelen davette kimse bir şey kabul etmedi, ve akış engelleyenin her sayısını, fotoğrafını engellenene
+gösterirdi. Ret kimin kimi engellediğini söylemez.
 
 Rövanş, eskisi kaç yerel gün sürdüyse o kadar gün sürer ve sihirbaz gibi açanın saat diliminde bir
 günün son milisaniyesinde biter. Önceden "şimdi + eski süre" ile düğmeye basılan saatte bitiyordu;
@@ -98,7 +101,10 @@ oluştuğu andan başlar, ilk itirazdan değil, ve girişin üstüne yazılır (
 küçüldüğünde eski bir itirazın süresi saatler önce dolmuş sayılıyor, giriş haber verilmeden
 atılıyordu. Artık ayrılma, hesap silme ve zamanlayıcının her turu saati o andan tam 12 saatle
 kurar ve sahibine söyler; `answer_by`'ı olmayan eski bir veritabanında da ilk tur böyle yapar.
-Ayrılan birinin itirazı sayılmaz. Eski uygulamada "Kanıt ekle" yoktur: günü fotoğrafla yeniden
+Ayrılan birinin itirazı sayılmaz. İşleyen bir saat, başladığı anda içeride olan oyunculara göre
+ölçülür (`joined_at`): sonradan çağrılan bir kanka (**Kanka ekle**) oy vermedi, çoğunluğu
+büyütüp saati durduramaz; yoksa itiraz edilen kurucu iki kanka ekleyip itirazı sessizce
+boşa çıkarabilirdi. Eski uygulamada "Kanıt ekle" yoktur: günü fotoğrafla yeniden
 göndermek de itirazı cevaplar. Fotoğrafla kapanan ya da geri çekilen itirazın sahibi, giriş
 sayısını ya da fotoğrafını değiştirince yeniden itiraz edebilir. Bitişte süresi dolmamış bir itiraz
 varsa çelınc o süre boyunca `active` kalır; yoksa son dakika gelen bir itiraz, sahibine söz verilen
@@ -325,6 +331,10 @@ giriş sayılır, zorunluysa sunucu reddeder ve kullanıcı "Kanıt fotoğrafı 
 diye duyar. React Native okuyamadığı dosyayı bağlantı yokmuş gibi bildirir; kuyruk ikisini
 `/health`'e sorarak ayırır: sunucu cevap verdiği halde fotoğraf iki kez gitmiyorsa sorun dosyadadır.
 İtiraza "Kanıt ekle" ile verilen cevabın arkasında kuyruk yok, o sadece bağlantı varken çalışır.
+Kuyruktaki her giriş, kuyruğa girdiği anda telefonda oturum açmış hesabı taşır (`ownerId`). Aynı
+telefonda başka bir hesap açılınca kuyruk onun girişlerini gönderir, öncekinin girişine ve
+fotoğrafına dokunmaz: yoksa Ali'nin günü ve fotoğrafı Veli'nin anahtarıyla, Veli'nin girişi olarak
+giderdi. Ali geri girince onunkiler gider.
 
 Ekranlar da bağlantı gidince ellerindekini bırakmaz. TanStack Query başarısız bir arka plan
 yenilemesinden sonra `isError` der ama son veriyi tutar; çelınc ekranı, giriş ekranı ve odak
@@ -353,13 +363,19 @@ tersi yasaktır: telefonun okuduğu bir gün için `manual` yazmaya kalkan istek
 alır. Kanıt fotoğrafı da sadece `manual` için zorunludur.
 
 İtirazla düşen (`rejected`) elle yazılmış bir gün sıfırda kalmaz: telefonun o güne okuduğu değer,
-yazılandan az da olsa, yerine geçer. Değer ve kaynak telefonunki olur, durum `ok`, kanıt fotoğrafı
+yazılandan az da olsa, yerine geçer. Telefon o günü zaten gönderdiyse bu, itirazı haklı çıkaran
+zamanlayıcı turunda olur (`restoreFromPhone`, bitirmeden önce): bitişten sonra düşen bir gün de
+sonuca telefonun sayısıyla girer. Göndermediyse ilk senkronda olur. İtiraz sürerken telefon elle
+yazılmış satıra hiç dokunmaz; üstüne yazsaydı satır "telefonun saydığı" olur, itiraz haklı
+çıkınca da gün bir daha geri gelmezdi. Değer ve kaynak telefonunki olur, durum `ok`, kanıt fotoğrafı
 ve `answer_by` silinir; geri çekilmiş ya da fotoğrafla kapanmış itirazlar unutulur, haklı çıkan
 (`upheld`) itirazlar `disputesWon` için yerinde kalır. Adımda 0 hiçbir şeyi geri getirmez.
 Telefonun kendi okuduğu bir gün düştüyse senkron ona dokunmaz, yoksa itiraz boşa giderdi. Geri
-gelen adım gününde haklı çıkmış itiraz durduğu için aynı kişi oraya bir daha itiraz edemez
-(kişi başına bir itiraz); o yüzden böyle bir güne elle sayı yazmak 409 `day_rejected` alır, o
-günü artık sadece telefon yazar.
+gelen adım gününe elle sayı yazmak 409 `day_rejected` alır, o günü artık sadece telefon yazar.
+Telefonun sayısı yeni bir sayıdır ve "telefon" kaynağını gönderen de uygulamanın kendisidir:
+itirazı kazanan kanka ona yeniden itiraz edebilir. Kişi başına bir itiraz satırı olduğu için
+aynı satır yeniden açılır ve `won_before = 1` alır (göç 010); ilk kazanç `disputesWon`'da kalır,
+gün de elle yazmaya kapalı kalır. Bu itiraz da haklı çıkarsa telefonun günü kalıcı olarak düşer.
 
 Android'de adımın üç kaynağı var: Health Connect (izin verildiyse), Google Play hizmetlerinin
 Recording API'si (`apps/mobile/modules/koydum-steps/`) ve uygulama açıkken sayım. Üçü yan yana
@@ -446,7 +462,13 @@ gibi sorar. Köprü bir izni uygulamanın her açılışında en fazla bir kez s
 zaten çıktıysa (sayfadaki düğme, ana sayfadaki "İZİN VER") bir daha çıkarmaz. Yoksa sayfada
 "izin verme" diyen biri ana sayfada aynı pencereyi, neden istendiğini söyleyen tek kelime olmadan,
 hemen bir daha görürdü; Android'de o ikinci "hayır" da son hak demek. Bir düğmeye basmak her zaman
-sorar.
+sorar. Ayarlar ekranını açmak düğme sayılmaz: açılışta ve telefonun ayarlarından dönüşte izne
+sadece bakar, soran yalnız "Tekrar dene"dir.
+
+Android 14'ten beri Health Connect telefonla gelir ve çoğu telefonda içine adım yazan yoktur. Adım
+izninde Health Connect'e "evet", fiziksel aktiviteye "hayır" diyen birinin telefonu hiçbir şey
+saymaz; bu yüzden boş bir Health Connect'in "evet"i tek başına izin sayılmaz
+(`requestStepPermission` false döner) ve ekranlar telefonun ayarlarına giden yolu gösterir.
 
 Android bir izin iki kez reddedilince pencereyi bir daha göstermez; o andan sonra tek yol
 telefonun ayarlarındaki KOYDUM sayfası (`openAppSettings`, yani `Linking.openSettings()`). Bildirim

@@ -34,6 +34,13 @@ export interface PendingEntry {
    * likes, so a photo that will not go up is dropped rather than retried forever.
    */
   proofLocalUri?: string;
+  /**
+   * The account that wrote it (the stored profile's id when it was parked). A
+   * flush under another account on the same phone leaves it for its owner:
+   * it would go up as that account's entry, with that account's photo upload.
+   * Items parked before this field existed go with whoever is logged in.
+   */
+  ownerId?: string;
   queuedAt: string;
   attempts: number;
   /** set once the server refused it for good, so we stop retrying */
@@ -42,6 +49,12 @@ export interface PendingEntry {
 
 const MAX_QUEUE = 50;
 const MAX_ATTEMPTS = 8;
+
+/** Who is logged in on this phone, from storage: the background task has no store. */
+async function currentOwnerId(): Promise<string | null> {
+  const me = await getJson<{ id?: unknown }>(StorageKeys.me);
+  return me && typeof me.id === 'string' ? me.id : null;
+}
 
 export async function readQueue(): Promise<PendingEntry[]> {
   const stored = await getJson<PendingEntry[]>(QUEUE_KEY);
@@ -58,12 +71,15 @@ export async function enqueueEntry(
   id: string,
   proofLocalUri?: string
 ): Promise<PendingEntry> {
-  const queue = await readQueue();
+  const [queue, ownerId] = await Promise.all([readQueue(), currentOwnerId()]);
+  // two accounts on one phone in the same çelınc build the same id for a day
+  const key = ownerId ? `${ownerId}/${id}` : id;
   const item: PendingEntry = {
-    id,
+    id: key,
     challengeId,
     body,
     ...(proofLocalUri ? { proofLocalUri } : {}),
+    ...(ownerId ? { ownerId } : {}),
     queuedAt: new Date().toISOString(),
     attempts: 0,
   };
@@ -72,7 +88,7 @@ export async function enqueueEntry(
   // corrected value supersedes the first), for append metrics (manual_count) it
   // also carries the client time, because two glasses of water on one day are
   // two entries, not a correction.
-  const deduped = queue.filter((existing) => existing.id !== id);
+  const deduped = queue.filter((existing) => existing.id !== key);
   await writeQueue([...deduped, item]);
   return item;
 }
@@ -177,7 +193,10 @@ export function flushQueue(client: ApiClient): Promise<FlushResult> {
 }
 
 async function runFlush(client: ApiClient): Promise<FlushResult> {
-  const queue = await readQueue();
+  const [all, ownerNow] = await Promise.all([readQueue(), currentOwnerId()]);
+  // the client carries the account logged in now: another account's entries wait for it
+  const mine = (item: PendingEntry) => !item.ownerId || item.ownerId === ownerNow;
+  const queue = all.filter(mine);
   if (queue.length === 0) return { sent: 0, dropped: 0, remaining: 0 };
 
   let sent = 0;
@@ -258,7 +277,7 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
     .filter((item) => !delivered.has(item.id))
     .map((item) => touched.get(item.id) ?? item);
   await writeQueue(keep);
-  return { sent, dropped, remaining: keep.filter((item) => !item.failedReason).length };
+  return { sent, dropped, remaining: keep.filter((item) => mine(item) && !item.failedReason).length };
 }
 
 /** Clears the entries the user has already been told about. */

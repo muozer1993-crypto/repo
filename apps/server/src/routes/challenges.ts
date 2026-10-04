@@ -416,6 +416,23 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       }
       return { user, row };
     });
+    // Blocked people do not see each other (SPEC 2.2), and the feed would show
+    // a player who blocked the newcomer every number and photo of theirs. In
+    // the wizard everybody saw the line-up before saying yes; a late invite
+    // nobody else agreed to must not get round a block. The refusal does not
+    // say who blocked whom.
+    const lineUp = db
+      .prepare(
+        `SELECT user_id FROM challenge_participants
+          WHERE challenge_id = ? AND user_id <> ? AND status IN ('accepted', 'invited')`,
+      )
+      .all(challenge.id, me.id) as { user_id: string }[];
+    for (const { user } of invitees) {
+      const others = [...lineUp.map((p) => p.user_id), ...invitees.map((i) => i.user.id)].filter((id) => id !== user.id);
+      if (others.some((otherId) => isBlockedBetween(db, user.id, otherId))) {
+        throw badRequest('blocked_in_challenge', `${user.display_name} bu çelınca eklenemez.`);
+      }
+    }
 
     // The wizard's cap counts everybody but the creator who is in or may still
     // say yes; a no does not hold a seat.

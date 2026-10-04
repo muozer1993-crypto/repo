@@ -543,10 +543,11 @@ export default function SettingsScreen() {
   const update = useAppUpdate();
   const build = Application.nativeBuildVersion;
 
-  const refreshPush = async () => {
+  /** `askAgain: false` only looks (see registerForPush); "Tekrar dene" is a tap and asks. */
+  const refreshPush = async (options: { askAgain?: boolean } = {}) => {
     setPushBusy(true);
     try {
-      const result = await registerForPush();
+      const result = await registerForPush(options);
       setPush(result);
       if (result.token) {
         try {
@@ -567,11 +568,14 @@ export default function SettingsScreen() {
 
   // Read on mount. Inlined rather than calling the two helpers so nothing sets
   // state synchronously inside the effect, and a screen closed mid-read stops.
+  // Opening Ayarlar is not a tap on "ask": by now the slide or the bridge has
+  // asked this run, and a dialog right after a no there would come out of
+  // nowhere (and on Android a second no is the last one).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const [pushResult, stepResult, screenTimeResult, alertsOn, backgroundResult] = await Promise.all([
-        registerForPush(),
+        registerForPush({ askAgain: false }),
         getStepAvailability(),
         getScreenTimeAvailability(),
         deviceRemindersEnabled(),
@@ -709,7 +713,8 @@ export default function SettingsScreen() {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
       sub.remove();
-      void refreshPush();
+      // looks, never asks: a switch left off over there is not met by a dialog here
+      void refreshPush({ askAgain: false });
     });
   };
 

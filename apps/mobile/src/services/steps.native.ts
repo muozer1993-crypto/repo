@@ -379,13 +379,15 @@ export async function getStepAvailability(): Promise<StepAvailability> {
  * The tap path (the welcome slide, home's İZİN VER, Ayarlar's İzin ver). On
  * Android a Health Connect yes is not enough on its own: it may well be empty,
  * so the physical activity permission is asked for right after it, which is
- * what lets the phone count by itself.
+ * what lets the phone count by itself. A no to that one with an empty Health
+ * Connect is a no: nothing would be counted, and the callers only show the
+ * way to the phone's settings when this answers false.
  */
 export async function requestStepPermission(): Promise<boolean> {
   try {
     let hcGranted = false;
+    const hc = Platform.OS === 'android' ? loadHealthConnect() : null;
     if (Platform.OS === 'android') {
-      const hc = loadHealthConnect();
       if (hc) {
         try {
           const status = await hc.getSdkStatus();
@@ -403,7 +405,7 @@ export async function requestStepPermission(): Promise<boolean> {
       if (Platform.OS === 'android') {
         // the same ACTIVITY_RECOGNITION grant lets Play services record for us
         if (ok) await ensureRecording();
-        return hcGranted || ok;
+        return ok || (hcGranted && hc !== null && (await healthConnectHasSteps(hc)));
       }
       const result = await Pedometer.requestPermissionsAsync();
       return result.status === 'granted';

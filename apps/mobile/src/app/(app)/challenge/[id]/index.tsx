@@ -1843,9 +1843,11 @@ function FeedRow({
           onPress={withdrawing ? undefined : onWithdraw}
         />
       );
-    } else if (myDispute) {
+    } else if (myDispute && myDispute !== 'upheld') {
       chip = <Chip label="İtiraz ettin" color={Colors.textFaint} size="sm" />;
     } else if (canDispute) {
+      // an itiraz I won on a row that counts again: the phone's reading took
+      // the typed number's place, and that new number is mine to question too
       chip = <Chip label={t('dispute_button', level)} color={Colors.danger} size="sm" onPress={onDispute} />;
     }
   } else if (isMine && disputed && active) {

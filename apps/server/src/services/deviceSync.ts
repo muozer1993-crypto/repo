@@ -20,13 +20,21 @@
  *
  * A typed day friends threw out (`rejected` after an upheld itiraz) is not a
  * day off for good: the phone's own reading takes its place, whatever its
- * size, and counts again. Only a typed one comes back — a device row that was
- * thrown out stays out, or a sync would undo the itiraz on it. The upheld
- * itirazlar stay on the row as history; from then on only the phone writes
- * that day (`day_rejected` in `validateAndUpsertEntry`).
+ * size, and counts again — right when the itiraz is upheld if the phone
+ * already reported that day (`restoreFromPhone`), else at its next sync. Only
+ * a typed one comes back — a device row that was thrown out stays out, or a
+ * sync would undo the itiraz on it. The upheld itirazlar stay on the row as
+ * history, and their owners may file one again on the phone's number
+ * (`recordDispute`); from then on only the phone writes that day
+ * (`day_rejected` in `validateAndUpsertEntry`).
+ *
+ * While friends dispute a typed number the phone leaves that row alone: the
+ * itiraz is about the number typed, and a reading written over it would turn
+ * it into a "phone" row, which an upheld itiraz throws out for good.
  */
 import { challengeTypesForDevice, type DeviceMetric, type EntrySource } from '@koydum/shared';
-import { newId, nowIso, type ChallengeRow, type Database, type UserRow } from '../db/index.js';
+import { newId, nowIso, type ChallengeRow, type Database, type EntryRow, type UserRow } from '../db/index.js';
+import { getUserRow } from './challengeViews.js';
 import { challengeWindow, dayOverByEnd, participantTimezone, typeForChallenge } from './challenges.js';
 import { dayWindowIssue, forgetDismissedDisputes, isDeviceSource } from './entries.js';
 
@@ -59,9 +67,10 @@ export function deviceChallengesFor(db: Database, userId: string, metric: Device
 }
 
 /**
- * Mirrors the given days into every matching challenge as an upserted entry.
- * Returns how many entries were touched. Runs inside the caller's transaction
- * when there is one; otherwise each statement is its own.
+ * Mirrors the given days into every matching challenge as an upserted entry
+ * (only `onlyChallengeId` when given). Returns how many entries were touched.
+ * Runs inside the caller's transaction when there is one; otherwise each
+ * statement is its own.
  */
 export function fanOutDeviceDays(
   db: Database,
@@ -69,9 +78,12 @@ export function fanOutDeviceDays(
   metric: DeviceMetric,
   days: readonly DeviceDay[],
   now: Date,
+  onlyChallengeId?: string,
 ): number {
   const at = nowIso(now);
-  const challenges = deviceChallengesFor(db, user.id, metric);
+  const challenges = deviceChallengesFor(db, user.id, metric).filter(
+    (challenge) => onlyChallengeId === undefined || challenge.id === onlyChallengeId,
+  );
   if (challenges.length === 0 || days.length === 0) return 0;
 
   const rules = challenges.map((challenge) => {
@@ -114,6 +126,8 @@ export function fanOutDeviceDays(
         // on the old one; the upheld ones are what friends won, they stay
         forgetDismissedDisputes(db, existing.id);
       } else if (existing) {
+        // a typed number friends are disputing is the itiraz's to settle (see above)
+        if (existing.status === 'disputed' && !isDeviceSource(existing.source)) continue;
         // A day's steps only ever grow. A LOWER reading for a day that already
         // has a value is a partial source, never a correction: a typed
         // declaration the foreground counter has not caught up with, a phone
@@ -131,4 +145,30 @@ export function fanOutDeviceDays(
     }
   }
   return updated;
+}
+
+/**
+ * The phone's reading for a typed day friends just threw out (`resolveDisputes`),
+ * from what it already reported (`steps_daily`, `screen_time_daily`). Without
+ * it the day waits for the next sync, and an itiraz upheld past the end would
+ * never get one: the same pass finishes the çelınc, and the fan-out stops at
+ * `finished`. Same rules as a sync (`fanOutDeviceDays`). True when it counts again.
+ */
+export function restoreFromPhone(db: Database, challenge: ChallengeRow, entry: EntryRow, now: Date): boolean {
+  const metric = typeForChallenge(challenge).deviceMetric;
+  if (!metric || isDeviceSource(entry.source)) return false;
+  const owner = getUserRow(db, entry.user_id);
+  if (!owner || owner.deleted_at !== null) return false;
+  const reading =
+    metric === 'steps'
+      ? (db.prepare('SELECT steps AS value, source FROM steps_daily WHERE user_id = ? AND day_key = ?').get(owner.id, entry.day_key) as
+          | { value: number; source: EntrySource }
+          | undefined)
+      : (db
+          .prepare("SELECT minutes AS value, 'usage_stats' AS source FROM screen_time_daily WHERE user_id = ? AND day_key = ?")
+          .get(owner.id, entry.day_key) as { value: number; source: EntrySource } | undefined);
+  if (!reading) return false;
+  fanOutDeviceDays(db, owner, metric, [{ dayKey: entry.day_key, value: Number(reading.value), source: reading.source }], now, challenge.id);
+  const after = db.prepare('SELECT status FROM entries WHERE id = ?').get(entry.id) as { status: string } | undefined;
+  return after?.status === 'ok';
 }

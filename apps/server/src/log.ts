@@ -11,7 +11,7 @@
  *
  *   ── 2026-10-04 ──
  *   21:03:12 • KOYDUM sunucusu ayakta: port 4000, davet adresi https://….trycloudflare.com, veritabanı data/koydum.db
- *   21:03:42 • zamanlayıcı: 1 çelınc bitti, 3 günlük hatırlatma
+ *   21:03:42 • zamanlayıcı: 1 çelınc bitti, 3 kişiye günlük hatırlatma
  *   21:03:43 • push: 4 bildirim gitti, 1 tanesi gitmedi
  *   21:05:10 ! istek patladı: POST /challenges → 500 (31 ms)
  */
@@ -92,10 +92,11 @@ const PASS_PARTS: Record<keyof SchedulerSummary, (n: number) => string> = {
   disputes: (n) => `${n} itirazlı kayıt sayılmadı`,
   finalized: (n) => `${n} çelınc bitti`,
   cancelled: (n) => `${n} çelınc başlamadan iptal oldu`,
-  reminders: (n) => `${n} günlük hatırlatma`,
+  // "3 günlük hatırlatma" would read as a three-day reminder
+  reminders: (n) => `${n} kişiye günlük hatırlatma`,
   nudges: (n) => `${n} dürtme`,
   tauntFollowups: (n) => `${n} kazanana "hadi koy" hatırlatması`,
-  recaps: (n) => `${n} haftalık özet`,
+  recaps: (n) => `${n} kişiye haftalık özet`,
 };
 
 const SHUTDOWN_REASONS: Record<string, string> = {

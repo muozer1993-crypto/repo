@@ -316,9 +316,11 @@ Arkadaşın bağlantıya dokununca sunucunun kendi sayfası açılır:
 * kurulum bitince Android'in kendi **Aç** düğmesine basan arkadaşın uygulamayı bağlantısız açar;
   sayfadaki **Bağlantıyı kopyala** bunun için var. Uygulama giriş ekranında **Önce sunucuyu seç**
   der, arkadaşın kopyaladığı bağlantıyı (ya da WhatsApp mesajının tamamını) oraya yapıştırır.
-  Bu kart bir sonraki `eas build` ile gelir; ondan önceki APK'da arkadaşın giriş ekranının
+  Bu kart 1.1.0 ile gelir; ondan önceki APK'da arkadaşın giriş ekranının
   altındaki **Sunucu: localhost:4000 · değiştir**'e basıp sadece adresi yazar (baştaki `https://`
-  dahil, sondaki `/davet/…` kısmı olmadan; eski sürüm `https://` yazılmayan adresi `http://` sanar),
+  dahil, sondaki `/davet/…` kısmı olmadan; eski sürüm `https://` yazılmayan adresi `http://` sanar).
+  Sayfa bunu kendisi ayarlar: `apk:yayinla` ile yayınlanan APK 1.1.0'dan eskiyse ya da sürümü
+  bilinmiyorsa kopyalanacak kutuda bağlantı değil sadece adres durur ve bu yol yazar,
 * kayıt olunca kanka isteği kendiliğinden gider.
 
 APK'yı sunucuya koymak için expo.dev'den indirdiğin dosyayı bir kere yayınla:
@@ -439,7 +441,9 @@ ekranında "unuttu galiba, rövanş aç" yazısını görür.
 **Cevap hakkı ve beraberlik:** kazanan sana laf soktuysa sonuç ekranında lafın hemen altında
 **Cevap ver** durur. Bir kere ve sadece kazanana cevap verebilirsin ("Yedim, kabul Ali. Rövanşta
 o lafı sana yediririm lan."); kazanan da cevabını kendi sonuç ekranında, senin adının altında
-görür. Berabere biten çelıncta birinciliği paylaşanlar birbirine birer laf atabilir (**Laf at**),
+görür. Kazanan hâlâ 1.0 kullanıyorsa cevabı sadece bildirim olarak görür, sonuç ekranında görmesi
+için 1.1'i kurması gerekir. 1.0'ın gelen kutusu bu mesajların başına kazananın (beraberlikte
+çelıncın) adını koyar; kimin yazdığını başlık söyler ("Veli cevap verdi", "Ali laf attı"). Berabere biten çelıncta birinciliği paylaşanlar birbirine birer laf atabilir (**Laf at**),
 arkadan gelenler atamaz. Telefonlar sonucu hâlâ bekliyorsa (bitişten sonraki bir saat, itiraz)
 kimse konuşamaz, sonuç yazılınca açılır.
 
@@ -690,6 +694,10 @@ ekle" diyen için ikinci bir çelınc açıp grubu bölmen gerekmez.
   geri dönemez.
 * Son bir saatte kimse eklenmez (kısa çelınclarda sürenin son dörtte birinde); o sırada daveti
   kabul etmek de kapalı. Süre bittikten sonra, sonuç beklenirken de eklenmez.
+* Çelınctaki birinin engellediği (ya da onu engellemiş) biri eklenmez; uygulama "Can bu çelınca
+  eklenemez." der, kimin kimi engellediğini söylemez.
+* Eklenen kanka, ondan önce başlamış bir itiraz saatini durdurmaz: o itiraz, başladığı anda
+  çelıncta olanların çoğunluğuyla açıldı ve öyle kalır.
 * Bir çelıncta senden başka en fazla 15 kişi olur. Reddedenler bu sayıya girmez.
 
 ---
@@ -729,8 +737,11 @@ boş kalır. Çelınc ekranındaki **Eksik günü yaz** en eski boş günü aça
 elle yazılabilir. Telefon sonradan o güne daha fazlasını sayarsa telefonunki geçer.
 
 Elle yazılan bir adım günü itirazla düştüyse o gün sıfırda kalmaz: telefonun o gün saydığı adım,
-yazılandan az da olsa, ilk senkronda yerine geçer ve sayılır. O güne artık elle sayı yazılmaz,
-sadece telefon yazar. Telefonun kendi saydığı bir gün itirazla düştüyse geri gelmez.
+yazılandan az da olsa, yerine geçer ve sayılır. Telefon o günü zaten gönderdiyse itiraz düştüğü
+anda olur (çelınc bittikten sonra düşse de sonuca telefonun sayısı girer), göndermediyse ilk
+senkronda. İtiraz sürerken telefon elle yazılan sayıya dokunmaz, karar itirazındır. O güne artık
+elle sayı yazılmaz, sadece telefon yazar; itirazı kazanan kanka telefonun sayısına da bir kere
+itiraz edebilir. Telefonun kendi saydığı bir gün itirazla düştüyse geri gelmez.
 
 ### Ekran süresi nereden geliyor?
 

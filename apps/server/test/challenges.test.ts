@@ -555,6 +555,22 @@ describe('POST /challenges/:id/invite', () => {
     expect(listByType(harness.db, cem.me.id, 'challenge_invite')).toHaveLength(1);
   });
 
+  it('does not put somebody a player blocked into that player\'s running çelınc', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await twoPlayerChallenge(harness);
+    const can = await registerUser(harness.app, 'can', { displayName: 'Can' });
+    befriend(harness.app, ali.me.id, can.me.id);
+    expect((await authed(harness.app, veli.token)({ method: 'POST', url: `/users/${can.me.id}/block` })).statusCode).toBeLessThan(300);
+
+    const blocked = await invite(harness, ali, challengeId, [can.me.id]);
+    expect(blocked.statusCode).toBe(400);
+    expect(blocked.json().error.code).toBe('blocked_in_challenge');
+    // the creator is not told who blocked whom
+    expect(blocked.json().error.message).toBe('Can bu çelınca eklenemez.');
+    expect(listByType(harness.db, can.me.id, 'challenge_invite')).toHaveLength(0);
+    expect((await authed(harness.app, can.token)({ method: 'GET', url: `/challenges/${challengeId}` })).statusCode).toBe(404);
+  });
+
   it('closes when accepting does, and stays shut once the time is up', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await twoPlayerChallenge(harness);
@@ -919,9 +935,11 @@ describe('POST /challenges/:id/taunt', () => {
     expect(fromAli.json<{ taunt: { body: string } }>().taunt.body).not.toContain('koydu');
     const fromVeli = await tauntAs(veli, challengeId, { toUserId: ali.me.id, templateId: 'l2_tie_02' });
     expect(fromVeli.statusCode).toBe(201);
-    expect(fromVeli.json<{ taunt: { body: string } }>().taunt.body).toBe(
-      'Veli ve Ali eşit bitirdi. Bu uygulama bunun için yapılmadı lan.',
-    );
+    // Veli talking to Ali, and the title (all a lock screen shows) says it is Veli
+    expect(fromVeli.json<{ taunt: { title: string; body: string } }>().taunt).toMatchObject({
+      title: 'Veli bırakmıyor',
+      body: 'Eşit bitti ama bu iş bitmedi Ali. Rövanşı aç da kim koyuyor görelim lan.',
+    });
     expect(JSON.parse(listByType(harness.db, ali.me.id, 'taunt')[0].data)).toMatchObject({ fromUserId: veli.me.id });
 
     const twice = await tauntAs(ali, challengeId, { toUserId: veli.me.id, templateId: 'l2_tie_01' });

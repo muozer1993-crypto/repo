@@ -43,6 +43,7 @@ import {
   getUserRow,
   levelOf,
 } from './challengeViews.js';
+import { restoreFromPhone } from './deviceSync.js';
 import { notify } from './notifications.js';
 import { awardBadges } from './stats.js';
 
@@ -136,15 +137,20 @@ function insertEntry(
  * file one again. Called when the entry itself changes: the photo that closed
  * an itiraz backed the old number, and in a 1v1 the rival is the only one who
  * could ever challenge the new one. Upheld and open rows stay; stats only
- * count upheld ones.
+ * count upheld ones. An itiraz friends won before and filed again on the
+ * phone's reading (`won_before`) goes back to `upheld`: the win stays counted
+ * and `recordDispute` opens it once more.
  */
 export function forgetDismissedDisputes(db: Database, entryId: string): void {
+  db.prepare("UPDATE disputes SET status = 'upheld' WHERE entry_id = ? AND status = 'dismissed' AND won_before = 1").run(entryId);
   db.prepare("DELETE FROM disputes WHERE entry_id = ? AND status = 'dismissed'").run(entryId);
 }
 
 /** True once friends threw this entry out — it stays so after the phone restores the day. */
 function hasUpheldDispute(db: Database, entryId: string): boolean {
-  return countOf(db, "SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ? AND status = 'upheld'", entryId) > 0;
+  return (
+    countOf(db, "SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ? AND (status = 'upheld' OR won_before = 1)", entryId) > 0
+  );
 }
 
 /**
@@ -451,10 +457,20 @@ function disputedEntries(
  * a disputer who left). Returns the entries whose clock started in this call;
  * the caller tells their owners (`recordDispute`'s route, or
  * `announceDisputeClocks`).
+ *
+ * A running clock is measured against the players who were in when it
+ * started: a friend who joins later (the creator's "Kanka ekle") raises the
+ * count but cast no vote, and stopping the clock then would let the disputed
+ * number count, and win, without anybody being told.
  */
 export function syncDisputeClocks(db: Database, challengeId: string, now: Date, entryId?: string): EntryRow[] {
   const threshold = disputeThreshold(acceptedCount(db, challengeId));
   const setClock = db.prepare('UPDATE entries SET answer_by = ? WHERE id = ?');
+  // a row from before `joined_at` was always set counts as in from the start
+  const inBy = db.prepare(
+    `SELECT COUNT(*) AS n FROM challenge_participants
+      WHERE challenge_id = ? AND status = 'accepted' AND COALESCE(joined_at, '') <= ?`,
+  );
   const started: EntryRow[] = [];
   for (const row of disputedEntries(db, challengeId, entryId)) {
     const { open_count: open, ...entry } = row;
@@ -463,8 +479,12 @@ export function syncDisputeClocks(db: Database, challengeId: string, now: Date, 
       const answerBy = nowIso(new Date(now.getTime() + LIMITS.DISPUTE_ANSWER_MS));
       setClock.run(answerBy, entry.id);
       started.push({ ...entry, answer_by: answerBy });
-    } else if (open < threshold && onClock) {
-      setClock.run(null, entry.id);
+    } else if (onClock) {
+      const startedAt = Date.parse(entry.answer_by as string) - LIMITS.DISPUTE_ANSWER_MS;
+      const then = Number.isFinite(startedAt)
+        ? disputeThreshold((inBy.get(challengeId, nowIso(new Date(startedAt))) as { n: number }).n)
+        : threshold;
+      if (open < then) setClock.run(null, entry.id);
     }
   }
   return started;
@@ -558,17 +578,22 @@ export function recordDispute(
     throw conflict('already_rejected', 'Bu giriş zaten iptal edilmiş.');
   }
   // One per person per entry, whatever became of it: an itiraz taken back or
-  // answered with a photo is not filed again.
+  // answered with a photo is not filed again. One friends won is the exception
+  // once the entry is no longer rejected: the phone's reading took the thrown
+  // out typed number's place (`fanOutDeviceDays`), and it is a new number the
+  // winner must be able to question, or a faked "phone" reading would undo
+  // the win with nobody left to object. The row is reused (`won_before` keeps
+  // the first win counted).
   const existing = db
-    .prepare('SELECT id FROM disputes WHERE entry_id = ? AND by_user_id = ?')
-    .get(entry.id, byUserId) as { id: string } | undefined;
-  if (existing) {
+    .prepare('SELECT id, status FROM disputes WHERE entry_id = ? AND by_user_id = ?')
+    .get(entry.id, byUserId) as { id: string; status: string } | undefined;
+  if (existing && existing.status !== 'upheld') {
     throw conflict('already_disputed', 'Bu girişe zaten itiraz ettin.');
   }
 
   const iso = nowIso(now);
   const dispute: DisputeRow = {
-    id: newId(),
+    id: existing?.id ?? newId(),
     entry_id: entry.id,
     by_user_id: byUserId,
     reason,
@@ -580,9 +605,17 @@ export function recordDispute(
   let openCount = 0;
   let reachedThreshold = false;
   const run = db.transaction(() => {
-    db.prepare(
-      'INSERT INTO disputes (id, entry_id, by_user_id, reason, status, created_at) VALUES (@id, @entry_id, @by_user_id, @reason, @status, @created_at)',
-    ).run(dispute);
+    if (existing) {
+      db.prepare("UPDATE disputes SET status = 'open', reason = ?, created_at = ?, won_before = 1 WHERE id = ?").run(
+        reason,
+        iso,
+        existing.id,
+      );
+    } else {
+      db.prepare(
+        'INSERT INTO disputes (id, entry_id, by_user_id, reason, status, created_at) VALUES (@id, @entry_id, @by_user_id, @reason, @status, @created_at)',
+      ).run(dispute);
+    }
     if (entry.status === 'ok') {
       db.prepare("UPDATE entries SET status = 'disputed', updated_at = ? WHERE id = ?").run(iso, entry.id);
     }
@@ -715,7 +748,9 @@ export function upholdDisputes(db: Database, challenge: ChallengeRow, entry: Ent
 /**
  * Scheduler step: every disputed entry whose answer window ran out without a
  * photo is thrown out (`upholdDisputes`). It runs right before `finalize` in the
- * same pass, so a çelınc that was only waiting on this entry finishes without it.
+ * same pass, so a çelınc that was only waiting on this entry finishes without it
+ * — but with the phone's own reading of that day when the number thrown out was
+ * typed and the phone already reported it (`restoreFromPhone`).
  *
  * First it brings every clock up to date (`announceDisputeClocks`): that is
  * what starts one on a database written before `answer_by` existed, always with
@@ -738,6 +773,7 @@ export function resolveDisputes(db: Database, now: Date = new Date()): number {
       const entry = getEntryRow(db, entryId);
       if (!entry || entry.status !== 'disputed') continue;
       upholdDisputes(db, challenge, entry, now);
+      db.transaction(() => restoreFromPhone(db, challenge, entry, now))();
       upheld += 1;
     }
   }

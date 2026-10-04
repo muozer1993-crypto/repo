@@ -70,8 +70,12 @@ describe('ownerLogStream', () => {
     stream.write(pino({ ...pass, activated: 1, finalized: 2, reminders: 3, tauntFollowups: 1 }));
     expect(lines()).toEqual([
       '── 2026-10-04 ──',
-      '21:03:12 • zamanlayıcı: 1 çelınc başladı, 2 çelınc bitti, 3 günlük hatırlatma, 1 kazanana "hadi koy" hatırlatması',
+      '21:03:12 • zamanlayıcı: 1 çelınc başladı, 2 çelınc bitti, 3 kişiye günlük hatırlatma, 1 kazanana "hadi koy" hatırlatması',
     ]);
+
+    // a count of people, not "a five-week summary"
+    stream.write(pino({ ...pass, recaps: 5 }));
+    expect(lines().at(-1)).toBe('21:03:12 • zamanlayıcı: 5 kişiye haftalık özet');
   });
 
   it('counts the pushes that went and the ones that did not', () => {

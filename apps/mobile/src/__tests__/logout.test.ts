@@ -4,8 +4,8 @@
  * to someone else, or signed into another account, must not keep ringing
  * "30 dakikan kaldı" for the old account's check-ins for two more weeks.
  */
-const mockCancelAllReminders = jest.fn(async () => {});
-jest.mock('@/services/reminders', () => ({ cancelAllReminders: () => mockCancelAllReminders() }));
+const mockClearReminders = jest.fn(async () => {});
+jest.mock('@/services/reminders', () => ({ clearReminders: () => mockClearReminders() }));
 
 import type { Me } from '@koydum/shared';
 
@@ -21,11 +21,11 @@ describe('logout', () => {
     await useAuth.getState().logout();
 
     expect(useAuth.getState().token).toBeNull();
-    expect(mockCancelAllReminders).toHaveBeenCalledTimes(1);
+    expect(mockClearReminders).toHaveBeenCalledTimes(1);
   });
 
   it('still logs out when cancelling the alarms fails', async () => {
-    mockCancelAllReminders.mockRejectedValueOnce(new Error('no module'));
+    mockClearReminders.mockRejectedValueOnce(new Error('no module'));
     useAuth.setState({ token: 'tok', me: ME });
 
     await useAuth.getState().logout();

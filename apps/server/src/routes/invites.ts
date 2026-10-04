@@ -13,7 +13,8 @@
  * switches servers; see apps/mobile/src/app/davet/[code].tsx. Android's
  * installer ends on its own "Aç", which starts the app with no link, so the
  * page also offers the link for copying: the app's login and register screens
- * take it pasted (ChooseServerCard).
+ * take it pasted (ChooseServerCard). An APK older than 1.1.0 (or one of no known
+ * version) gets the bare address instead, for its Sunucu screen.
  *
  * Lookups are rate-limited per IP: a code is only six characters and the page
  * answers with a display name, so it must not be an enumeration oracle.
@@ -94,6 +95,25 @@ function openHref(input: PageInput & { code: string }): string {
   return `intent://${path}?${query}#Intent;scheme=koydum;package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
 }
 
+/**
+ * The first app that reads a whole pasted invite link (ChooseServerCard, the
+ * Sunucu screen). An older one keeps `/davet/CODE` as part of the server
+ * address, and every call after that is a 404.
+ */
+const PASTES_INVITE_LINK_SINCE = [1, 1, 0];
+
+/** True when `version` is at least `PASTES_INVITE_LINK_SINCE`; unknown is not. */
+function pastesInviteLink(version: string | null | undefined): boolean {
+  if (!version) return false;
+  const parts = version.split('.').map((part) => Number.parseInt(part, 10));
+  if (parts.some((n) => !Number.isFinite(n))) return false;
+  for (let i = 0; i < PASTES_INVITE_LINK_SINCE.length; i += 1) {
+    const diff = (parts[i] ?? 0) - (PASTES_INVITE_LINK_SINCE[i] ?? 0);
+    if (diff !== 0) return diff > 0;
+  }
+  return true;
+}
+
 function renderPage(input: PageInput): string {
   const name = input.inviter ? input.inviter.display_name : null;
   const title = input.unknownCode
@@ -120,11 +140,20 @@ function renderPage(input: PageInput): string {
   // What the app's "Önce sunucuyu seç" card reads: the server, and the code
   // when there is one. Built here rather than read from the address bar, so
   // the fallback /indir?kod= page hands over the same link as /davet.
+  // The APK this page hands out decides what may be pasted: an app older than
+  // 1.1.0 (or one this server cannot vouch for) only takes the bare address,
+  // typed where both versions have it, under the login form.
   const link = code ? `${input.origin}/davet/${encodeURIComponent(code)}` : `${input.origin}/indir`;
-  const copy = `<div class="copy">
+  const copy = pastesInviteLink(release?.version)
+    ? `<div class="copy">
           <span>Yükleyicideki <b>Aç</b>'a bastıysan: bu bağlantıyı kopyala, uygulamada yapıştır.</span>
           <input id="link" readonly value="${escapeHtml(link)}" aria-label="Davet bağlantısı">
           <button id="copy" type="button">Bağlantıyı kopyala</button>
+        </div>`
+    : `<div class="copy">
+          <span>Yükleyicideki <b>Aç</b>'a bastıysan: uygulamada girişin altındaki <b>Sunucu · değiştir</b>'e bas, bu adresi yapıştır. Sonuna bir şey ekleme.</span>
+          <input id="link" readonly value="${escapeHtml(input.origin)}" aria-label="Sunucu adresi">
+          <button id="copy" type="button">Adresi kopyala</button>
         </div>`;
 
   const steps = code

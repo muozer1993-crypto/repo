@@ -157,6 +157,18 @@ export function refreshReminders(
   return run;
 }
 
+/**
+ * Clears every reminder after whatever refresh is still running (logout). A
+ * refresh waiting on the list holds the old account's token, and that request
+ * still succeeds: cancelling straight away would leave its fourteen days of
+ * check-in alarms to be scheduled right after, with nothing left to clear them.
+ */
+export function clearReminders(): Promise<void> {
+  const run = refreshQueue.then(cancelAllReminders);
+  refreshQueue = run.catch(() => undefined);
+  return run;
+}
+
 async function refresh(client: Pick<ApiClient, 'challenges'>, level: 1 | 2 | 3, tz: string): Promise<number> {
   if (!(await deviceRemindersEnabled())) {
     await cancelAllReminders();

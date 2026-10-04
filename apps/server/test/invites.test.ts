@@ -113,7 +113,9 @@ describe('GET /davet/:code', () => {
   });
 
   it('hands the link over for pasting, for a friend who opened the app from the installer', async () => {
-    harness = await appWith(tempAppDir());
+    const appDir = tempAppDir();
+    publish(appDir, '1.1.0');
+    harness = await appWith(appDir);
     const ali = await registerUser(harness.app, 'ali');
     const page = await harness.app.inject({
       method: 'GET',
@@ -138,6 +140,25 @@ describe('GET /davet/:code', () => {
     expect(fallback.body).toContain(`value="http://x.test/davet/${ali.me.inviteCode}"`);
     const bare = await harness.app.inject({ method: 'GET', url: '/indir', headers: { host: 'x.test' } });
     expect(bare.body).toContain('value="http://x.test/indir"');
+  });
+
+  it('hands only the address to paste when the APK on offer is older than 1.1.0, or unknown', async () => {
+    const appDir = tempAppDir();
+    publish(appDir, '1.0.4');
+    harness = await appWith(appDir);
+    const ali = await registerUser(harness.app, 'ali');
+    const headers = { host: 'abc.trycloudflare.com', 'x-forwarded-proto': 'https' };
+    const old = await harness.app.inject({ method: 'GET', url: `/davet/${ali.me.inviteCode}`, headers });
+    // 1.0 would keep /davet/CODE as part of the server address
+    expect(old.body).toContain('value="https://abc.trycloudflare.com"');
+    expect(old.body).not.toContain(`value="https://abc.trycloudflare.com/davet/`);
+    expect(old.body).toContain('<b>Sunucu · değiştir</b>');
+    expect(old.body).not.toContain('bu bağlantıyı kopyala');
+
+    fs.rmSync(path.join(appDir, 'latest.json'));
+    const unknown = await harness.app.inject({ method: 'GET', url: `/davet/${ali.me.inviteCode}`, headers });
+    expect(unknown.body).toContain('value="https://abc.trycloudflare.com"');
+    expect(unknown.body).toContain('Adresi kopyala');
   });
 });
 

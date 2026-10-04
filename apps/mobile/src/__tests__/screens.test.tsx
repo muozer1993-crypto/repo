@@ -142,7 +142,7 @@ jest.mock('@/services/reminders', () => ({
   setDeviceRemindersEnabled: (on: boolean) => mockReminders.set(on),
   refreshReminders: (...args: unknown[]) => mockReminders.refresh(...args),
   skipTodayCheckinReminder: (challengeId: string, tz: string) => mockReminders.skipToday(challengeId, tz),
-  cancelAllReminders: async () => {},
+  clearReminders: async () => {},
 }));
 
 /** Android's battery and alarm switches (services/deviceHealth has its own test); null = not Android. */
@@ -1185,6 +1185,20 @@ describe('an itiraz on the feed', () => {
     expect(text).toContain('GALERİ');
   });
 
+  it('lets the friend who won the itiraz question the phone reading that took the day back', async () => {
+    searchParams.id = 'c-1';
+    const detail = withDispute('me');
+    detail.feed[0] = { ...detail.feed[0]!, source: 'health_connect' as 'manual', status: 'ok' as 'disputed', answerBy: null as unknown as string };
+    detail.disputes[0] = { ...detail.disputes[0]!, status: 'upheld' as 'open' };
+    api.challenge = jest.fn(async () => detail);
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(rendered(tree)).not.toContain('İtiraz ettin');
+    expect(findWith(tree, 'label', 'Yalan Bu', 'onPress')).toBeTruthy();
+  });
+
   it('says no majority yet instead of a clock when nobody is on one', async () => {
     searchParams.id = 'c-1';
     const detail = withDispute('ali');
@@ -1390,19 +1404,23 @@ describe('answering back, and a tie', () => {
 
   it('shows a co-leader the laf the other one threw, and that theirs went', async () => {
     searchParams.id = 'c-1';
-    api.results = jest.fn(async () =>
-      tied(1, [
-        { ...aliToMe, title: 'Sıkıcı oldu', body: 'Ali ve Mustafa eşit bitirdi. Bu uygulama bunun için yapılmadı lan.' },
-        { ...meToAli, title: 'Kimse koyamadı', body: '9.000 - 9.000. Berabere. Bir daha oynayın.' },
-      ])
-    );
+    const fromAli = { ...aliToMe, title: 'Ali bırakmıyor', body: 'Eşit bitti ama bu iş bitmedi Mustafa. Rövanşı aç da kim koyuyor görelim lan.' };
+    const fromMe = { ...meToAli, title: 'Mustafa laf attı', body: '9.000 - 9.000, berabere Ali. Rövanşta ayırırız bu işi.' };
+    api.results = jest.fn(async () => tied(1, [fromMe]));
     const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const first = renderScreen(<ResultsScreen />);
+    await settle();
+    // mine went first: now it is his turn
+    expect(rendered(first)).toContain('Lafını attın, sıra onda.');
+
+    api.results = jest.fn(async () => tied(1, [fromAli, fromMe]));
     const tree = renderScreen(<ResultsScreen />);
     await settle();
-
     const text = rendered(tree);
-    expect(text).toContain('Bu uygulama bunun için yapılmadı lan.');
-    expect(text).toContain('Lafını attın, sıra onda.');
+    expect(text).toContain('Rövanşı aç da kim koyuyor görelim lan.');
+    // he had already written: nobody's turn, his one row is used
+    expect(text).toContain('Lafını attın, ödeştiniz.');
+    expect(text).not.toContain('sıra onda');
     expect(() => findWith(tree, 'title', 'Laf at', 'onPress')).toThrow();
   });
 
@@ -1435,7 +1453,9 @@ describe('answering back, and a tie', () => {
 
     const text = rendered(tree);
     expect(text).toContain('BERABERE');
-    expect(text).toContain('Mustafa ve Ali eşit bitirdi.');
+    // a line from me to him, signed by me
+    expect(text).toContain('Mustafa laf attı');
+    expect(text).toContain('9.000 - 9.000, berabere Ali.');
     expect(text).not.toContain('Kazanan olmadığı için');
   });
 
@@ -2433,6 +2453,12 @@ describe('a permission the phone said no to', () => {
       const tree = renderScreen(<SettingsScreen />);
       await settle();
       expect(rendered(tree)).toContain('“Ayarları aç”a bas');
+      // opening the screen only looks: the slide or the bridge already asked this run
+      expect(notifications().registerForPush.mock.calls).toEqual([[{ askAgain: false }]]);
+      // "Tekrar dene" is a tap, and a tap asks
+      press(tree, 'Tekrar dene');
+      await settle();
+      expect(notifications().registerForPush.mock.calls.at(-1)).toEqual([{}]);
       const asked = notifications().registerForPush.mock.calls.length;
 
       press(tree, 'Ayarları aç');
@@ -2442,6 +2468,8 @@ describe('a permission the phone said no to', () => {
       notifications().registerForPush.mockResolvedValue({ token: null, granted: true, reason: 'no-fcm' });
       await comeBack();
       expect(notifications().registerForPush.mock.calls.length).toBe(asked + 1);
+      // and so does coming back from the system page
+      expect(notifications().registerForPush.mock.calls.at(-1)).toEqual([{ askAgain: false }]);
       expect(() => findWith(tree, 'title', 'Ayarları aç', 'onPress')).toThrow();
     } finally {
       notifications().registerForPush.mockResolvedValue({ token: null, reason: 'web' });

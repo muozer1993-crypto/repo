@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { ApiError } from '@/lib/api';
+import { StorageKeys, setJson } from '@/lib/storage';
 import {
   clearFailed,
   enqueueEntry,
@@ -224,5 +225,40 @@ describe('an entry parked with a photo still on the phone', () => {
     const [item] = await readQueue();
     expect(item?.proofLocalUri).toBe(PHOTO);
     expect(item?.attempts).toBe(1);
+  });
+});
+
+describe('two accounts on one phone', () => {
+  const PHOTO = 'file:///data/user/0/com.koydum.app/cache/ImagePicker/ali.jpeg';
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  it("leaves the previous account's parked entry and photo for that account", async () => {
+    // Ali logs a day offline, with a photo, then logs out; Veli logs in
+    await setJson(StorageKeys.me, { id: 'ali' });
+    await enqueueEntry('c1', body('2026-09-08', 30000), 'c1:2026-09-08:manual:', PHOTO);
+    await setJson(StorageKeys.me, { id: 'veli' });
+    await enqueueEntry('c1', body('2026-09-08', 9000), 'c1:2026-09-08:manual:');
+
+    const uploadPhoto = jest.fn().mockResolvedValue({ url: '/uploads/p1.jpg' });
+    const addEntry = jest.fn().mockResolvedValue({});
+    const result = await flushQueue(fakeClient(addEntry, { uploadPhoto }));
+
+    // only Veli's own entry goes up with Veli's token, and nothing of Ali's
+    expect(uploadPhoto).not.toHaveBeenCalled();
+    expect(addEntry).toHaveBeenCalledTimes(1);
+    expect(addEntry).toHaveBeenCalledWith('c1', body('2026-09-08', 9000));
+    expect(result).toEqual({ sent: 1, dropped: 0, remaining: 0 });
+    const left = await readQueue();
+    expect(left.map((item) => [item.ownerId, item.body.value, item.proofLocalUri])).toEqual([['ali', 30000, PHOTO]]);
+
+    // Ali back on the phone: his day and photo go out as his
+    await setJson(StorageKeys.me, { id: 'ali' });
+    await flushQueue(fakeClient(addEntry, { uploadPhoto }));
+    expect(uploadPhoto).toHaveBeenCalledWith(PHOTO, 'ali.jpeg');
+    expect(addEntry).toHaveBeenLastCalledWith('c1', { ...body('2026-09-08', 30000), proofUrl: '/uploads/p1.jpg' });
+    expect(await readQueue()).toEqual([]);
   });
 });

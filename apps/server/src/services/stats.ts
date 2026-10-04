@@ -82,7 +82,12 @@ export function computeUserStats(db: Database, userId: string, now: Date = new D
   const tauntsSent = countOf(db, 'SELECT COUNT(*) AS n FROM taunts WHERE from_user_id = ?', userId);
   const tauntsReceived = countOf(db, 'SELECT COUNT(*) AS n FROM taunts WHERE to_user_id = ?', userId);
   const pokesSent = countOf(db, 'SELECT COUNT(*) AS n FROM pokes WHERE from_user_id = ?', userId);
-  const disputesWon = countOf(db, "SELECT COUNT(*) AS n FROM disputes WHERE by_user_id = ? AND status = 'upheld'", userId);
+  // `won_before`: a won itiraz filed again on the phone's reading that replaced the number
+  const disputesWon = countOf(
+    db,
+    "SELECT COUNT(*) AS n FROM disputes WHERE by_user_id = ? AND (status = 'upheld' OR won_before = 1)",
+    userId,
+  );
 
   const stepsSingleDayMax = countOf(db, 'SELECT COALESCE(MAX(steps), 0) AS n FROM steps_daily WHERE user_id = ?', userId);
 

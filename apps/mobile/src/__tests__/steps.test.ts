@@ -346,6 +346,24 @@ describe('Android steps recorded while the app is closed', () => {
       expect(subscribe).toHaveBeenCalledTimes(1);
     });
 
+    it('answers no when only the empty Health Connect was allowed, so the caller shows the way to settings', async () => {
+      pedometer.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+      pedometer.requestPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false });
+      // without physical activity Play services records nothing either
+      withModule({
+        status: jest.fn(async () => 'no-permission'),
+        subscribe: jest.fn(async () => false),
+        dailySteps: jest.fn(async () => []),
+      });
+      expect(await steps.requestStepPermission()).toBe(false);
+      expect(healthConnect.requestPermission).toHaveBeenCalledTimes(1);
+      expect(await steps.getStepAvailability()).toMatchObject({ available: false, reason: 'denied' });
+
+      // a Health Connect something writes into counts on its own
+      healthConnect.aggregateRecord.mockResolvedValue({ COUNT_TOTAL: 8000, dataOrigins: ['com.sec.android.app.shealth'] });
+      expect(await steps.requestStepPermission()).toBe(true);
+    });
+
     it('still takes Health Connect when something writes into it and it has the larger day', async () => {
       await recordingSinceLastWeek();
       healthConnect.aggregateRecord.mockResolvedValue({ COUNT_TOTAL: 8000, dataOrigins: ['com.sec.android.app.shealth'] });

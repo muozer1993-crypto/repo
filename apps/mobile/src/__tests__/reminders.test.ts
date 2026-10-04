@@ -53,6 +53,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StorageKeys } from '@/lib/storage';
 import {
   REMINDER_KIND,
+  clearReminders,
   deviceRemindersEnabled,
   minusMinutes,
   refreshReminders,
@@ -291,6 +292,22 @@ describe('the "Saatli çelınc uyarıları" switch', () => {
 
     // the first run did schedule, but the second one waited for it and cleared everything
     expect(mockSchedule).toHaveBeenCalledTimes(2);
+    expect(mockScheduled).toEqual([]);
+  });
+
+  it('does not let a refresh still waiting on the list schedule the old account\'s alarms after logout', async () => {
+    let release!: (value: ChallengeSummary[]) => void;
+    const slow = { challenges: jest.fn(() => new Promise<ChallengeSummary[]>((resolve) => (release = resolve))) };
+    const inFlight = refreshReminders(slow, 2, 'Europe/Istanbul');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Çıkış yap while the list is still on its way (the old token still works)
+    const cleared = clearReminders();
+    release([checkinSummary()]);
+    await inFlight;
+    await cleared;
+
+    expect(mockSchedule).toHaveBeenCalled();
     expect(mockScheduled).toEqual([]);
   });
 });

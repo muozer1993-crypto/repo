@@ -6,7 +6,7 @@ import { ApiClient } from '@/lib/api';
 import { guessServerUrl, serverUrlIsEditable, stripTrailingSlash } from '@/lib/config';
 import { queryClient } from '@/lib/query';
 import { StorageKeys, getJson, removeItem, setItem, setJson } from '@/lib/storage';
-import { cancelAllReminders } from '@/services/reminders';
+import { clearReminders } from '@/services/reminders';
 import { markTokenRenewed, renewTokenIfDue } from '@/services/session';
 
 interface AuthState {
@@ -173,9 +173,10 @@ export const useAuth = create<AuthState>((set, get) => ({
     // the next account must not be served this one's challenges, inbox or badge
     queryClient.clear();
     // nor ring for this account's check-ins: the alarms are the phone's own and
-    // would go on for up to two weeks. Not awaited, a failure only means one
+    // would go on for up to two weeks. Queued behind a refresh still in flight
+    // (it would schedule them again). Not awaited, a failure only means one
     // stray alarm.
-    void cancelAllReminders().catch(() => {});
+    void clearReminders().catch(() => {});
     await Promise.all([
       removeItem(StorageKeys.token),
       removeItem(StorageKeys.tokenRenewedAt),

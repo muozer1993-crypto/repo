@@ -174,6 +174,20 @@ describe('taunts', () => {
       }
     }
   });
+
+  it('gives a tie\'s co-leaders lines to each other at every level, signed by the sender', () => {
+    for (const level of LEVELS) {
+      const pool = TAUNTS.filter((x) => x.context === 'tie' && x.level === level);
+      expect(pool.length, `level ${level}`).toBeGreaterThanOrEqual(2);
+      for (const template of pool) {
+        // {winner} is the sender in a tie, {loser} the one reading it
+        expect(template.title, template.id).toContain('{winner}');
+        expect(template.body, template.id).toContain('{loser}');
+        // one person talking to one, not the app announcing to both
+        expect(template.body, template.id).not.toMatch(/açın|oynayın|İsterseniz/);
+      }
+    }
+  });
 });
 
 describe('taunts fit the çelınc they land on', () => {

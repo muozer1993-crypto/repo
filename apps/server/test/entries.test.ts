@@ -732,6 +732,52 @@ describe('POST /challenges/:id/entries/:entryId/dispute', () => {
     expect(listByType(harness.db, ali.me.id, 'entry_rejected')).toHaveLength(0);
   });
 
+  it('keeps a running clock when the disputed player brings in a friend who had no say', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+    const veli = await registerUser(harness.app, 'veli');
+    const cem = await registerUser(harness.app, 'cem');
+    const eda = await registerUser(harness.app, 'eda');
+    for (const friend of [veli, cem, eda]) befriend(harness.app, ali.me.id, friend.me.id);
+
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'adim_yarisi', startsAt: iso(harness), endsAt: iso(harness, 3 * DAY_MS), participantIds: [veli.me.id, cem.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    for (const friend of [veli, cem]) {
+      await authed(harness.app, friend.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    }
+    const entry = await post(harness, ali, challengeId, { dayKey: today(harness), value: 50000, source: 'manual', clientTime: iso(harness) });
+    const entryId = entry.json<{ entry: Entry }>().entry.id;
+
+    // 3 accepted: Veli alone is the majority and the 12 hours start
+    const disputed = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'elli bin mi' },
+    });
+    const answerBy = disputed.json<{ answerBy: string | null }>().answerBy;
+    expect(answerBy).toBe(iso(harness, LIMITS.DISPUTE_ANSWER_MS));
+
+    // Ali adds Eda; with 4 in, a new itiraz would need 2, but this one already started
+    harness.advance(60_000);
+    const invited = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/invite`,
+      payload: { userIds: [eda.me.id] },
+    });
+    expect(invited.statusCode).toBe(200);
+    expect((await authed(harness.app, eda.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    runSchedulerOnce(harness.db, harness.now());
+    expect(getEntryRow(harness.db, entryId)?.answer_by).toBe(answerBy);
+
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS);
+    expect(runSchedulerOnce(harness.db, harness.now()).disputes).toBe(1);
+    expect(getEntryRow(harness.db, entryId)?.status).toBe('rejected');
+  });
+
   it('keeps a disputed entry in the feed however many came after it', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await liveChallenge(harness, 'su_bardak');

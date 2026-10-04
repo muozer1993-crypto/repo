@@ -306,6 +306,16 @@ const ENTRY_ANSWER_BY = `
 ALTER TABLE entries ADD COLUMN answer_by TEXT;
 `;
 
+/**
+ * Set on an itiraz that friends won on a typed number and filed again on the
+ * phone's reading that took that day's place (`fanOutDeviceDays` restores a
+ * rejected typed day). The row is reused (one per person per entry), so this
+ * is what keeps the first win in `disputesWon` and the day closed to typing.
+ */
+const DISPUTE_WON_BEFORE = `
+ALTER TABLE disputes ADD COLUMN won_before INTEGER NOT NULL DEFAULT 0;
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -316,4 +326,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '007_taunt_followups', sql: TAUNT_FOLLOWUPS },
   { id: '008_notification_prefs', sql: NOTIFICATION_PREFS },
   { id: '009_entry_answer_by', sql: ENTRY_ANSWER_BY },
+  { id: '010_dispute_won_before', sql: DISPUTE_WON_BEFORE },
 ];
