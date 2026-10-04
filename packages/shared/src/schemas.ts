@@ -331,6 +331,24 @@ export function createChallengeBodySchema(opts: ChallengeSchemaOptions = {}) {
 export const CreateChallengeBodySchema = createChallengeBodySchema();
 export type CreateChallengeBody = z.infer<typeof CreateChallengeBodySchema>;
 
+/**
+ * Friends the creator brings into a çelınc that already exists. Same bounds as
+ * the wizard's pick; that they are friends, not already in, and still fit is
+ * the server's call.
+ */
+export const InviteToChallengeBodySchema = z
+  .object({
+    userIds: z
+      .array(IdSchema)
+      .min(1, 'En az bir kanka seçmelisin')
+      .max(LIMITS.PARTICIPANTS_MAX, `En fazla ${LIMITS.PARTICIPANTS_MAX} kişi`),
+  })
+  .refine((v) => new Set(v.userIds).size === v.userIds.length, {
+    message: 'Aynı kanka iki kez seçilemez',
+    path: ['userIds'],
+  });
+export type InviteToChallengeBody = z.infer<typeof InviteToChallengeBodySchema>;
+
 /** What `POST /uploads` answered: a server path or a full http(s) address, nothing else. */
 const ProofUrlSchema = z
   .string()

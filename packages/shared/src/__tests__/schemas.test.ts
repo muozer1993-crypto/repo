@@ -10,6 +10,7 @@ import {
   FriendRequestBodySchema,
   InboxQuerySchema,
   InboxReadBodySchema,
+  InviteToChallengeBodySchema,
   LoginBodySchema,
   PokeBodySchema,
   PushTokenBodySchema,
@@ -238,6 +239,18 @@ describe('CreateChallengeBody', () => {
     const body = { ...base, startsAt: new Date(realNow).toISOString(), endsAt: new Date(realNow + D).toISOString() };
     expect(CreateChallengeBodySchema.safeParse(body).success).toBe(true);
     expect(CreateChallengeBodySchema.safeParse({ ...body, startsAt: '2020-01-01T00:00:00Z' }).success).toBe(false);
+  });
+});
+
+describe('InviteToChallengeBody', () => {
+  it('takes one to fifteen distinct friends', () => {
+    expect(InviteToChallengeBodySchema.safeParse({ userIds: ['u-1'] }).success).toBe(true);
+    const fifteen = Array.from({ length: 15 }, (_, i) => `u-${i}`);
+    expect(InviteToChallengeBodySchema.safeParse({ userIds: fifteen }).success).toBe(true);
+    expect(issuePaths(InviteToChallengeBodySchema.safeParse({ userIds: [...fifteen, 'u-99'] }))).toEqual(['userIds']);
+    expect(issuePaths(InviteToChallengeBodySchema.safeParse({ userIds: [] }))).toEqual(['userIds']);
+    expect(issuePaths(InviteToChallengeBodySchema.safeParse({ userIds: ['u-1', 'u-1'] }))).toEqual(['userIds']);
+    expect(InviteToChallengeBodySchema.safeParse({}).success).toBe(false);
   });
 });
 

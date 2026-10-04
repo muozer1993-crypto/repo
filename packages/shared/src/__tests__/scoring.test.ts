@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ChallengeType } from '../types';
 import {
+  LIMITS,
+  acceptClosesAt,
   computeScore,
   formatNumberTr,
   rankParticipants,
@@ -260,6 +262,27 @@ describe('winMargin', () => {
     expect(tauntContextForMargin('big')).toBe('win_big');
     expect(tauntContextForMargin('close')).toBe('win_close');
     expect(tauntContextForMargin('normal')).toBe('win');
+  });
+});
+
+describe('acceptClosesAt', () => {
+  const H = 60 * 60 * 1000;
+  const start = '2026-01-05T09:00:00.000Z';
+  const at = (ms: number) => new Date(Date.parse(start) + ms).toISOString();
+
+  it('closes the door an hour before the end of anything long enough', () => {
+    expect(acceptClosesAt(start, at(3 * 24 * H))).toBe(Date.parse(at(3 * 24 * H)) - LIMITS.ACCEPT_CUTOFF_MS);
+  });
+
+  it('never closes before a quarter of the way in, so a short çelınc stays joinable', () => {
+    // a two-hour çelınc: the cutoff is 30 minutes, not an hour
+    expect(acceptClosesAt(start, at(2 * H))).toBe(Date.parse(at(2 * H)) - 30 * 60 * 1000);
+    expect(acceptClosesAt(start, at(H))).toBe(Date.parse(at(H)) - 15 * 60 * 1000);
+  });
+
+  it('gives NaN for a date it cannot read, which no clock is ever before', () => {
+    expect(acceptClosesAt('yok', at(H))).toBeNaN();
+    expect(Date.now() < acceptClosesAt(start, 'yok')).toBe(false);
   });
 });
 

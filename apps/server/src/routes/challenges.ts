@@ -5,6 +5,7 @@
  *   POST /challenges
  *   GET  /challenges/:id
  *   POST /challenges/:id/accept | /decline | /leave | /cancel
+ *   POST /challenges/:id/invite
  *
  * Every mutation answers with the full `ChallengeDetail` of the challenge it touched,
  * so the app can repaint the screen straight from the response.
@@ -12,6 +13,8 @@
 import type { FastifyInstance } from 'fastify';
 import {
   LIMITS,
+  InviteToChallengeBodySchema,
+  acceptClosesAt,
   createChallengeBodySchema,
   getChallengeType,
   ChallengeListQuerySchema,
@@ -29,6 +32,7 @@ import {
   cancelledByCreatorCopy,
   declinedCopy,
   freshDetail,
+  getParticipant,
   getUserRow,
   inviteCopy,
   leftCopy,
@@ -77,6 +81,19 @@ function isBlocked(db: Database, a: string, b: string): boolean {
     )
     .get(a, b, b, a) as { ok: number } | undefined;
   return blocked !== undefined;
+}
+
+/**
+ * Somebody the reader may put in a çelınc: an existing account and an accepted
+ * friendship with no block on top of it. Creation and a later invite pass the
+ * same gate.
+ */
+function requireFriend(db: Database, meId: string, userId: string): UserRow {
+  const user = requireUserRow(db, userId);
+  if (isBlocked(db, meId, user.id) || !areFriends(db, meId, user.id)) {
+    throw badRequest('not_friends', `${user.display_name} kankan değil. Önce arkadaş olun.`);
+  }
+  return user;
 }
 
 /**
@@ -157,12 +174,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       throw badRequest('self_participant', 'Kendini davet edemezsin, zaten içindesin.');
     }
 
-    for (const participantId of body.participantIds) {
-      const user = requireUserRow(db, participantId);
-      if (isBlocked(db, me.id, user.id) || !areFriends(db, me.id, user.id)) {
-        throw badRequest('not_friends', `${user.display_name} kankan değil. Önce arkadaş olun.`);
-      }
-    }
+    for (const participantId of body.participantIds) requireFriend(db, me.id, participantId);
 
     const startsAt = new Date(body.startsAt).toISOString();
     const endsAt = new Date(body.endsAt).toISOString();
@@ -267,13 +279,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     }
     // the invite predates the block; the block wins
     assertNotBlocked(db, me.id, challenge.creator_id);
-    // Joining in the last hour would be a free ride, so the door closes early —
-    // but never earlier than a quarter of the way in, or a challenge of the
-    // minimum length (one hour) could never be accepted at all.
-    const startsAt = Date.parse(challenge.starts_at);
-    const endsAt = Date.parse(challenge.ends_at);
-    const cutoff = Math.min(LIMITS.ACCEPT_CUTOFF_MS, Math.max(0, (endsAt - startsAt) / 4));
-    if (now.getTime() >= endsAt - cutoff) {
+    if (now.getTime() >= acceptClosesAt(challenge.starts_at, challenge.ends_at)) {
       throw badRequest('accept_closed', 'Çelıncın bitmesine az kaldı, artık katılamazsın.');
     }
 
@@ -362,6 +368,98 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       announceDisputeClocks(db, challenge.id, now);
     });
     run();
+    return freshDetail(db, challenge.id, me.id, app.now());
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /challenges/:id/invite
+  // -------------------------------------------------------------------------
+  /**
+   * The creator brings friends into a çelınc that already exists: phones get
+   * KOYDUM over days, and the friend who installs on day two should not need a
+   * second çelınc that splits the group. They come in `invited`, exactly like
+   * the ones picked in the wizard, and accept through the same door.
+   */
+  app.post('/challenges/:id/invite', { preHandler: app.authenticate }, async (request): Promise<ChallengeDetail> => {
+    const me = request.user;
+    const now = app.now();
+    const { id } = request.params as IdParams;
+    const challenge = requireChallengeRow(db, id);
+    const membership = requireMembership(db, challenge, me.id);
+
+    if (challenge.creator_id !== me.id) throw forbidden('not_creator', 'Sadece çelıncı açan kanka ekleyebilir.');
+    if (membership.status !== 'accepted') {
+      throw forbidden('not_participant', 'Bu çelınctan ayrıldın, kimseyi çağıramazsın.');
+    }
+    const body = parseBody(InviteToChallengeBodySchema, request.body);
+    // past the end only the result is left (the settle hour, an itiraz's photo)
+    if (!stillOpen(challenge, now)) throw badRequest('challenge_closed', 'Bu çelınc bitti, kimse eklenemez.');
+    // an invite nobody may accept any more would only be a push for nothing
+    if (now.getTime() >= acceptClosesAt(challenge.starts_at, challenge.ends_at)) {
+      throw badRequest('accept_closed', 'Çelıncın bitmesine az kaldı, artık kimse katılamaz.');
+    }
+    if (body.userIds.includes(me.id)) {
+      throw badRequest('self_participant', 'Kendini davet edemezsin, zaten içindesin.');
+    }
+
+    const invitees = body.userIds.map((userId) => {
+      const user = requireFriend(db, me.id, userId);
+      const row = getParticipant(db, challenge.id, user.id);
+      if (row?.status === 'accepted' || row?.status === 'invited') {
+        throw conflict('already_in', `${user.display_name} zaten bu çelıncta.`);
+      }
+      // The accept route's rule: somebody who played and walked out was announced
+      // as gone and moved the itiraz majority. A "Reddet", or an invitee's "Ayrıl",
+      // is only a no, and a no may be asked again.
+      if (row?.status === 'left' && row.joined_at !== null) {
+        throw conflict('already_left', `${user.display_name} bu çelınctan ayrıldı, geri dönemez.`);
+      }
+      return { user, row };
+    });
+
+    // The wizard's cap counts everybody but the creator who is in or may still
+    // say yes; a no does not hold a seat.
+    const seated = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM challenge_participants
+          WHERE challenge_id = ? AND user_id <> ? AND status IN ('accepted', 'invited')`,
+      )
+      .get(challenge.id, challenge.creator_id) as { n: number };
+    if (seated.n + invitees.length > LIMITS.PARTICIPANTS_MAX) {
+      throw badRequest(
+        'too_many_participants',
+        `Çelınc dolu: senden başka en fazla ${LIMITS.PARTICIPANTS_MAX} kişi olabilir.`,
+      );
+    }
+
+    const iso = nowIso(now);
+    const run = db.transaction(() => {
+      for (const { user, row } of invitees) {
+        if (row) {
+          // a fresh invite: it goes to the end of the line-up like a new one
+          db.prepare(
+            "UPDATE challenge_participants SET status = 'invited', invited_at = ? WHERE challenge_id = ? AND user_id = ?",
+          ).run(iso, challenge.id, user.id);
+        } else {
+          // `timezone` stays empty until they accept, like any invitee (see POST /challenges)
+          db.prepare(
+            `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at, final_score, final_rank, timezone)
+             VALUES (?, ?, 'invited', ?, NULL, NULL, NULL, NULL)`,
+          ).run(challenge.id, user.id, iso);
+        }
+        const copy = inviteCopy(levelOf(user), me.row.display_name, challenge.title);
+        notify(db, {
+          userId: user.id,
+          type: 'challenge_invite',
+          title: copy.title,
+          body: copy.body,
+          data: { challengeId: challenge.id, fromUserId: me.id },
+          createdAt: iso,
+        });
+      }
+    });
+    run();
+
     return freshDetail(db, challenge.id, me.id, app.now());
   });
 

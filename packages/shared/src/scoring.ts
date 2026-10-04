@@ -64,6 +64,20 @@ export const LIMITS = {
   UPLOAD_MAX_BYTES: 5 * 1024 * 1024,
 } as const;
 
+/**
+ * When a çelınc stops taking players (epoch ms). Joining in the last hour would
+ * be a free ride, so the door closes `ACCEPT_CUTOFF_MS` early — but never
+ * earlier than a quarter of the way in, or a çelınc of the minimum length (one
+ * hour) could never be joined at all. The server refuses an accept or an invite
+ * from here on, and the app hides "Kanka ekle" at the same instant. NaN for a
+ * date it cannot read.
+ */
+export function acceptClosesAt(startsAt: string, endsAt: string): number {
+  const start = Date.parse(startsAt);
+  const end = Date.parse(endsAt);
+  return end - Math.min(LIMITS.ACCEPT_CUTOFF_MS, Math.max(0, (end - start) / 4));
+}
+
 // ---------------------------------------------------------------------------
 // Scoring (SPEC 1.3)
 // ---------------------------------------------------------------------------

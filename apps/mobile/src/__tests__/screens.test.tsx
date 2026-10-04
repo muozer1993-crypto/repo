@@ -2887,3 +2887,87 @@ describe('an inbox longer than one page', () => {
     expect(ids(tree)).toHaveLength(34);
   });
 });
+
+describe('"Kanka ekle" on a çelınc already under way', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const CEM = { id: 'u-3', username: 'cem', displayName: 'Cem', avatarEmoji: '🦁', createdAt: '2026-09-01T00:00:00.000Z' };
+  const VELI = { id: 'u-4', username: 'veli', displayName: 'Veli', avatarEmoji: '🐺', createdAt: '2026-09-01T00:00:00.000Z' };
+  const DAN = { id: 'u-5', username: 'dan', displayName: 'Dan', avatarEmoji: '🦊', createdAt: '2026-09-01T00:00:00.000Z' };
+  // level 2 reads "Kankaları Çağır"; buttons draw it in Turkish capitals
+  const CTA = 'Kankaları Çağır';
+
+  /** My running step çelınc with Ali playing, Veli who said no and Dan who walked out. */
+  function mine() {
+    const detail = challengeDetail();
+    const ali = { ...detail.me!, user: ALI, score: 4201, rank: 2 };
+    const veli = { ...ali, user: VELI, status: 'declined' as const, score: 0, rank: 0 };
+    const dan = { ...veli, user: DAN, status: 'left' as const };
+    return { ...detail, participants: [detail.me!, ali, veli, dan] };
+  }
+
+  /** The FriendRow for this user, ready to be ticked. */
+  function friendRow(tree: ReactTestRenderer, userId: string) {
+    const [row] = tree.root.findAll(
+      (node) => (node.props.user as { id?: string } | undefined)?.id === userId && typeof node.props.onToggle === 'function'
+    );
+    return row;
+  }
+
+  it('lets the creator call a friend in, offering only who is not already on the list', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => mine());
+    api.friends = jest.fn(async () => ({ friends: [ALI, CEM, VELI, DAN], incoming: [], outgoing: [] }));
+    api.inviteToChallenge = jest.fn(async () => mine());
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('KANKALARI ÇAĞIR');
+    // the list is only asked for once the sheet opens
+    expect(api.friends).not.toHaveBeenCalled();
+    press(tree, CTA);
+    await settle();
+
+    expect(rendered(tree)).toContain('Kimi çağırıyorsun?');
+    // Ali plays and Dan walked out; Veli said no, and may be asked again
+    expect(friendRow(tree, ALI.id)).toBeUndefined();
+    expect(friendRow(tree, DAN.id)).toBeUndefined();
+    expect(friendRow(tree, VELI.id)).toBeDefined();
+
+    act(() => {
+      friendRow(tree, CEM.id)!.props.onToggle(CEM.id);
+    });
+    press(tree, 'Çağır (1)');
+    await settle();
+
+    expect(api.inviteToChallenge).toHaveBeenCalledWith('c-1', [CEM.id]);
+    expect(rendered(tree)).toContain('Davet gitti: Cem. Kabul eden sıralamaya girer.');
+    expect(rendered(tree)).not.toContain('Kimi çağırıyorsun?');
+  });
+
+  it('is not there for a friend who did not open the çelınc', async () => {
+    searchParams.id = 'c-1';
+    const detail = mine();
+    api.challenge = jest.fn(async () => ({ ...detail, challenge: { ...detail.challenge, creatorId: ALI.id } }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Haftalık Adım');
+    expect(rendered(tree)).not.toContain('KANKALARI ÇAĞIR');
+  });
+
+  it('goes away when the last hour starts, as the server stops taking anybody new', async () => {
+    searchParams.id = 'c-1';
+    const detail = mine();
+    const endsAt = new Date(Date.now() + 30 * 60_000).toISOString();
+    api.challenge = jest.fn(async () => ({ ...detail, challenge: { ...detail.challenge, endsAt } }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    // still running: the countdown is there, the button is not
+    expect(rendered(tree)).toContain('BİTMESİNE');
+    expect(rendered(tree)).not.toContain('KANKALARI ÇAĞIR');
+  });
+});

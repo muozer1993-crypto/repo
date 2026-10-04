@@ -63,6 +63,14 @@ dendi, itiraz çoğunluğu da ona göre küçüldü. Sessiz bir davetli yüzünd
 tek kişiyle biten çelınc da zamanlayıcıda "herkes kaçtı" diye kapanır, kabul edip giden biri
 varsa "kimse kabul etmedi" yazmaz.
 
+Çelıncı açan, çelınc sürerken kanka da ekleyebilir (`POST /challenges/:id/invite`): uygulamayı
+herkes aynı gün kurmuyor, ikinci gün gelen kanka için açılan ikinci bir çelınc grubu böler. Eklenen,
+sihirbazda seçilmiş gibi `invited` girer ve aynı kapıdan kabul eder. Kapı da ikisi için aynı anda
+kapanır (`acceptClosesAt`: bitişten bir saat önce, kısa çelıncta sürenin son dörtte biri); kabul
+edilemeyecek bir davet boş bir bildirimdir. Bitişten sonraki bekleyişte kimse eklenmez. Reddeden
+yeniden çağrılabilir ve yeni bir davet bildirimi alır; oynayıp ayrılan çağrılamaz, kabul kuralıyla
+aynı sebepten.
+
 Rövanş, eskisi kaç yerel gün sürdüyse o kadar gün sürer ve sihirbaz gibi açanın saat diliminde bir
 günün son milisaniyesinde biter. Önceden "şimdi + eski süre" ile düğmeye basılan saatte bitiyordu;
 yarıda kesilen son günün sonradan gelen telefon sayısı bitişten sonra atılan adımları da taşırdı.

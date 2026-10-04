@@ -606,6 +606,23 @@ telefonda tuttuğu geçici bir kopyadır; telefon yer açmak için onu silerse g
 fotoğraf zorunluysa düşer ve uygulama "Kanıt fotoğrafı telefonda bulunamadı" der. Bağlantı
 koptuğunda açık olan çelınc ekranı kapanmaz, son bilinen hali gösterir; yazdığın sayı silinmez.
 
+### Çelınc sürerken kanka ekleme
+
+Uygulamayı herkes aynı gün kurmuyor. Çelıncı sen açtıysan çelınc ekranında, sıralamanın altında
+**Kankaları Çağır** düğmesi durur (seviyene göre "Arkadaş Davet Et" ya da "Kurban Getir" yazar).
+Dokununca çelıncta olmayan kankaların çıkar; seçtiklerine davet bildirimi gider, kabul eden
+sıralamaya girer. İkinci gün katılan kanka adım yarışında önceki günleri **Eksik günü yaz** ile
+doldurabilir (bkz. [Adım sayımı nasıl çalışıyor](#adım-sayımı-nasıl-çalışıyor)). Böylece "beni de
+ekle" diyen için ikinci bir çelınc açıp grubu bölmen gerekmez.
+
+* Sadece çelıncı açan ekler. Yeni gelen önce kankan olmalı: davet bağlantından geldiyse
+  arkadaşlık isteği **Kankalar** sekmesine düşer, kabul etmen yeter.
+* Daveti reddeden kankayı yeniden çağırabilirsin, ona yeni bir bildirim gider. Oynayıp ayrılan
+  geri dönemez.
+* Son bir saatte kimse eklenmez (kısa çelınclarda sürenin son dörtte birinde); o sırada daveti
+  kabul etmek de kapalı. Süre bittikten sonra, sonuç beklenirken de eklenmez.
+* Bir çelıncta senden başka en fazla 15 kişi olur. Reddedenler bu sayıya girmez.
+
 ---
 
 ## Adım sayımı nasıl çalışıyor

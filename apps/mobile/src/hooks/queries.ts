@@ -270,6 +270,16 @@ export function useChallengeAction(id: string) {
   });
 }
 
+/** "Kanka ekle": friends the creator calls into a çelınc that already exists. */
+export function useInviteToChallenge(id: string) {
+  const api = useApi();
+  const invalidate = useInvalidator();
+  return useMutation<ChallengeDetail, Error, string[]>({
+    mutationFn: (userIds) => api.inviteToChallenge(id, userIds),
+    onSuccess: () => invalidate.challenge(id),
+  });
+}
+
 /**
  * An entry write. `proofLocalUri` is a proof photo the entry modal could not
  * upload for lack of a connection: it goes up first, and when it still cannot,

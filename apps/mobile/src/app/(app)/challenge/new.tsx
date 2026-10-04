@@ -8,7 +8,6 @@ import {
   isValidHHmm,
   t,
   type ChallengeType,
-  type PublicUser,
   type VulgarityLevel,
 } from '@koydum/shared';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -21,6 +20,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Chip } from '@/components/Chip';
 import { EmptyState } from '@/components/EmptyState';
+import { FriendRow } from '@/components/FriendRow';
 import { Input } from '@/components/Input';
 import { Loading } from '@/components/Loading';
 import { Screen } from '@/components/Screen';
@@ -217,43 +217,6 @@ function TypeRow({ type, level, selected, onSelect }: TypeRowProps) {
         </View>
       </Pressable>
     </Card>
-  );
-}
-
-function FriendRow({
-  user,
-  selected,
-  onToggle,
-}: {
-  user: PublicUser;
-  selected: boolean;
-  onToggle: (id: string) => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected }}
-      onPress={() => onToggle(user.id)}
-      style={({ pressed }) => [
-        styles.friendRow,
-        selected && styles.friendRowOn,
-        pressed && styles.pressed,
-      ]}>
-      <Avatar emoji={user.avatarEmoji} name={user.displayName} size={40} ring={selected ? Colors.accent : null} />
-      <View style={styles.grow}>
-        <Text variant="body" bold numberOfLines={1}>
-          {user.displayName}
-        </Text>
-        <Text variant="tiny" faint numberOfLines={1}>
-          @{user.username}
-        </Text>
-      </View>
-      <View style={[styles.check, selected && styles.checkOn]}>
-        <Text variant="tiny" bold color={selected ? Colors.white : Colors.textFaint}>
-          {selected ? '✓' : ''}
-        </Text>
-      </View>
-    </Pressable>
   );
 }
 
@@ -919,27 +882,6 @@ const styles = StyleSheet.create({
   },
   windowCard: { gap: Spacing.sm },
 
-  friendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-  },
-  friendRowOn: { borderColor: Colors.accent, backgroundColor: Colors.surfaceHigh },
-  check: {
-    width: 26,
-    height: 26,
-    borderRadius: Radius.pill,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkOn: { backgroundColor: Colors.accent, borderColor: Colors.accent },
   noMatch: { paddingVertical: Spacing.xl },
   retry: { marginTop: Spacing.md, alignSelf: 'flex-start' },
 

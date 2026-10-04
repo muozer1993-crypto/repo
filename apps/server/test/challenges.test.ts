@@ -5,7 +5,7 @@
  * (`makeApp`), so "now" is exact and no test depends on wall-clock timing.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { addDays, todayKey, DEFAULT_TIMEZONE, type ChallengeDetail, type ChallengeResults, type LeaderboardEntry, type Challenge } from '@koydum/shared';
+import { LIMITS, addDays, todayKey, DEFAULT_TIMEZONE, type ChallengeDetail, type ChallengeResults, type LeaderboardEntry, type Challenge } from '@koydum/shared';
 import { listByType } from '../src/services/notifications.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
@@ -462,6 +462,203 @@ describe('accept / decline / leave / cancel', () => {
     const response = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/cancel` });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('challenge_started');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bringing a friend in later
+// ---------------------------------------------------------------------------
+
+describe('POST /challenges/:id/invite', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  async function invite(h: TestApp, user: RegisteredUser, challengeId: string, userIds: string[]) {
+    return authed(h.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/invite`, payload: { userIds } });
+  }
+
+  it('brings a friend into a running çelınc on day two: invited, told, and ranked once they accept', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await twoPlayerChallenge(harness);
+    const cem = await registerUser(harness.app, 'cem', { displayName: 'Cem', vulgarityMax: 1 });
+    befriend(harness.app, ali.me.id, cem.me.id);
+    harness.advance(DAY);
+
+    const invited = await invite(harness, ali, challengeId, [cem.me.id]);
+    expect(invited.statusCode).toBe(200);
+    const detail = invited.json<ChallengeDetail>();
+    expect(detail.participants.find((p) => p.user.id === cem.me.id)?.status).toBe('invited');
+
+    const inbox = listByType(harness.db, cem.me.id, 'challenge_invite');
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0].title).toBe('Çelınc daveti'); // Cem is level 1
+    expect(inbox[0].body).toContain('Ali');
+    expect(JSON.parse(inbox[0].data)).toEqual({ challengeId, fromUserId: ali.me.id });
+
+    const cemCall = authed(harness.app, cem.token);
+    expect((await cemCall({ method: 'GET', url: '/challenges' })).json<unknown[]>()).toHaveLength(1);
+    const accepted = await cemCall({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    expect(accepted.statusCode).toBe(200);
+    await postEntry(harness, cem, challengeId, { dayKey: today(harness), value: 20000, source: 'pedometer', clientTime: iso(harness) });
+
+    const after = await cemCall({ method: 'GET', url: `/challenges/${challengeId}` });
+    const me = after.json<ChallengeDetail>().me;
+    expect(me?.status).toBe('accepted');
+    expect(me?.rank).toBe(1);
+    expect(me?.score).toBe(20000);
+  });
+
+  it('is the creator\'s call, and only for friends nobody blocked', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await twoPlayerChallenge(harness);
+    const cem = await registerUser(harness.app, 'cem');
+    const eda = await registerUser(harness.app, 'eda');
+    const stranger = await registerUser(harness.app, 'yabanci');
+    befriend(harness.app, ali.me.id, cem.me.id);
+    befriend(harness.app, veli.me.id, cem.me.id);
+    befriend(harness.app, ali.me.id, eda.me.id);
+
+    const byVeli = await invite(harness, veli, challengeId, [cem.me.id]);
+    expect(byVeli.statusCode).toBe(403);
+    expect(byVeli.json().error.code).toBe('not_creator');
+
+    const outsider = await invite(harness, stranger, challengeId, [cem.me.id]);
+    expect(outsider.statusCode).toBe(404);
+
+    const notFriend = await invite(harness, ali, challengeId, [stranger.me.id]);
+    expect(notFriend.statusCode).toBe(400);
+    expect(notFriend.json().error.code).toBe('not_friends');
+
+    // the block is Eda's, placed on Ali: it still keeps her out
+    await authed(harness.app, eda.token)({ method: 'POST', url: `/users/${ali.me.id}/block` });
+    const blocked = await invite(harness, ali, challengeId, [eda.me.id]);
+    expect(blocked.statusCode).toBe(400);
+    expect(blocked.json().error.code).toBe('not_friends');
+
+    const self = await invite(harness, ali, challengeId, [ali.me.id]);
+    expect(self.statusCode).toBe(400);
+    expect(self.json().error.code).toBe('self_participant');
+
+    const twice = await invite(harness, ali, challengeId, [cem.me.id, cem.me.id]);
+    expect(twice.statusCode).toBe(400);
+    expect(twice.json().error.code).toBe('validation');
+
+    // one bad name stops the whole list: nobody is half invited
+    const mixed = await invite(harness, ali, challengeId, [cem.me.id, veli.me.id]);
+    expect(mixed.statusCode).toBe(409);
+    expect(mixed.json().error.code).toBe('already_in');
+    expect(listByType(harness.db, cem.me.id, 'challenge_invite')).toHaveLength(0);
+
+    expect((await invite(harness, ali, challengeId, [cem.me.id])).statusCode).toBe(200);
+    const again = await invite(harness, ali, challengeId, [cem.me.id]);
+    expect(again.statusCode).toBe(409);
+    expect(again.json().error.code).toBe('already_in');
+    expect(listByType(harness.db, cem.me.id, 'challenge_invite')).toHaveLength(1);
+  });
+
+  it('closes when accepting does, and stays shut once the time is up', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await twoPlayerChallenge(harness);
+    const cem = await registerUser(harness.app, 'cem');
+    befriend(harness.app, ali.me.id, cem.me.id);
+
+    harness.advance(3 * DAY - 30 * 60 * 1000); // 30 minutes left
+    const late = await invite(harness, ali, challengeId, [cem.me.id]);
+    expect(late.statusCode).toBe(400);
+    expect(late.json().error.code).toBe('accept_closed');
+
+    // a step çelınc stays `active` for the phones' hour past its end: still no invites
+    harness.advance(45 * 60 * 1000);
+    const settling = await invite(harness, ali, challengeId, [cem.me.id]);
+    expect(settling.statusCode).toBe(400);
+    expect(settling.json().error.code).toBe('challenge_closed');
+    expect(listByType(harness.db, cem.me.id, 'challenge_invite')).toHaveLength(0);
+  });
+
+  it('refuses a finished or cancelled çelınc', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await finishedChallenge(harness);
+    const cem = await registerUser(harness.app, 'cem');
+    befriend(harness.app, ali.me.id, cem.me.id);
+
+    const finished = await invite(harness, ali, challengeId, [cem.me.id]);
+    expect(finished.statusCode).toBe(400);
+    expect(finished.json().error.code).toBe('challenge_closed');
+
+    const later = await createChallenge(harness, ali, {
+      participantIds: [cem.me.id],
+      startsAt: iso(harness, 2 * 60 * 60 * 1000),
+      endsAt: iso(harness, 2 * DAY),
+    });
+    const laterId = later.json<Challenge>().id;
+    await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${laterId}/cancel` });
+    const cancelled = await invite(harness, ali, laterId, [cem.me.id]);
+    expect(cancelled.statusCode).toBe(400);
+    expect(cancelled.json().error.code).toBe('challenge_closed');
+  });
+
+  it('asks a "Reddet" again with a fresh invite, but never brings back somebody who played and left', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli');
+    const cem = await registerUser(harness.app, 'cem');
+    const dan = await registerUser(harness.app, 'dan');
+    const eda = await registerUser(harness.app, 'eda');
+    for (const friend of [veli, cem, dan, eda]) befriend(harness.app, ali.me.id, friend.me.id);
+    const created = await createChallenge(harness, ali, {
+      participantIds: [veli.me.id, cem.me.id, dan.me.id, eda.me.id],
+    });
+    const id = created.json<Challenge>().id;
+    // Eda plays, so the no's and the walk-out leave a race behind
+    await authed(harness.app, eda.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${id}/decline` });
+    await authed(harness.app, cem.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    await authed(harness.app, cem.token)({ method: 'POST', url: `/challenges/${id}/leave` });
+    // Dan never joined: his "Ayrıl" on the invite was only a no
+    await authed(harness.app, dan.token)({ method: 'POST', url: `/challenges/${id}/leave` });
+
+    const left = await invite(harness, ali, id, [cem.me.id]);
+    expect(left.statusCode).toBe(409);
+    expect(left.json().error.code).toBe('already_left');
+
+    const back = await invite(harness, ali, id, [veli.me.id, dan.me.id]);
+    expect(back.statusCode).toBe(200);
+    const statuses = Object.fromEntries(back.json<ChallengeDetail>().participants.map((p) => [p.user.id, p.status]));
+    expect(statuses[veli.me.id]).toBe('invited');
+    expect(statuses[dan.me.id]).toBe('invited');
+    expect(listByType(harness.db, veli.me.id, 'challenge_invite')).toHaveLength(2);
+    expect(listByType(harness.db, dan.me.id, 'challenge_invite')).toHaveLength(2);
+
+    // the invite is the real thing again: it shows on the list, and a no is still a no
+    const veliCall = authed(harness.app, veli.token);
+    expect((await veliCall({ method: 'GET', url: '/challenges' })).json<unknown[]>()).toHaveLength(1);
+    expect((await veliCall({ method: 'POST', url: `/challenges/${id}/decline` })).statusCode).toBe(200);
+  });
+
+  it('fills up to the wizard\'s cap and no further', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+    const friends: RegisteredUser[] = [];
+    for (let i = 0; i < LIMITS.PARTICIPANTS_MAX + 2; i += 1) {
+      const friend = await registerUser(harness.app, `kanka${i}`);
+      befriend(harness.app, ali.me.id, friend.me.id);
+      friends.push(friend);
+    }
+    const [first, second, ...rest] = friends;
+    const created = await createChallenge(harness, ali, { participantIds: [first.me.id, second.me.id] });
+    const id = created.json<Challenge>().id;
+    // a no gives its seat back
+    await authed(harness.app, second.token)({ method: 'POST', url: `/challenges/${id}/decline` });
+
+    const tooMany = await invite(harness, ali, id, rest.map((friend) => friend.me.id));
+    expect(tooMany.statusCode).toBe(400);
+    expect(tooMany.json().error.code).toBe('too_many_participants');
+
+    const full = await invite(harness, ali, id, rest.slice(0, LIMITS.PARTICIPANTS_MAX - 1).map((friend) => friend.me.id));
+    expect(full.statusCode).toBe(200);
+    const last = await invite(harness, ali, id, [second.me.id]);
+    expect(last.statusCode).toBe(400);
+    expect(last.json().error.code).toBe('too_many_participants');
   });
 });
 

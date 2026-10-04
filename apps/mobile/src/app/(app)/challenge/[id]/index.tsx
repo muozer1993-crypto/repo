@@ -12,6 +12,7 @@ import type {
 } from '@koydum/shared';
 import {
   LIMITS,
+  acceptClosesAt,
   addDays,
   diffDayKeys,
   formatNumberTr,
@@ -32,8 +33,9 @@ import { Card } from '@/components/Card';
 import { Chip } from '@/components/Chip';
 import { Countdown, formatRemaining } from '@/components/Countdown';
 import { EmptyState } from '@/components/EmptyState';
+import { FriendRow } from '@/components/FriendRow';
 import { Input } from '@/components/Input';
-import { Skeleton } from '@/components/Loading';
+import { Loading, Skeleton } from '@/components/Loading';
 import { Screen } from '@/components/Screen';
 import { Sheet } from '@/components/Sheet';
 import { Standings } from '@/components/Standings';
@@ -46,6 +48,8 @@ import {
   useChallengeAction,
   useDeleteEntry,
   useDispute,
+  useFriends,
+  useInviteToChallenge,
   usePoke,
   useWithdrawDispute,
 } from '@/hooks/queries';
@@ -275,6 +279,16 @@ export default function ChallengeDetailScreen() {
     (item) => item.status === 'disputed' && !!item.answerBy && Date.parse(item.answerBy) > clock
   );
   const canEnter = challenge.status === 'active' && !settling && isPlayer && !!type;
+  /**
+   * The creator may call more friends in while somebody new could still accept:
+   * the server closes invites together with accepts (`acceptClosesAt`), so a
+   * button past that would only earn an error.
+   */
+  const canInvite =
+    isCreator &&
+    isPlayer &&
+    (challenge.status === 'pending' || (challenge.status === 'active' && !settling)) &&
+    clock < acceptClosesAt(challenge.startsAt, challenge.endsAt);
 
   return (
     <Screen
@@ -410,6 +424,7 @@ export default function ChallengeDetailScreen() {
             {t('challenge_pending_you', level)}
           </Text>
         ) : null}
+        {canInvite ? <InviteMore id={id} participants={participants} level={level} /> : null}
       </Card>
 
       {/* -------------------------------------------------- invite reply */}
@@ -595,6 +610,159 @@ function RejoinCard({ id, level }: { id: string; level: VulgarityLevel }) {
         <Button title="Katıl" size="md" fullWidth loading={action.isPending} onPress={join} />
       </View>
     </Card>
+  );
+}
+
+/* ------------------------------------------------------------- kanka ekle */
+
+/**
+ * "Kanka ekle" for the creator. Phones get KOYDUM over days, and the friend who
+ * installs on day two should join this çelınc rather than a second one that
+ * splits the group. The friends list is only fetched once the sheet opens.
+ */
+function InviteMore({
+  id,
+  participants,
+  level,
+}: {
+  id: string;
+  participants: ParticipantView[];
+  level: VulgarityLevel;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        title={t('invite_friends_cta', level)}
+        icon="➕"
+        variant="secondary"
+        size="sm"
+        style={styles.inviteMore}
+        onPress={() => setOpen(true)}
+      />
+      <Sheet
+        visible={open}
+        onClose={() => setOpen(false)}
+        title={byLevel(level, 'Kimi çağıralım?', 'Kimi çağırıyorsun?', 'Kimi getiriyorsun? 🍆')}>
+        {open ? (
+          <InvitePicker id={id} participants={participants} level={level} onDone={() => setOpen(false)} />
+        ) : null}
+      </Sheet>
+    </>
+  );
+}
+
+function InvitePicker({
+  id,
+  participants,
+  level,
+  onDone,
+}: {
+  id: string;
+  participants: ParticipantView[];
+  level: VulgarityLevel;
+  onDone: () => void;
+}) {
+  const friendsQuery = useFriends();
+  const invite = useInviteToChallenge(id);
+  const toast = useToast();
+  const [picked, setPicked] = useState<string[]>([]);
+
+  // Whoever is in, still deciding, or walked out is not offered; a "Reddet" is,
+  // since asking again is the point. The server takes an invitee's "Ayrıl" back
+  // too, but the line-up cannot tell that one from a player who played and left.
+  const listed = new Set(participants.filter((p) => p.status !== 'declined').map((p) => p.user.id));
+  const friends = (friendsQuery.data?.friends ?? []).filter((friend) => !listed.has(friend.id));
+  const chosen = friends.filter((friend) => picked.includes(friend.id));
+  // the wizard's cap: everybody in or still invited, the creator aside
+  const seats =
+    LIMITS.PARTICIPANTS_MAX -
+    (participants.filter((p) => p.status === 'accepted' || p.status === 'invited').length - 1);
+
+  const toggle = (userId: string) =>
+    setPicked((prev) => (prev.includes(userId) ? prev.filter((x) => x !== userId) : [...prev, userId]));
+
+  const send = async () => {
+    try {
+      await invite.mutateAsync(chosen.map((friend) => friend.id));
+      toast({
+        title: byLevel(level, 'Tamamdır', 'Çağırdın', 'Kurban yolda 🍆'),
+        body: `Davet gitti: ${chosen.map((friend) => friend.displayName).join(', ')}. Kabul eden sıralamaya girer.`,
+        kind: 'success',
+      });
+      onDone();
+    } catch (error) {
+      toast({ title: 'Olmadı', body: errorText(error, 'Davet gitmedi.'), kind: 'danger' });
+    }
+  };
+
+  if (friendsQuery.isLoading) return <Loading label="Kankalar geliyor..." />;
+
+  if (friendsQuery.isError) {
+    return (
+      <View style={styles.actionBody}>
+        <Text variant="small" color={Colors.danger}>
+          {errorText(friendsQuery.error, 'Kankalar gelmedi.')}
+        </Text>
+        <Button title="Tekrar dene" variant="secondary" size="sm" onPress={() => void friendsQuery.refetch()} />
+      </View>
+    );
+  }
+
+  if (friends.length === 0) {
+    return (
+      <View style={styles.actionBody}>
+        <Text variant="small" muted>
+          {byLevel(
+            level,
+            'Davet edebileceğin başka arkadaşın yok. Yeni biri katılacaksa önce arkadaş olun.',
+            'Çağıracak kimse kalmadı. Yeni biri varsa önce kankan olsun.',
+            'Getirecek kurban kalmadı 🍆 Yeni geleni önce kankan yap.'
+          )}
+        </Text>
+        <Button
+          title="Kankalara git"
+          variant="secondary"
+          size="md"
+          fullWidth
+          onPress={() => {
+            onDone();
+            router.push('/(app)/(tabs)/friends');
+          }}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <Text variant="tiny" muted>
+        {byLevel(
+          level,
+          'Kabul eden sıralamaya girer.',
+          'Kabul eden sıralamaya girer, bakalım kim gelecek.',
+          'Kabul eden sıralamaya girer. Adamlığı yeten gelsin 🍆'
+        )}
+      </Text>
+      {friends.map((friend) => (
+        <FriendRow key={friend.id} user={friend} selected={picked.includes(friend.id)} onToggle={toggle} />
+      ))}
+      {chosen.length > seats ? (
+        <Text variant="tiny" color={Colors.danger}>
+          {seats > 0
+            ? `Çelınc dolmak üzere: en fazla ${seats} kişi daha çağırabilirsin.`
+            : 'Çelınc dolu, daha fazla kişi çağıramazsın.'}
+        </Text>
+      ) : null}
+      <Button
+        title={`${byLevel(level, 'Davet et', 'Çağır', 'Getir')}${chosen.length > 0 ? ` (${chosen.length})` : ''}`}
+        size="lg"
+        fullWidth
+        loading={invite.isPending}
+        disabled={chosen.length === 0 || chosen.length > seats}
+        onPress={() => void send()}
+      />
+    </>
   );
 }
 
@@ -2038,6 +2206,7 @@ const styles = StyleSheet.create({
 
   sectionLabel: { marginBottom: Spacing.md },
   verdict: { marginTop: Spacing.md },
+  inviteMore: { marginTop: Spacing.md, alignSelf: 'flex-start' },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   grow: { flex: 1 },

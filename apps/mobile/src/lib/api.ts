@@ -363,6 +363,11 @@ export class ApiClient {
     return this.request<{ ok: true }>('POST', `/challenges/${id}/cancel`);
   }
 
+  /** The creator bringing friends into a çelınc already under way; answers with the fresh detail. */
+  inviteToChallenge(id: string, userIds: string[]) {
+    return this.request<ChallengeDetail>('POST', `/challenges/${id}/invite`, { body: { userIds } });
+  }
+
   addEntry(
     id: string,
     body: {
