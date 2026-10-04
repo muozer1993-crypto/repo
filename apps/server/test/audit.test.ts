@@ -561,6 +561,7 @@ describe('device readings versus typed declarations', () => {
     });
     expect(again.statusCode).toBe(409);
     expect(errorCode(again)).toBe('day_rejected');
+    expect(again.json<{ error: { message: string } }>().error.message).toContain('sadece telefonun saydığı adım');
 
     // the phone keeps raising it like any other day
     await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 12500, source: 'pedometer' }] } });
@@ -579,6 +580,18 @@ describe('device readings versus typed declarations', () => {
     const synced = await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 31000, source: 'health_connect' }] } });
     expect(synced.json<{ updated: number }>().updated).toBe(0);
     expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ value: 30000, source: 'pedometer', status: 'rejected' });
+
+    // nor by hand, and the refusal does not promise a phone that never comes back
+    const typed = await call({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 12000, source: 'manual', clientTime: iso(harness) },
+    });
+    expect(typed.statusCode).toBe(409);
+    expect(errorCode(typed)).toBe('day_rejected');
+    const message = typed.json<{ error: { message: string } }>().error.message;
+    expect(message).toContain('artık bir şey yazılmaz');
+    expect(message).not.toContain('sadece telefonun');
   });
 
   it('a restored day drops the itirazlar closed on the old number and keeps the upheld one', async () => {

@@ -149,6 +149,8 @@ export default function EntryModalScreen() {
     type.metricType === 'auto_steps' &&
     !!dayEntry &&
     detail.disputes.some((row) => row.entryId === dayEntry.id && row.status === 'upheld');
+  // a phone reading thrown out never comes back through a sync either
+  const stepsGone = stepsRejected && dayEntry?.status === 'rejected' && dayEntry.source !== 'manual';
   const dayLocked = deviceLocked || stepsRejected;
   const dayLabel = formatDayKeyFriendly(selectedDay, today, yesterday);
   // "8 Ekim" keeps its capital in a sentence, "Bugün" does not
@@ -270,7 +272,7 @@ export default function EntryModalScreen() {
       </View>
       {query.isRefetchError ? (
         <Text variant="tiny" faint style={styles.stale}>
-          Sunucuya ulaşamıyorum, bilgiler son bilinen hali. Kaydedersen giriş sıraya alınır, bağlantı gelince gider.
+          Sunucuya ulaşamıyorum, gördüğün son bilinen hali. Kaydedersen giriş sıraya alınır, bağlantı gelince gider.
         </Text>
       ) : null}
 
@@ -283,7 +285,9 @@ export default function EntryModalScreen() {
                 ? 'Bu çelıncta oyuncu değilsin, giriş yapamazsın.'
                 : deviceLocked
                   ? `${dayLabel} için değeri telefon kendisi okudu, elle değiştirilemez.`
-                  : `${dayLabel} için yazdığını kankalar itirazla yaktı. O güne artık sadece telefonun saydığı adım yazılır.`}
+                  : stepsGone
+                    ? `${dayLabel} için telefonun saydığını kankalar itirazla yaktı. O güne artık bir şey yazılmaz.`
+                    : `${dayLabel} için yazdığını kankalar itirazla yaktı. O güne artık sadece telefonun saydığı adım yazılır.`}
           </Text>
         </Card>
       ) : null}

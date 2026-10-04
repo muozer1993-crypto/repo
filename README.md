@@ -759,10 +759,10 @@ kendiliğinden gider. Android iki kere "izin verme" denince bir daha sormuyor, y
 
 **Adımlar 0 görünüyor.**
 iOS'ta hareket izni verilmemiş olabilir (Ayarlar → Gizlilik → Hareket ve Fitness). Android'de
-Health Connect kurulu değilse uygulama yaklaşık sayıma düşer ve bunu ekranda yazar. Health
-Connect'e izin verdiysen ama ona adım yazan bir uygulama yoksa (Android 14 ve üstünde çoğu
-telefonda böyle) uygulama telefonun kendi sayımını kullanır; **Ayarlar → Adım sayacı** bunu
-"Health Connect'e adım yazan bir uygulama yok" diye söyler. Fiziksel
+Google Play hizmetleri eskiyse uygulama adımları sadece açıkken, yaklaşık sayar ve bunu ekranda
+yazar. Health Connect'e izin verdiysen ama ona adım yazan bir uygulama yoksa (Android 14 ve
+üstünde çoğu telefonda böyle) uygulama telefonun kendi sayımını kullanır; **Ayarlar → Adım
+sayacı** bunu "Health Connect'e adım yazan bir uygulama yok" diye söyler. Fiziksel
 aktivite izni reddedildiyse ana sayfadaki **İzin ver**'e bas; Android pencereyi artık açmıyorsa
 çıkan uyarıya dokun, telefonun ayarları açılır, oradan **Fiziksel aktivite**'yi aç.
 

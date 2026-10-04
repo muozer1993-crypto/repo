@@ -790,6 +790,33 @@ describe('the entry modal', () => {
     expect(rendered(tree)).toContain('Dün için yazdığını kankalar itirazla yaktı.');
     expect(findWith(tree, 'title', 'Kaydet', 'onPress').props.disabled).toBe(true);
   });
+
+  it('does not promise the phone back on a phone reading friends threw out', async () => {
+    const day = addDays(today(), -1);
+    searchParams.id = 'c-1';
+    searchParams.day = day;
+    const detail = challengeDetail();
+    const entry: Entry = {
+      id: 'e-1', challengeId: 'c-1', userId: 'me-1', dayKey: day, value: 30000, source: 'pedometer',
+      note: null, proofUrl: null, status: 'rejected', createdAt: new Date().toISOString(),
+    };
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      myEntries: [entry],
+      disputes: [
+        { id: 'd-1', entryId: 'e-1', byUserId: 'u-2', reason: 'otuz bin mi', status: 'upheld' as const, createdAt: entry.createdAt },
+      ],
+    }));
+
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Dün için telefonun saydığını kankalar itirazla yaktı. O güne artık bir şey yazılmaz.');
+    expect(text).not.toContain('sadece telefonun saydığı');
+    expect(findWith(tree, 'title', 'Kaydet', 'onPress').props.disabled).toBe(true);
+  });
 });
 
 describe('a background refetch that fails', () => {

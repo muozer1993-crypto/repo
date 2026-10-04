@@ -311,7 +311,13 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
       if (!isDeviceSource(body.source)) {
         const existing = selectDayEntry(db, challenge.id, user.id, body.dayKey);
         if (existing && hasUpheldDispute(db, existing.id)) {
-          throw conflict('day_rejected', 'Bu günü kankalar itirazla yaktı. Artık o güne sadece telefonun saydığı adım yazılır.');
+          // a phone reading thrown out is never brought back by a sync either
+          throw conflict(
+            'day_rejected',
+            existing.status === 'rejected' && isDeviceSource(existing.source)
+              ? 'Telefonun bu gün saydığını kankalar itirazla yaktı. O güne artık bir şey yazılmaz.'
+              : 'Bu günü kankalar itirazla yaktı. Artık o güne sadece telefonun saydığı adım yazılır.',
+          );
         }
       }
       return upsertDayEntry(db, input, body.value, false);

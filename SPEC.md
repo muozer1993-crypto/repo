@@ -339,7 +339,7 @@ while a phone-counted çelınc waits for the last syncs (2.4); `dayKey` must be 
 `challenge.proofRequired` and source is manual (400 `proof_required`) — and only for metrics where a photo can back a typed number (`manual_count`, `manual_lower_is_better`, `auto_steps`); a `daily_boolean` mark or a `checkin` has no photo step and ignores the flag. Device sources (`pedometer`, `health_connect`, `usage_stats`) never need proof; `usage_stats` gets the 7-day device backfill window.
 
 Per type:
-- `auto_steps`: source `manual` allowed (marks entry as beyan). Upsert by (challenge,user,day). Value ≤ maxPerDay. A `manual` write on a day whose row carries an upheld dispute is refused (409 `day_rejected`): only the phone writes that day again (fan-out below).
+- `auto_steps`: source `manual` allowed (marks entry as beyan). Upsert by (challenge,user,day). Value ≤ maxPerDay. A `manual` write on a day whose row carries an upheld dispute is refused (409 `day_rejected`): only the phone writes that day again (fan-out below), and on a still-rejected device row not even the phone, which the 409's message says instead.
 - `focus_minutes`: source must be `focus`; `sessionId` (a real v4 UUID — `z.uuid()`; the app generates it with `utils/ids.ts`, Hermes has no `crypto.randomUUID`) required; duplicate sessionId → idempotent return of existing entry; value 1..180.
 - `checkin_deadline`: source `checkin`; dayKey must equal user's local today; server computes `localTimeHHmm(now, tz)`; before `type.checkinWindowStart` → 400 `checkin_too_early` (a "yattım" at 02:00 is not an early night); if ≤ deadlineTime → value 1 else value 0 and `late: true`. One per day (409 `already_checked_in`).
 - `daily_boolean`: value 0 or 1; upsert per day.
