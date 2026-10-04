@@ -93,4 +93,9 @@ export const StorageKeys = {
   dismissedBatteryCard: 'koydum.dismissedBatteryCard',
   /** '1' once the home screen's "bildirim izni kapalı" card was closed (see components/PermissionBanner) */
   dismissedNotifCard: 'koydum.dismissedNotifCard',
+  /**
+   * '1' once this install has shown the notification permission dialog. Kept on
+   * logout: the permission belongs to the phone, not the account.
+   */
+  notifAsked: 'koydum.notifAsked',
 } as const;

@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 
+import { StorageKeys, getItem, setItem } from '@/lib/storage';
 import {
   isExpoGo,
   localNotifications,
@@ -110,6 +111,7 @@ export async function registerForPush(options: { askAgain?: boolean } = {}): Pro
     let status = existing.status;
     if (status !== 'granted' && (options.askAgain !== false || !askedThisRun)) {
       askedThisRun = true;
+      await setItem(StorageKeys.notifAsked, '1');
       const asked = await api.requestPermissionsAsync();
       status = asked.status;
     }
@@ -161,9 +163,15 @@ export async function pushPermissionStatus(): Promise<'granted' | 'denied' | 'un
   const api = localNotifications();
   if (!api) return 'unknown';
   try {
-    const { status } = await api.getPermissionsAsync();
+    const { status, canAskAgain } = (await api.getPermissionsAsync()) as { status: string; canAskAgain?: boolean };
     if (status === 'granted') return 'granted';
-    if (status === 'denied') return 'denied';
+    if (status === 'denied') {
+      // Android 13+ reports 'denied' before the app has ever asked. That is not
+      // a no yet, and the home card would tell somebody who never saw the
+      // dialog that they switched notifications off.
+      if (canAskAgain !== false && (await getItem(StorageKeys.notifAsked)) !== '1') return 'undetermined';
+      return 'denied';
+    }
     if (status === 'undetermined') return 'undetermined';
     return 'unknown';
   } catch {

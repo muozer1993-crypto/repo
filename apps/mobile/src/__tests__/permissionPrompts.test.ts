@@ -96,3 +96,32 @@ describe('physical activity permission', () => {
     expect(mockPedometer.requestPermissionsAsync).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('notification permission status for the home card', () => {
+  const load = () => require('@/services/notifications') as typeof import('@/services/notifications');
+
+  // the module registry is reset before each test, so the store is read through it too
+  const storage = () => {
+    const mod = require('@react-native-async-storage/async-storage');
+    return (mod.default ?? mod) as { clear: () => Promise<void> };
+  };
+
+  beforeEach(async () => {
+    await storage().clear();
+  });
+
+  it("reads Android 13's 'denied' before the first ask as not decided yet", async () => {
+    const { pushPermissionStatus } = load();
+    expect(await pushPermissionStatus()).toBe('undetermined');
+  });
+
+  it('reads it as a no once the dialog was shown, or once Android stopped asking', async () => {
+    const { pushPermissionStatus, registerForPush } = load();
+    await registerForPush(); // the slide's "Bildirim izni", answered no
+    expect(await pushPermissionStatus()).toBe('denied');
+
+    await storage().clear();
+    mockNotifications.getPermissionsAsync.mockResolvedValueOnce({ status: 'denied', canAskAgain: false });
+    expect(await pushPermissionStatus()).toBe('denied');
+  });
+});
