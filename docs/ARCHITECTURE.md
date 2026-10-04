@@ -542,6 +542,15 @@ yani sunucu açıkken çalışır. Oturumlar durumsuz JWT olduğundan yeni şifr
 kapatmaz. Şikayetler de aynı yoldan okunur (`sikayetler`): uygulamada onları okuyan bir ekran yok,
 sunucu her yeni şikayette kendi penceresine bir `warn` satırı düşer.
 
+O pencereyi okuyan da yalnız o. Bir kanka "bildirim gelmedi" deyince neyin ne zaman olduğunu
+orada arar, bu yüzden pino'nun JSON'u bir konsola yazılırken `src/log.ts`'ten geçer: her kayıt
+İstanbul saatiyle başlayan tek bir Türkçe satır olur (`21:03:42 • zamanlayıcı: 1 çelınc bitti`),
+gün dönünce araya tarih girer, hatanın altına stack trace'in ilk üç satırı gelir (çökmede
+hepsi). Çıktı konsola değil de dosyaya, Docker'a ya da bir teste gidiyorsa JSON olduğu gibi
+kalır; `LOG_FORMAT=json` konsolda da JSON'da tutar. Satıra giren kullanıcı metni (şikayet
+sebebi, hata mesajı) kontrol karakterlerinden arındırılır: bir kaçış dizisi sahibin penceresini
+silemez, bir satır sonu sahte bir kayıt uyduramaz.
+
 Yedek de onun işi (`services/backup.ts`). Zamanlayıcı her gün `db.backup()` ile
 `data/backups`'a bir kopya yazar. O klasör veritabanıyla aynı diskte durduğu için `BACKUP_DIR`
 (OneDrive klasörü gibi) verilmişse aynı dosyalar oraya da kopyalanır. Bu kopya turdan ayrı

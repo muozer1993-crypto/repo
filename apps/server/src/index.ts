@@ -8,6 +8,7 @@ import { loadConfig } from './config.js';
 import { openDb } from './db/index.js';
 import { loadDotEnv } from './env.js';
 import { listenErrorMessage } from './listenError.js';
+import { ownerLogStream, wantsReadableLogs } from './log.js';
 import { startScheduler } from './services/scheduler.js';
 
 /**
@@ -22,7 +23,8 @@ async function main(): Promise<void> {
   loadDotEnv();
   const config = loadConfig();
   const db = openDb(config.dbPath);
-  const { app } = await buildApp({ config, db });
+  // Turkish lines with the time in the owner's window, JSON for everything else
+  const { app } = await buildApp({ config, db, logStream: wantsReadableLogs() ? ownerLogStream() : undefined });
 
   let stopScheduler: (() => Promise<void>) | null = null;
   let shuttingDown = false;
@@ -74,7 +76,13 @@ async function main(): Promise<void> {
   if (shuttingDown) return;
   stopScheduler = startScheduler(app, db, config);
   app.log.info(
-    { port: config.port, host: config.host, publicUrl: config.publicUrl, db: config.dbPath },
+    {
+      port: config.port,
+      host: config.host,
+      // the default http://localhost:<port> is no address to give anybody
+      publicUrl: config.publicUrlExplicit ? config.publicUrl : undefined,
+      db: config.dbPath,
+    },
     'KOYDUM sunucusu ayakta',
   );
 }

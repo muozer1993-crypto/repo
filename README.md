@@ -65,8 +65,13 @@ npm install
 
 # 2. Sunucuyu başlat
 npm run server
-# → KOYDUM server http://0.0.0.0:4000 üzerinde dinliyor
+# → 21:03:12 • KOYDUM sunucusu ayakta: port 4000, veritabanı data\koydum.db
 ```
+
+Sunucunun penceresinde her satır saatiyle başlar: `•` olağan işler (çelınc bitti, bildirim
+gitti, günün yedeği alındı), `!` bir uyarı (yavaş ya da patlayan bir istek, yeni bir şikayet),
+`✗` bir hata. Gün dönünce araya tarih girer. Bir kanka "bildirim gelmedi" derse o saatin
+satırlarına bak.
 
 Sunucu ilk çalıştığında `apps/server/data/` altında SQLite veritabanını ve bir JWT anahtarı
 üretir. Bir ayarı değiştirmek istersen (mesela portu), örnek dosyayı kopyalayıp Not Defteri'nde
@@ -118,6 +123,9 @@ hostname -I | awk '{print $1}'
 # Windows (PowerShell)
 (Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.InterfaceAlias -notmatch 'Loopback'}).IPAddress
 ```
+
+Sunucunun penceresi de söyler: açılırken `şu adreste dinliyor: http://192.168.1.20:4000` gibi
+satırlar yazar. `127.0.0.1` bilgisayarın kendisidir, telefonda işe yaramaz.
 
 Çıkan adresi (`192.168.1.20` gibi) uygulamadaki **Sunucu adresi** ekranına yaz. Port yazmazsan
 otomatik `:4000` eklenir. "Bağlantıyı test et" düğmesi yeşil yanıyorsa tamamdır. APK'yı yeni kurmuş
@@ -500,7 +508,8 @@ Docker'da bu dosya okunmaz (imaja hiç girmez): orada ayarları `docker-compose.
 | `BACKUP_DIR` | boş | Günlük yedeklerin ikinci kopyası buraya da gider. OneDrive ya da Google Drive'daki bir klasörü yaz, PC bozulsa da yedekler kalır ([Yedekler](#yedekler)). |
 | `PUBLIC_URL` | boş | Sunucunun internetteki adresi. Boşsa davet sayfası bağlantıları gelen isteğin adresinden kurar, evde de tünelde de doğru çıkar. |
 | `JWT_SECRET` | otomatik üretilir | Elle vermek istersen |
-| `LOG_LEVEL` | `info` | Sunucu penceresine ne yazılsın. Her istek tek tek yazılmaz; açılış, hatalar, 2 saniyeden uzun süren istekler ve zamanlayıcının yaptıkları görünür. `warn` sadece sorunları gösterir. |
+| `LOG_LEVEL` | `info` | Sunucu penceresine ne yazılsın. Her istek tek tek yazılmaz; açılış, hatalar, 2 saniyeden uzun süren istekler ve zamanlayıcının yaptıkları saatiyle, Türkçe birer satır olarak görünür. `warn` sadece sorunları gösterir. |
+| `LOG_FORMAT` | boş | Boşken pencerede Türkçe satırlar çıkar, çıktı dosyaya ya da Docker'a gidiyorsa JSON. `json` yazarsan pencerede de ham JSON çıkar (bir log aracına vereceksen). |
 | `EXPO_ACCESS_TOKEN` | boş | Expo push için isteğe bağlı |
 | `ENABLE_DEV_ROUTES` | `0` | `1` yaparsan test uçları açılır (üretimde açma) |
 | `APP_DIR` | `<DATA_DIR>/app` | `npm run apk:yayinla`'nın APK'yı koyduğu yer |
@@ -824,7 +833,9 @@ toparlar. İki sunucuyu bilerek yan yana açıyorsan ikincisine başka bir port 
 **Android'de bildirim gelmiyor.**
 Expo Go kullanıyorsan normal — yukarıdaki [Expo Go'nun sınırları](#expo-gonun-sınırları)
 bölümüne bak. Geliştirme derlemesi al ve `eas init` çalıştırdığından emin ol. Ayarlar
-ekranı hangi aşamada takıldığını Türkçe olarak söyler. Geliyor ama saatler sonra geliyorsa
+ekranı hangi aşamada takıldığını Türkçe olarak söyler. Anlık bildirim (Firebase) kuruluysa
+sunucunun penceresine de bak: o saatte `push: 2 bildirim gitti` ya da `push: 1 bildirim
+gitmedi` yazar. Geliyor ama saatler sonra geliyorsa
 **Ayarlar → Arka plan**'daki iki satıra bak ([Bildirimler](#bildirimler-gecikmeli-hazır-ve-anlık-firebase-ile)
 bölümünde anlattım). Ana sayfada bildirimlerin kapalı olduğunu söyleyen kırmızı kenarlı bir kart
 (seviyeye göre **Bildirim izni kapalı**, **Bildirimlerin kapalı** ya da **Sana koyanı duyamazsın**)

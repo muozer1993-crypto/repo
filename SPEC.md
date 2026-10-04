@@ -209,6 +209,8 @@ strings in `src/db/migrations.ts` — no filesystem reads for migrations so it w
 ```
 src/index.ts            boot: loadDotEnv() + buildApp() + listen(PORT, HOST 0.0.0.0) + start scheduler (after listen);
                         clean shutdown (see 2.6)
+src/log.ts              ownerLogStream(): pino lines → one Turkish line each for the owner's console (see Logging);
+                        wantsReadableLogs(): stdout is a TTY and LOG_FORMAT is not `json`
 src/env.ts              loadDotEnv(): apps/server/.env into process.env, never over a variable already set; entry
                         points only (index.ts, cli/yonet.ts; scripts/env.mjs for the .mjs scripts), not loadConfig
 src/app.ts              buildApp(opts): registers plugins, routes, error handler; exported for tests
@@ -435,6 +437,15 @@ a stack; the scheduler starts only after `listen` succeeds.
 
 Logging: no per-request lines (`LogController({ disableRequestLogging: true })`); an `onResponse` hook writes one `warn`
 for a status ≥ 500 or a response slower than 2 s: method, path without the query string, status, ms.
+In a console (stdout is a TTY, `LOG_FORMAT` is not `json`) `src/index.ts` passes `logStream: ownerLogStream()` and every
+pino line becomes `HH:mm:ss <glyph> <Turkish text>`: Istanbul time, `•` up to info, `!` warn, `✗` error and fatal; a
+`── YYYY-MM-DD ──` line before the first entry of each Istanbul day. The server's own messages have Turkish renderings
+(startup with port and the explicit PUBLIC_URL, Fastify's "Server listening at", scheduler pass counts, push sent/failed,
+backup written/copied/failed, shutdown reason, the failed/slow request line, YENİ ŞİKAYET with reporter, reported and
+reason); an `err` adds `: <message>` and, from error up, the first 3 "at" frames of its stack (all of them for fatal).
+An all-zero pass or flush writes nothing. Unknown messages: the message, then the remaining keys as `k=v` (pid,
+hostname, level, time, v and reqId dropped; `err=` its message). Control characters in any value become a space. A line that is not JSON
+is written unchanged. Anything else (pipe, file, Docker, tests) keeps pino's JSON.
 
 `npm run internet` (`scripts/internet.mjs`) supervises: the server runs as `node --import tsx src/index.ts` (one process,
 IPC channel). Stop = IPC shutdown, SIGKILL after 15 s. A server exit that was not asked for is restarted with the same
