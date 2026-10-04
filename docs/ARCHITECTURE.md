@@ -307,6 +307,15 @@ Cihaz kaynağı (`pedometer`, `health_connect`, `usage_stats`) elle yazılmış 
 tersi yasaktır: telefonun okuduğu bir gün için `manual` yazmaya kalkan istek 409 `device_locked`
 alır. Kanıt fotoğrafı da sadece `manual` için zorunludur.
 
+İtirazla düşen (`rejected`) elle yazılmış bir gün sıfırda kalmaz: telefonun o güne okuduğu değer,
+yazılandan az da olsa, yerine geçer. Değer ve kaynak telefonunki olur, durum `ok`, kanıt fotoğrafı
+ve `answer_by` silinir; geri çekilmiş ya da fotoğrafla kapanmış itirazlar unutulur, haklı çıkan
+(`upheld`) itirazlar `disputesWon` için yerinde kalır. Adımda 0 hiçbir şeyi geri getirmez.
+Telefonun kendi okuduğu bir gün düştüyse senkron ona dokunmaz, yoksa itiraz boşa giderdi. Geri
+gelen adım gününde haklı çıkmış itiraz durduğu için aynı kişi oraya bir daha itiraz edemez
+(kişi başına bir itiraz); o yüzden böyle bir güne elle sayı yazmak 409 `day_rejected` alır, o
+günü artık sadece telefon yazar.
+
 Android'de adımın üç kaynağı var: Health Connect (izin verildiyse), Google Play hizmetlerinin
 Recording API'si (`apps/mobile/modules/koydum-steps/`) ve uygulama açıkken sayım. Üçü yan yana
 okunur, her gün için en büyüğü alınır; hepsi ancak eksik sayar, toplamak aynı adımı iki kere

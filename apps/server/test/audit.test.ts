@@ -7,11 +7,13 @@
  * blocked pair reaching each other, a rematch winner "avenging" a win (and the
  * picker never hearing of a real rövanş or a third win in a row), a rematch
  * silently dropping a group rival, a partial step count shaving a typed
- * declaration, and a proxy header nobody set.
+ * declaration, a step day friends threw out staying at zero after the phone
+ * counted it, and a proxy header nobody set.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_TIMEZONE,
+  LIMITS,
   addDays,
   todayKey,
   type Challenge,
@@ -19,7 +21,8 @@ import {
   type ChallengeResults,
 } from '@koydum/shared';
 import { loadConfig } from '../src/config.js';
-import { sendNudges, sendReminders } from '../src/services/challenges.js';
+import { runSchedulerOnce, sendNudges, sendReminders } from '../src/services/challenges.js';
+import { computeUserStats } from '../src/services/stats.js';
 import { sendTaunt } from '../src/services/taunts.js';
 import type { ChallengeRow, UserRow } from '../src/db/index.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
@@ -499,6 +502,125 @@ describe('device readings versus typed declarations', () => {
     expect(row).toEqual({ value: 9000, source: 'health_connect' });
     const raw = harness.db.prepare('SELECT steps, source FROM steps_daily WHERE user_id = ? AND day_key = ?').get(ali.me.id, day);
     expect(raw).toEqual({ steps: 9000, source: 'health_connect' });
+  });
+
+  /** Ali's day, its status and the itirazlar on it, straight from the table. */
+  function stepRow(h: TestApp, challengeId: string, userId: string) {
+    return h.db
+      .prepare('SELECT id, value, source, status, proof_url, answer_by FROM entries WHERE challenge_id = ? AND user_id = ?')
+      .get(challengeId, userId) as { id: string; value: number; source: string; status: string; proof_url: string | null; answer_by: string | null };
+  }
+
+  /** Files an itiraz and lets the answer window run out unanswered. */
+  async function throwOut(h: TestApp, by: RegisteredUser, challengeId: string, entryId: string): Promise<void> {
+    const disputed = await authed(h.app, by.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'otuz bin adım mı, yürü git' },
+    });
+    expect(disputed.statusCode).toBe(201);
+    h.advance(LIMITS.DISPUTE_ANSWER_MS);
+    expect(runSchedulerOnce(h.db, h.now()).disputes).toBe(1);
+  }
+
+  it('the phone brings back a typed step day friends threw out, and only the phone writes it after that', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await livePair(harness, 'adim_yarisi');
+    const call = authed(harness.app, ali.token);
+    const day = today(harness);
+
+    const typed = await call({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 30000, source: 'manual', clientTime: iso(harness) },
+    });
+    expect(typed.statusCode).toBe(201);
+    await throwOut(harness, veli, challengeId, stepRow(harness, challengeId, ali.me.id).id);
+    expect(stepRow(harness, challengeId, ali.me.id).status).toBe('rejected');
+
+    // a lower honest number is still a number: the rejected row counted 0
+    const synced = await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 11800, source: 'pedometer' }] } });
+    expect(synced.json<{ updated: number }>().updated).toBe(1);
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({
+      value: 11800,
+      source: 'pedometer',
+      status: 'ok',
+      proof_url: null,
+      answer_by: null,
+    });
+    const detail = (await call({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>();
+    expect(detail.participants.find((p) => p.user.id === ali.me.id)?.score).toBe(11800);
+    // what Veli won stays won
+    expect(computeUserStats(harness.db, veli.me.id, harness.now()).disputesWon).toBe(1);
+
+    // typing the old number again would count now, and Veli could not object twice
+    const again = await call({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 30000, source: 'manual', clientTime: iso(harness) },
+    });
+    expect(again.statusCode).toBe(409);
+    expect(errorCode(again)).toBe('day_rejected');
+
+    // the phone keeps raising it like any other day
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 12500, source: 'pedometer' }] } });
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ value: 12500, status: 'ok' });
+  });
+
+  it('a step reading friends threw out stays out, whatever the phone says next', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await livePair(harness, 'adim_yarisi');
+    const call = authed(harness.app, ali.token);
+    const day = today(harness);
+
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 30000, source: 'pedometer' }] } });
+    await throwOut(harness, veli, challengeId, stepRow(harness, challengeId, ali.me.id).id);
+
+    const synced = await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 31000, source: 'health_connect' }] } });
+    expect(synced.json<{ updated: number }>().updated).toBe(0);
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ value: 30000, source: 'pedometer', status: 'rejected' });
+  });
+
+  it('a restored day drops the itirazlar closed on the old number and keeps the upheld one', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+    const veli = await registerUser(harness.app, 'veli');
+    const can = await registerUser(harness.app, 'can');
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, can.me.id);
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'adim_yarisi', startsAt: iso(harness), endsAt: iso(harness, 3 * DAY_MS), participantIds: [veli.me.id, can.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    const call = authed(harness.app, ali.token);
+    const day = today(harness);
+
+    await call({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 30000, source: 'manual', clientTime: iso(harness) },
+    });
+    const entryId = stepRow(harness, challengeId, ali.me.id).id;
+    // Can objects and takes it back; Veli's itiraz is the one that sticks
+    const canCall = authed(harness.app, can.token);
+    await canCall({ method: 'POST', url: `/challenges/${challengeId}/entries/${entryId}/dispute`, payload: { reason: 'emin değilim' } });
+    expect((await canCall({ method: 'DELETE', url: `/challenges/${challengeId}/entries/${entryId}/dispute` })).statusCode).toBe(200);
+    await throwOut(harness, veli, challengeId, entryId);
+
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 11800, source: 'pedometer' }] } });
+    const left = harness.db.prepare('SELECT by_user_id, status FROM disputes WHERE entry_id = ?').all(entryId);
+    expect(left).toEqual([{ by_user_id: veli.me.id, status: 'upheld' }]);
+    // the new number is Can's to question
+    const fresh = await canCall({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'bu da fazla' },
+    });
+    expect(fresh.statusCode).toBe(201);
   });
 
   it('a typed screen time is always replaced by the phone reading (lower is better, the phone is honest)', async () => {

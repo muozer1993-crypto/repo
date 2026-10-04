@@ -1,5 +1,5 @@
 import type { ChallengeType } from '@koydum/shared';
-import { LIMITS, addDays, getChallengeType, t } from '@koydum/shared';
+import { LIMITS, addDays, diffDayKeys, getChallengeType, t } from '@koydum/shared';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -22,7 +22,7 @@ import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
 import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
-import { formatNumber } from '@/utils/format';
+import { formatDayKeyFriendly, formatNumber } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
 import { resolveServerUrl } from '@/utils/url';
 
@@ -63,10 +63,17 @@ export default function EntryModalScreen() {
   const windowKeys = detail
     ? safeDayKeysBetween(detail.challenge.startsAt, detail.challenge.endsAt, tz)
     : [];
-  const yesterdayAllowed = windowKeys.includes(yesterday) && LIMITS.MANUAL_BACKFILL_DAYS >= 1;
+  // Steps go back a week like the server takes them: somebody who joined on
+  // day two, or whose phone started counting mid-race, writes the days before.
+  // Typed counts keep today and yesterday.
+  const backfillDays =
+    type?.metricType === 'auto_steps' ? LIMITS.STEPS_BACKFILL_DAYS : Math.min(1, LIMITS.MANUAL_BACKFILL_DAYS);
+  const pickableDays = windowKeys
+    .filter((day) => day <= today && diffDayKeys(day, today) <= backfillDays)
+    .reverse();
 
   const requestedDay = typeof params.day === 'string' ? params.day : '';
-  const initialDay = requestedDay === yesterday && yesterdayAllowed ? yesterday : today;
+  const initialDay = pickableDays.includes(requestedDay) ? requestedDay : today;
 
   const addEntry = useAddEntry(id, { append: type?.metricType === 'manual_count' });
   const [dayKey, setDayKey] = useState<string | null>(null);
@@ -127,10 +134,18 @@ export default function EntryModalScreen() {
   const chips = quickAdds(type.maxPerEntry);
   const notActive = challenge.status !== 'active';
   const notPlaying = detail.me?.status !== 'accepted';
+  const dayEntry = detail.myEntries.find((entry) => entry.dayKey === selectedDay);
   // the phone already reported this day: the server will answer 409 device_locked
-  const deviceLocked =
-    detail.myEntries.find((entry) => entry.dayKey === selectedDay)?.source === 'usage_stats';
-  const dayLabel = selectedDay === today ? 'Bugün' : 'Dün';
+  const deviceLocked = dayEntry?.source === 'usage_stats';
+  // friends threw this step day out: only the phone writes it now (409 day_rejected)
+  const stepsRejected =
+    type.metricType === 'auto_steps' &&
+    !!dayEntry &&
+    detail.disputes.some((row) => row.entryId === dayEntry.id && row.status === 'upheld');
+  const dayLocked = deviceLocked || stepsRejected;
+  const dayLabel = formatDayKeyFriendly(selectedDay, today, yesterday);
+  // "8 Ekim" keeps its capital in a sentence, "Bugün" does not
+  const dayWord = selectedDay === today ? 'bugün' : selectedDay === yesterday ? 'dün' : dayLabel;
 
   /**
    * `manual_count` appends, so the server rejects anything that pushes the day's
@@ -210,7 +225,7 @@ export default function EntryModalScreen() {
             }
           : {
               title: 'Yazıldı',
-              body: `${formatNumber(value)} ${type.unitTr} · ${dayLabel.toLocaleLowerCase('tr-TR')}`,
+              body: `${formatNumber(value)} ${type.unitTr} · ${dayWord}`,
               kind: 'success',
             }
       );
@@ -235,14 +250,16 @@ export default function EntryModalScreen() {
         <Button title="Kapat" variant="ghost" size="sm" onPress={close} />
       </View>
 
-      {notActive || notPlaying || deviceLocked ? (
+      {notActive || notPlaying || dayLocked ? (
         <Card edgeColor={Colors.danger}>
           <Text variant="small">
             {notActive
               ? 'Bu çelınc şu an aktif değil, giriş kabul edilmiyor.'
               : notPlaying
                 ? 'Bu çelıncta oyuncu değilsin, giriş yapamazsın.'
-                : `${dayLabel} için değeri telefon kendisi okudu, elle değiştirilemez.`}
+                : deviceLocked
+                  ? `${dayLabel} için değeri telefon kendisi okudu, elle değiştirilemez.`
+                  : `${dayLabel} için yazdığını kankalar itirazla yaktı. O güne artık sadece telefonun saydığı adım yazılır.`}
           </Text>
         </Card>
       ) : null}
@@ -300,12 +317,24 @@ export default function EntryModalScreen() {
         <Text variant="label" style={styles.label}>
           Hangi gün
         </Text>
-        {yesterdayAllowed ? (
+        {pickableDays.length > 2 ? (
+          <View style={styles.dayChips}>
+            {pickableDays.map((day) => (
+              <Chip
+                key={day}
+                label={formatDayKeyFriendly(day, today, yesterday)}
+                selected={day === selectedDay}
+                color={day === selectedDay ? Colors.accent : Colors.textMuted}
+                onPress={() => {
+                  setDayKey(day);
+                  setError(null);
+                }}
+              />
+            ))}
+          </View>
+        ) : pickableDays.length === 2 ? (
           <SegmentedControl
-            options={[
-              { value: today, label: 'Bugün' },
-              { value: yesterday, label: 'Dün' },
-            ]}
+            options={pickableDays.map((day) => ({ value: day, label: formatDayKeyFriendly(day, today, yesterday) }))}
             value={selectedDay}
             onChange={(next) => {
               setDayKey(next);
@@ -397,7 +426,7 @@ export default function EntryModalScreen() {
         size="xl"
         fullWidth
         loading={addEntry.isPending}
-        disabled={uploading || notActive || notPlaying || deviceLocked}
+        disabled={uploading || notActive || notPlaying || dayLocked}
         onPress={() => void submit()}
       />
     </Screen>
@@ -419,6 +448,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginTop: Spacing.md },
+  dayChips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   hint: { marginTop: Spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   grow: { flex: 1 },

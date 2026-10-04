@@ -339,13 +339,14 @@ while a phone-counted çelınc waits for the last syncs (2.4); `dayKey` must be 
 `challenge.proofRequired` and source is manual (400 `proof_required`) — and only for metrics where a photo can back a typed number (`manual_count`, `manual_lower_is_better`, `auto_steps`); a `daily_boolean` mark or a `checkin` has no photo step and ignores the flag. Device sources (`pedometer`, `health_connect`, `usage_stats`) never need proof; `usage_stats` gets the 7-day device backfill window.
 
 Per type:
-- `auto_steps`: source `manual` allowed (marks entry as beyan). Upsert by (challenge,user,day). Value ≤ maxPerDay.
+- `auto_steps`: source `manual` allowed (marks entry as beyan). Upsert by (challenge,user,day). Value ≤ maxPerDay. A `manual` write on a day whose row carries an upheld dispute is refused (409 `day_rejected`): only the phone writes that day again (fan-out below).
 - `focus_minutes`: source must be `focus`; `sessionId` (a real v4 UUID — `z.uuid()`; the app generates it with `utils/ids.ts`, Hermes has no `crypto.randomUUID`) required; duplicate sessionId → idempotent return of existing entry; value 1..180.
 - `checkin_deadline`: source `checkin`; dayKey must equal user's local today; server computes `localTimeHHmm(now, tz)`; before `type.checkinWindowStart` → 400 `checkin_too_early` (a "yattım" at 02:00 is not an early night); if ≤ deadlineTime → value 1 else value 0 and `late: true`. One per day (409 `already_checked_in`).
 - `daily_boolean`: value 0 or 1; upsert per day.
 - `manual_count`: append; daily sum must stay ≤ maxPerDay (400 `daily_cap`). Optional `sessionId` (UUID) is stored and makes the write idempotent — the app sends a fresh one per tap so a timed-out request replayed from the offline queue cannot count twice. Upsert metrics ignore the field.
 - `manual_lower_is_better`: upsert per day; value ≤ maxPerEntry. Sources `manual` and `usage_stats`; once the day's row has a device source, a `manual` write is refused (409 `device_locked`) — the phone may keep correcting itself. Scored as the DAILY AVERAGE over the participant's own window (sum + missing days × penalty) / window days; while the çelınc is active the window is clipped to today, so day 2 of 7 shows two days' average, not five days of penalty.
 - Device fan-out (`POST /me/steps`) never lowers a typed `manual` value on a higher-is-better metric: the Android foreground counter is partial by design and the user was told to declare the real number; a device value ≥ the typed one replaces it (source becomes the device's).
+- A `rejected` typed row (an upheld itiraz) is restored by the fan-out (steps and screen time) whatever the reading's size: the device's value and source, status `ok`, `proof_url` and `answer_by` cleared, dismissed disputes forgotten (`forgetDismissedDisputes`), upheld ones kept (they are `disputesWon`). A 0 on a higher-is-better metric restores nothing. A `rejected` device row is never touched by a sync. The upheld dispute still holds its disputer's one slot on the entry (`UNIQUE(entry_id, by_user_id)`), so from then on the day takes no typed number (`day_rejected` above; screen time already has `device_locked`).
 - Disputes: only while the challenge is `active` (400 `challenge_not_active`) and, past `endsAt`, only inside a phone-counted çelınc's settle hour (`endsAt + LIMITS.DEVICE_SETTLE_MS`, where the last evening lands; 400 `challenge_ended` otherwise — a new dispute during a wait would hold the result another 12 h, and a chain of them for days), and never across a block (403 `blocked`). Phone-counted entries may be disputed too. A dispute never rejects anything by itself: a majority starts the owner's 12-hour answer window (2.2), and only an unanswered one is upheld (2.4). Accepting an invite from someone who blocked you or whom you blocked → 403 `blocked`.
 - Taunt context `revenge` only when the çelınc is a rematch AND the taunting winner lost the original; otherwise `streak` when the winner has won this çelınc and the two before it that both played (accepted, finished, newest first counting back from this one; a tie, a loss or a third player's win breaks the run), otherwise the margin. Templates carry an optional `metrics` list and are filtered by the challenge's metric (a "kalk yürü" line stays on step çelınclar).
 
@@ -556,7 +557,10 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
 (app)/challenge/[id]/taunt.tsx     picker: target chip(s), a context chip per loser from `tauntContexts` (RÖVANŞ / SERİ / EZİCİ FARK / NORMAL FARK / KIL PAYI;
                             without the field, the margin), list of templates of that context rendered with real names/scores (levels ≤ target max; higher ones shown locked with
                             "X bunu kaldıramaz" note), custom text field (banned-word check client side), preview, "GÖNDER" → success animation
-(app)/challenge/[id]/entry.tsx     modal: log manual value (numeric pad, quick +1/+5 chips per unit), note, proof photo (camera/gallery → /uploads), day selector (today/yesterday)
+(app)/challenge/[id]/entry.tsx     modal: log manual value (numeric pad, quick +1/+5 chips per unit), note, proof photo (camera/gallery → /uploads), day selector
+                            (today/yesterday; an auto_steps çelınc offers every window day back to STEPS_BACKFILL_DAYS as chips
+                            labelled by formatDayKeyFriendly), the `day` param preselects a day it offers; a step day with an
+                            upheld itiraz is locked like a device_locked one (server 409 `day_rejected`)
 (app)/focus/[id].tsx        full-screen timer (pick 15/25/45/60 min), big countdown, "elini telefondan çek" copy, leaving app → abandoned state with copy focus_abandoned; completion posts entry;
                             while the timer runs, Android back (and any other pop: usePreventRemove) opens the same "Seansı bitirelim mi?" sheet as "Vazgeç" instead of leaving;
                             a failed refetch keeps the last detail and the timer (the "Seans açılmadı" screen is only for a çelınc never loaded)
@@ -578,7 +582,10 @@ davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), r
 
 - auto_steps: "Bugün: 6.421 adım" + "Senkronla" (calls syncSteps → POST /me/steps → invalidate). Android while the count is approximate
   (foreground counter only, or the day recording started; a granted but empty Health Connect is not a source):
-  shows "Yaklaşık (uygulama açıkken sayılıyor)" + manual "Beyan et" entry.
+  shows "Yaklaşık (uygulama açıkken sayılıyor)" + manual "Beyan et" entry. A past window day within STEPS_BACKFILL_DAYS
+  with no positive entry (a rejected one is the phone's to restore, so it does not count) → secondary "Eksik günü yaz",
+  opening the entry modal on the oldest; when one of them is before `recordingSince()` a faint line says the phone
+  started counting that day and a later, higher phone count still wins.
 - focus_minutes: "Odak seansı başlat" → focus/[id]; today's total.
 - checkin_deadline: big "GELDİM" button visible only today; shows deadline; after tap → success or late copy.
 - daily_boolean: two buttons "Yaptım ✅ / Yapmadım ❌" for today (and yesterday if missing).

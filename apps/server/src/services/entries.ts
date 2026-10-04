@@ -142,6 +142,11 @@ export function forgetDismissedDisputes(db: Database, entryId: string): void {
   db.prepare("DELETE FROM disputes WHERE entry_id = ? AND status = 'dismissed'").run(entryId);
 }
 
+/** True once friends threw this entry out — it stays so after the phone restores the day. */
+function hasUpheldDispute(db: Database, entryId: string): boolean {
+  return countOf(db, "SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ? AND status = 'upheld'", entryId) > 0;
+}
+
 /**
  * One row per (challenge, user, day) for the upsert metrics.
  *
@@ -298,6 +303,16 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
     case 'auto_steps': {
       if (body.value > type.maxPerDay) {
         throw badRequest('daily_cap', `Günlük sınır ${unitLabel(type, type.maxPerDay)}.`);
+      }
+      // A step day friends threw out comes back only through the phone
+      // (`fanOutDeviceDays`). A typed number on it again would count once the
+      // phone restored the row, and the rival who won the itiraz could never
+      // file another one on it (one per person per entry).
+      if (!isDeviceSource(body.source)) {
+        const existing = selectDayEntry(db, challenge.id, user.id, body.dayKey);
+        if (existing && hasUpheldDispute(db, existing.id)) {
+          throw conflict('day_rejected', 'Bu günü kankalar itirazla yaktı. Artık o güne sadece telefonun saydığı adım yazılır.');
+        }
       }
       return upsertDayEntry(db, input, body.value, false);
     }

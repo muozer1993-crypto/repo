@@ -1,4 +1,6 @@
-import type { Me, ParticipantView } from '@koydum/shared';
+import type { Entry, Me, ParticipantView } from '@koydum/shared';
+import { LIMITS, addDays, todayKey } from '@koydum/shared';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
@@ -17,7 +19,7 @@ import { clearPendingInvite, readPendingInvite } from '@/services/invite';
 
 /* ------------------------------------------------------------------ mocks */
 
-const searchParams: { id?: string; with?: string; show?: string } = {};
+const searchParams: { id?: string; with?: string; show?: string; day?: string } = {};
 
 /** The last focus effect a screen handed over; nothing navigates here, so tests run it by hand. */
 const mockFocus: { effect?: () => void } = {};
@@ -247,6 +249,7 @@ beforeEach(() => {
   delete searchParams.id;
   delete searchParams.with;
   delete searchParams.show;
+  delete searchParams.day;
   for (const key of Object.keys(api)) delete api[key];
   Object.assign(api, {
     challenges: jest.fn(async () => []),
@@ -614,6 +617,160 @@ describe('a step çelınc past its end, still active on the server', () => {
     const tree = renderScreen(<HomeScreen />);
     await settle();
     expect(rendered(tree)).toContain('Sonuç bekleniyor');
+  });
+});
+
+describe('step days the phone never counted', () => {
+  // ME.timezone is unusable, so the screens fall back to the device zone
+  const today = () => todayKey('Europe/Istanbul');
+
+  function stepEntry(dayKey: string, value: number, status: Entry['status'] = 'ok'): Entry {
+    return {
+      id: `e-${dayKey}`,
+      challengeId: 'c-1',
+      userId: 'me-1',
+      dayKey,
+      value,
+      source: status === 'ok' ? 'pedometer' : 'manual',
+      note: null,
+      proofUrl: null,
+      status,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  /** Every past day the server still takes a typed number for, each with a number. */
+  function everyDayCounted(): Entry[] {
+    return Array.from({ length: LIMITS.STEPS_BACKFILL_DAYS }, (_, i) => stepEntry(addDays(today(), -(i + 1)), 8000));
+  }
+
+  afterEach(async () => {
+    await AsyncStorage.removeItem('koydum.stepRecordingSince');
+  });
+
+  it('offers "Eksik günü yaz" for an empty day and opens the entry on the oldest one still allowed', async () => {
+    searchParams.id = 'c-1';
+    // joined late: the race started weeks ago and nothing is written for this week
+    api.challenge = jest.fn(async () => challengeDetail());
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.push!.mockClear();
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('EKSİK GÜNÜ YAZ');
+    // the existing "Beyan et" for today stays
+    expect(rendered(tree)).toContain('BEYAN ET');
+    press(tree, 'Eksik günü yaz');
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/challenge/[id]/entry',
+      params: { id: 'c-1', day: addDays(today(), -LIMITS.STEPS_BACKFILL_DAYS), proof: '0' },
+    });
+  });
+
+  it('says why when the empty days come before this phone started counting', async () => {
+    await AsyncStorage.setItem('koydum.stepRecordingSince', JSON.stringify(addDays(today(), -1)));
+    searchParams.id = 'c-1';
+    const entries = everyDayCounted().filter((entry) => entry.dayKey !== addDays(today(), -3));
+    api.challenge = jest.fn(async () => ({ ...challengeDetail(), myEntries: entries }));
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('EKSİK GÜNÜ YAZ');
+    expect(text).toContain('Telefon adım saymaya dün başladı, öncesini bilmiyor.');
+  });
+
+  it('offers nothing when every day has a number, or friends threw it out', async () => {
+    searchParams.id = 'c-1';
+    // the itiraz-ed day is the phone's to bring back, not a typed one's
+    const entries = everyDayCounted().map((entry, i) => (i === 2 ? stepEntry(entry.dayKey, 30000, 'rejected') : entry));
+    api.challenge = jest.fn(async () => ({ ...challengeDetail(), myEntries: entries }));
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('SENİN SIRAN');
+    expect(text).not.toContain('EKSİK GÜNÜ YAZ');
+    expect(text).not.toContain('öncesini bilmiyor');
+  });
+});
+
+describe('the entry modal', () => {
+  const today = () => todayKey('Europe/Istanbul');
+  const { formatDayKey } = require('@/utils/format') as typeof import('@/utils/format');
+
+  /** The day chip with this label, if the modal drew one. */
+  function dayChip(tree: ReactTestRenderer, label: string) {
+    return tree.root.findAll((node) => node.props.label === label && 'selected' in node.props)[0];
+  }
+
+  it('offers a step çelınc a week of days and opens on the one it was asked for', async () => {
+    const threeBack = addDays(today(), -3);
+    searchParams.id = 'c-1';
+    searchParams.day = threeBack;
+    api.challenge = jest.fn(async () => challengeDetail());
+
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    expect(dayChip(tree, 'Bugün')?.props.selected).toBe(false);
+    expect(dayChip(tree, 'Dün')).toBeDefined();
+    expect(dayChip(tree, formatDayKey(threeBack))?.props.selected).toBe(true);
+    expect(dayChip(tree, formatDayKey(addDays(today(), -LIMITS.STEPS_BACKFILL_DAYS)))).toBeDefined();
+    // one day further back the server says day_too_old
+    expect(dayChip(tree, formatDayKey(addDays(today(), -LIMITS.STEPS_BACKFILL_DAYS - 1)))).toBeUndefined();
+  });
+
+  it('keeps a typed count to today and yesterday', async () => {
+    searchParams.id = 'c-1';
+    searchParams.day = addDays(today(), -2);
+    const detail = challengeDetail();
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge: { ...detail.challenge, typeKey: 'su_bardak', metricType: 'manual_count' as const, unit: 'bardak' },
+    }));
+
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Bugün');
+    expect(text).toContain('Dün');
+    expect(text).not.toContain(formatDayKey(addDays(today(), -2)));
+    expect(dayChip(tree, 'Bugün')).toBeUndefined();
+  });
+
+  it('locks a step day friends threw out: only the phone writes it now', async () => {
+    const day = addDays(today(), -1);
+    searchParams.id = 'c-1';
+    searchParams.day = day;
+    const detail = challengeDetail();
+    const entry: Entry = {
+      id: 'e-1', challengeId: 'c-1', userId: 'me-1', dayKey: day, value: 11800, source: 'pedometer',
+      note: null, proofUrl: null, status: 'ok', createdAt: new Date().toISOString(),
+    };
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      myEntries: [entry],
+      disputes: [
+        { id: 'd-1', entryId: 'e-1', byUserId: 'u-2', reason: 'otuz bin mi', status: 'upheld' as const, createdAt: entry.createdAt },
+      ],
+    }));
+
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Dün için yazdığını kankalar itirazla yaktı.');
+    expect(findWith(tree, 'title', 'Kaydet', 'onPress').props.disabled).toBe(true);
   });
 });
 

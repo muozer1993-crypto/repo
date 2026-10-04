@@ -17,11 +17,18 @@
  * day's entry; on lower-is-better (screen time) it overwrites whatever is there,
  * typed values included — the phone is the honest one. A typed value may never
  * replace a device reading there (`device_locked` in `validateAndUpsertEntry`).
+ *
+ * A typed day friends threw out (`rejected` after an upheld itiraz) is not a
+ * day off for good: the phone's own reading takes its place, whatever its
+ * size, and counts again. Only a typed one comes back — a device row that was
+ * thrown out stays out, or a sync would undo the itiraz on it. The upheld
+ * itirazlar stay on the row as history; from then on only the phone writes
+ * that day (`day_rejected` in `validateAndUpsertEntry`).
  */
 import { challengeTypesForDevice, type DeviceMetric, type EntrySource } from '@koydum/shared';
 import { newId, nowIso, type ChallengeRow, type Database, type UserRow } from '../db/index.js';
 import { challengeWindow, dayOverByEnd, participantTimezone, typeForChallenge } from './challenges.js';
-import { dayWindowIssue } from './entries.js';
+import { dayWindowIssue, forgetDismissedDisputes, isDeviceSource } from './entries.js';
 
 /** A challenge plus the timezone this user's days in it are measured in. */
 type DeviceChallengeRow = ChallengeRow & { participant_timezone: string | null };
@@ -73,8 +80,15 @@ export function fanOutDeviceDays(
     return { challenge, tz, window: challengeWindow(challenge, tz), type };
   });
 
-  const findEntry = db.prepare('SELECT id, value, source FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ?');
+  const findEntry = db.prepare(
+    'SELECT id, value, source, status FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ?',
+  );
   const updateEntry = db.prepare('UPDATE entries SET value = ?, source = ?, updated_at = ? WHERE id = ?');
+  // the photo backed the typed number and the answer clock ran for it: neither
+  // belongs to the phone's reading
+  const restoreEntry = db.prepare(
+    "UPDATE entries SET value = ?, source = ?, status = 'ok', proof_url = NULL, answer_by = NULL, updated_at = ? WHERE id = ?",
+  );
   const insertEntry = db.prepare(
     `INSERT INTO entries (id, challenge_id, user_id, day_key, value, source, note, proof_url, status,
                           client_time, session_id, late, created_at, updated_at)
@@ -88,9 +102,18 @@ export function fanOutDeviceDays(
       if (now.getTime() >= Date.parse(challenge.ends_at) && !dayOverByEnd(challenge, tz, day.dayKey)) continue;
       const value = Math.min(day.value, type.maxPerDay);
       const existing = findEntry.get(challenge.id, user.id, day.dayKey) as
-        | { id: string; value: number; source: string }
+        | { id: string; value: number; source: string; status: string }
         | undefined;
-      if (existing) {
+      if (existing && existing.status === 'rejected') {
+        // The typed number was the lie, not the day. A rejected device row
+        // stays rejected, and a 0 says nothing a rejected row does not.
+        if (isDeviceSource(existing.source)) continue;
+        if (type.direction === 'higher' && value <= 0) continue;
+        restoreEntry.run(value, day.source, at, existing.id);
+        // a new value reopens the door for itirazlar taken back or answered
+        // on the old one; the upheld ones are what friends won, they stay
+        forgetDismissedDisputes(db, existing.id);
+      } else if (existing) {
         // A day's steps only ever grow. A LOWER reading for a day that already
         // has a value is a partial source, never a correction: a typed
         // declaration the foreground counter has not caught up with, a phone

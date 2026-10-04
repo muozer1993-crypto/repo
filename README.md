@@ -629,6 +629,14 @@ Adımlar sunucuya günlük özet olarak gider (`POST /me/steps`), ham konum veya
 asla gönderilmez. Uygulama açıldığında, ön plana geldiğinde ve arka plan görevinde
 (15 dakikada bir, platformun izin verdiği ölçüde) senkronize olur.
 
+Yarışa geç katılan ya da telefonu adım saymaya yarışın ortasında başlayan kankanın önceki günleri
+boş kalır. Çelınc ekranındaki **Eksik günü yaz** en eski boş günü açar; adım 7 gün geriye kadar
+elle yazılabilir. Telefon sonradan o güne daha fazlasını sayarsa telefonunki geçer.
+
+Elle yazılan bir adım günü itirazla düştüyse o gün sıfırda kalmaz: telefonun o gün saydığı adım,
+yazılandan az da olsa, ilk senkronda yerine geçer ve sayılır. O güne artık elle sayı yazılmaz,
+sadece telefon yazar. Telefonun kendi saydığı bir gün itirazla düştüyse geri gelmez.
+
 ### Ekran süresi nereden geliyor?
 
 | Platform | Kaynak | Not |

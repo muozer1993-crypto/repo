@@ -13,6 +13,7 @@ import type {
 import {
   LIMITS,
   addDays,
+  diffDayKeys,
   formatNumberTr,
   getChallengeType,
   renderTaunt,
@@ -53,6 +54,7 @@ import { useProofPhoto } from '@/hooks/useProofPhoto';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { useTimezone } from '@/hooks/useTimezone';
+import { recordingSince } from '@/services/recordingSteps';
 import {
   getScreenTimeAvailability,
   getTodayScreenMinutes,
@@ -624,13 +626,14 @@ function openEntryModal(id: string, dayKey: string, proof?: boolean) {
 
 /* auto_steps ------------------------------------------------------------- */
 
-function StepsAction({ id, detail, type, today }: ActionProps) {
+function StepsAction({ id, detail, type, today, yesterday, dayKeys }: ActionProps) {
   const api = useApi();
   const toast = useToast();
   const queryClient = useQueryClient();
   const refreshMe = useAuth((s) => s.refreshMe);
   const [availability, setAvailability] = useState<StepAvailability | null>(null);
   const [deviceSteps, setDeviceSteps] = useState<number | null>(null);
+  const [since, setSince] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
@@ -646,6 +649,13 @@ function StepsAction({ id, detail, type, today }: ActionProps) {
         if (alive) setAvailability({ available: false, reason: 'error' });
       }
     })();
+    void recordingSince()
+      .then((day) => {
+        if (alive) setSince(day);
+      })
+      .catch(() => {
+        // without it the screen simply does not explain the empty days
+      });
     return () => {
       alive = false;
     };
@@ -654,6 +664,20 @@ function StepsAction({ id, detail, type, today }: ActionProps) {
   const recorded = detail.myEntries.find((entry) => entry.dayKey === today);
   const approximate = availability?.available === true && availability.approximate;
   const unavailable = availability !== null && !availability.available;
+  /**
+   * Past days of the race with nothing on them that the server still takes a
+   * typed number for: the days before an invite was accepted, or before this
+   * phone started recording, stay 0 otherwise. Today is still being walked,
+   * and a day friends threw out is the phone's to bring back, not a typed one.
+   */
+  const missingDays = dayKeys.filter(
+    (day) =>
+      day < today &&
+      diffDayKeys(day, today) <= LIMITS.STEPS_BACKFILL_DAYS &&
+      !detail.myEntries.some((entry) => entry.dayKey === day && (entry.value > 0 || entry.status === 'rejected'))
+  );
+  // the phone has no data before its first recording day (services/recordingSteps)
+  const startedOn = since && missingDays.some((day) => day < since) ? sinceWord(since, today, yesterday) : null;
 
   const sync = async () => {
     setSyncing(true);
@@ -722,9 +746,25 @@ function StepsAction({ id, detail, type, today }: ActionProps) {
         ) : null}
       </View>
 
+      {missingDays.length > 0 ? (
+        <Button
+          title="Eksik günü yaz"
+          icon="📅"
+          variant="secondary"
+          size="md"
+          fullWidth
+          onPress={() => openEntryModal(id, missingDays[0])}
+        />
+      ) : null}
+
       {approximate ? (
         <Text variant="tiny" faint>
           Yaklaşık (uygulama açıkken sayılıyor). Sayaç eksik kalırsa değeri elle gir.
+        </Text>
+      ) : null}
+      {startedOn ? (
+        <Text variant="tiny" faint>
+          {`Telefon adım saymaya ${startedOn} başladı, öncesini bilmiyor. O günleri elle yaz; telefon sonradan daha çok sayarsa onunki geçer.`}
         </Text>
       ) : null}
       {unavailable ? (
@@ -734,6 +774,13 @@ function StepsAction({ id, detail, type, today }: ActionProps) {
       ) : null}
     </View>
   );
+}
+
+/** "bugün" / "dün" / "1 Ekim günü": the day the phone started counting, mid-sentence. */
+function sinceWord(since: string, today: string, yesterday: string): string {
+  if (since === today) return 'bugün';
+  if (since === yesterday) return 'dün';
+  return `${formatDayKeyFriendly(since, today, yesterday)} günü`;
 }
 
 function stepsReason(availability: StepAvailability | null): string {
