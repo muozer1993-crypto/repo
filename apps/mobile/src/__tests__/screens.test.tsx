@@ -142,6 +142,7 @@ jest.mock('@/services/reminders', () => ({
   setDeviceRemindersEnabled: (on: boolean) => mockReminders.set(on),
   refreshReminders: (...args: unknown[]) => mockReminders.refresh(...args),
   skipTodayCheckinReminder: (challengeId: string, tz: string) => mockReminders.skipToday(challengeId, tz),
+  cancelAllReminders: async () => {},
 }));
 
 /** Android's battery and alarm switches (services/deviceHealth has its own test); null = not Android. */

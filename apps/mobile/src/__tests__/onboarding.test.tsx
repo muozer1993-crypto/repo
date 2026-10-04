@@ -56,7 +56,7 @@ jest.mock('@/services/background', () => ({
   registerBackgroundSync: async () => {},
   setBackgroundHandler: () => {},
 }));
-jest.mock('@/services/reminders', () => ({ refreshReminders: async () => 0 }));
+jest.mock('@/services/reminders', () => ({ refreshReminders: async () => 0, cancelAllReminders: async () => {} }));
 jest.mock('@/services/stepSync', () => ({ syncStepsNow: async () => ({ days: 0, updated: 0 }) }));
 jest.mock('@/services/screenTimeSync', () => ({ syncScreenTimeNow: async () => ({ days: 0, updated: 0 }) }));
 jest.mock('@/services/offlineQueue', () => ({
