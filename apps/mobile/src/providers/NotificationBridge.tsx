@@ -39,6 +39,15 @@ import { deliverNewInbox } from '@/services/inboxNotifier';
  * notifications, the foreground step counter for physical activity) wait while
  * the welcome slides are up: the last slide asks for both, with a reason.
  */
+
+/** The screen a notification opens: the same for a push tap, its toast and the poll's toast. */
+function openRoute(route: Exclude<NotificationRoute, null>): void {
+  if (route.kind === 'inbox') router.push('/(app)/(tabs)/inbox');
+  else if (route.kind === 'friends') router.push('/(app)/(tabs)/friends');
+  else if (route.kind === 'results') router.push(`/challenge/${route.challengeId}/results`);
+  else router.push(`/challenge/${route.challengeId}`);
+}
+
 export function NotificationBridge() {
   const token = useAuth((s) => s.token);
   // A renewed token (services/session) or a password change swaps the token
@@ -151,10 +160,7 @@ export function NotificationBridge() {
           })
           .catch(() => {});
       }
-      if (route.kind === 'inbox') router.push('/(app)/(tabs)/inbox');
-      else if (route.kind === 'friends') router.push('/(app)/(tabs)/friends');
-      else if (route.kind === 'results') router.push(`/challenge/${route.challengeId}/results`);
-      else router.push(`/challenge/${route.challengeId}`);
+      openRoute(route);
     };
 
     void getInitialRoute().then(go);
@@ -197,11 +203,30 @@ export function NotificationBridge() {
         if (delivery.surface !== 'in-app' || !newest) return;
         // one toast at a time: a second one would only replace the first
         const more = delivery.items.length - 1;
+        // A single new row opens its own screen and counts as read, as a tap on
+        // its push would; several of them are a pile for Gelen.
+        const route =
+          more === 0
+            ? routeForNotificationData({ ...newest.data, type: newest.type, notificationId: newest.id })
+            : null;
         toast({
           title: newest.title,
           body: more > 0 ? `${newest.body}\nGelen kutunda ${more} bildirim daha var.` : newest.body,
           kind: newest.type === 'taunt' ? 'taunt' : 'info',
-          onPress: () => router.push('/(app)/(tabs)/inbox'),
+          onPress: () => {
+            if (!route) {
+              router.push('/(app)/(tabs)/inbox');
+              return;
+            }
+            makeClient()
+              .markInboxRead({ ids: [newest.id] })
+              .then(() => {
+                void queryClient.invalidateQueries({ queryKey: qk.unread });
+                void queryClient.invalidateQueries({ queryKey: qk.inbox });
+              })
+              .catch(() => {});
+            openRoute(route);
+          },
         });
       } catch {
         // offline: try again on the next tick
