@@ -64,7 +64,11 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
           <Countdown target={challenge.startsAt} prefix="🚦 başlıyor:" variant="tiny" muted />
         ) : (
           <Text variant="tiny" muted>
-            {challenge.isTie ? '🤝 Berabere' : challenge.winnerId ? '🏁 Bitti' : '🚫 İptal'}
+            {challenge.isTie && status.key !== 'lost'
+              ? '🤝 Berabere'
+              : challenge.status === 'finished'
+                ? '🏁 Bitti'
+                : '🚫 İptal'}
           </Text>
         )}
         {me && challenge.status === 'active' ? (
@@ -98,7 +102,10 @@ function statusOf(summary: ChallengeSummary): StatusView {
   if (challenge.status === 'cancelled') return { key: 'cancelled', label: 'İPTAL', color: Colors.textFaint };
   if (challenge.status === 'pending') return { key: 'pending', label: 'BAŞLAMADI', color: Colors.info };
   if (challenge.status === 'finished') {
-    if (challenge.isTie) return { key: 'tie', label: 'BERABERE', color: Colors.info };
+    // a tie is the co-leaders' draw: whoever finished behind them lost to both
+    if (challenge.isTie && !(me?.status === 'accepted' && me.rank > 1)) {
+      return { key: 'tie', label: 'BERABERE', color: Colors.info };
+    }
     if (me && challenge.winnerId === me.user.id) return { key: 'won', label: 'KOYDUN', color: Colors.success };
     return { key: 'lost', label: 'YEDİN', color: Colors.danger };
   }

@@ -31,7 +31,7 @@ import { useChallenge, useResults, useTaunt } from '@/hooks/queries';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { errorText } from '@/utils/errors';
-import { CUSTOM_TAUNT_CEILING_NOTE, byLevel } from '@/utils/levelCopy';
+import { BEHIND_THE_TIE, CUSTOM_TAUNT_CEILING_NOTE, byLevel } from '@/utils/levelCopy';
 
 /* ------------------------------------------------------------------- copy */
 
@@ -99,13 +99,6 @@ const NOT_WINNER: Record<VulgarityLevel, string> = {
   1: 'Mesaj gönderme hakkı kazananın.',
   2: 'Laf sokmak kazananın hakkı. Sen bu çelıncı kazanmadın.',
   3: 'Koyma hakkı kazananın 🍆 Sen kazanmadın, sıraya gir.',
-};
-
-/** A tie: the co-leaders may talk, whoever finished behind them may not. */
-const BEHIND_THE_TIE: Record<VulgarityLevel, string> = {
-  1: 'Mesaj hakkı berabere kalanlarda. İstersen rövanş aç.',
-  2: 'Laf hakkı berabere kalanlarda, sen arkada kaldın. Rövanş aç.',
-  3: 'Laf hakkı öndekilerde, sen arkada kaldın 🍆 Rövanş aç.',
 };
 
 /**

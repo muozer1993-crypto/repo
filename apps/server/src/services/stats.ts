@@ -53,12 +53,16 @@ export function computeUserStats(db: Database, userId: string, now: Date = new D
     userId,
   );
 
+  // A tie is only a tie for the players sharing first place (`final_rank` 1);
+  // whoever finished behind them lost to all of them. A row from before
+  // final_rank was written (NULL) keeps counting as the tie it always did.
   const losses = countOf(
     db,
     `SELECT COUNT(*) AS n FROM challenges c
        JOIN challenge_participants p ON p.challenge_id = c.id AND p.user_id = ?
       WHERE c.status = 'finished' AND p.status = 'accepted'
-        AND c.is_tie = 0 AND c.winner_id IS NOT NULL AND c.winner_id <> ?`,
+        AND ((c.is_tie = 0 AND c.winner_id IS NOT NULL AND c.winner_id <> ?)
+          OR (c.is_tie = 1 AND COALESCE(p.final_rank, 1) > 1))`,
     userId,
     userId,
   );
@@ -67,7 +71,8 @@ export function computeUserStats(db: Database, userId: string, now: Date = new D
     db,
     `SELECT COUNT(*) AS n FROM challenges c
        JOIN challenge_participants p ON p.challenge_id = c.id AND p.user_id = ?
-      WHERE c.status = 'finished' AND p.status = 'accepted' AND c.is_tie = 1`,
+      WHERE c.status = 'finished' AND p.status = 'accepted' AND c.is_tie = 1
+        AND COALESCE(p.final_rank, 1) = 1`,
     userId,
   );
 

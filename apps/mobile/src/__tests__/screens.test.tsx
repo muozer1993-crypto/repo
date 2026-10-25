@@ -1398,8 +1398,39 @@ describe('answering back, and a tie', () => {
     api.results = jest.fn(async () => tied(3));
     const behind = renderScreen(<ResultsScreen />);
     await settle();
-    expect(rendered(behind)).toContain('BERABERE LAN');
+    expect(rendered(behind)).toContain('Laf hakkı berabere kalanlarda, sen arkada kaldın. Rövanş aç.');
     expect(() => findWith(behind, 'title', 'Laf at', 'onPress')).toThrow();
+  });
+
+  it('tells whoever finished behind a tie they lost, penalty and all, and the co-leaders they drew', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => tied(3));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const behind = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(behind);
+    expect(text).toContain('YEDİN');
+    expect(text).not.toContain('BERABERE LAN');
+    // section labels are drawn in capitals
+    expect(text).toContain('CEZA');
+    expect(text).not.toContain('ORTADA KALAN HESAP');
+    expect(text).toMatch(/Öndekilerin ödülü\s*:\s+Kaybeden kahve ısmarlar/);
+    // measured against the shared top score
+    expect(text).toMatch(/Öndekilerle\s+aranda\s+6\.000 adım\s+fark var\./);
+    // no co-leader may send him a laf, so nothing waits for one
+    expect(text).not.toContain('Daha sesi çıkmadı');
+    expect(text).not.toContain('Kazanan ağzını açarsa');
+    expect(() => findWith(behind, 'title', 'Rövanş İstiyorum', 'onPress')).not.toThrow();
+
+    api.results = jest.fn(async () => tied());
+    const leader = renderScreen(<ResultsScreen />);
+    await settle();
+    const leaderText = rendered(leader);
+    expect(leaderText).toContain('BERABERE LAN');
+    expect(leaderText).toContain('ORTADA KALAN HESAP');
+    expect(leaderText).not.toContain('CEZA');
+    expect(leaderText).not.toContain('Öndekilerle');
   });
 
   it('shows a co-leader the laf the other one threw, and that theirs went', async () => {

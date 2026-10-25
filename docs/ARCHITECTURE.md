@@ -162,7 +162,11 @@ kazanana ve yalnızca kazananın lafı ona ulaştıktan sonra. Cevap için ayrı
 satırı ters yönde yazılır ve `UNIQUE(challenge_id, from_user_id, to_user_id)` ikincisine izin
 vermez (409 `already_replied`). `reply` şablonları kaybedenin ağzından yazılır ama `{winner}` yine
 kazanandır, `{loser}` cevap veren. Beraberlikte kimse kazanmaz; birinciliği paylaşanlar birbirine
-birer laf atabilir (`tie` şablonları), arkadan gelen kimseye bir şey diyemez. Kimin kime hangi
+birer laf atabilir (`tie` şablonları), arkadan gelen kimseye bir şey diyemez. Beraberlik de yalnızca
+birinciliği paylaşanlar arasındadır: arkadan gelen hepsine kaybetmiştir. Bitiş bildirimi ona
+birincileri ve kaçıncı olduğunu söyler (`role: 'loser'`, `winnerId: null`; kazanan lafı vaat eden
+`challenge_finished_lost` cümlesi olmadan), Karne ve haftalık özet onu `final_rank` > 1 diye yenilgi
+sayar, sonuç ekranı, kart ve geçmiş de ona cezayı ve YEDİN'i gösterir. Kimin kime hangi
 hakla konuştuğuna rota karar verir (`tauntModeFor`). Cevapta ve beraberlikte başka havuzdan istenen
 bir şablon o durumun kendi havuzundan biriyle değiştirilir: berabere biten çelıncta "Ali koydu"
 yalan olurdu. Bildirim kimden geldiğini taşır (`fromUserId`), gelen kutusu yüzü oradan bulur.

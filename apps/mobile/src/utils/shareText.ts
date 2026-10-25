@@ -14,9 +14,12 @@ export interface ResultShareInput {
   range: string;
   /** the players who raced, in finishing order, each score already written with its unit */
   ranked: { rank: number; name: string; score: string }[];
+  /** first place shared, whether or not by me */
   isTie: boolean;
   winnerName: string | null;
   iWon: boolean;
+  /** my place in `ranked` (only a player can share) */
+  myRank: number;
   /** my invite link (hooks/useInviteLink), null before /me has the code */
   link: string | null;
 }
@@ -63,7 +66,23 @@ function placeOf(rank: number): string {
   return medal ?? `${rank}.`;
 }
 
-function verdictLine({ level, isTie, iWon, winnerName }: ResultShareInput): string | null {
+/** "Ali", "Ali ve Veli", "Ali, Veli ve Can" */
+function joinNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} ve ${names[names.length - 1]}`;
+}
+
+function verdictLine({ level, ranked, isTie, iWon, winnerName, myRank }: ResultShareInput): string | null {
+  if (isTie && myRank > 1) {
+    // the co-leaders drew with each other; behind them it is a loss like any other
+    const leaders = joinNames(ranked.filter((player) => player.rank === 1).map((player) => player.name));
+    return byLevel(
+      level,
+      `${leaders} berabere kaldı, ben ${myRank}. oldum.`,
+      `${leaders} berabere kaldı, ben ${myRank}. oldum, yedik.`,
+      `${leaders} berabere kaldı, ben ${myRank}. oldum, 🍆 bana kaldı.`
+    );
+  }
   if (isTie) {
     return byLevel(
       level,

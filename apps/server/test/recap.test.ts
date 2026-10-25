@@ -26,6 +26,8 @@ interface FinishedOptions {
   players: string[];
   winnerId: string | null;
   tie?: boolean;
+  /** `final_rank` per player, as finalize writes it; left out it stays NULL like an old row */
+  ranks?: Record<string, number>;
   finalizedAt: string;
 }
 
@@ -42,10 +44,10 @@ function seedFinished(app: FastifyInstance, options: FinishedOptions): string {
     )
     .run(id, options.players[0], at, at, at, at, options.tie ? null : options.winnerId, options.tie ? 1 : 0);
   const insert = app.db.prepare(
-    `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at, timezone)
-     VALUES (?, ?, 'accepted', ?, ?, 'Europe/Istanbul')`,
+    `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at, timezone, final_rank)
+     VALUES (?, ?, 'accepted', ?, ?, 'Europe/Istanbul', ?)`,
   );
-  for (const userId of options.players) insert.run(id, userId, at, at);
+  for (const userId of options.players) insert.run(id, userId, at, at, options.ranks?.[userId] ?? null);
   return id;
 }
 
@@ -155,6 +157,26 @@ describe('weekly recap', () => {
     const [forCan] = recapsOf(can.me.id);
     expect(forCan.body).toContain('Bu hafta 1 kere yedin, bir kere bile koyamadın.');
     expect(forCan.body).toContain('Haftaya rövanş.');
+  });
+
+  it('counts finishing behind a shared first place as a loss, and the shared first place as a tie', async () => {
+    const { app, ali, veli, can } = await gang();
+    seedFinished(app, {
+      players: [ali.me.id, veli.me.id, can.me.id],
+      winnerId: null,
+      tie: true,
+      ranks: { [ali.me.id]: 1, [veli.me.id]: 1, [can.me.id]: 3 },
+      finalizedAt: '2026-01-09T10:00:00.000Z',
+    });
+
+    sendWeeklyRecaps(app.db, app.now());
+
+    const [forCan] = recapsOf(can.me.id);
+    expect(dataOf(forCan)).toMatchObject({ wins: 0, losses: 1, ties: 0 });
+    expect(forCan.body).toContain('Bu hafta 1 kere yedin, bir kere bile koyamadın.');
+    expect(forCan.body).not.toContain('berabere');
+    expect(dataOf(recapsOf(ali.me.id)[0])).toMatchObject({ wins: 0, losses: 0, ties: 1 });
+    expect(dataOf(recapsOf(veli.me.id)[0])).toMatchObject({ wins: 0, losses: 0, ties: 1 });
   });
 
   it('speaks at the reader’s level', async () => {

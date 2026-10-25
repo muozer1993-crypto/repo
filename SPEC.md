@@ -140,6 +140,9 @@ Unknown placeholders are left as-is. Numbers are formatted with `tr-TR` locale (
 strings parsed by `evaluateBadges(stats)` → earned badge keys. `stats` shape:
 `{ wins, losses, ties, tauntsSent, tauntsReceived, stepsSingleDayMax, focusTotalMinutes, checkinsStreakMax, disputesWon, challengesPlayed, pokesSent, revengeWins }`
 (`revengeWins` = finished challenges won that were a rematch of an earlier one; the `rovans_*` ladder needs it).
+In the Karne (`computeUserStats`) a tie is only a tie for the players sharing first place: `losses` counts the finished
+çelınclar I played (`accepted`) that somebody else won AND the ties I finished behind (`final_rank` > 1), `ties` only
+the ties where my `final_rank` is 1 (a NULL `final_rank` counts as 1). The weekly recap counts the same way.
 Badges are LADDERS, not a flat wall: each `BadgeDef` carries a `family` and a 1-based `tier`,
 and `badgeLadder(stats)` returns every earned rung plus exactly one locked rung per family —
 the rungs above that stay hidden until they are reached.
@@ -412,7 +415,12 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    end, so it stays `active` (the same wait) until a photo (2.2) or the window running out; the app says it is
    waiting for proof. Finalize: accepted participants with `rankParticipants`; write final_score/rank,
    winner_id/is_tie, `finished`, `finalized_at`; notifications: winner → `challenge_finished` with data
-   `{ role: 'winner' }`, losers → `{ role: 'loser', winnerId }`, tie → `{ role: 'tie' }`. The TITLE is a short
+   `{ role: 'winner' }`, losers → `{ role: 'loser', winnerId }`, a tie → `{ role: 'tie' }` to the players sharing
+   first place ("… berabere bitti. Senin skorun … İsteyen rövanş açsın."). Whoever finished behind a tie lost:
+   `{ role: 'loser', winnerId: null }`, the loser title, and a body naming the co-leaders, the shared top score and
+   their own place ("Sosyal Medya Orucu bitti. Ali ve Veli berabere kaldı (7 gün), sen 3. oldun (4 gün). Ceza sende,
+   rövanş aç."; L1 "… birinciliği paylaştı … İstersen rövanş aç.", L3 "… Ceza sende 🍆 Rövanşı aç da görelim."),
+   never the `challenge_finished_lost` sentence, which promises a laf no co-leader may send them. The TITLE is a short
    lock-screen phrase per level ("Kazandın 🏆" / "KOYDUN! 👑" / "KOYDUN! 👑🍆", and "Bu tur bitti" / "Yedin lan" /
    "YEDİN 🍆"); the `challenge_finished_won` / `_lost` sentence opens the BODY, because a phone truncates a long
    title to nothing useful. Award badges (stats recompute) for all participants.
@@ -608,11 +616,16 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             ("Veli kankan değil, rövanşa çağrılmaz. Tablodan adına dokun, ekle."; final-table rows open profiles),
                             and a success toast naming whoever the new çelınc really invited (read back from its detail); tie view
                             (a rank-1 player sees the lafs the other co-leaders sent them and "Laf at" (L1 "Mesaj bırak") → picker,
-                            `to` the one other co-leader or, with more, no `to`; then "Lafını attın, sıra onda.", or "Lafını attın, ödeştiniz." once every co-leader has written to me too; nothing behind the tie);
+                            `to` the one other co-leader or, with more, no `to`; then "Lafını attın, sıra onda.", or "Lafını attın, ödeştiniz." once every co-leader has written to me too);
+                            a player behind a tie gets the loser view without a laf: the shame header with "Laf hakkı berabere
+                            kalanlarda, sen arkada kaldın. Rövanş aç." (L1 "Mesaj hakkı…", L3 "…öndekilerde…"), no "bekliyor" card
+                            and no answer button, "Öndekilerle aranda … fark var." against the shared top score, the Ceza card
+                            ("Öndekilerin ödülü: …", no `challenge_finished_lost` line) and the loser's rematch label;
                             every player (not a watcher) also gets "Gruba at" (level 1 "Sonucu paylaş"): resultShareText
                             (utils/shareText.ts) writes "🚶 Haftalık Adım bitti (7 Eylül – 10 Eylül)", one line per player
                             who raced (🥇🥈🥉 by rank, so a tie has two 🥇, then "4." on; display name · score), a verdict at
-                            the reader's level (tie / "Koydum, geçmiş olsun." / "Bu sefer Ali koydu, yedik.") and my invite
+                            the reader's level (tie / "Koydum, geçmiş olsun." / "Bu sefer Ali koydu, yedik." / behind a tie
+                            "Ali ve Veli berabere kaldı, ben 3. oldum, yedik.") and my invite
                             link (useInviteLink) unless it is loopback or a home-network address. Phone → Share.share
                             ("Paylaşılamadı" toast on a throw), web → clipboard ("Kopyalandı")
 (app)/challenge/[id]/taunt.tsx     picker: target chip(s), a context chip per loser from `tauntContexts` (RÖVANŞ / SERİ / EZİCİ FARK / NORMAL FARK / KIL PAYI;
@@ -634,7 +647,8 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             a failed refetch keeps the last detail and the timer (the "Seans açılmadı" screen is only for a çelınc never loaded)
 (app)/history.tsx           every finished and cancelled çelınc, newest closed first (the same `GET /challenges` list home
                             uses); chips Hepsi / Koyduklarım / Yediklerim / Berabere / İptal with counts, read like the Karne
-                            (a loss is someone else's win in a çelınc I played); `with=<userId>` keeps the ones we both played
+                            (a loss is someone else's win in a çelınc I played, or a place behind a tie; the home card
+                            says YEDİN there too); `with=<userId>` keeps the ones we both played
                             (both `accepted`) until "Herkesle"; `show=<chip>` opens on that chip (the rövanş badge → Yediklerim);
                             tap → results (finished) or the çelınc (cancelled); pull-to-refresh
 (app)/user/[id].tsx         public profile + head-to-head record vs me (finished çelınclar we both played, both `accepted`:

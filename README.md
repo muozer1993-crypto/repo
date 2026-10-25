@@ -454,7 +454,9 @@ o lafı sana yediririm lan."); kazanan da cevabını kendi sonuç ekranında, se
 görür. Kazanan hâlâ 1.0 kullanıyorsa cevabı sadece bildirim olarak görür, sonuç ekranında görmesi
 için 1.1'i kurması gerekir. 1.0'ın gelen kutusu bu mesajların başına kazananın (beraberlikte
 çelıncın) adını koyar; kimin yazdığını başlık söyler ("Veli cevap verdi", "Ali laf attı"). Berabere biten çelıncta birinciliği paylaşanlar birbirine birer laf atabilir (**Laf at**),
-arkadan gelenler atamaz. Telefonlar sonucu hâlâ bekliyorsa (bitişten sonraki bir saat, itiraz)
+arkadan gelenler atamaz. Arkadan gelen için o çelınc berabere değil, yenilgidir: bildirimi "Ali ve
+Veli berabere kaldı, sen 3. oldun. Ceza sende" der, profildeki Karne'de **Yedim**'e yazılır, ceza da ondadır.
+Telefonlar sonucu hâlâ bekliyorsa (bitişten sonraki bir saat, itiraz)
 kimse konuşamaz, sonuç yazılınca açılır.
 
 **Rövanş ve seri lafları:** rövanşı ilk çelıncı kaybeden kazanırsa laf seçicide **RÖVANŞ**

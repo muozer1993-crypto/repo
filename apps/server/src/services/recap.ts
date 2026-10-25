@@ -109,17 +109,19 @@ export function buildWeeklyRecap(
 
   const finished = db
     .prepare(
-      `SELECT c.winner_id, c.is_tie FROM challenges c
+      `SELECT c.winner_id, c.is_tie, p.final_rank FROM challenges c
          JOIN challenge_participants p ON p.challenge_id = c.id AND p.user_id = ? AND p.status = 'accepted'
         WHERE c.status = 'finished' AND c.finalized_at > ? AND c.finalized_at <= ?`,
     )
-    .all(user.id, since, until) as { winner_id: string | null; is_tie: number }[];
+    .all(user.id, since, until) as { winner_id: string | null; is_tie: number; final_rank: number | null }[];
 
   let wins = 0;
   let losses = 0;
   let ties = 0;
   for (const row of finished) {
-    if (row.is_tie) ties += 1;
+    // counted like the Karne (stats.ts): behind a shared first place is a loss
+    if (row.is_tie && (row.final_rank ?? 1) > 1) losses += 1;
+    else if (row.is_tie) ties += 1;
     else if (row.winner_id === user.id) wins += 1;
     else if (row.winner_id) losses += 1;
   }

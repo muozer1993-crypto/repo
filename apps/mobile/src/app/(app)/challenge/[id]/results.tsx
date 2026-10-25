@@ -28,6 +28,7 @@ import { safeDayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { formatDayKey, relativeTime } from '@/utils/format';
 import {
+  BEHIND_THE_TIE,
   REMATCH_WINNER,
   TAUNT_ALL,
   TAUNT_ALL_DONE,
@@ -320,7 +321,11 @@ export default function ResultsScreen() {
   const mine = standings.find((p) => p.user.id === meId) ?? null;
   const isPlayer = mine?.status === 'accepted';
   const iWon = !!meId && challenge.winnerId === meId;
-  const isTie = challenge.isTie || (!challenge.winnerId && !!ranked.length);
+  const tieAtTop = challenge.isTie || (!challenge.winnerId && !!ranked.length);
+  // The co-leaders drew with each other, not with whoever finished behind them:
+  // for that player it is a loss (the Karne says so too), penalty included.
+  const behindTie = tieAtTop && isPlayer && (mine?.rank ?? 1) > 1;
+  const isTie = tieAtTop && !behindTie;
   const winner = ranked.find((p) => p.isWinner) ?? (challenge.winnerId ? ranked.find((p) => p.user.id === challenge.winnerId) : undefined);
 
   // losers = everybody who played, is not me and is not the winner
@@ -346,7 +351,7 @@ export default function ResultsScreen() {
   // A tie gives nobody "KOYDUM MU?", but whoever shares first place may have a
   // go at the others who do; somebody behind them has nothing to talk about.
   const coLeaders =
-    isTie && isPlayer && mine?.rank === 1 ? ranked.filter((p) => p.user.id !== meId && p.rank === 1) : [];
+    tieAtTop && isPlayer && mine?.rank === 1 ? ranked.filter((p) => p.user.id !== meId && p.rank === 1) : [];
   const tiePending = coLeaders.filter((p) => !taunted.has(p.user.id));
   const tieReceived = coLeaders.length > 0 ? taunts.filter((x) => x.toUserId === meId) : [];
   // every co-leader already had their one go at me: it is nobody's turn
@@ -363,9 +368,11 @@ export default function ResultsScreen() {
   const finalizedMs = challenge.finalizedAt ? Date.parse(challenge.finalizedAt) : Number.NaN;
   const waitGaveUp = Number.isFinite(finalizedMs) && query.dataUpdatedAt - finalizedMs >= WAIT_GIVES_UP_MS;
 
-  // how far behind the winner I finished / how far ahead of the runner-up I did
+  // how far behind the winner (or a tie's shared top score) I finished / how far
+  // ahead of the runner-up I did
   const runnerUp = losers[0];
-  const loserGap = winner && mine ? Math.abs(winner.score - mine.score) : 0;
+  const leader = winner ?? (behindTie ? ranked[0] : undefined);
+  const loserGap = leader && mine ? Math.abs(leader.score - mine.score) : 0;
   const winnerGap = mine && runnerUp ? Math.abs(mine.score - runnerUp.score) : 0;
 
   // The group lives in WhatsApp: a screenshot carries the gloat but not the way
@@ -377,9 +384,10 @@ export default function ResultsScreen() {
       typeEmoji: type?.emoji ?? '🎯',
       range: dateRange(challenge.startsAt, challenge.endsAt, tz),
       ranked: ranked.map((p) => ({ rank: p.rank, name: p.user.displayName, score: scoreText(p.score) })),
-      isTie,
+      isTie: tieAtTop,
       winnerName: winner?.user.displayName ?? null,
       iWon,
+      myRank: mine?.rank ?? 0,
       link: inviteLink,
     });
     if (Platform.OS === 'web') {
@@ -416,6 +424,8 @@ export default function ResultsScreen() {
         <WinnerHeader level={level} />
       ) : isTie ? (
         <NeutralHeader title={TIE_TITLE[level]} subtitle={TIE_SUB[level]} emoji="🤝" />
+      ) : behindTie ? (
+        <ShameHeader level={level} waiting={false} subtitle={BEHIND_THE_TIE[level]} />
       ) : isPlayer ? (
         <ShameHeader level={level} waiting={!received} />
       ) : (
@@ -435,7 +445,8 @@ export default function ResultsScreen() {
       ) : null}
 
       {/* -------------------------------------------------- taunt received */}
-      {!iWon && !isTie && isPlayer ? (
+      {/* nobody may send one to whoever finished behind a tie */}
+      {!iWon && !tieAtTop && isPlayer ? (
         received ? (
           <>
             <TauntBubble
@@ -494,9 +505,9 @@ export default function ResultsScreen() {
           Final tablosu
         </Text>
         <Standings participants={standings} type={type} meId={meId} finished onPressUser={openProfile} />
-        {isPlayer && !iWon && !isTie && winner ? (
+        {isPlayer && !iWon && !isTie && leader ? (
           <Text variant="small" bold color={Colors.accent} style={styles.gapLine}>
-            {winner.user.displayName} ile aranda {scoreText(loserGap)} fark var.
+            {winner ? `${winner.user.displayName} ile` : 'Öndekilerle'} aranda {scoreText(loserGap)} fark var.
           </Text>
         ) : null}
         {isPlayer && iWon && runnerUp ? (
@@ -625,12 +636,15 @@ export default function ResultsScreen() {
               </Text>
               {challenge.rewardText ? (
                 <Text variant="tiny" muted style={styles.gap}>
-                  Kazananın ödülü: {challenge.rewardText}
+                  {behindTie ? 'Öndekilerin ödülü' : 'Kazananın ödülü'}: {challenge.rewardText}
                 </Text>
               ) : null}
-              <Text variant="small" muted style={styles.gap}>
-                {t('challenge_finished_lost', level)}
-              </Text>
+              {/* its lines promise a winner's laf, and behind a tie none is coming */}
+              {behindTie ? null : (
+                <Text variant="small" muted style={styles.gap}>
+                  {t('challenge_finished_lost', level)}
+                </Text>
+              )}
             </>
           )}
         </Card>
@@ -735,7 +749,16 @@ function WinnerHeader({ level }: { level: VulgarityLevel }) {
   );
 }
 
-function ShameHeader({ level, waiting }: { level: VulgarityLevel; waiting: boolean }) {
+function ShameHeader({
+  level,
+  waiting,
+  subtitle,
+}: {
+  level: VulgarityLevel;
+  waiting: boolean;
+  /** in place of the line about the winner's laf, when there is no winner to send one */
+  subtitle?: string;
+}) {
   const rise = useRise(0);
   return (
     <Animated.View style={[styles.headline, riseStyle(rise, 20)]}>
@@ -743,7 +766,7 @@ function ShameHeader({ level, waiting }: { level: VulgarityLevel; waiting: boole
         {t('shame_screen_title', level)}
       </Text>
       <Text variant="lead" muted center>
-        {waiting ? SHAME_WAITING_SUB[level] : t('shame_screen_subtitle', level)}
+        {subtitle ?? (waiting ? SHAME_WAITING_SUB[level] : t('shame_screen_subtitle', level))}
       </Text>
     </Animated.View>
   );

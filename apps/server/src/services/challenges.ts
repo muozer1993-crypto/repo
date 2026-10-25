@@ -343,6 +343,25 @@ function finishedTitle(level: VulgarityLevel, role: 'winner' | 'loser'): string 
 }
 
 /**
+ * The finish body for somebody behind a shared first place. The co-leaders drew
+ * with each other, not with them: no winner to name and no laf on its way, but
+ * the penalty is still theirs.
+ */
+function behindTieBody(
+  level: VulgarityLevel,
+  vars: { title: string; leaders: string[]; leaderScore: string; rank: number; myScore: string },
+): string {
+  const { title, leaderScore, rank, myScore } = vars;
+  const leaders = joinNames(vars.leaders);
+  if (level === 1) {
+    return `${title} bitti. ${leaders} birinciliği paylaştı (${leaderScore}), sen ${rank}. oldun (${myScore}). İstersen rövanş aç.`;
+  }
+  const head = `${title} bitti. ${leaders} berabere kaldı (${leaderScore}), sen ${rank}. oldun (${myScore}).`;
+  if (level === 3) return `${head} Ceza sende 🍆 Rövanşı aç da görelim.`;
+  return `${head} Ceza sende, rövanş aç.`;
+}
+
+/**
  * `everyone_left`: the rivals were there and walked out (declined, left,
  * deleted their account). "Kimse kabul etmedi" would be a lie to somebody whose
  * rival accepted on Monday and quit on Tuesday.
@@ -638,6 +657,14 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
   const isTie = ranking.isTie;
   const winnerUser = winnerId ? users.get(winnerId) : undefined;
   const scoreById = new Map(ranking.results.map((r) => [r.userId, r]));
+  // who shares first place in a tie, named to everybody who finished behind them
+  const leaders = isTie
+    ? ranking.results
+        .filter((r) => r.rank === 1)
+        .map((r) => users.get(r.userId)?.display_name)
+        .filter((name): name is string => !!name)
+    : [];
+  const leaderScore = scoreLabel(type, ranking.results[0]?.score ?? 0);
 
   const run = db.transaction(() => {
     const updateParticipant = db.prepare(
@@ -656,14 +683,30 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
       const level = levelOf(user);
       const mine = scoreById.get(user.id);
       const myScore = scoreLabel(type, mine?.score ?? 0);
+      const myRank = mine?.rank ?? 1;
 
-      if (isTie) {
+      if (isTie && myRank === 1) {
         notify(db, {
           userId: user.id,
           type: 'challenge_finished',
           title: level === 1 ? 'Berabere' : level === 3 ? 'BERABERE 🍆' : 'Berabere kaldınız',
           body: `${challenge.title} berabere bitti. Senin skorun ${myScore}. İsteyen rövanş açsın.`,
           data: { challengeId: challenge.id, role: 'tie' },
+          createdAt: iso,
+        });
+        continue;
+      }
+
+      if (isTie) {
+        // Behind a shared first place is a loss like any other: the penalty is
+        // this player's. Not `challenge_finished_lost`, whose lines promise a
+        // winner's laf that no co-leader may send to somebody behind them.
+        notify(db, {
+          userId: user.id,
+          type: 'challenge_finished',
+          title: finishedTitle(level, 'loser'),
+          body: behindTieBody(level, { title: challenge.title, leaders, leaderScore, rank: myRank, myScore }),
+          data: { challengeId: challenge.id, role: 'loser', winnerId: null },
           createdAt: iso,
         });
         continue;

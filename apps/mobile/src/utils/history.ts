@@ -21,13 +21,15 @@ export function pastChallenges(list: readonly ChallengeSummary[]): ChallengeSumm
 /**
  * Read the way the server counts the Karne (services/stats), so a chip never
  * disagrees with "Koydum 3 / Yedim 2": a loss is somebody else's win in a
- * çelınc I actually played. An invite I never answered is none of these.
+ * çelınc I actually played, or a place behind a shared first one. An invite I
+ * never answered is none of these.
  */
 export function outcomeOf(summary: ChallengeSummary, meId: string | null): Outcome {
   const { challenge, me } = summary;
   if (challenge.status === 'cancelled') return 'cancelled';
   if (challenge.status !== 'finished' || !me || me.status !== 'accepted') return 'none';
-  if (challenge.isTie) return 'tie';
+  // only the co-leaders drew; whoever finished behind a tie lost (services/stats too)
+  if (challenge.isTie) return me.rank > 1 ? 'lost' : 'tie';
   if (!challenge.winnerId) return 'none';
   return challenge.winnerId === meId ? 'won' : 'lost';
 }

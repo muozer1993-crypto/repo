@@ -37,6 +37,8 @@ interface SeedOptions {
   endsAt: string;
   status?: string;
   typeKey?: string;
+  metricType?: string;
+  unit?: string;
   title?: string;
 }
 
@@ -49,12 +51,14 @@ function seedChallenge(app: FastifyInstance, options: SeedOptions): string {
       `INSERT INTO challenges (id, creator_id, type_key, metric_type, direction, unit, title, starts_at, ends_at,
                                status, reward_text, penalty_text, deadline_time, daily_target, proof_required,
                                created_at, finalized_at, winner_id, is_tie, rematch_of_id)
-       VALUES (?, ?, ?, 'auto_steps', 'higher', 'adım', ?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, NULL, NULL, 0, NULL)`,
+       VALUES (?, ?, ?, ?, 'higher', ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, NULL, NULL, 0, NULL)`,
     )
     .run(
       id,
       options.creatorId,
       options.typeKey ?? 'adim_yarisi',
+      options.metricType ?? 'auto_steps',
+      options.unit ?? 'adım',
       options.title ?? 'Adım Yarışı',
       options.startsAt,
       options.endsAt,
@@ -151,6 +155,64 @@ describe('challenge lifecycle', () => {
     const final = computeStandings(db, finished);
     expect(final[0]!.isWinner).toBe(true);
     expect(final[0]!.rank).toBe(1);
+  });
+
+  it('tells whoever finished behind a shared first place that they lost, and counts it so', async () => {
+    harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+    const { app, db } = harness;
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(app, 'veli', { displayName: 'Veli' });
+    const can = await registerUser(app, 'can', { displayName: 'Can' });
+
+    // a perfect score is easy to share in a check-off çelınc: Ali and Veli kept the day, Can did not
+    const challengeId = seedChallenge(app, {
+      creatorId: ali.me.id,
+      accepted: [ali.me.id, veli.me.id, can.me.id],
+      startsAt: '2026-01-05T08:00:00.000Z',
+      endsAt: '2026-01-05T20:59:59.999Z',
+      status: 'active',
+      typeKey: 'sosyal_medya_orucu',
+      metricType: 'daily_boolean',
+      unit: 'gün',
+      title: 'Sosyal Medya Orucu',
+    });
+    addSteps(app, challengeId, ali.me.id, '2026-01-05', 1);
+    addSteps(app, challengeId, veli.me.id, '2026-01-05', 1);
+    addSteps(app, challengeId, can.me.id, '2026-01-05', 0);
+
+    harness.setNow('2026-01-05T21:00:00.000Z');
+    expect(finalizeEndedChallenges(db, app.now())).toBe(1);
+    const finished = getChallengeRow(db, challengeId) as ChallengeRow;
+    expect(finished.is_tie).toBe(1);
+    expect(finished.winner_id).toBeNull();
+
+    for (const leader of [ali, veli]) {
+      const [row] = listByType(db, leader.me.id, 'challenge_finished');
+      expect(JSON.parse(row!.data)).toEqual({ challengeId, role: 'tie' });
+      expect(row!.title).toBe('Berabere kaldınız');
+    }
+
+    const [behind] = listByType(db, can.me.id, 'challenge_finished');
+    expect(JSON.parse(behind!.data)).toEqual({ challengeId, role: 'loser', winnerId: null });
+    expect(behind!.title).toBe('Yedin lan');
+    expect(behind!.body).toBe(
+      'Sosyal Medya Orucu bitti. Ali ve Veli berabere kaldı (1 gün), sen 3. oldun (0 gün). Ceza sende, rövanş aç.',
+    );
+    // no co-leader may send him a laf, so nothing may promise one
+    expect(behind!.body).not.toContain('Kazanan');
+    expect(behind!.body).not.toContain('berabere bitti');
+
+    const statsOf = async (user: RegisteredUser) => {
+      const response = await authed(app, user.token)({ method: 'GET', url: '/me' });
+      expect(response.statusCode).toBe(200);
+      return response.json<{ stats: { wins: number; losses: number; ties: number } }>().stats;
+    };
+    expect(await statsOf(can)).toMatchObject({ wins: 0, losses: 1, ties: 0 });
+    expect(await statsOf(ali)).toMatchObject({ wins: 0, losses: 0, ties: 1 });
+    expect(await statsOf(veli)).toMatchObject({ wins: 0, losses: 0, ties: 1 });
+    // the yiyiş ladder follows the loss; the co-leaders lost nothing
+    expect(getBadges(db, can.me.id)).toContain('yiyis_1');
+    expect(getBadges(db, ali.me.id)).not.toContain('yiyis_1');
   });
 
   it('cancels a pending challenge nobody joined', async () => {

@@ -18,6 +18,7 @@ function input(overrides: Partial<ResultShareInput> = {}): ResultShareInput {
     isTie: false,
     winnerName: 'Ali',
     iWon: false,
+    myRank: 2,
     link: TUNNEL,
     ...overrides,
   };
@@ -48,6 +49,7 @@ describe('resultShareText', () => {
         ],
         isTie: true,
         winnerName: null,
+        myRank: 1,
       })
     );
     expect(text).toContain('🥇 Ali · 9.000 adım\n🥇 Mustafa · 9.000 adım');
@@ -58,13 +60,34 @@ describe('resultShareText', () => {
   it('speaks at the sender’s level', () => {
     expect(resultShareText(input({ level: 1 }))).toContain('Kazanan Ali, tebrikler.');
     expect(resultShareText(input({ level: 3 }))).toContain('Bu sefer Ali sapladı, yedik 🍆');
-    expect(resultShareText(input({ level: 3, isTie: true, winnerName: null }))).toContain(
+    expect(resultShareText(input({ level: 3, isTie: true, winnerName: null, myRank: 1 }))).toContain(
       'Berabere bitti, ortada sahipsiz bir 🍆 kaldı.'
     );
     // without the link, whose host says "koydum" on its own
     const nazik = resultShareText(input({ level: 1, link: null }));
     expect(nazik).not.toContain('🍆');
     expect(nazik).not.toMatch(/koy|yedik/);
+  });
+
+  it('owns up to the loss when the sender finished behind a shared first place', () => {
+    const behind = (level: 1 | 2 | 3) =>
+      resultShareText(
+        input({
+          level,
+          ranked: [
+            { rank: 1, name: 'Ali', score: '9.000 adım' },
+            { rank: 1, name: 'Veli', score: '9.000 adım' },
+            { rank: 3, name: 'Mustafa', score: '3.000 adım' },
+          ],
+          isTie: true,
+          winnerName: null,
+          myRank: 3,
+        })
+      );
+    expect(behind(1)).toContain('Ali ve Veli berabere kaldı, ben 3. oldum.');
+    expect(behind(2)).toContain('Ali ve Veli berabere kaldı, ben 3. oldum, yedik.');
+    expect(behind(3)).toContain('Ali ve Veli berabere kaldı, ben 3. oldum, 🍆 bana kaldı.');
+    for (const level of [1, 2, 3] as const) expect(behind(level)).not.toContain('Berabere bitti');
   });
 
   it('gloats in the first person when the sender won', () => {

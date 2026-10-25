@@ -66,6 +66,17 @@ export const REMATCH_WINNER: Record<VulgarityLevel, string> = {
 };
 
 /**
+ * A tie: the co-leaders may talk, whoever finished behind them may not. The
+ * taunt picker says it to somebody who tries anyway, and the results screen
+ * under the "yedin" header, where no laf is coming.
+ */
+export const BEHIND_THE_TIE: Record<VulgarityLevel, string> = {
+  1: 'Mesaj hakkı berabere kalanlarda. İstersen rövanş aç.',
+  2: 'Laf hakkı berabere kalanlarda, sen arkada kaldın. Rövanş aç.',
+  3: 'Laf hakkı öndekilerde, sen arkada kaldın 🍆 Rövanş aç.',
+};
+
+/**
  * Whether saying no (or leaving) would leave nobody to race. The server then
  * cancels the çelınc on the spot (`cancelIfAbandoned`): fewer than two people
  * left who are in or could still say yes.
