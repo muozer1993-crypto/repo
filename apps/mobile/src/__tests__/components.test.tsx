@@ -1,15 +1,33 @@
-import type { ReactElement } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { useEffect, useState, type ReactElement } from 'react';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 
 import { Chip } from '@/components/Chip';
 import { formatRemaining } from '@/components/Countdown';
+import { OfflineFrame } from '@/components/OfflineBanner';
 import { ProgressBar } from '@/components/ProgressBar';
 import { Screen } from '@/components/Screen';
 import { Sheet } from '@/components/Sheet';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
+import { ToastProvider, useToast } from '@/components/Toast';
+
+/** What the /health probe says; the real hook would poll the network. */
+const mockConnection = { online: true, checked: true, longOffline: false };
+
+jest.mock('@/hooks/useConnection', () => ({
+  useConnection: () => ({ ...mockConnection, lastOkAt: null, retry: () => {} }),
+}));
+
+jest.mock('@/store/auth', () => ({
+  useAuth: (selector: (state: { token: string | null }) => unknown) => selector({ token: 'token' }),
+}));
+
+jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+
+// The JS driver, so a test can read where a fade got to (the native one runs off the JS thread).
+jest.mock('@/utils/animation', () => ({ ...jest.requireActual('@/utils/animation'), USE_NATIVE_DRIVER: false }));
 
 /** Collects every string rendered anywhere in the tree. */
 function textIn(node: unknown): string[] {
@@ -206,5 +224,238 @@ describe('Text line height fits the font size', () => {
       const ratio = (style.lineHeight ?? 0) / (style.fontSize ?? 1);
       expect({ variant, ok: ratio >= 1.15 }).toEqual({ variant, ok: true });
     }
+  });
+});
+
+describe('a toast raised while a sheet is open', () => {
+  const SAFE_AREA = {
+    frame: { x: 0, y: 0, width: 390, height: 844 },
+    insets: { top: 24, left: 0, right: 0, bottom: 48 },
+  };
+
+  function Raise({ label, title }: { label: string; title: string }) {
+    const toast = useToast();
+    return (
+      <Pressable accessibilityLabel={label} onPress={() => toast({ title, kind: 'danger' })}>
+        <Text>{label}</Text>
+      </Pressable>
+    );
+  }
+
+  function Harness({ report, more = false }: { report: boolean; more?: boolean }) {
+    return (
+      <SafeAreaProvider initialMetrics={SAFE_AREA}>
+        <ToastProvider>
+          <Raise label="Ekranda" title="Şikayet alındı" />
+          <Sheet visible={more} onClose={() => {}} title="Ali" scroll={false}>
+            <Raise label="Menüde" title="Kopyalandı" />
+          </Sheet>
+          <Sheet visible={report} onClose={() => {}} title="Şikayet et">
+            <Raise label="Gönder" title="Sebep yaz" />
+          </Sheet>
+        </ToastProvider>
+      </SafeAreaProvider>
+    );
+  }
+
+  let tree: ReactTestRenderer | null = null;
+  afterEach(() => {
+    act(() => tree?.unmount());
+    tree = null;
+  });
+
+  const press = (label: string) =>
+    act(() => {
+      tree!.root.find((node) => typeof node.type !== 'string' && node.props.accessibilityLabel === label).props.onPress();
+    });
+  /** native text nodes that print exactly this, under `root` */
+  const printed = (root: ReactTestInstance, text: string) =>
+    root.findAll((node) => typeof node.type === 'string' && node.props.children === text);
+  const modals = () => tree!.root.findAllByType(Modal);
+
+  // A Sheet is an RN Modal, a window of its own: the root tree's toast sat
+  // under its scrim, so "Sebep yaz" or "Fotoğraf gitmedi" never showed
+  it('draws the toast inside the open sheet, once', () => {
+    act(() => {
+      tree = create(<Harness report />);
+    });
+    press('Gönder');
+    const [, reportSheet] = modals();
+    expect(printed(reportSheet!, 'Sebep yaz')).toHaveLength(1);
+    expect(printed(tree!.root, 'Sebep yaz')).toHaveLength(1);
+  });
+
+  it('goes back to the app once the sheet is closed', () => {
+    act(() => {
+      tree = create(<Harness report />);
+    });
+    press('Gönder');
+    act(() => tree!.update(<Harness report={false} />));
+    // still on screen for the rest of its time, now drawn by the app
+    expect(printed(tree!.root, 'Sebep yaz')).toHaveLength(1);
+
+    press('Ekranda');
+    expect(printed(tree!.root, 'Şikayet alındı')).toHaveLength(1);
+    expect(printed(tree!.root, 'Sebep yaz')).toHaveLength(0);
+    for (const modal of modals()) expect(printed(modal, 'Şikayet alındı')).toHaveLength(0);
+  });
+
+  it('is drawn by the sheet opened last, and by the one below when that closes', () => {
+    act(() => {
+      tree = create(<Harness report={false} more />);
+    });
+    act(() => tree!.update(<Harness report more />));
+    press('Gönder');
+    const [moreSheet, reportSheet] = modals();
+    expect(printed(reportSheet!, 'Sebep yaz')).toHaveLength(1);
+    expect(printed(moreSheet!, 'Sebep yaz')).toHaveLength(0);
+
+    act(() => tree!.update(<Harness report={false} more />));
+    expect(printed(modals()[0]!, 'Sebep yaz')).toHaveLength(1);
+    expect(printed(tree!.root, 'Sebep yaz')).toHaveLength(1);
+  });
+
+  /** The report sheet's own flow: an empty reason is refused, a sent one closes it. */
+  function ReportFlow() {
+    const [open, setOpen] = useState(true);
+    const toast = useToast();
+    return (
+      <Sheet visible={open} onClose={() => setOpen(false)} title="Şikayet et">
+        <Pressable accessibilityLabel="Boş gönder" onPress={() => toast({ title: 'Sebep yaz', kind: 'danger' })} />
+        <Pressable
+          accessibilityLabel="Gönder"
+          onPress={() => {
+            setOpen(false);
+            toast({ title: 'Şikayet alındı', kind: 'success' });
+          }}
+        />
+      </Sheet>
+    );
+  }
+
+  // Animated stops a running fade once the last view on its value goes away,
+  // and closing the sheet moves the toast from the sheet's view to the app's.
+  // On a phone the old view lets go (in a microtask) before the app's view
+  // takes over (a later task), so the "Şikayet alındı" raised in the same tap
+  // stayed at opacity 0. act() would flush both commits before that
+  // microtask, so this runs on React's own scheduler, as the app does.
+  it('finishes its fade in the view that draws it next', async () => {
+    act(() => {
+      tree = create(
+        <SafeAreaProvider initialMetrics={SAFE_AREA}>
+          <ToastProvider>
+            <ReportFlow />
+          </ToastProvider>
+        </SafeAreaProvider>
+      );
+    });
+    const tap = (label: string) =>
+      tree!.root.find((node) => typeof node.type !== 'string' && node.props.accessibilityLabel === label).props.onPress();
+    /** the toast's own opacity, read from its Animated.Value */
+    const opacityOf = (title: string) =>
+      tree!.root
+        .findAll(
+          (node) =>
+            typeof node.type !== 'string' &&
+            typeof StyleSheet.flatten(node.props.style)?.opacity === 'object' &&
+            printed(node, title).length > 0
+        )
+        // the value's current number (an internal of Animated, not in its types)
+        .map((node) => (StyleSheet.flatten(node.props.style).opacity as unknown as { __getValue(): number }).__getValue());
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const actEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    actEnvironment.IS_REACT_ACT_ENVIRONMENT = false;
+    try {
+      tap('Boş gönder');
+      await wait(400);
+      expect(opacityOf('Sebep yaz')).toEqual([1]);
+      tap('Gönder');
+      await wait(600);
+      expect(opacityOf('Şikayet alındı')).toEqual([1]);
+    } finally {
+      actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+    }
+  });
+});
+
+describe('the offline strip', () => {
+  const SAFE_AREA = {
+    frame: { x: 0, y: 0, width: 390, height: 844 },
+    insets: { top: 40, left: 0, right: 0, bottom: 20 },
+  };
+
+  afterEach(() => {
+    Object.assign(mockConnection, { online: true, checked: true, longOffline: false });
+  });
+
+  /** what a screen under the strip would read, and how often it mounted */
+  const seen: { insets?: EdgeInsets; mounts: number } = { mounts: 0 };
+
+  function Probe() {
+    seen.insets = useSafeAreaInsets();
+    useEffect(() => {
+      seen.mounts += 1;
+    }, []);
+    return null;
+  }
+
+  function render(): ReactTestRenderer {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <SafeAreaProvider initialMetrics={SAFE_AREA}>
+          <OfflineFrame>
+            <Probe />
+          </OfflineFrame>
+        </SafeAreaProvider>
+      );
+    });
+    return tree;
+  }
+
+  const stripOf = (tree: ReactTestRenderer) =>
+    tree.root.findAll((node) => typeof node.type === 'string' && node.props.accessibilityRole === 'button');
+
+  beforeEach(() => {
+    seen.insets = undefined;
+    seen.mounts = 0;
+  });
+
+  // Android is edge-to-edge: a strip at y = 0 sat behind the clock and the
+  // cutout, and every screen below left the status bar's room once more
+  it('pads itself below the status bar and gives the screens that room back', () => {
+    mockConnection.online = false;
+    const tree = render();
+    const [strip] = stripOf(tree);
+    expect(StyleSheet.flatten(strip!.props.style).paddingTop).toBe(46);
+    expect(seen.insets).toMatchObject({ top: 0, bottom: 20 });
+    act(() => tree.unmount());
+  });
+
+  it('leaves the screens alone while the server answers', () => {
+    const tree = render();
+    expect(stripOf(tree)).toHaveLength(0);
+    expect(seen.insets).toMatchObject({ top: 40, bottom: 20 });
+    act(() => tree.unmount());
+  });
+
+  it('does not remount the screens when it comes and goes', () => {
+    const tree = render();
+    mockConnection.online = false;
+    act(() =>
+      tree.update(
+        <SafeAreaProvider initialMetrics={SAFE_AREA}>
+          <OfflineFrame>
+            <Probe />
+          </OfflineFrame>
+        </SafeAreaProvider>
+      )
+    );
+    expect(stripOf(tree)).toHaveLength(1);
+    expect(seen.insets?.top).toBe(0);
+    // a remount here would have thrown away the navigation stack
+    expect(seen.mounts).toBe(1);
+    act(() => tree.unmount());
   });
 });

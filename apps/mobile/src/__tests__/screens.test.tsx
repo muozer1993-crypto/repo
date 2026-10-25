@@ -3,7 +3,7 @@ import { LIMITS, addDays, todayKey } from '@koydum/shared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
-import { TextInput } from 'react-native';
+import { RefreshControl, TextInput } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -3427,5 +3427,38 @@ describe('"Kanka ekle" on a çelınc already under way', () => {
     // still running: the countdown is there, the button is not
     expect(rendered(tree)).toContain('BİTMESİNE');
     expect(rendered(tree)).not.toContain('KANKALARI ÇAĞIR');
+  });
+});
+
+describe('the pull-to-refresh spinner', () => {
+  // isRefetching is also true for the 45 s / 60 s polls, push invalidations
+  // and every step sync: bound to it, the spinner dropped in by itself and the
+  // app looked stuck
+  it('spins for a pull, not for a refetch nobody asked for', async () => {
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+    const spinner = () => tree.root.findByType(RefreshControl).props as { refreshing: boolean; onRefresh: () => void };
+
+    let answer: (rows: unknown[]) => void = () => {};
+    api.challenges = jest.fn(() => new Promise<unknown[]>((resolve) => (answer = resolve)));
+
+    act(() => {
+      void clientOf(tree).invalidateQueries({ queryKey: ['challenges'] });
+    });
+    await settle();
+    expect(api.challenges).toHaveBeenCalledTimes(1);
+    expect(spinner().refreshing).toBe(false);
+    await act(async () => answer([]));
+    await settle();
+
+    act(() => spinner().onRefresh());
+    await settle();
+    expect(api.challenges).toHaveBeenCalledTimes(2);
+    expect(spinner().refreshing).toBe(true);
+
+    await act(async () => answer([]));
+    await settle();
+    expect(spinner().refreshing).toBe(false);
   });
 });

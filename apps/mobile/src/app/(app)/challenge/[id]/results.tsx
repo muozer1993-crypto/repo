@@ -20,6 +20,7 @@ import { useToast } from '@/components/Toast';
 import { useChallenge, useRematch, useResults } from '@/hooks/queries';
 import { ApiError } from '@/lib/api';
 import { useInviteLink } from '@/hooks/useInviteLink';
+import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
@@ -207,6 +208,7 @@ export default function ResultsScreen() {
   // already cached because we arrive from the challenge screen
   const detail = useChallenge(id);
   const rematch = useRematch(id);
+  const pull = usePullRefresh(() => Promise.all([query.refetch(), detail.refetch()]));
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)'));
 
@@ -411,11 +413,8 @@ export default function ResultsScreen() {
     <Screen
       scroll
       glow
-      onRefresh={() => {
-        void query.refetch();
-        void detail.refetch();
-      }}
-      refreshing={query.isRefetching}
+      onRefresh={pull.onRefresh}
+      refreshing={pull.refreshing}
       contentStyle={styles.content}
       bottomInset={Spacing.xxl}>
       <Header onBack={back} title={challenge.title || type?.nameTr || 'Sonuç'} />

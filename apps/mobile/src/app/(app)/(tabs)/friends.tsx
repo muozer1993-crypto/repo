@@ -19,6 +19,7 @@ import { useToast } from '@/components/Toast';
 import { useFriendAction, useFriends } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { useInviteLink } from '@/hooks/useInviteLink';
+import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
 import { useAuth, useLevel } from '@/store/auth';
@@ -38,6 +39,7 @@ export default function FriendsScreen() {
   const api = useApi();
   const toast = useToast();
   const friends = useFriends();
+  const pull = usePullRefresh(() => friends.refetch());
   const action = useFriendAction();
   const queryClient = useQueryClient();
 
@@ -194,8 +196,8 @@ export default function FriendsScreen() {
     <Screen
       glow
       keyboard
-      onRefresh={() => void friends.refetch()}
-      refreshing={friends.isRefetching}>
+      onRefresh={pull.onRefresh}
+      refreshing={pull.refreshing}>
       <View style={styles.header}>
         <Text variant="big">Kankalar</Text>
         <Text variant="tiny" faint>

@@ -19,6 +19,7 @@ import { useToast } from '@/components/Toast';
 import { UpdateBanner } from '@/components/UpdateBanner';
 import { useChallengeAction, useChallenges, useFriends } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
+import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { ApiError } from '@/lib/api';
 import { openAppSettings } from '@/services/deviceHealth';
 import {
@@ -85,18 +86,14 @@ export default function HomeScreen() {
     router.push({ pathname: '/challenge/[id]', params: { id } });
   };
 
-  const refresh = () => {
-    void challenges.refetch();
-    void steps.reload();
-    void refreshMe();
-  };
+  const pull = usePullRefresh(() => Promise.all([challenges.refetch(), steps.reload(), refreshMe()]));
 
   return (
     <View style={styles.root}>
       <Screen
         glow
-        onRefresh={refresh}
-        refreshing={challenges.isRefetching}
+        onRefresh={pull.onRefresh}
+        refreshing={pull.refreshing}
         bottomInset={Spacing.xxxl + Spacing.xxl}>
         <View style={styles.headerRow}>
           <View style={styles.brand}>

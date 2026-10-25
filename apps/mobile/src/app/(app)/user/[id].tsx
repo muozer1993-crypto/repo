@@ -19,6 +19,7 @@ import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import { useChallenges, useFriendAction, useFriends, useProfile } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
+import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
 import { useAuth } from '@/store/auth';
@@ -42,6 +43,7 @@ export default function UserProfileScreen() {
   const queryClient = useQueryClient();
 
   const profile = useProfile(id);
+  const pull = usePullRefresh(() => profile.refetch());
   const friends = useFriends();
   const finished = useChallenges('finished');
   // a çelınc still running between us is not "henüz karşı karşıya gelmediniz"
@@ -286,7 +288,7 @@ export default function UserProfileScreen() {
   const badges = user.badges.map((key) => getBadge(key)).filter((badge) => !!badge);
 
   return (
-    <Screen scroll onRefresh={() => void profile.refetch()} refreshing={profile.isRefetching} contentStyle={styles.content}>
+    <Screen scroll onRefresh={pull.onRefresh} refreshing={pull.refreshing} contentStyle={styles.content}>
       <Pressable accessibilityRole="button" onPress={back} hitSlop={12}>
         <Text variant="small" color={Colors.accent} bold>
           ‹ Geri

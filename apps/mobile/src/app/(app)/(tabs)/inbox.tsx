@@ -20,6 +20,7 @@ import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import { inboxRows, useChallenges, useInbox, useMarkInboxRead, useUnread } from '@/hooks/queries';
+import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { useLevel } from '@/store/auth';
@@ -166,6 +167,7 @@ export default function InboxScreen() {
   const level = useLevel();
   const toast = useToast();
   const inbox = useInbox();
+  const pull = usePullRefresh(() => inbox.refetch());
   const unread = useUnread();
   const markRead = useMarkInboxRead();
 
@@ -321,8 +323,8 @@ export default function InboxScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.listContent, sections.length === 0 && styles.listEmpty]}
         ListHeaderComponent={header}
-        refreshing={inbox.isRefetching}
-        onRefresh={() => void inbox.refetch()}
+        refreshing={pull.refreshing}
+        onRefresh={pull.onRefresh}
         onEndReached={() => loadOlder(false)}
         onEndReachedThreshold={0.5}
         ListFooterComponent={

@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/Loading';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { useChallenges } from '@/hooks/queries';
+import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { ApiError } from '@/lib/api';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
@@ -66,6 +67,7 @@ export default function HistoryScreen() {
   // the list home already holds: opening this costs no request, and its
   // "Hepsini gör (N)" always matches what is here
   const challenges = useChallenges();
+  const pull = usePullRefresh(() => challenges.refetch());
 
   const [filter, setFilter] = useState<Filter>(isFilter(params.show) ? params.show : 'all');
   // kept here rather than in the route, so "Herkesle" can widen it in place
@@ -172,8 +174,8 @@ export default function HistoryScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.listContent, shown.length === 0 && styles.listEmpty]}
         ListHeaderComponent={header}
-        refreshing={challenges.isRefetching}
-        onRefresh={() => void challenges.refetch()}
+        refreshing={pull.refreshing}
+        onRefresh={pull.onRefresh}
         ListEmptyComponent={
           nothingYet ? (
             <EmptyState

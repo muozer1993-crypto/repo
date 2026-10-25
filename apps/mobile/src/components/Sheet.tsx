@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleShee
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
+import { ToastView, useToastLayer } from '@/components/Toast';
 import { Colors, Layout, Radius, Spacing } from '@/theme';
 import { keyboardBehavior } from '@/utils/keyboard';
 
@@ -18,6 +19,7 @@ export interface SheetProps {
 /** Bottom sheet built on the RN Modal so it works on web too. */
 export function Sheet({ visible, onClose, title, children, scroll = true }: SheetProps) {
   const insets = useSafeAreaInsets();
+  const onTop = useToastLayer(visible);
   const body = (
     <View style={styles.body}>
       {title ? (
@@ -62,6 +64,11 @@ export function Sheet({ visible, onClose, title, children, scroll = true }: Shee
           )}
         </View>
       </KeyboardAvoidingView>
+      {/* A toast raised while the sheet is open (an error from its own form,
+          most of the time) is drawn here, over the scrim: the root tree's copy
+          would sit under this Modal's window. Outside the KeyboardAvoidingView,
+          so the keyboard does not move it. */}
+      {onTop ? <ToastView /> : null}
     </Modal>
   );
 }

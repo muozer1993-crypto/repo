@@ -7,7 +7,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text as RNText, View } fro
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { OfflineBanner } from '@/components/OfflineBanner';
+import { OfflineFrame } from '@/components/OfflineBanner';
 import { ToastProvider } from '@/components/Toast';
 import { queryClient } from '@/lib/query';
 import { NotificationBridge } from '@/providers/NotificationBridge';
@@ -64,23 +64,26 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <ToastProvider>
             <StatusBar style="light" />
-            <OfflineBanner />
             <NotificationBridge />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: Colors.bg },
-                animation: Platform.OS === 'web' ? 'none' : 'default',
-              }}>
-              <Stack.Protected guard={!token}>
-                <Stack.Screen name="(auth)" />
-              </Stack.Protected>
+            {/* Inside ToastProvider on purpose: while the offline strip shows,
+                the screens see the top inset as taken, and toasts keep the real one */}
+            <OfflineFrame>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: Colors.bg },
+                  animation: Platform.OS === 'web' ? 'none' : 'default',
+                }}>
+                <Stack.Protected guard={!token}>
+                  <Stack.Screen name="(auth)" />
+                </Stack.Protected>
 
-              <Stack.Protected guard={!!token}>
-                <Stack.Screen name="(app)" />
-                <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
-              </Stack.Protected>
-            </Stack>
+                <Stack.Protected guard={!!token}>
+                  <Stack.Screen name="(app)" />
+                  <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
+                </Stack.Protected>
+              </Stack>
+            </OfflineFrame>
           </ToastProvider>
         </QueryClientProvider>
       </SafeAreaProvider>

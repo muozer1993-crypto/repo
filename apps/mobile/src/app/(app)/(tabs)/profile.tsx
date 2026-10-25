@@ -33,6 +33,7 @@ import { Stat } from '@/components/Stat';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import { useFriends, useLeaderboard, useUpdateMe } from '@/hooks/queries';
+import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { ApiError } from '@/lib/api';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, Radius, Spacing } from '@/theme';
@@ -190,7 +191,7 @@ export default function ProfileScreen() {
   const leaderboard = useLeaderboard();
   const updateMe = useUpdateMe();
 
-  const [refreshing, setRefreshing] = useState(false);
+  const pull = usePullRefresh(() => Promise.all([refreshMe(), friends.refetch(), leaderboard.refetch()]));
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [nameOpen, setNameOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
@@ -212,13 +213,6 @@ export default function ProfileScreen() {
   const earnedCount = BADGES.filter((badge) => earned.has(badge.key)).length;
   const ladder = badgeLadder(stats, [...earned]);
   const friendCount = friends.data?.friends.length ?? 0;
-
-  const refresh = () => {
-    setRefreshing(true);
-    void Promise.all([refreshMe(), friends.refetch(), leaderboard.refetch()]).finally(() =>
-      setRefreshing(false)
-    );
-  };
 
   const saveField = (
     body: Parameters<typeof updateMe.mutate>[0],
@@ -289,7 +283,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <Screen scroll onRefresh={refresh} refreshing={refreshing} glow bottomInset={Spacing.xxl}>
+    <Screen scroll onRefresh={pull.onRefresh} refreshing={pull.refreshing} glow bottomInset={Spacing.xxl}>
       {/* ---------------------------------------------------------- header */}
       <View style={styles.header}>
         <Pressable

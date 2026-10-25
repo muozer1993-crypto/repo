@@ -347,6 +347,17 @@ da öyle. Klavye açılınca ekran artık küçülmez, klavye içeriğin üstün
 KeyboardAvoidingView'i `padding` ile kullanır (`utils/keyboard.ts`). Yoksa alttaki alanlar da,
 şifre ve sunucu adresi kartları da klavyenin altında kalır.
 
+Toast'lar (üstte beliren kısa mesajlar) uygulamanın kökünde çizilir, ama `Sheet` bir Modal'dır:
+telefonda kendi penceresi, web'de sayfanın en üstüne eklenen ayrı bir katman. Kökteki toast açık
+kartın karartmasının altında kalıyordu; kartın kendi formundan gelen hata ne okunabiliyor ne de
+dokunulabiliyordu. Şimdi açık her kart kendini `useToastLayer` ile bildirir, toast'ı en son açılan
+kart kendi içinde çizer, kök yalnızca hiçbir kart açık değilken çizer.
+
+Bağlantı şeridi (`OfflineFrame`) de kenardan kenara çizimin altında kalıyordu: saatin ve kameranın
+arkasında duruyor, dokununca bildirim perdesi iniyordu. Şerit artık durum çubuğunun arkasına kadar
+uzanır, yazısını ve dokunulan yerini onun altına iter; şerit görünürken altındaki ekranlara üst
+boşluk 0 diye söylenir ki her ekran aynı boşluğu bir daha bırakmasın. Toast'lar şeridin dışında kalır ve gerçek boşluğu bilir.
+
 ## Bağlantı yokken
 
 Giriş en çok çekmeyen yerde yapılır: bodrumdaki spor salonu, metro, merdiven boşluğu. Sunucuya
@@ -373,6 +384,11 @@ Ekranlar da bağlantı gidince ellerindekini bırakmaz. TanStack Query başarıs
 yenilemesinden sonra `isError` der ama son veriyi tutar; çelınc ekranı, giriş ekranı ve odak
 seansı bu durumda son bilinen hali göstermeye devam eder (ilk ikisi bunu küçük bir satırla söyler).
 Hata ekranı yalnızca hiç yüklenmemiş, ya da sunucunun 404 dediği çelınc içindir.
+
+Aşağı çekip yenilemenin çarkı yalnızca kullanıcı çektiğinde, o yenileme bitene kadar döner
+(`hooks/usePullRefresh.ts`). TanStack Query'nin `isRefetching`'i 45 ve 60 saniyelik yoklamalarda,
+push'un tazelettiği listelerde ve her adım senkronunda da doğrudur; çark ona bağlıyken her 45
+saniyede kendiliğinden beliriyor, uygulama takılmış gibi görünüyordu.
 
 ## Telefonun kendi okuduğu değerler
 

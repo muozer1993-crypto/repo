@@ -476,6 +476,25 @@ async function main() {
     await expectText(page, ['Gelen Kutusu', 'Gelen', 'okundu'], 'inbox');
     await page.screenshot({ path: join(SHOT_DIR, '06-inbox.png'), fullPage: true });
 
+    // 6b. a toast raised inside a sheet is drawn over it, where a tap reaches it.
+    // A Sheet is an RN Modal (a body portal here, a window of its own on a
+    // phone), and the root tree's toast used to sit under its scrim.
+    await page.goto(`${statics.url}/user/${story.ali.me.id}`, { waitUntil: 'domcontentloaded' });
+    await expectText(page, ['DİĞER SEÇENEKLER'], "a friend's profile");
+    await page.getByRole('button', { name: /DİĞER SEÇENEKLER/ }).click();
+    await page.getByRole('button', { name: /Şikayet et/ }).click();
+    // an empty reason is refused with a toast while the report sheet stays open
+    await page.getByRole('button', { name: /GÖNDER/ }).click();
+    const reasonToast = page.getByText('Sebep yaz', { exact: true });
+    await reasonToast.waitFor({ state: 'visible', timeout: 15_000 });
+    const toastOnTop = await reasonToast.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return !!hit && element.contains(hit);
+    });
+    if (!toastOnTop) fail('the "Sebep yaz" toast is drawn under the report sheet');
+    log('✓ a toast raised in a sheet is drawn over it');
+
     // 7. the invite page a shared link opens, served by the API itself
     await page.goto(`${API_URL}/davet/${story.mustafa.me.inviteCode}`, { waitUntil: 'domcontentloaded' });
     await expectText(page, ["Mustafa seni KOYDUM'a çağırıyor"], 'invite page on the server');

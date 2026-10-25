@@ -55,6 +55,7 @@ import {
 } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { useProofPhoto } from '@/hooks/useProofPhoto';
+import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { useTimezone } from '@/hooks/useTimezone';
@@ -147,6 +148,7 @@ export default function ChallengeDetailScreen() {
   const serverUrl = useAuth((s) => s.serverUrl);
 
   const query = useChallenge(id);
+  const pull = usePullRefresh(() => query.refetch());
   const detail = query.data;
   const type = detail ? getChallengeType(detail.challenge.typeKey) : undefined;
 
@@ -294,8 +296,8 @@ export default function ChallengeDetailScreen() {
     <Screen
       scroll
       glow
-      onRefresh={() => void query.refetch()}
-      refreshing={query.isRefetching}
+      onRefresh={pull.onRefresh}
+      refreshing={pull.refreshing}
       contentStyle={styles.content}
       bottomInset={Spacing.xxl}>
       <Header onBack={back} title={type?.nameTr ?? 'Çelınc'} />
