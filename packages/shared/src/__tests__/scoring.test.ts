@@ -11,6 +11,7 @@ import {
   winMargin,
   type ScoreInput,
 } from '../scoring';
+import { formatScore } from '../taunts';
 
 function makeType(overrides: Partial<ChallengeType> = {}): ChallengeType {
   return {
@@ -304,6 +305,17 @@ describe('formatting', () => {
     expect(formatNumberTr(999)).toBe('999');
     expect(formatNumberTr(0)).toBe('0');
     expect(formatNumberTr(Number.NaN)).toBe('0');
+  });
+
+  it('formatScore prints what scoreLabel and the previews print', () => {
+    // a screen-time average: the preview said 66,67 and the taunt used to land as 66,7
+    expect(formatScore(200 / 3)).toBe('66,67');
+    expect(formatScore(200 / 3)).toBe(formatNumberTr(200 / 3));
+    expect(formatScore(12430.25)).toBe('12.430,25');
+    expect(formatScore(-0.04)).toBe('-0,04');
+    // whole numbers read as before
+    expect(formatScore(12430)).toBe('12.430');
+    expect(formatScore(Number.POSITIVE_INFINITY)).toBe('0');
   });
 
   it('scoreLabel appends the unit', () => {

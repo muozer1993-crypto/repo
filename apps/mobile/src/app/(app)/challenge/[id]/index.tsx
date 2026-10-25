@@ -15,7 +15,7 @@ import {
   acceptClosesAt,
   addDays,
   diffDayKeys,
-  formatNumberTr,
+  formatScore,
   getChallengeType,
   renderTaunt,
   scoreLabel,
@@ -78,6 +78,7 @@ import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { formatDayKeyFriendly, formatMinutes, formatNumber, formatTime, relativeTime } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
+import { dativeTr } from '@/utils/turkish';
 import { resolveServerUrl } from '@/utils/url';
 
 /* ------------------------------------------------------------------ utils */
@@ -1976,15 +1977,15 @@ function PokeSection({
   const type = getChallengeType(challenge.typeKey);
   const scoreText = (value: number) => scoreLabel({ unitTr: challenge.unit }, value);
 
-  /** The lines on offer, filled in with who is where. */
+  /** The lines on offer, filled in with who is where (formatScore: the server's digits). */
   const linesFor = (rival: ParticipantView) => {
     const vars: TauntVars = {
       winner: me?.user.displayName ?? 'Sen',
       loser: rival.user.displayName,
       metric: type?.nameTr ?? challenge.title,
-      winnerScore: formatNumberTr(me?.score ?? 0),
-      loserScore: formatNumberTr(rival.score),
-      diff: formatNumberTr(Math.abs((me?.score ?? 0) - rival.score)),
+      winnerScore: formatScore(me?.score ?? 0),
+      loserScore: formatScore(rival.score),
+      diff: formatScore(Math.abs((me?.score ?? 0) - rival.score)),
       unit: challenge.unit,
       challenge: challenge.title,
     };
@@ -2065,7 +2066,7 @@ function PokeSection({
       <Sheet
         visible={!!picking}
         onClose={() => setPicking(null)}
-        title={picking ? `${picking.user.displayName}'a ne diyelim?` : ''}>
+        title={picking ? `${dativeTr(picking.user.displayName) ?? `${picking.user.displayName} için`} ne diyelim?` : ''}>
         {picking
           ? linesFor(picking).map((line) => (
               <Pressable

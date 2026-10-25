@@ -8,7 +8,7 @@
  * Visibility rule (SPEC 2.2): a non-participant must not be able to tell an existing
  * challenge from a made-up id, so `requireMembership` throws 404 — never 403.
  */
-import { LIMITS } from '@koydum/shared';
+import { LIMITS, formatDayKeyTr } from '@koydum/shared';
 import type {
   CanTaunt,
   ChallengeDetail,
@@ -321,6 +321,12 @@ export function leftCopy(level: VulgarityLevel, who: string, title: string): Cop
 const ANSWER_HOURS = `${Math.round(LIMITS.DISPUTE_ANSWER_MS / 3_600_000)} saat`;
 
 /**
+ * "21 Ekim Salı", not "2026-10-21 tarihli". Always followed by "günkü" or
+ * "için" in the copy below, never by a case suffix of its own.
+ */
+const dayWord = (dayKey: string): string => formatDayKeyTr(dayKey, { withWeekday: true });
+
+/**
  * Where the photo goes. The "Kanıt ekle" chip only exists from 1.1.0 on, and a
  * friend still on the 1.0 APK was otherwise told to do something their app
  * cannot; the server does not know which one the reader has.
@@ -340,23 +346,23 @@ export function disputeCopy(level: VulgarityLevel, by: string, title: string, da
     return {
       title: 'Girişine itiraz var',
       body: onTheClock
-        ? `${by}, "${title}" çelıncında ${dayKey} tarihli girişine itiraz etti. ${ANSWER_HOURS} içinde fotoğraf eklersen giriş kalır, eklemezsen iptal olur. ${proofWhere(level)}`
-        : `${by}, "${title}" çelıncında ${dayKey} tarihli girişine itiraz etti. Kanıtını paylaşabilirsin.`,
+        ? `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine itiraz etti. ${ANSWER_HOURS} içinde fotoğraf eklersen giriş kalır, eklemezsen iptal olur. ${proofWhere(level)}`
+        : `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine itiraz etti. Kanıtını paylaşabilirsin.`,
     };
   }
   if (level === 3) {
     return {
       title: 'PALAVRA DEDİ 🍆',
       body: onTheClock
-        ? `${by}, "${title}" çelıncında ${dayKey} tarihli girişine palavra dedi. ${ANSWER_HOURS} içinde fotoğrafı koy, yoksa o gün yanar. ${proofWhere(level)}`
-        : `${by}, "${title}" çelıncında ${dayKey} tarihli girişine palavra dedi. Kanıtlayamazsan o gün gider.`,
+        ? `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine palavra dedi. ${ANSWER_HOURS} içinde fotoğrafı koy, yoksa o gün yanar. ${proofWhere(level)}`
+        : `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine palavra dedi. Kanıtlayamazsan o gün gider.`,
     };
   }
   return {
     title: 'İtiraz yedin',
     body: onTheClock
-      ? `${by}, "${title}" çelıncında ${dayKey} tarihli girişine yalan dedi. ${ANSWER_HOURS} içinde fotoğraf ekle, yoksa bu giriş yanar. ${proofWhere(level)}`
-      : `${by}, "${title}" çelıncında ${dayKey} tarihli girişine yalan dedi. Kanıtını göster.`,
+      ? `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine yalan dedi. ${ANSWER_HOURS} içinde fotoğraf ekle, yoksa bu giriş yanar. ${proofWhere(level)}`
+      : `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine yalan dedi. Kanıtını göster.`,
   };
 }
 
@@ -369,40 +375,91 @@ export function disputeMajorityCopy(level: VulgarityLevel, title: string, dayKey
   if (level === 1) {
     return {
       title: 'Girişine itiraz var',
-      body: `"${title}" çelıncında ${dayKey} tarihli girişine yapılan itiraz artık çoğunlukta. ${ANSWER_HOURS} içinde fotoğraf eklersen giriş kalır, eklemezsen iptal olur. ${proofWhere(level)}`,
+      body: `"${title}" çelıncında ${dayWord(dayKey)} günkü girişine yapılan itiraz artık çoğunlukta. ${ANSWER_HOURS} içinde fotoğraf eklersen giriş kalır, eklemezsen iptal olur. ${proofWhere(level)}`,
     };
   }
   if (level === 3) {
     return {
       title: 'PALAVRA DİYENLER ÇOĞALDI 🍆',
-      body: `"${title}" çelıncında ${dayKey} tarihli girişine palavra diyenler artık çoğunlukta. ${ANSWER_HOURS} içinde fotoğrafı koy, yoksa o gün yanar. ${proofWhere(level)}`,
+      body: `"${title}" çelıncında ${dayWord(dayKey)} günkü girişine palavra diyenler artık çoğunlukta. ${ANSWER_HOURS} içinde fotoğrafı koy, yoksa o gün yanar. ${proofWhere(level)}`,
     };
   }
   return {
     title: 'İtiraz yedin',
-    body: `"${title}" çelıncında ${dayKey} tarihli girişine yalan diyenler artık çoğunlukta. ${ANSWER_HOURS} içinde fotoğraf ekle, yoksa bu giriş yanar. ${proofWhere(level)}`,
+    body: `"${title}" çelıncında ${dayWord(dayKey)} günkü girişine yalan diyenler artık çoğunlukta. ${ANSWER_HOURS} içinde fotoğraf ekle, yoksa bu giriş yanar. ${proofWhere(level)}`,
   };
 }
 
 /** To everybody whose itiraz a photo just answered. */
 export function disputeProofCopy(level: VulgarityLevel, owner: string, title: string, dayKey: string): CopyText {
   if (level === 1) {
-    return { title: 'Kanıt geldi', body: `${owner}, "${title}" çelıncındaki ${dayKey} tarihli girişine fotoğraf ekledi. İtirazın kapandı, bir göz atabilirsin.` };
+    return { title: 'Kanıt geldi', body: `${owner}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine fotoğraf ekledi. İtirazın kapandı, bir göz atabilirsin.` };
   }
   if (level === 3) {
-    return { title: 'KANITI KOYDU 🍆', body: `${owner} kanıtı koydu, bir bak. "${title}" çelıncındaki ${dayKey} girişi yine sayılıyor.` };
+    return { title: 'KANITI KOYDU 🍆', body: `${owner} kanıtı koydu, bir bak. "${title}" çelıncında ${dayWord(dayKey)} günkü girişi yine sayılıyor.` };
   }
-  return { title: 'Kanıt geldi', body: `${owner} kanıt ekledi, bir bak. "${title}" çelıncındaki ${dayKey} girişi yine sayılıyor.` };
+  return { title: 'Kanıt geldi', body: `${owner} kanıt ekledi, bir bak. "${title}" çelıncında ${dayWord(dayKey)} günkü girişi yine sayılıyor.` };
 }
 
 export function entryRejectedCopy(level: VulgarityLevel, title: string, dayKey: string): CopyText {
   if (level === 1) {
-    return { title: 'Girişin iptal oldu', body: `"${title}" çelıncında ${dayKey} tarihli girişine itiraz vardı, ${ANSWER_HOURS} içinde kanıt gelmedi. Giriş skorundan düştü.` };
+    return { title: 'Girişin iptal oldu', body: `"${title}" çelıncında ${dayWord(dayKey)} günkü girişine itiraz vardı, ${ANSWER_HOURS} içinde kanıt gelmedi. Giriş skorundan düştü.` };
   }
   if (level === 3) {
-    return { title: 'GİRİŞİN ÇÖPE GİTTİ 🍆', body: `"${title}" çelıncında ${dayKey} tarihli girişine hile dendi, sen de kanıtı koyamadın. Yandı, skorundan düştü.` };
+    return { title: 'GİRİŞİN ÇÖPE GİTTİ 🍆', body: `"${title}" çelıncında ${dayWord(dayKey)} günkü girişine hile dendi, sen de kanıtı koyamadın. Yandı, skorundan düştü.` };
   }
-  return { title: 'Girişin yandı', body: `"${title}" çelıncında ${dayKey} tarihli girişine yalan dendi, kanıt da gelmedi. Giriş skorundan düştü.` };
+  return { title: 'Girişin yandı', body: `"${title}" çelıncında ${dayWord(dayKey)} günkü girişine yalan dendi, kanıt da gelmedi. Giriş skorundan düştü.` };
+}
+
+/**
+ * To the owner of a typed day thrown out when the phone had already reported
+ * it (`restoreFromPhone`): the day did not drop off the score, the phone's
+ * number took the typed one's place, and the copy says both. `typed` and
+ * `phone` come from `scoreLabel` ("15.000 adım").
+ */
+export function entryReplacedCopy(level: VulgarityLevel, title: string, dayKey: string, typed: string, phone: string): CopyText {
+  const day = dayWord(dayKey);
+  if (level === 1) {
+    return {
+      title: 'Girişin değişti',
+      body: `"${title}" çelıncında ${day} için yazdığın ${typed} artık sayılmıyor: itiraza ${ANSWER_HOURS} içinde kanıt gelmedi. Telefonun o gün ${phone} kaydetmiş, yerine o sayılıyor.`,
+    };
+  }
+  if (level === 3) {
+    return {
+      title: 'PALAVRAN YANDI 🍆',
+      body: `"${title}" çelıncında ${day} için yazdığın ${typed} çöpe gitti, kanıtı koyamadın. Telefonun ${phone} demiş, artık o sayılıyor. Telefon yalan söylemez 🍆`,
+    };
+  }
+  return {
+    title: 'Girişin yandı',
+    body: `"${title}" çelıncında ${day} için yazdığın ${typed} yandı, kanıt gelmedi. Telefonun ${phone} demiş, yerine o sayılıyor.`,
+  };
+}
+
+/**
+ * To everybody whose itiraz was upheld: they started it, so they hear how it
+ * ended, like they do when a photo answers it. `phone` is the phone's number
+ * that took the day's place, when there was one.
+ */
+export function disputeUpheldCopy(level: VulgarityLevel, owner: string, title: string, dayKey: string, phone: string | null): CopyText {
+  const day = dayWord(dayKey);
+  if (level === 1) {
+    return {
+      title: 'İtirazın kabul edildi',
+      body: `${owner}, "${title}" çelıncında ${day} günkü girişine ${ANSWER_HOURS} içinde kanıt eklemedi. Giriş sayılmıyor.${phone ? ` Yerine telefonunun kaydettiği ${phone} sayılıyor.` : ''}`,
+    };
+  }
+  if (level === 3) {
+    return {
+      title: 'YAKALADIN 🍆',
+      body: `${owner}, "${title}" çelıncında ${day} günkü girişine kanıt koyamadı, palavrası çöpe gitti.${phone ? ` Telefonu ${phone} demiş, artık o sayılıyor.` : ''}`,
+    };
+  }
+  return {
+    title: 'İtirazın tuttu',
+    body: `${owner}, "${title}" çelıncında ${day} günkü girişine kanıt getiremedi, o giriş yandı.${phone ? ` Yerine telefonunun saydığı ${phone} geçti.` : ''}`,
+  };
 }
 
 export function rematchCopy(level: VulgarityLevel, by: string, title: string): CopyText {

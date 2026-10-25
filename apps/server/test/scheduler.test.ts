@@ -16,7 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TIMEZONE, LIMITS, todayKey, type Challenge } from '@koydum/shared';
 import { runSchedulerOnce } from '../src/services/challenges.js';
-import { challengeFeed } from '../src/services/challengeViews.js';
+import { challengeFeed, disputeUpheldCopy, entryReplacedCopy } from '../src/services/challengeViews.js';
 import { listByType } from '../src/services/notifications.js';
 import type { FlushResult, PushSender } from '../src/services/push.js';
 import {
@@ -468,12 +468,106 @@ describe('scheduler: an itiraz nobody answers', () => {
     const rejected = listByType(harness.db, ali.me.id, 'entry_rejected');
     expect(rejected).toHaveLength(3);
     expect(dataOf(rejected[0])).toMatchObject({ challengeId, dayKey: day });
+    // no phone counts water: the day simply drops off the score
+    expect(rejected[0]?.body).toContain('5 Ocak Pazartesi günkü girişine');
+    expect(rejected[0]?.body).toContain('skorundan düştü');
+    expect(rejected[0]?.body).not.toContain('telefon');
+    // Veli started it, so Veli hears how it ended
+    const told = listByType(harness.db, veli.me.id, 'dispute');
+    expect(told).toHaveLength(3);
+    expect(told.map((row) => dataOf(row).entryId).sort()).toEqual([...entries].sort());
+    expect(dataOf(told[0]!)).toMatchObject({ challengeId, kind: 'upheld' });
+    expect(told[0]).toMatchObject({ title: 'İtirazın tuttu' });
+    expect(told[0]?.body).toContain('Ali, ');
+    expect(told[0]?.body).not.toContain('telefon');
+    // days are written the way people say them, never as a database key
+    const said = [...listByType(harness.db, ali.me.id, 'dispute'), ...rejected, ...told];
+    for (const row of said) {
+      expect(row.body).toContain('5 Ocak Pazartesi');
+      expect(row.body).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    }
     // three upheld itiraz is the first rung of the ladder
     expect(getBadges(harness.db, veli.me.id)).toContain('itiraz_1');
 
     // done is done: the next pass has nothing left to throw out
     expect(tick(harness)).toMatchObject({ disputes: 0 });
     expect(listByType(harness.db, ali.me.id, 'entry_rejected')).toHaveLength(3);
+  });
+
+  it("names the phone's number that took a typed step day's place, to the owner and the disputer", async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+    const day = today(harness);
+    const typed = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 15_000, source: 'manual', clientTime: iso(harness) },
+    });
+    expect(typed.statusCode).toBe(201);
+    const entryId = typed.json<{ entry: { id: string } }>().entry.id;
+    await dispute(harness, veli, challengeId, entryId);
+    // the phone reports the day meanwhile; the typed row stays the itiraz's
+    await phoneSync(harness, ali, { [day]: 8_200 });
+
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS);
+    expect(tick(harness)).toMatchObject({ disputes: 1 });
+    expect(entryStatus(harness, entryId)).toBe('ok');
+
+    // not "skorundan düştü": the day still counts, with the phone's number
+    const [owner] = listByType(harness.db, ali.me.id, 'entry_rejected');
+    expect(owner?.body).toContain('15.000 adım');
+    expect(owner?.body).toContain('8.200 adım');
+    expect(owner?.body).not.toContain('skorundan düştü');
+
+    const told = listByType(harness.db, veli.me.id, 'dispute');
+    expect(told).toHaveLength(1);
+    expect(dataOf(told[0]!)).toEqual({ challengeId, entryId, kind: 'upheld' });
+    expect(told[0]?.body).toContain('telefonunun saydığı 8.200 adım');
+  });
+
+  it('says both numbers at every level, and the phone only when it took the day', () => {
+    for (const level of [1, 2, 3] as const) {
+      const replaced = entryReplacedCopy(level, 'Adım', '2026-10-21', '15.000 adım', '8.200 adım');
+      expect(replaced.body).toContain('21 Ekim Çarşamba için yazdığın 15.000 adım');
+      expect(replaced.body).toContain('Telefonun');
+      expect(replaced.body).toContain('8.200 adım');
+
+      const plain = disputeUpheldCopy(level, 'Ali', 'Adım', '2026-10-21', null);
+      expect(plain.body).toContain('Ali, "Adım" çelıncında 21 Ekim Çarşamba günkü girişine');
+      expect(plain.body).not.toContain('elefon');
+      expect(disputeUpheldCopy(level, 'Ali', 'Adım', '2026-10-21', '8.200 adım').body).toContain('elefonu');
+    }
+  });
+
+  it('tells no disputer who blocked the owner or deleted the account in the meantime', async () => {
+    harness = await makeApp({ now: NOW });
+    const players: RegisteredUser[] = [];
+    for (const name of ['ali', 'veli', 'ayse', 'mert']) players.push(await registerUser(harness.app, name));
+    const [ali, veli, ayse, mert] = players as [RegisteredUser, RegisteredUser, RegisteredUser, RegisteredUser];
+    for (const friend of [veli, ayse, mert]) befriend(harness.app, ali.me.id, friend.me.id);
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'su_bardak', startsAt: iso(harness), endsAt: MIDNIGHT_END, participantIds: [veli.me.id, ayse.me.id, mert.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    for (const friend of [veli, ayse, mert]) {
+      await authed(harness.app, friend.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    }
+    tick(harness);
+    const entryId = await logWater(harness, ali, challengeId, 9);
+    for (const friend of [veli, ayse, mert]) await dispute(harness, friend, challengeId, entryId);
+
+    const blocked = await authed(harness.app, ayse.token)({ method: 'POST', url: `/users/${ali.me.id}/block` });
+    expect(blocked.statusCode).toBe(200);
+    expect((await authed(harness.app, mert.token)({ method: 'DELETE', url: '/me' })).statusCode).toBe(200);
+
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS);
+    expect(tick(harness)).toMatchObject({ disputes: 1 });
+    expect(entryStatus(harness, entryId)).toBe('rejected');
+    expect(listByType(harness.db, veli.me.id, 'dispute')).toHaveLength(1);
+    expect(listByType(harness.db, ayse.me.id, 'dispute')).toHaveLength(0);
+    expect(listByType(harness.db, mert.me.id, 'dispute')).toHaveLength(0);
   });
 
   it('still needs two of the four rivals in a five-player çelınc', async () => {

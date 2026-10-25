@@ -671,7 +671,8 @@ iste-geri çek-iste biriyle bütün gün telefonunu öttürebilirdi.
 Şüpheli girişlere arkadaşlar **itiraz** edebilir; itirazın sebebi akışta o girişin altında herkese
 görünür. İtiraz tek başına girişi silmez: diğer oyuncuların çoğunluğu itiraz edince girişin sahibinin
 **12 saati** olur. O sürede "Kanıt ekle" deyip fotoğraf koyarsa itiraz kapanır, giriş sayılmaya devam
-eder ve itiraz edenlere haber gider; koymazsa giriş düşer. "Kanıt ekle" 1.1 sürümüyle geldi; 1.0'daki
+eder ve itiraz edenlere haber gider; koymazsa giriş düşer, bunu da hem girişin sahibi hem itiraz
+edenler bildirimle öğrenir. "Kanıt ekle" 1.1 sürümüyle geldi; 1.0'daki
 kanka o günü giriş ekranından fotoğrafıyla yeniden gönderince de itiraz kapanır (adım ve ekran
 süresi gibi günde tek sayı yazılan türlerde; diğerlerinde önce güncellemesi gerekir, bildirim de
 bunu söyler). 12 saat, çoğunluk oluştuğu anda başlar: biri çelınctan ayrılıp çoğunluk küçülünce de
@@ -751,8 +752,9 @@ elle yazılabilir. Telefon sonradan o güne daha fazlasını sayarsa telefonunki
 
 Elle yazılan bir adım günü itirazla düştüyse o gün sıfırda kalmaz: telefonun o gün saydığı adım,
 yazılandan az da olsa, yerine geçer ve sayılır. Telefon o günü zaten gönderdiyse itiraz düştüğü
-anda olur (çelınc bittikten sonra düşse de sonuca telefonun sayısı girer), göndermediyse ilk
-senkronda. İtiraz sürerken telefon elle yazılan sayıya dokunmaz, karar itirazındır. O güne artık
+anda olur (çelınc bittikten sonra düşse de sonuca telefonun sayısı girer); bildirim de "skorundan
+düştü" demez, yazdığın sayıyı ve yerine geçen telefon sayısını söyler. Göndermediyse ilk
+senkronda olur. İtiraz sürerken telefon elle yazılan sayıya dokunmaz, karar itirazındır. O güne artık
 elle sayı yazılmaz, sadece telefon yazar; itirazı kazanan kanka telefonun sayısına da bir kere
 itiraz edebilir. Telefonun kendi saydığı bir gün itirazla düştüyse geri gelmez.
 

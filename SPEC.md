@@ -41,7 +41,8 @@ copy.ts           MICROCOPY (keyed, 3 levels), BADGES, TAGLINE, t(key, level)
 scoring.ts        computeScores(), rankParticipants(), day helpers, validation constants
 banned.ts         BANNED_PATTERNS (regex list) + containsBanned(text)
 text.ts           stripInvisible(), countGraphemes(), TURKISH_FOLD, foldUsername()
-time.ts           dayKeyInTz(date, tz), localTimeHHmm(date, tz), dayKeysBetween(), isValidDayKey()
+time.ts           dayKeyInTz(date, tz), localTimeHHmm(date, tz), dayKeysBetween(), isValidDayKey(),
+                  formatDayKeyTr(dayKey, { withWeekday? }) → "21 Ekim Salı" (a table, not Intl: Hermes)
 ```
 
 ### 1.1 Enums
@@ -137,7 +138,9 @@ export function clampLevel(requested: VulgarityLevel, recipientMax: VulgarityLev
 Placeholders: `{winner} {loser} {metric} {winnerScore} {loserScore} {diff} {unit} {challenge}`.
 `reply` templates are the loser's answer, read by the winner: `{winner}` is still the winner (the reader)
 and `{loser}` the one answering, whose name is in the title ("Veli boş durmadı").
-Unknown placeholders are left as-is. Numbers are formatted with `tr-TR` locale (12.430).
+Unknown placeholders are left as-is. Numbers are formatted by `formatScore`, which is `formatNumberTr`
+(12.430, 66,67): the digits `scoreLabel`, the results screen and the app's taunt and poke previews print, so a
+screen-time average reads the same in the preview and in the message that lands.
 
 ### 1.5 Copy (`copy.ts`)
 
@@ -395,9 +398,14 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    `answer_by` before `bootAt` is moved to `bootAt + DEVICE_SETTLE_MS` (`answer_from` kept): the server was off or
    asleep when it ran out, so a photo sent in its last hours never got through, and the owner gets that hour after
    it is back. Stored, so the feed's `answerBy` and the app's "Kanıt ekle" show it. Then an entry whose `answer_by` has passed is
-   upheld: open disputes → `upheld`, entry → `rejected`, `entry_rejected` to the owner (not when deleted), badges
-   recomputed for the disputers (`disputesWon`), and a typed day the phone already reported takes the phone's
-   number right away (`restoreFromPhone`, 2.3). The window runs from the moment the majority was reached and is
+   upheld (`upholdDisputes`, one transaction): open disputes → `upheld`, entry → `rejected`, and a typed day the
+   phone already reported takes the phone's number right away (`restoreFromPhone`, 2.3). Then `entry_rejected` to
+   the owner (not when deleted): when the phone's number took the day it names both ("… için yazdığın 15.000 adım
+   … Telefonun 8.200 adım demiş"), otherwise the day "skorundan düştü". Each disputer (not deleted, not blocked
+   with the owner) gets a `dispute` notification with data `{ challengeId, entryId, kind: 'upheld' }` ("İtirazın
+   tuttu", plus the phone's number when it took the day). Badges are recomputed for the disputers
+   (`disputesWon`). Every itiraz notification writes the day as `formatDayKeyTr(dayKey, { withWeekday: true })`
+   ("21 Ekim Salı günkü girişine"), never the raw key. The window runs from the moment the majority was reached and is
    stored then, so a second dispute ten hours after the first still gives the owner the full 12 hours, and a
    player leaving (which shrinks the majority) starts a full window at the leave instead of putting an old
    dispute's clock in the past; the leave and account-deletion paths arm it on the spot. A database from before
@@ -556,7 +564,8 @@ theme/                   colors, spacing, typography (dark neon), components: Sc
 components/Toast.tsx     ToastProvider + useToast; ToastView draws the toast. A Sheet is an RN Modal (its own window on Android and iOS, a body portal on web), so a toast drawn in the root tree sat under its scrim: every visible Sheet registers with useToastLayer, the one opened last draws the toast inside its Modal (after the KeyboardAvoidingView, so the keyboard does not move it), and the provider draws it only while no Sheet is open. Animated stops a running fade when the last view on its value unmounts, so the view that draws the toast next finishes the fade (a "Şikayet alındı" raised in the tap that closed the sheet stayed invisible otherwise)
 hooks/usePullRefresh.ts  usePullRefresh(run) → { refreshing, onRefresh } for every pull-to-refresh: the spinner runs from the pull until `run` settles and at no other time. react-query's `isRefetching` is also true for the 45 s / 60 s polls, push invalidations and step syncs, which dropped the spinner in by itself
 utils/keyboard.ts        keyboardBehavior(): 'padding' on iOS and Android, none on web. `Screen keyboard` and every Sheet (a KeyboardAvoidingView around backdrop and sheet, so only the sheet rises; its 88% maxHeight is of what the keyboard leaves) lift their content with it: Android builds and RN Modals are edge-to-edge on every version, so `adjustResize` no longer shrinks the window. Screen's offset is 0 on Android (the frame is measured below the root's paddingTop) and stays insets.top on iOS, whose modal routes are page sheets. Forms with several fields chain "İleri" (`returnKeyType="next"`, `submitBehavior="submit"`, focus the next field's ref): login, register, "Şifreni değiştir"; password fields are `autoCapitalize="none"`, `autoCorrect={false}`. A pressable Chip reaches 8 dp above and below and 4 dp to the sides (`hitSlop`, never past a chip row's 8 dp gap) and reports `accessibilityState.selected`; the header back/close circles take `hitSlop={8}`
-utils/format.ts          formatNumber (tr-TR), formatDuration, relativeTime (tr), dayKey helpers (re-export shared/time)
+utils/format.ts          formatNumber (tr-TR), formatDuration, relativeTime (tr), dayKey helpers (formatDayKey is shared formatDayKeyTr)
+utils/turkish.ts         upperTr (İ/I by hand before toUpperCase), dativeTr(name) → "Can'a" / "Gül'e" / "Ali'ye" / "Mustafa'ya" by the last vowel, null when the name ends in no letter or has no Turkish vowel
 ```
 
 ### 3.3 Routes (`src/app`)
@@ -607,6 +616,7 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             countdown, no action area, "böyle devam" verdict, "laf sok" or "Ayrıl", one device sync on open
                             (the list card says "Sonuç bekleniyor"),
                             "laf sok" per rival you lead, before `endsAt` — opens a sheet of rendered `poke` lines to choose from,
+                            titled with dativeTr ("Mehmet'e ne diyelim?", "🔥 için ne diyelim?" when it gives null),
                             invited → "Varım" / "Yokum" ("Yokum" asks first, like the home card); declined while it
                             still runs → "Reddetmiştin..." card with "Katıl" (accept),
                             the creator, still in it, while `pending` or running and before `acceptClosesAt` → an

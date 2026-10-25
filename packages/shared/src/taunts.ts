@@ -14,6 +14,7 @@
  * screen (or an old app's inbox) the title is all that says who wrote it.
  */
 import { clampLevel } from './levels';
+import { formatNumberTr } from './scoring';
 import type { MetricType, TauntContext, TauntTemplate, TauntVars, VulgarityLevel } from './types';
 
 export const TAUNTS: readonly TauntTemplate[] = [
@@ -193,9 +194,12 @@ export function resolveTauntForRecipient(
   return pickTaunt(requested?.context ?? context, level, seed, metric);
 }
 
-/** Formats a score the way the taunt copy expects: 12.430 in tr-TR. */
+/**
+ * Formats a score for taunt, poke and nudge copy: 12.430, 66,67. The same
+ * digits as `scoreLabel`, the results screen and the app's previews. It used
+ * to round to one decimal through `toLocaleString`, so a screen-time average
+ * the preview showed as "66,67 dk" landed as "66,7 dk".
+ */
 export function formatScore(value: number): string {
-  if (!Number.isFinite(value)) return '0';
-  const rounded = Math.abs(value % 1) < 1e-9 ? Math.round(value) : Math.round(value * 10) / 10;
-  return rounded.toLocaleString('tr-TR');
+  return formatNumberTr(value);
 }

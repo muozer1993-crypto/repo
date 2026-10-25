@@ -790,6 +790,47 @@ describe('POST /challenges/:id/taunt', () => {
     expect(taunt.level).toBe(2);
   });
 
+  it('prints a screen-time average with the digits the app previewed', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    // three whole days in Istanbul: 5, 6 and 7 January
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'ekran_suresi_beyani',
+      endsAt: '2026-01-07T20:59:59.999Z',
+      participantIds: [veli.me.id],
+    });
+    const id = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    const days: [number, number][] = [
+      [60, 80],
+      [70, 80],
+      [70, 81],
+    ];
+    for (const [i, minutes] of days.entries()) {
+      harness.setNow(new Date(Date.parse(NOW) + i * 24 * 60 * 60 * 1000));
+      for (const [user, value] of [[ali, minutes[0]], [veli, minutes[1]]] as const) {
+        const payload = { dayKey: today(harness), value, source: 'manual', proofUrl: '/uploads/ekran.jpg', clientTime: iso(harness) };
+        expect((await postEntry(harness, user, id, payload)).statusCode).toBe(201);
+      }
+    }
+    harness.setNow('2026-01-08T09:00:00.000Z');
+    expect((await harness.app.inject({ method: 'POST', url: `/dev/finalize/${id}` })).statusCode).toBe(200);
+
+    // 200/3 and 241/3: the results screen and the preview say 66,67 and 80,33
+    const sent = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${id}/taunt`,
+      payload: { toUserId: veli.me.id, templateId: 'l1_win_01' },
+    });
+    expect(sent.statusCode).toBe(201);
+    const body = sent.json<{ taunt: { body: string } }>().taunt.body;
+    expect(body).toContain('66,67');
+    expect(body).toContain('80,33');
+    expect(body).not.toContain('66,7 ');
+  });
+
   it('refuses before the challenge is finished and for non-participants', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await twoPlayerChallenge(harness);

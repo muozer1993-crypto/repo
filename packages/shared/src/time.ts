@@ -215,6 +215,28 @@ export function startOfDayInTz(dayKey: string, tz: string): Date {
   return new Date(wall - zoneOffsetMs(new Date(first), tz));
 }
 
+const TR_MONTHS = [
+  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
+];
+const TR_DAYS = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+
+/**
+ * "2026-09-08" -> "8 Eylül" / "8 Eylül Salı", written by hand.
+ *
+ * Shared because the server's push copy names days too, and "2026-10-21
+ * tarihli girişine" read like a database row. A table instead of
+ * `toLocaleDateString('tr-TR')`: Hermes on Android has no reliable Turkish
+ * month names. No timezone maths, day keys are already local. A key that is
+ * not a real day comes back unchanged.
+ */
+export function formatDayKeyTr(dayKey: string, opts: { withWeekday?: boolean } = {}): string {
+  if (!isValidDayKey(dayKey)) return dayKey;
+  const [y, m, d] = dayKey.split('-').map(Number) as [number, number, number];
+  const label = `${d} ${TR_MONTHS[m - 1]}`;
+  return opts.withWeekday ? `${label} ${TR_DAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}` : label;
+}
+
 /** Minutes since midnight for an `HH:mm` string. */
 export function hhmmToMinutes(hhmm: string): number {
   if (!HHMM_REGEX.test(hhmm)) throw new RangeError(`Invalid HH:mm: ${hhmm}`);

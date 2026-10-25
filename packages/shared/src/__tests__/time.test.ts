@@ -6,6 +6,7 @@ import {
   dayKeyToUtcDate,
   dayKeysBetween,
   diffDayKeys,
+  formatDayKeyTr,
   hhmmToMinutes,
   isBeforeOrEqualHHmm,
   isValidDayKey,
@@ -210,5 +211,20 @@ describe('isValidTimeZone', () => {
     expect(isValidTimeZone('Mars/Olympus')).toBe(false);
     expect(isValidTimeZone('')).toBe(false);
     expect(isValidTimeZone(42)).toBe(false);
+  });
+});
+
+describe('formatDayKeyTr', () => {
+  it('writes a day key the way a person says it', () => {
+    expect(formatDayKeyTr('2026-09-08')).toBe('8 Eylül');
+    expect(formatDayKeyTr('2026-09-08', { withWeekday: true })).toBe('8 Eylül Salı');
+    expect(formatDayKeyTr('2026-01-01', { withWeekday: true })).toBe('1 Ocak Perşembe');
+    expect(formatDayKeyTr('2026-02-01', { withWeekday: true })).toBe('1 Şubat Pazar');
+  });
+
+  it('hands back what is not a real day instead of "1 undefined"', () => {
+    expect(formatDayKeyTr('bozuk')).toBe('bozuk');
+    expect(formatDayKeyTr('2026-13-01')).toBe('2026-13-01');
+    expect(formatDayKeyTr('2026-02-30', { withWeekday: true })).toBe('2026-02-30');
   });
 });

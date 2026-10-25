@@ -1,3 +1,5 @@
+import { formatDayKeyTr } from '@koydum/shared';
+
 /** Turkish-locale formatting helpers shared by every screen. */
 
 export function formatNumber(value: number): string {
@@ -56,21 +58,11 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   return deltaSeconds < 0 ? `${count} ${unit} önce` : `${count} ${unit} sonra`;
 }
 
-const TR_MONTHS = [
-  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
-  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
-];
-const TR_DAYS = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
-
-/** "2026-09-08" -> "8 Eylül Salı" (no timezone maths: day keys are already local) */
-export function formatDayKey(dayKey: string, opts: { withWeekday?: boolean } = {}): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
-  if (!m) return dayKey;
-  const [, y, mo, d] = m;
-  const date = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d)));
-  const label = `${Number(d)} ${TR_MONTHS[Number(mo) - 1]}`;
-  return opts.withWeekday ? `${label} ${TR_DAYS[date.getUTCDay()]}` : label;
-}
+/**
+ * "2026-09-08" -> "8 Eylül" / "8 Eylül Salı". The table lives in the shared
+ * package, so a day reads the same on screen and in the server's push copy.
+ */
+export const formatDayKey = formatDayKeyTr;
 
 /** "2026-01-05".."2026-01-11" -> "5 – 11 Ocak"; across months "29 Eylül – 5 Ekim" */
 export function formatWeekRange(startKey: string, endKey: string): string {

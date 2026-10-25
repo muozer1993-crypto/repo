@@ -148,7 +148,7 @@ export function fanOutDeviceDays(
 }
 
 /**
- * The phone's reading for a typed day friends just threw out (`resolveDisputes`),
+ * The phone's reading for a typed day friends just threw out (`upholdDisputes`),
  * from what it already reported (`steps_daily`, `screen_time_daily`). Without
  * it the day waits for the next sync, and an itiraz upheld past the end would
  * never get one: the same pass finishes the çelınc, and the fan-out stops at

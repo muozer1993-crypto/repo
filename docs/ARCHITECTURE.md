@@ -102,7 +102,11 @@ da taşır, o yüzden gün bitişteki haliyle kalır ve o oyuncu beklenmez. Bekl
 12 saat (`LIMITS.DISPUTE_ANSWER_MS`) tanınır ve giriş bu sürede sayılmaya devam eder; yoksa teke tek
 çelıncta kaybeden taraf rakibinin her gününü tek dokunuşla sıfırlayabilirdi. Sahibi fotoğraf eklerse
 itirazlar `dismissed` olur. Eklemezse zamanlayıcının `resolveDisputes` adımı (bitirmeden hemen önce
-çalışır) girişi `rejected` yapar ve itiraz edenlerin `disputesWon` sayısı artar. Süre çoğunluğun
+çalışır) girişi `rejected` yapar ve itiraz edenlerin `disputesWon` sayısı artar. Haberi iki taraf da
+alır: sahibine `entry_rejected`, itiraz edenlere `dispute` (`kind: 'upheld'`); fotoğrafla kapanan
+itirazda olduğu gibi, işi başlatan da nasıl bittiğini duyar (sahibiyle arasında engel olan ya da
+hesabını silen hariç). Bildirimler günü "21 Ekim Salı" diye yazar (paylaşılan `formatDayKeyTr`), "2026-10-21
+tarihli" diye değil; ay adları Hermes'e güvenmeden tablodan gelir. Süre çoğunluğun
 oluştuğu andan başlar, ilk itirazdan değil, ve girişin üstüne yazılır (`entries.answer_by`,
 `syncDisputeClocks`). Her geçişte oyuncu sayısından yeniden hesaplanınca biri ayrılıp çoğunluk
 küçüldüğünde eski bir itirazın süresi saatler önce dolmuş sayılıyor, giriş haber verilmeden
@@ -414,11 +418,14 @@ alır. Kanıt fotoğrafı da sadece `manual` için zorunludur.
 İtirazla düşen (`rejected`) elle yazılmış bir gün sıfırda kalmaz: telefonun o güne okuduğu değer,
 yazılandan az da olsa, yerine geçer. Telefon o günü zaten gönderdiyse bu, itirazı haklı çıkaran
 zamanlayıcı turunda olur (`restoreFromPhone`, bitirmeden önce): bitişten sonra düşen bir gün de
-sonuca telefonun sayısıyla girer. Göndermediyse ilk senkronda olur. İtiraz sürerken telefon elle
-yazılmış satıra hiç dokunmaz; üstüne yazsaydı satır "telefonun saydığı" olur, itiraz haklı
-çıkınca da gün bir daha geri gelmezdi. Değer ve kaynak telefonunki olur, durum `ok`, kanıt fotoğrafı
-ve `answer_by` silinir; geri çekilmiş ya da fotoğrafla kapanmış itirazlar unutulur, haklı çıkan
-(`upheld`) itirazlar `disputesWon` için yerinde kalır. Adımda 0 hiçbir şeyi geri getirmez.
+sonuca telefonun sayısıyla girer. Bu, `upholdDisputes`'un kendi işleminde, bildirimlerden önce
+yapılır: sahibine "skorundan düştü" demek yalan olurdu, bildirim yazdığı sayıyla yerine geçen
+telefon sayısını birlikte söyler, itiraz edenlere de telefonun sayısı gider. Göndermediyse ilk
+senkronda olur. İtiraz sürerken telefon elle yazılmış satıra hiç dokunmaz; üstüne yazsaydı satır
+"telefonun saydığı" olur, itiraz haklı çıkınca da gün bir daha geri gelmezdi. Değer ve kaynak
+telefonunki olur, durum `ok`, kanıt fotoğrafı ve `answer_by` silinir; geri çekilmiş ya da
+fotoğrafla kapanmış itirazlar unutulur, haklı çıkan (`upheld`) itirazlar `disputesWon` için
+yerinde kalır. Adımda 0 hiçbir şeyi geri getirmez.
 Telefonun kendi okuduğu bir gün düştüyse senkron ona dokunmaz, yoksa itiraz boşa giderdi. Geri
 gelen adım gününe elle sayı yazmak 409 `day_rejected` alır, o günü artık sadece telefon yazar.
 Telefonun sayısı yeni bir sayıdır ve "telefon" kaynağını gönderen de uygulamanın kendisidir:

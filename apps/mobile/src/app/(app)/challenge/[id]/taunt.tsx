@@ -2,7 +2,7 @@ import type { ChallengeType, ParticipantView, TauntContext, TauntTemplate, Taunt
 import {
   LIMITS,
   containsBanned,
-  formatNumberTr,
+  formatScore,
   getChallengeType,
   renderTaunt,
   scoreLabel,
@@ -427,13 +427,14 @@ export default function TauntPickerScreen() {
   // an answer is written by the loser, but {winner} stays the winner it answers
   const theirName = chosen?.user.displayName ?? 'kanka';
   const reply = mode === 'reply';
+  // formatScore is what the server fills the line with, so the preview shows the digits that land
   const vars: TauntVars = {
     winner: reply ? theirName : myName,
     loser: reply ? myName : theirName,
     metric: type?.nameTr ?? challenge.unit,
-    winnerScore: formatNumberTr(reply ? theirScore : myScore),
-    loserScore: formatNumberTr(reply ? myScore : theirScore),
-    diff: formatNumberTr(Math.abs(myScore - theirScore)),
+    winnerScore: formatScore(reply ? theirScore : myScore),
+    loserScore: formatScore(reply ? myScore : theirScore),
+    diff: formatScore(Math.abs(myScore - theirScore)),
     unit: challenge.unit,
     challenge: challenge.title || type?.nameTr || 'çelınc',
   };

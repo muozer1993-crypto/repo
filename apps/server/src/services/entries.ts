@@ -18,6 +18,7 @@ import {
   formatNumberTr,
   isBeforeOrEqualHHmm,
   localTimeHHmm,
+  scoreLabel,
   todayKey,
   type ChallengeType,
   type EntryBody,
@@ -39,12 +40,15 @@ import { challengeWindow, dayOverByEnd, participantTimezone, typeForChallenge } 
 import {
   acceptedCount,
   disputeMajorityCopy,
+  disputeUpheldCopy,
   entryRejectedCopy,
+  entryReplacedCopy,
   getParticipant,
   getUserRow,
   levelOf,
 } from './challengeViews.js';
 import { restoreFromPhone } from './deviceSync.js';
+import { isBlockedBetween } from './friends.js';
 import { notify } from './notifications.js';
 import { awardBadges } from './stats.js';
 
@@ -718,11 +722,15 @@ export function answerDisputeWithProof(
 /**
  * Throws out an entry whose owner let the answer window run out: the open
  * disputes become `upheld` (that is what `disputesWon` counts), the entry
- * `rejected`, the owner hears about it and every disputer's badges are
- * recounted (Yalan Dedektörü, Savcı).
+ * `rejected`, and a typed day the phone already reported takes the phone's
+ * number right here (`restoreFromPhone`), so the owner's copy can name both
+ * numbers instead of saying the day dropped off the score. Every disputer
+ * hears how their itiraz ended, and their badges are recounted (Yalan
+ * Dedektörü, Savcı).
  */
 export function upholdDisputes(db: Database, challenge: ChallengeRow, entry: EntryRow, now: Date): string[] {
   const iso = nowIso(now);
+  const type = typeForChallenge(challenge);
   let disputerIds: string[] = [];
   const run = db.transaction(() => {
     disputerIds = (
@@ -733,16 +741,38 @@ export function upholdDisputes(db: Database, challenge: ChallengeRow, entry: Ent
     db.prepare("UPDATE disputes SET status = 'upheld' WHERE entry_id = ? AND status = 'open'").run(entry.id);
     db.prepare("UPDATE entries SET status = 'rejected', updated_at = ? WHERE id = ?").run(iso, entry.id);
 
-    // an owner who deleted their account is simply not told
+    const after = restoreFromPhone(db, challenge, entry, now) ? getEntryRow(db, entry.id) : undefined;
+    const phone = after ? scoreLabel(type, Number(after.value)) : null;
+
     const owner = getUserRow(db, entry.user_id);
-    if (owner && owner.deleted_at === null) {
-      const copy = entryRejectedCopy(levelOf(owner), challenge.title, entry.day_key);
+    if (!owner) return;
+    // an owner who deleted their account is simply not told
+    if (owner.deleted_at === null) {
+      const level = levelOf(owner);
+      const copy = phone
+        ? entryReplacedCopy(level, challenge.title, entry.day_key, scoreLabel(type, Number(entry.value)), phone)
+        : entryRejectedCopy(level, challenge.title, entry.day_key);
       notify(db, {
         userId: owner.id,
         type: 'entry_rejected',
         title: copy.title,
         body: copy.body,
         data: { challengeId: challenge.id, entryId: entry.id, dayKey: entry.day_key },
+        createdAt: iso,
+      });
+    }
+    for (const disputerId of disputerIds) {
+      const disputer = getUserRow(db, disputerId);
+      if (!disputer || disputer.deleted_at !== null) continue;
+      // a block since the itiraz closes this door too, as it does for a photo answer
+      if (isBlockedBetween(db, owner.id, disputerId)) continue;
+      const copy = disputeUpheldCopy(levelOf(disputer), owner.display_name, challenge.title, entry.day_key, phone);
+      notify(db, {
+        userId: disputer.id,
+        type: 'dispute',
+        title: copy.title,
+        body: copy.body,
+        data: { challengeId: challenge.id, entryId: entry.id, kind: 'upheld' },
         createdAt: iso,
       });
     }
@@ -806,7 +836,6 @@ export function resolveDisputes(db: Database, now: Date = new Date(), options: {
       const entry = getEntryRow(db, entryId);
       if (!entry || entry.status !== 'disputed') continue;
       upholdDisputes(db, challenge, entry, now);
-      db.transaction(() => restoreFromPhone(db, challenge, entry, now))();
       upheld += 1;
     }
   }
