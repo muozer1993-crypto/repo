@@ -45,6 +45,7 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
           meId={meId}
           limit={3}
           finished={challenge.status === 'finished'}
+          closed={challenge.status === 'cancelled'}
           style={styles.standings}
         />
       ) : null}

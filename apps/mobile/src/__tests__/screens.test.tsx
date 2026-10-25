@@ -41,6 +41,8 @@ jest.mock('expo-router/react-navigation', () => ({
   usePreventRemove: (prevent: boolean) => {
     mockPreventRemove.prevent = prevent;
   },
+  // no navigator here: a Sheet then counts its screen as always in front
+  NavigationContext: require('react').createContext(undefined),
 }));
 
 const api: Record<string, jest.Mock> = {};
@@ -826,6 +828,34 @@ describe('an invite, before and after the door closes', () => {
     expect(text).toContain('Ali');
     expect(text).not.toContain('Cem');
     expect(text).not.toContain('bekliyor');
+  });
+});
+
+describe('a çelınc called off', () => {
+  it('lists nobody as "bekliyor" for an invite nobody can answer any more', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    const CEM = { id: 'u-3', username: 'cem', displayName: 'Cem', avatarEmoji: '🦁', createdAt: '2026-09-01T00:00:00.000Z' };
+    const cem = { ...detail.me, user: CEM, status: 'invited' as const, score: 0, days: 0, rank: 0, lastEntryAt: null };
+    const cancelled = {
+      ...detail,
+      challenge: { ...detail.challenge, status: 'cancelled' as const, finalizedAt: new Date().toISOString() },
+      participants: [detail.me, cem],
+    };
+    api.challenge = jest.fn(async () => cancelled);
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('Mustafa');
+    expect(rendered(tree)).not.toContain('bekliyor');
+
+    api.challenges = jest.fn(async () => [
+      { challenge: cancelled.challenge, participants: cancelled.participants, me: cancelled.me, unreadTaunts: 0 },
+    ]);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const home = renderScreen(<HomeScreen />);
+    await settle();
+    expect(rendered(home)).not.toContain('bekliyor');
   });
 });
 

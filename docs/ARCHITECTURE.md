@@ -395,7 +395,10 @@ Toast'lar (üstte beliren kısa mesajlar) uygulamanın kökünde çizilir, ama `
 telefonda kendi penceresi, web'de sayfanın en üstüne eklenen ayrı bir katman. Kökteki toast açık
 kartın karartmasının altında kalıyordu; kartın kendi formundan gelen hata ne okunabiliyor ne de
 dokunulabiliyordu. Şimdi açık her kart kendini `useToastLayer` ile bildirir, toast'ı en son açılan
-kart kendi içinde çizer, kök yalnızca hiçbir kart açık değilken çizer.
+kart kendi içinde çizer, kök yalnızca hiçbir kart açık değilken çizer. Kart açıkken başka ekrana
+geçilirse (kartın içindeki toast'a ya da bir bildirime dokunmak) Android kartın penceresini ekranla
+birlikte kapatır ama `visible` açık kalırdı; toast'lar o kaybolmuş pencereye çizilir, hiçbiri
+görünmezdi. Kart artık ekranı arkada kalınca (`blur`) kendini kapatır ve katmanı hemen bırakır.
 
 Bağlantı şeridi (`OfflineFrame`) de kenardan kenara çizimin altında kalıyordu: saatin ve kameranın
 arkasında duruyor, dokununca bildirim perdesi iniyordu. Şerit artık durum çubuğunun arkasına kadar

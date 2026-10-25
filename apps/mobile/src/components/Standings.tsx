@@ -17,6 +17,11 @@ export interface StandingsProps {
   /** the challenge is over: rank 1 gets the crown treatment */
   finished?: boolean;
   /**
+   * Nobody can answer an invite any more without a result to crown (a
+   * cancelled çelınc). `finished` implies it.
+   */
+  closed?: boolean;
+  /**
    * Makes every row but mine a way to that person's profile — the only place a
    * group-çelınc rival who is not a friend yet can be added from.
    */
@@ -27,9 +32,11 @@ export interface StandingsProps {
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 /** Ranked bar chart of everyone's score — the heart of every challenge screen. */
-export function Standings({ participants, type, meId, limit, finished, onPressUser, style }: StandingsProps) {
-  // "bekliyor" is a lie once it is over: an invite nobody answered is not on the final table
-  const playing = participants.filter((p) => p.status === 'accepted' || (!finished && p.status === 'invited'));
+export function Standings({ participants, type, meId, limit, finished, closed, onPressUser, style }: StandingsProps) {
+  // "bekliyor" is a lie once it is over, finished or called off: an invite
+  // nobody answered is not on the final table
+  const over = finished || closed;
+  const playing = participants.filter((p) => p.status === 'accepted' || (!over && p.status === 'invited'));
   // rank 0 means "not ranked" (still invited), not "above first place"
   const ranked = [...playing].sort((a, b) => {
     const ra = a.rank > 0 ? a.rank : Number.MAX_SAFE_INTEGER;

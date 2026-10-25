@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { NavigationContext } from 'expo-router/react-navigation';
+import { useContext, useEffect, useEffectEvent, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,10 +17,41 @@ export interface SheetProps {
   scroll?: boolean;
 }
 
+/**
+ * Whether the screen this sheet sits on is the one in front. Outside a
+ * navigator (component tests) there is no screen to leave: always.
+ */
+function useScreenFocused(onBlur: () => void): boolean {
+  const navigation = useContext(NavigationContext);
+  const [focused, setFocused] = useState(() => navigation?.isFocused() ?? true);
+  const blurred = useEffectEvent(onBlur);
+  useEffect(() => {
+    if (!navigation) return;
+    const offFocus = navigation.addListener('focus', () => setFocused(true));
+    const offBlur = navigation.addListener('blur', () => {
+      setFocused(false);
+      blurred();
+    });
+    return () => {
+      offFocus();
+      offBlur();
+    };
+  }, [navigation]);
+  return focused;
+}
+
 /** Bottom sheet built on the RN Modal so it works on web too. */
 export function Sheet({ visible, onClose, title, children, scroll = true }: SheetProps) {
   const insets = useSafeAreaInsets();
-  const onTop = useToastLayer(visible);
+  // A tap that navigates away with the sheet still open (its own toast's
+  // onPress, a notification) takes the Modal down with the screen on Android,
+  // but `visible` stays true: the sheet would keep the toast layer, and every
+  // toast after it would be drawn into a dialog that is gone. Leaving the
+  // screen closes the sheet and hands the toast back at once.
+  const focused = useScreenFocused(() => {
+    if (visible) onClose();
+  });
+  const onTop = useToastLayer(visible && focused);
   const body = (
     <View style={styles.body}>
       {title ? (
@@ -33,7 +65,7 @@ export function Sheet({ visible, onClose, title, children, scroll = true }: Shee
 
   return (
     <Modal
-      visible={visible}
+      visible={visible && focused}
       transparent
       animationType={Platform.OS === 'web' ? 'fade' : 'slide'}
       onRequestClose={onClose}

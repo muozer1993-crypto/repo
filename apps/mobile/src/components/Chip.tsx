@@ -64,10 +64,12 @@ export function Chip({
 
 /**
  * A chip is 22-27 dp tall, well under a fingertip, so the touch area reaches
- * past it. Never further than the 8 dp gap of a chip row, though: the slop must
- * not reach onto a neighbour, beside it or in the wrapped row above or below.
+ * past it: half of a chip row's 8 dp gap on every side. Two neighbours' slops,
+ * beside each other or in wrapped rows, then meet in the middle of the gap and
+ * never overlap; with more, Android and iOS hand a tap in the overlap to the
+ * later chip, so a tap just under "Dün" picked the older day below it.
  */
-const CHIP_SLOP = { top: 8, bottom: 8, left: 4, right: 4 };
+const CHIP_SLOP = { top: 4, bottom: 4, left: 4, right: 4 };
 
 /** black text on light chips, white on dark ones */
 function pickForeground(hex: string): string {

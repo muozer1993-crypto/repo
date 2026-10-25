@@ -443,6 +443,7 @@ export default function ChallengeDetailScreen() {
           type={type}
           meId={meId}
           finished={challenge.status === 'finished'}
+          closed={challenge.status === 'cancelled'}
           onPressUser={(userId) => router.push({ pathname: '/user/[id]', params: { id: userId } })}
         />
         {/* "küçük bir gayret yeter" is a lie once nothing more counts, and

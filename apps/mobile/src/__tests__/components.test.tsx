@@ -1,3 +1,4 @@
+import { NavigationContext } from 'expo-router/react-navigation';
 import { useEffect, useState, type ReactElement } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
@@ -12,6 +13,7 @@ import { Sheet } from '@/components/Sheet';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { ToastProvider, useToast } from '@/components/Toast';
+import { Spacing } from '@/theme';
 
 /** What the /health probe says; the real hook would poll the network. */
 const mockConnection = { online: true, checked: true, longOffline: false };
@@ -94,8 +96,14 @@ describe('Chip', () => {
       tree = create(<Chip label="7 gün" selected onPress={() => {}} />);
     });
     const [button] = buttonsIn(tree!);
-    // vertically no further than the 8 dp gap between wrapped chip rows
-    expect(button!.props.hitSlop).toEqual({ top: 8, bottom: 8, left: 4, right: 4 });
+    // A chip row's gap (Spacing.sm, both ways) holds one chip's slop on one
+    // side plus its neighbour's on the other, beside it or in the row below:
+    // more and a tap in the overlap goes to the later chip.
+    const slop = button!.props.hitSlop as { top: number; bottom: number; left: number; right: number };
+    expect(slop.top).toBeGreaterThan(0);
+    expect(slop.left).toBeGreaterThan(0);
+    expect(slop.top + slop.bottom).toBeLessThanOrEqual(Spacing.sm);
+    expect(slop.left + slop.right).toBeLessThanOrEqual(Spacing.sm);
     expect(button!.props.accessibilityState).toMatchObject({ selected: true });
     expect(button!.props.accessibilityLabel).toBe('7 gün');
 
@@ -376,6 +384,74 @@ describe('a toast raised while a sheet is open', () => {
     } finally {
       actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     }
+  });
+});
+
+describe('a sheet left open when its screen goes out of front', () => {
+  /** Just enough of a screen's navigation object: focus and blur listeners. */
+  function fakeNavigation() {
+    const listeners = new Map<string, Set<() => void>>();
+    const navigation = {
+      isFocused: () => true,
+      addListener: (type: string, callback: () => void) => {
+        const set = listeners.get(type) ?? new Set();
+        set.add(callback);
+        listeners.set(type, set);
+        return () => set.delete(callback);
+      },
+    };
+    const emit = (type: string) => act(() => listeners.get(type)?.forEach((callback) => callback()));
+    return { navigation, emit };
+  }
+
+  function Raise({ label, title }: { label: string; title: string }) {
+    const toast = useToast();
+    return <Pressable accessibilityLabel={label} onPress={() => toast({ title, kind: 'success' })} />;
+  }
+
+  function PokeScreen() {
+    const [open, setOpen] = useState(true);
+    return (
+      <Sheet visible={open} onClose={() => setOpen(false)} title="Ali'ye ne diyelim?">
+        <Raise label="Dürt" title="Dürttün" />
+      </Sheet>
+    );
+  }
+
+  let tree: ReactTestRenderer | null = null;
+  afterEach(() => {
+    act(() => tree?.unmount());
+    tree = null;
+  });
+
+  // A toast's onPress (or a notification) pushes the next screen with the
+  // sheet still open: Android takes the dialog down with the screen, and a
+  // sheet still holding the toast layer drew every later toast into it.
+  it('closes, and the next screen\'s toasts show again', () => {
+    const { navigation, emit } = fakeNavigation();
+    act(() => {
+      tree = create(
+        <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 24, left: 0, right: 0, bottom: 48 } }}>
+          <ToastProvider>
+            <NavigationContext.Provider value={navigation as never}>
+              <PokeScreen />
+            </NavigationContext.Provider>
+            <Raise label="Sonuç ekranında" title="Rövanş açıldı" />
+          </ToastProvider>
+        </SafeAreaProvider>
+      );
+    });
+    expect(tree!.root.findByType(Modal).props.visible).toBe(true);
+
+    emit('blur');
+    expect(tree!.root.findByType(Modal).props.visible).toBe(false);
+    act(() => {
+      tree!.root.find((node) => typeof node.type !== 'string' && node.props.accessibilityLabel === 'Sonuç ekranında').props.onPress();
+    });
+    const printed = (root: ReactTestInstance) =>
+      root.findAll((node) => typeof node.type === 'string' && node.props.children === 'Rövanş açıldı');
+    expect(printed(tree!.root)).toHaveLength(1);
+    expect(printed(tree!.root.findByType(Modal))).toHaveLength(0);
   });
 });
 

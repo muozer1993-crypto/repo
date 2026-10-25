@@ -717,7 +717,7 @@ Kankan kabul etmeden önce neye girdiğini görür.
 Kapısı kapanmış bir davet (bitişe bir saat kala, kısa çelınclarda sürenin son dörtte birinde) ana
 sayfadan kalkar; bildirimden açılırsa çelınc ekranı **Varım** yerine "Bu çelınca katılım kapandı."
 der. Hiç cevap vermediğin bir çelınc bitince **Bitenler**'de **KAÇIRDIN** yazar; final tablosunda
-cevap vermeyenler görünmez.
+cevap vermeyenler görünmez, iptal olan bir çelıncın sıralamasında da "bekliyor" diye durmazlar.
 
 ### Kabul edince ne oluyor?
 
