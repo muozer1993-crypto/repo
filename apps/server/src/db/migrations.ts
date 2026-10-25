@@ -316,6 +316,19 @@ const DISPUTE_WON_BEFORE = `
 ALTER TABLE disputes ADD COLUMN won_before INTEGER NOT NULL DEFAULT 0;
 `;
 
+/**
+ * When the owner's answer clock started. `syncDisputeClocks` measures a running
+ * clock against the players who were in at its start, and read that start off
+ * `answer_by` minus the 12 hours. A window that ran out while the server slept
+ * is moved to an hour after it wakes (`resolveDisputes`), and the start read
+ * that way would move with it, past a friend who joined in between: the
+ * majority would grow by one who cast no vote and the clock would stop without
+ * a word. Read only while `answer_by` is set; NULL on a clock from before this.
+ */
+const ENTRY_ANSWER_FROM = `
+ALTER TABLE entries ADD COLUMN answer_from TEXT;
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -327,4 +340,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '008_notification_prefs', sql: NOTIFICATION_PREFS },
   { id: '009_entry_answer_by', sql: ENTRY_ANSWER_BY },
   { id: '010_dispute_won_before', sql: DISPUTE_WON_BEFORE },
+  { id: '011_entry_answer_from', sql: ENTRY_ANSWER_FROM },
 ];

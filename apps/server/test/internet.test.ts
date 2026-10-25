@@ -86,8 +86,17 @@ async function ctrlC(): Promise<number | null> {
   return exited;
 }
 
+/**
+ * The supervisor tests need a POSIX shell: the stand-in cloudflared is a
+ * `#!/bin/sh` script, which Windows cannot run (the script would only say
+ * "cloudflared yok"), and Ctrl+C is a SIGINT, which Windows turns into a kill
+ * that no handler sees. On the owner's PC `npm test` skips them rather than
+ * hang for minutes and fail, which would read as a broken server.
+ */
+const onPosix = it.skipIf(process.platform === 'win32');
+
 describe('npm run internet', () => {
-  it('starts the server with the tunnel address and stops both on Ctrl+C', async () => {
+  onPosix('starts the server with the tunnel address and stops both on Ctrl+C', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'koydum-internet-'));
     dirs.push(dir);
     // cloudflared prints the address on stderr inside a box, then keeps running
@@ -122,7 +131,7 @@ describe('npm run internet', () => {
     }, 10_000);
   }, 60_000);
 
-  it('restarts a crashed server behind the same address', async () => {
+  onPosix('restarts a crashed server behind the same address', async () => {
     const dir = tempDir();
     const fake = stub(dir, `echo "2026 INF |  https://ayni-adres-kalsin.trycloudflare.com  |" 1>&2\nexec sleep 600`);
     const port = await freePort();
@@ -146,7 +155,7 @@ describe('npm run internet', () => {
     expect(await ctrlC()).toBe(0);
   }, 60_000);
 
-  it('keeps the server up while a dropped tunnel is reopened, then serves the new address', async () => {
+  onPosix('keeps the server up while a dropped tunnel is reopened, then serves the new address', async () => {
     const dir = tempDir();
     // The first cloudflared dies once the test drops it (the home internet went);
     // every later one prints a fresh address and stays up.

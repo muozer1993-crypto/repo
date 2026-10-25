@@ -168,6 +168,8 @@ export interface EntryRow {
   updated_at: string;
   /** Set while a majority disputes it: thrown out at this instant unless a photo comes (migration 009). */
   answer_by?: string | null;
+  /** When that clock started (migration 011); NULL on one from before, which started 12 h before `answer_by`. */
+  answer_from?: string | null;
 }
 
 export interface StepsDailyRow {

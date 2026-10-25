@@ -85,8 +85,10 @@ yarısı kapatırsak kazananı eksik sayıyla seçeriz ve sonradan gelen adımla
 çelınc bir saat daha `active` kalır: telefonlar son günü göndermeye devam eder, elle giriş ise
 bitişten itibaren kabul edilmez (`challenge_ended`). Herkesin telefonu son günü bitişten sonra
 gönderdiyse beklemeden kapanır. Sunucu bitişte kapalıysa bir saat açıldığı andan sayılır
-(`bootAt`). Elle girilen çelınclar tam bitişte kapanır. Bitişten sonra yalnızca bitişte bitmiş
-günler değişebilir (`dayOverByEnd`): bitiş bir günü yarıda kestiyse (başka saat dilimindeki bir
+(`bootAt`). Bitişte uyuyan bilgisayar da kapalı sayılır: Windows uyanınca süreç yeniden başlamaz,
+ama zamanlayıcının iki vuruşu arasında beş dakikadan uzun bir boşluk görülünce `bootAt` uyandığı
+ana taşınır (`nextBootAt`). Elle girilen çelınclar tam bitişte kapanır. Bitişten sonra yalnızca
+bitişte bitmiş günler değişebilir (`dayOverByEnd`): bitiş bir günü yarıda kestiyse (başka saat dilimindeki bir
 oyuncu, eski usul 24 saatlik bir çelınc) o günün sonraki okuması bitişten sonra atılan adımları
 da taşır, o yüzden gün bitişteki haliyle kalır ve o oyuncu beklenmez. Bekleyişte dürtme de yoktur:
 "hâlâ açık, sıra sende" yalan olurdu.
@@ -101,6 +103,10 @@ oluştuğu andan başlar, ilk itirazdan değil, ve girişin üstüne yazılır (
 küçüldüğünde eski bir itirazın süresi saatler önce dolmuş sayılıyor, giriş haber verilmeden
 atılıyordu. Artık ayrılma, hesap silme ve zamanlayıcının her turu saati o andan tam 12 saatle
 kurar ve sahibine söyler; `answer_by`'ı olmayan eski bir veritabanında da ilk tur böyle yapar.
+Sunucu kapalıyken ya da uyurken dolan bir süreye, sunucu dönünce bir saat daha eklenir
+(`bootAt + DEVICE_SETTLE_MS`, yine `answer_by`'a yazılır): sahibinin son saatlerde gönderdiği
+fotoğraf uyuyan sunucuya hiç ulaşmadı. Saatin başladığı an ayrıca durur (`answer_from`), yoksa
+uzayan süreyle birlikte kayar ve arada katılan bir kankayı içeride sayardı.
 Ayrılan birinin itirazı sayılmaz. İşleyen bir saat, başladığı anda içeride olan oyunculara göre
 ölçülür (`joined_at`): sonradan çağrılan bir kanka (**Kanka ekle**) oy vermedi, çoğunluğu
 büyütüp saati durduramaz; yoksa itiraz edilen kurucu iki kanka ekleyip itirazı sessizce
@@ -563,6 +569,14 @@ bağlantıyla açar. WAL ikinci bağlantıyı içeri alır, `busy_timeout` sunuc
 yani sunucu açıkken çalışır. Oturumlar durumsuz JWT olduğundan yeni şifre açık oturumları
 kapatmaz. Şikayetler de aynı yoldan okunur (`sikayetler`): uygulamada onları okuyan bir ekran yok,
 sunucu her yeni şikayette kendi penceresine bir `warn` satırı düşer.
+
+Bilgisayarı uyanık tutmak da onun işi olurdu, ama akla gelmez: dizüstü 15-30 dakika boşta kalınca
+uyur ve uyuyan sunucuya kimse bağlanamaz. Bu yüzden sunucu Windows'ta açılırken gizli bir
+PowerShell başlatır (`src/keepAwake.ts`). O, `SetThreadExecutionState` ile sistemin uyumamasını
+ister (ekranın değil, ekran yine kararır) ve sunucunun pid'i yaşadıkça bekler; sunucu sertçe
+öldürülse de kendi kapanır. Yeni bir bağımlılık gerekmez: o çağrıyı ancak native kod yapabilir,
+PowerShell de her Windows'ta var. `KEEP_AWAKE=0` kapatır. Kapak kapanınca bilgisayar yine uyur;
+README bunun ayarını anlatır.
 
 O pencereyi okuyan da yalnız o. Bir kanka "bildirim gelmedi" deyince neyin ne zaman olduğunu
 orada arar, bu yüzden pino'nun JSON'u bir konsola yazılırken `src/log.ts`'ten geçer: her kayıt

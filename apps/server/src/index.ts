@@ -1,5 +1,6 @@
 /**
- * Boot: .env → config → database → app → listen → scheduler, plus a clean shutdown.
+ * Boot: .env → config → database → app → listen → scheduler (and, on Windows, the
+ * helper that keeps the PC awake), plus a clean shutdown.
  * `npm run dev -w apps/server` (tsx watch) or `npm start -w apps/server`; under
  * `npm run internet` the script supervises this process and talks to it over IPC.
  */
@@ -8,6 +9,7 @@ import { loadConfig } from './config.js';
 import { openDb } from './db/index.js';
 import { loadDotEnv } from './env.js';
 import { listenErrorMessage } from './listenError.js';
+import { startKeepAwake } from './keepAwake.js';
 import { ownerLogStream, wantsReadableLogs } from './log.js';
 import { startScheduler } from './services/scheduler.js';
 
@@ -27,11 +29,13 @@ async function main(): Promise<void> {
   const { app } = await buildApp({ config, db, logStream: wantsReadableLogs() ? ownerLogStream() : undefined });
 
   let stopScheduler: (() => Promise<void>) | null = null;
+  let stopKeepAwake: (() => void) | null = null;
   let shuttingDown = false;
   const shutdown = (reason: string, code = 0): void => {
     if (shuttingDown) return;
     shuttingDown = true;
     app.log.info({ reason }, 'shutting down');
+    stopKeepAwake?.();
     setTimeout(() => process.exit(code), SHUTDOWN_DEADLINE_MS).unref();
     void (async () => {
       // an in-flight push flush marks its rows before the database closes, so a
@@ -75,6 +79,8 @@ async function main(): Promise<void> {
   // pass (notifications, pushes, the backup) against the same database first
   if (shuttingDown) return;
   stopScheduler = startScheduler(app, db, config);
+  // Windows only: a sleeping PC is a server nobody can reach (src/keepAwake.ts)
+  stopKeepAwake = startKeepAwake(app.log);
   app.log.info(
     {
       port: config.port,

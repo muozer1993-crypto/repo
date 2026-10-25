@@ -167,6 +167,16 @@ Bilinmesi gerekenler:
 * **Pencere açık kaldıkça çalışır.** Bilgisayar uyursa ya da pencereyi kapatırsan kankaların
   bağlanamaz; çelınc sonuçları sunucu tekrar açılınca hesaplanır. Kapatırken **Ctrl+C**'ye bas:
   sunucu elindeki bildirimleri bitirip veritabanını düzgünce kapatır.
+* **Bilgisayar uyumasın.** Sunucu penceresi açıkken (`npm run server` de `npm run internet` de)
+  Windows bilgisayarı boşta kaldı diye uyutmaz; ekran kararır, sunucu çalışmaya devam eder.
+  Dizüstünün kapağını kapatırsan ise yine uyur. Kapak kapalıyken de çalışsın istiyorsan:
+  **Denetim Masası → Güç Seçenekleri → Kapağı kapatmanın yapacağı işlemi seçin → Prize
+  takılıyken: Hiçbir şey yapma**. Pencerede "bilgisayarı uyanık tutamadım" yazıyorsa (okulun ya da
+  işin kısıtladığı bir bilgisayar) **Ayarlar → Sistem → Güç**'te uykuyu **Hiçbir zaman** yap.
+  Bilgisayar yine de uyursa sonuç yanlış çıkmaz: uyanınca pencerede "bilgisayar 8 saat uyumuş"
+  gibi bir satır çıkar. Uyurken biten bir adım ya da ekran süresi çelıncında kazanan, telefonlar
+  bir saat daha beklendikten sonra belli olur; uykudayken süresi dolan bir itirazın sahibi de
+  fotoğraf eklemek için bir saat daha alır.
 * **Sunucu çökerse pencere onu kendisi yeniden açar.** "Sunucu düştü, yeniden açıyorum" yazar,
   birkaç saniye sonra sunucu geri gelir. Tünel yerinde kaldığı için adres de aynıdır, kimseye
   yeni bağlantı atmana gerek yok. On dakikada beş kere çökerse bırakır ve kapanır; sebebi hemen
@@ -515,6 +525,7 @@ Docker'da bu dosya okunmaz (imaja hiç girmez): orada ayarları `docker-compose.
 | `LOG_LEVEL` | `info` | Sunucu penceresine ne yazılsın. Her istek tek tek yazılmaz; açılış, hatalar, 2 saniyeden uzun süren istekler ve zamanlayıcının yaptıkları saatiyle, Türkçe birer satır olarak görünür. `warn` sadece sorunları gösterir. |
 | `LOG_FORMAT` | boş | Boşken pencerede Türkçe satırlar çıkar, çıktı dosyaya ya da Docker'a gidiyorsa JSON. `json` yazarsan pencerede de ham JSON çıkar (bir log aracına vereceksen). |
 | `EXPO_ACCESS_TOKEN` | boş | Expo push için isteğe bağlı |
+| `KEEP_AWAKE` | açık | Windows'ta sunucu açıkken bilgisayar boşta kaldı diye uyumaz (ekran yine kararır). `0` yazarsan kapanır; o zaman uykuyu Windows'un güç ayarlarından kapat ([Bilgisayar uyumasın](#arkadaşların-farklı-ağdaysa-npm-run-internet)). |
 | `ENABLE_DEV_ROUTES` | `0` | `1` yaparsan test uçları açılır (üretimde açma) |
 | `APP_DIR` | `<DATA_DIR>/app` | `npm run apk:yayinla`'nın APK'yı koyduğu yer |
 | `APP_DOWNLOAD_URL` / `APP_LATEST_VERSION` | boş | APK başka yerdeyse bağlantısı ve sürümü |
@@ -924,6 +935,9 @@ npm test              # ortak paket + sunucu
 cd apps/mobile && npx jest
 node e2e/smoke.mjs    # gerçek sunucu + tarayıcı, uçtan uca (playwright-core ister)
 ```
+
+Windows'ta `npm test`, `npm run internet`'in üç testini atlar (`skipped` yazar, hata değildir):
+o testlerdeki sahte cloudflared, Windows'un çalıştıramadığı bir Linux betiği.
 
 `e2e/smoke.mjs` geçici bir veritabanıyla sunucuyu ayağa kaldırır, iki kullanıcı kaydeder,
 aralarında bir adım çelıncı oynatır, çelıncı kapatır, KOYDUM gönderir; sonra web derlemesini

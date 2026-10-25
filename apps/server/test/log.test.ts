@@ -78,6 +78,20 @@ describe('ownerLogStream', () => {
     expect(lines().at(-1)).toBe('21:03:12 • zamanlayıcı: 5 kişiye haftalık özet');
   });
 
+  it('says how long the PC slept and that the results wait an hour, and when it cannot keep it awake', () => {
+    const { stream, lines } = capture();
+    stream.write(pino({ level: 40, minutes: 543, msg: 'scheduler resumed after a pause' }));
+    stream.write(pino({ level: 40, minutes: 120, msg: 'scheduler resumed after a pause' }));
+    stream.write(pino({ level: 40, minutes: 7, msg: 'scheduler resumed after a pause' }));
+    stream.write(pino({ level: 40, err: { message: 'spawn powershell.exe ENOENT' }, msg: 'keep-awake helper failed' }));
+    expect(lines().slice(1)).toEqual([
+      '21:03:12 ! bilgisayar 9 saat 3 dakika uyumuş; telefonlara ve itiraza cevap verecek olanlara bir saat daha veriyorum',
+      '21:03:12 ! bilgisayar 2 saat uyumuş; telefonlara ve itiraza cevap verecek olanlara bir saat daha veriyorum',
+      '21:03:12 ! bilgisayar 7 dakika uyumuş; telefonlara ve itiraza cevap verecek olanlara bir saat daha veriyorum',
+      '21:03:12 ! bilgisayarı uyanık tutamadım; uykuyu Ayarlar → Sistem → Güç\'ten kapat (README: "Bilgisayar uyumasın"): spawn powershell.exe ENOENT',
+    ]);
+  });
+
   it('counts the pushes that went and the ones that did not', () => {
     const { stream, lines } = capture();
     stream.write(pino({ sent: 4, failed: 1, msg: 'push flush' }));

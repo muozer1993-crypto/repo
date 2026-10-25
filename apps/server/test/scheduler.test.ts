@@ -8,16 +8,24 @@
  * çelınc once the phones have had their hour) with the right winner (or no winner
  * at all), telling every participant, handing out badges, throwing out a disputed
  * entry whose owner never answered (and holding the result for one who still may),
- * and cancelling a pending challenge nobody joined. The last block is
+ * giving both an hour after the owner's PC wakes from a night asleep, and
+ * cancelling a pending challenge nobody joined. The last block is
  * `startScheduler`'s stop, which a clean shutdown awaits before closing the database.
  */
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TIMEZONE, LIMITS, todayKey, type Challenge } from '@koydum/shared';
 import { runSchedulerOnce } from '../src/services/challenges.js';
+import { challengeFeed } from '../src/services/challengeViews.js';
 import { listByType } from '../src/services/notifications.js';
 import type { FlushResult, PushSender } from '../src/services/push.js';
-import { startScheduler, STOP_WAIT_MS } from '../src/services/scheduler.js';
+import {
+  nextBootAt,
+  RESUME_GAP_MS,
+  SCHEDULER_INTERVAL_MS,
+  startScheduler,
+  STOP_WAIT_MS,
+} from '../src/services/scheduler.js';
 import { getBadges } from '../src/services/stats.js';
 import type { ChallengeRow, ParticipantRow } from '../src/db/index.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
@@ -774,6 +782,145 @@ describe('scheduler: the itiraz majority shrinks when somebody leaves', () => {
     expect(back.statusCode).toBe(409);
     expect(back.json<{ error: { code: string } }>().error.code).toBe('already_left');
     expect(participant(harness, challengeId, can.me.id).status).toBe('left');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The owner's PC sleeps
+// ---------------------------------------------------------------------------
+
+/** A push sender with nothing to send, so a pass started by the interval ends at once. */
+const quietPush: PushSender = { flush: () => Promise.resolve({ sent: 0, failed: 0 }) };
+
+describe('scheduler: the owner\'s PC slept through the night', () => {
+  it('takes a gap of more than five minutes between two beats for a sleep, and nothing shorter', () => {
+    const prev = new Date('2026-01-06T18:00:00.000Z');
+    const lastBeat = Date.parse('2026-01-06T20:30:00.000Z');
+    expect(nextBootAt(prev, lastBeat, new Date(lastBeat + SCHEDULER_INTERVAL_MS))).toBe(prev);
+    expect(nextBootAt(prev, lastBeat, new Date(lastBeat + 4 * MINUTE))).toBe(prev);
+    expect(nextBootAt(prev, lastBeat, new Date(lastBeat + RESUME_GAP_MS))).toBe(prev);
+    const woke = new Date(lastBeat + 6 * MINUTE);
+    expect(nextBootAt(prev, lastBeat, woke)).toBe(woke);
+  });
+
+  it('gives the phones their hour from the moment it wakes, not from the end it slept through', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+    // the last syncs before bed; the rest of the evening sits on the phones
+    at(harness, '2026-01-06T19:00:00.000Z');
+    await phoneSync(harness, ali, { '2026-01-06': 10_000 });
+    await phoneSync(harness, veli, { '2026-01-06': 9_000 });
+
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const warn = vi.spyOn(harness.app.log, 'warn');
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      // the server was started at 23:30, and the laptop went to sleep soon after
+      at(harness, MIDNIGHT_END, -30 * MINUTE);
+      stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush });
+      // it wakes at 09:00 with the same process: Windows does not restart it
+      at(harness, MIDNIGHT_END, 9 * HOUR);
+      const wokeAt = harness.now().getTime();
+      const beat = async (): Promise<void> => {
+        await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
+        // let the pass that beat started finish, so the next one is not skipped
+        await new Promise((resolve) => setImmediate(resolve));
+      };
+      await beat();
+      expect(challengeRow(harness, challengeId).status).toBe('active');
+      expect(warn).toHaveBeenCalledWith({ minutes: 9 * 60 + 30 }, 'scheduler resumed after a pause');
+
+      // an hour of beats four minutes apart: awake all along, the hour is not started again
+      for (let minutes = 4; minutes < 60; minutes += 4) {
+        at(harness, new Date(wokeAt).toISOString(), minutes * MINUTE);
+        await beat();
+        expect(challengeRow(harness, challengeId).status, `${minutes} dakika sonra`).toBe('active');
+      }
+      at(harness, new Date(wokeAt).toISOString(), LIMITS.DEVICE_SETTLE_MS);
+      await beat();
+      expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives the owner of an itiraz that ran out in the night an hour after it wakes, on the clock the app shows', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'su_bardak');
+    at(harness, MIDNIGHT_END, -2 * HOUR);
+    const aliEntry = await logWater(harness, ali, challengeId, 8);
+    await logWater(harness, veli, challengeId, 5);
+    at(harness, MIDNIGHT_END, -HOUR);
+    const answerBy = (await dispute(harness, veli, challengeId, aliEntry)).answerBy!;
+
+    // asleep from before the end until two hours after Ali's 12 hours ran out
+    const bootAt = new Date(Date.parse(answerBy) + 2 * HOUR);
+    const pass = () => runSchedulerOnce(harness!.db, harness!.now(), { bootAt });
+    at(harness, bootAt.toISOString());
+    expect(pass()).toMatchObject({ disputes: 0, finalized: 0 });
+    expect(entryStatus(harness, aliEntry)).toBe('disputed');
+    const extended = new Date(bootAt.getTime() + LIMITS.DEVICE_SETTLE_MS).toISOString();
+    expect(answerByOf(harness, aliEntry)).toBe(extended);
+    // the feed counts down the same hour, so the app still offers "Kanıt ekle"
+    expect(challengeFeed(harness.db, challengeId).find((item) => item.id === aliEntry)?.answerBy).toBe(extended);
+
+    at(harness, extended, -MINUTE);
+    expect(pass()).toMatchObject({ disputes: 0, finalized: 0 });
+    at(harness, extended);
+    expect(pass()).toMatchObject({ disputes: 1, finalized: 1 });
+    expect(entryStatus(harness, aliEntry)).toBe('rejected');
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: veli.me.id });
+  });
+
+  it('throws out on time an itiraz that ran out while the server was up', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'su_bardak');
+    const aliEntry = await logWater(harness, ali, challengeId, 8);
+    const answerBy = (await dispute(harness, veli, challengeId, aliEntry)).answerBy!;
+
+    // started half an hour before the window ran out: Ali had the server all along
+    const bootAt = new Date(Date.parse(answerBy) - 30 * MINUTE);
+    at(harness, answerBy);
+    expect(runSchedulerOnce(harness.db, harness.now(), { bootAt })).toMatchObject({ disputes: 1 });
+    expect(entryStatus(harness, aliEntry)).toBe('rejected');
+  });
+
+  it('keeps an extended clock measured against the players who were in when it started', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId } = await waterGroup(harness, ['veli', 'cem']);
+    const [ali, veli] = players as [RegisteredUser, RegisteredUser];
+    const eda = await registerUser(harness.app, 'eda');
+    befriend(harness.app, ali.me.id, eda.me.id);
+    const entryId = await logWater(harness, ali, challengeId, 9);
+    // three in: Veli alone is the majority and the 12 hours start
+    const answerBy = (await dispute(harness, veli, challengeId, entryId)).answerBy!;
+
+    // Ali adds Eda; with four in a new itiraz would need two, this one already started
+    harness.advance(MINUTE);
+    const invited = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/invite`,
+      payload: { userIds: [eda.me.id] },
+    });
+    expect(invited.statusCode).toBe(200);
+    expect((await authed(harness.app, eda.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+
+    const bootAt = new Date(Date.parse(answerBy) + 2 * HOUR);
+    const extended = new Date(bootAt.getTime() + LIMITS.DEVICE_SETTLE_MS).toISOString();
+    const pass = () => runSchedulerOnce(harness!.db, harness!.now(), { bootAt });
+    at(harness, bootAt.toISOString());
+    expect(pass()).toMatchObject({ disputes: 0 });
+    expect(answerByOf(harness, entryId)).toBe(extended);
+    // Eda joined before the moved end's 12 hours, but not before the clock started
+    at(harness, bootAt.toISOString(), MINUTE);
+    expect(pass()).toMatchObject({ disputes: 0 });
+    expect(answerByOf(harness, entryId)).toBe(extended);
+
+    at(harness, extended);
+    expect(pass()).toMatchObject({ disputes: 1 });
+    expect(entryStatus(harness, entryId)).toBe('rejected');
   });
 });
 

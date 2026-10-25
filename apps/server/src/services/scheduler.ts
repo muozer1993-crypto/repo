@@ -28,6 +28,24 @@ export const STOP_WAIT_MS = 10_000;
  */
 export const BACKUP_COPY_RETRY_MS = 60 * 60_000;
 
+/**
+ * A gap this long between two beats of the 30-second interval means the process
+ * was not running: the PC slept (Windows suspends it, the process never restarts)
+ * or was frozen. Well above a beat, so a busy event loop never reads as one; a
+ * false one only holds a result an hour longer.
+ */
+export const RESUME_GAP_MS = 5 * 60_000;
+
+/**
+ * The `bootAt` for this beat: `now` after a gap of more than `RESUME_GAP_MS`
+ * since the last one, `prev` (the same object, so the caller can tell) otherwise.
+ * A server that slept through midnight is a server that was off at midnight, and
+ * gets the same hour (`stillSettling`, `resolveDisputes`).
+ */
+export function nextBootAt(prev: Date, lastBeatMs: number, now: Date): Date {
+  return now.getTime() - lastBeatMs > RESUME_GAP_MS ? now : prev;
+}
+
 export interface SchedulerOptions {
   /** Stand-in for the Expo sender; tests hold a flush open to watch stop() wait for it. */
   push?: PushSender;
@@ -49,8 +67,12 @@ export function startScheduler(
   let copyInFlight: Promise<void> | null = null;
   let copyRetryAt = 0;
   // A phone-counted çelınc that ended while this server was off waits a full
-  // hour from now, not from its end, so the phones get to report before anybody wins.
-  const bootAt = app.now();
+  // hour from now, not from its end, so the phones get to report before anybody
+  // wins; an itiraz whose window ran out meanwhile gets the same hour for its
+  // photo. Asleep is off too: the PC wakes with this process still running, so
+  // the interval moves it on when it comes back (`nextBootAt`).
+  let bootAt = app.now();
+  let lastBeatMs = bootAt.getTime();
 
   const tick = async (): Promise<void> => {
     try {
@@ -107,6 +129,16 @@ export function startScheduler(
   };
 
   const run = (): void => {
+    // Measured on every beat, including the ones a slow pass makes us skip: a
+    // push flush that holds a pass for minutes is not a sleep.
+    const now = app.now();
+    const next = nextBootAt(bootAt, lastBeatMs, now);
+    if (next !== bootAt) {
+      app.log.warn({ minutes: Math.round((now.getTime() - lastBeatMs) / 60_000) }, 'scheduler resumed after a pause');
+    }
+    bootAt = next;
+    lastBeatMs = now.getTime();
+
     if (inFlight) return; // never overlap two passes
     inFlight = tick().finally(() => {
       inFlight = null;

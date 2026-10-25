@@ -133,6 +133,14 @@ function pushLine(entry: Entry): string | null {
   return null;
 }
 
+/** "9 saat 3 dakika" rather than "543 dakika": a night asleep reads in hours. */
+function duration(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours === 0) return `${rest} dakika`;
+  return rest === 0 ? `${hours} saat` : `${hours} saat ${rest} dakika`;
+}
+
 /** The query string never got into the entry (app.ts); an invite code has no business here. */
 function requestLine(entry: Entry): string {
   return `${text(entry.method)} ${text(entry.url)} → ${text(entry.statusCode)} (${text(entry.ms)} ms)`;
@@ -155,6 +163,9 @@ const MESSAGES: Record<string, (entry: Entry) => string | null> = {
   'scheduler pass failed': () => 'zamanlayıcı turu patladı',
   'scheduler step failed': (e) => `zamanlayıcının "${text(e.step)}" adımı patladı`,
   'scheduler pass still running at shutdown, closing anyway': () => 'zamanlayıcı turu bitmedi, beklemeden kapatıyorum',
+  'scheduler resumed after a pause': (e) =>
+    `bilgisayar ${duration(count(e, 'minutes'))} uyumuş; telefonlara ve itiraza cevap verecek olanlara bir saat daha veriyorum`,
+  'keep-awake helper failed': () => 'bilgisayarı uyanık tutamadım; uykuyu Ayarlar → Sistem → Güç\'ten kapat (README: "Bilgisayar uyumasın")',
   'push flush': pushLine,
   'push flush failed': () => 'push gönderilemedi',
   'database backup written': (e) => `günün yedeği alındı: ${text(e.file)}`,

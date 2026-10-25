@@ -207,8 +207,9 @@ statements and SQL migrations applied at boot (`migrations/001_init.sql` ... emb
 strings in `src/db/migrations.ts` — no filesystem reads for migrations so it works from any cwd).
 
 ```
-src/index.ts            boot: loadDotEnv() + buildApp() + listen(PORT, HOST 0.0.0.0) + start scheduler (after listen);
-                        clean shutdown (see 2.6)
+src/index.ts            boot: loadDotEnv() + buildApp() + listen(PORT, HOST 0.0.0.0) + start scheduler (after listen)
+                        + startKeepAwake(); clean shutdown (see 2.6)
+src/keepAwake.ts        Windows only: a hidden PowerShell that keeps the PC from idle sleep while the server runs (see 2.6)
 src/log.ts              ownerLogStream(): pino lines → one Turkish line each for the owner's console (see Logging);
                         wantsReadableLogs(): stdout is a TTY and LOG_FORMAT is not `json`
 src/env.ts              loadDotEnv(): apps/server/.env into process.env, never over a variable already set; entry
@@ -235,7 +236,8 @@ src/services/notifications.ts  notify(userId, type, title, body, data) → inbox
 src/services/push.ts        Expo push sender (batch, handles DeviceNotRegistered → clears token)
 src/services/stats.ts       computeUserStats(userId), evaluate & award badges
 src/services/scheduler.ts   setInterval 30s: activate due, finalize ended, cancel underfilled, reminders; the stop
-                            function awaits a pass in flight (≤ 10 s) so a push flush marks its rows first
+                            function awaits a pass in flight (≤ 10 s) so a push flush marks its rows first; a beat
+                            more than RESUME_GAP_MS (5 min) after the last one (the PC slept) moves bootAt to now
 src/services/taunts.ts      sendTaunt() with clamp + one-per-loser rule; sendPoke() rate limit
 src/services/admin.ts       owner tools: listUsers(), listReports(), resetPassword() (8-char readable temp password)
 src/cli/yonet.ts            `npm run yonet -- kullanicilar | sikayetler | sifre <kullanici>` on the server's own DB file
@@ -256,9 +258,11 @@ challenges(id TEXT PK, creator_id TEXT, type_key TEXT, metric_type TEXT, directi
 challenge_participants(challenge_id TEXT, user_id TEXT, status TEXT, invited_at TEXT, joined_at TEXT,
       final_score REAL, final_rank INTEGER, PRIMARY KEY(challenge_id, user_id))
 entries(id TEXT PK, challenge_id TEXT, user_id TEXT, day_key TEXT, value REAL, source TEXT, note TEXT, proof_url TEXT,
-      status TEXT DEFAULT 'ok', client_time TEXT, session_id TEXT, created_at TEXT, updated_at TEXT, answer_by TEXT)
+      status TEXT DEFAULT 'ok', client_time TEXT, session_id TEXT, created_at TEXT, updated_at TEXT, answer_by TEXT,
+      answer_from TEXT)
   -- indexes: (challenge_id, user_id, day_key); UNIQUE(challenge_id, user_id, session_id) WHERE session_id IS NOT NULL
   -- answer_by: set once when a majority disputes the entry (the owner's 12 h clock, 2.4 1b), NULL otherwise
+  -- answer_from: when that clock started (migration 011); NULL on an older clock, which started 12 h before answer_by
 steps_daily(user_id TEXT, day_key TEXT, steps INTEGER, source TEXT, updated_at TEXT, PRIMARY KEY(user_id, day_key))
 screen_time_daily(user_id TEXT, day_key TEXT, minutes INTEGER, updated_at TEXT, PRIMARY KEY(user_id, day_key))
 disputes(id TEXT PK, entry_id TEXT, by_user_id TEXT, reason TEXT, status TEXT, created_at TEXT, won_before INTEGER DEFAULT 0,
@@ -377,8 +381,11 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
 1b. Disputes (`resolveDisputes`, before finalize): in every `active` çelınc the clocks are brought up to date first
    (`announceDisputeClocks`): a `disputed` entry of an accepted player whose open disputes (from accepted players)
    reach the threshold and has no `answer_by` gets `now + LIMITS.DISPUTE_ANSWER_MS` and its owner a `dispute`
-   notification; one that no longer reaches it loses its clock (measured against the players accepted when it
-   started, so a late joiner cannot stop it). Then an entry whose `answer_by` has passed is
+   notification; one that no longer reaches it loses its clock (measured against the players accepted by
+   `answer_from`, so a late joiner cannot stop it). While `now < bootAt + LIMITS.DEVICE_SETTLE_MS` (2), an
+   `answer_by` before `bootAt` is moved to `bootAt + DEVICE_SETTLE_MS` (`answer_from` kept): the server was off or
+   asleep when it ran out, so a photo sent in its last hours never got through, and the owner gets that hour after
+   it is back. Stored, so the feed's `answerBy` and the app's "Kanıt ekle" show it. Then an entry whose `answer_by` has passed is
    upheld: open disputes → `upheld`, entry → `rejected`, `entry_rejected` to the owner (not when deleted), badges
    recomputed for the disputers (`disputesWon`), and a typed day the phone already reported takes the phone's
    number right away (`restoreFromPhone`, 2.3). The window runs from the moment the majority was reached and is
@@ -394,7 +401,10 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    (`challengeWindow(c, participantTimezone(p, u)).at(-1)`) has `updated_at > ends_at`; a participant whose last
    day was not over by `ends_at` (another zone, an end in the middle of a day) is not waited for, because that day
    no longer moves (2.3). `bootAt` is when
-   `startScheduler` started, so a server that was off at the end gives the phones the full hour after boot. While
+   `startScheduler` started, so a server that was off at the end gives the phones the full hour after boot. A PC
+   that sleeps keeps its process, so the scheduler also moves `bootAt` to `now` when a beat of its interval comes
+   more than `RESUME_GAP_MS` (5 min) after the one before (`nextBootAt`), and logs it (`warn`, the minutes slept);
+   asleep at the end is the same as off at the end. While
    settling, device syncs still fan out into the last day and typed entries get `challenge_ended` (2.3); the
    app shows "Sonuç birazdan" instead of the countdown, hides the entry buttons and sends its own count once.
    Every other type finalizes right at `ends_at` — unless, whatever the type, one of its entries is inside a
@@ -433,9 +443,17 @@ Daily backup (`services/backup.ts`, run from the scheduler tick): `db.backup()` 
 
 Owner CLI (`npm run yonet`, root script → workspace script, so the cwd is `apps/server` and the default `./data` is the server's database): `kullanicilar` (username, name, created, last seen in Istanbul time, accepted active çelınclar, deleted last), `sikayetler` (reporter, reported, reason, newest first), `sifre <kullanici>` (name folded like a login, so `sifre Şeyma` finds seyma; new random password from `abcdefghjkmnpqrstuvwxyz23456789`, stored as scrypt, printed once; unknown or deleted → Turkish error, exit 1), `yedekler` (both backup folders: name, mtime in Istanbul time, size; a BACKUP_DIR hint when unset), `geri-yukle [yedek]` (`geri-yükle` too; no argument → the newest day across both folders, the local copy on a tie; else a path, a backup name or a bare `YYYY-MM-DD`). No argument → Turkish help (exit 0); unknown command → help on stderr, exit 1. Refuses when the DB file does not exist rather than creating one (except `yedekler`/`geri-yukle`, which keep no connection to it: `geri-yukle` opens it only for the moment of the check below), and never writes a JWT secret. Safe beside a running server (WAL + busy_timeout), except `geri-yukle`: it refuses (exit 1, nothing touched) when `GET http://127.0.0.1:<PORT>/health` answers `ok: true` within 2 s, and `restoreBackup` refuses on its own when the live file's `-wal` survives an open/read/close of ours (another connection holds it). The backup is copied next to the database (`koydum.db.gelen`) and must pass `PRAGMA integrity_check` and have `_migrations` rows ("bozuk" / "KOYDUM yedeği değil" otherwise); the live file (with a WAL it could not fold in) is renamed to `koydum-onceki-YYYY-MM-DD-HHmm[-n].db` beside it, stale `-wal`/`-shm` removed, the new file renamed in. Nothing is deleted. There is no email and no reset endpoint: a forgotten password is reset by the owner; existing tokens stay valid. A signed-in user changes their own (including the temporary one) in Ayarlar → Hesap → "Şifreni değiştir" (`POST /me/password`).
 
+Keep-awake (`src/keepAwake.ts`, started right after the scheduler): on Windows, unless `KEEP_AWAKE` is `0`, the
+server spawns `powershell.exe -NoProfile -NonInteractive -EncodedCommand …` (`stdio: 'ignore'`, `windowsHide`; no
+`-WindowStyle Hidden`, which would hide the console it was started from). It calls
+`SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` through `Add-Type`, then polls every 30 s until the
+server's pid is gone, so it also ends after a hard kill. No display flag: the screen still goes dark. A closed lid
+still sleeps (README). Shutdown kills it; a spawn error or an exit nobody asked for logs one `warn` and is never
+fatal. Other platforms: nothing.
+
 Shutdown (`src/index.ts`): SIGINT, SIGTERM, SIGHUP (a closed console window, Windows too), SIGBREAK on Windows, an
-IPC message `{ type: 'shutdown' }` and a lost IPC channel all run the same path: await the scheduler stop, `app.close()`,
-`db.close()`, exit 0 (forced after 12 s). An unhandled rejection or uncaught exception is logged as fatal and takes the
+IPC message `{ type: 'shutdown' }` and a lost IPC channel all run the same path: stop the keep-awake helper, await
+the scheduler stop, `app.close()`, `db.close()`, exit 0 (forced after 12 s). An unhandled rejection or uncaught exception is logged as fatal and takes the
 same path with exit code 1. A busy port (EADDRINUSE) prints one Turkish line (`src/listenError.ts`) and exits 1 without
 a stack; the scheduler starts only after `listen` succeeds.
 
@@ -446,7 +464,7 @@ pino line becomes `HH:mm:ss <glyph> <Turkish text>`: Istanbul time, `•` up to 
 `── YYYY-MM-DD ──` line before the first entry of each Istanbul day. The server's own messages have Turkish renderings
 (startup with port and the explicit PUBLIC_URL, Fastify's "Server listening at", scheduler pass counts, push sent/failed,
 backup written/copied/failed, shutdown reason, the failed/slow request line, YENİ ŞİKAYET with reporter, reported and
-reason); an `err` adds `: <message>` and, from error up, the first 3 "at" frames of its stack (all of them for fatal).
+reason, the PC waking after N minutes ("bilgisayar 9 saat 3 dakika uyumuş; …"), the keep-awake helper failing); an `err` adds `: <message>` and, from error up, the first 3 "at" frames of its stack (all of them for fatal).
 An all-zero pass or flush writes nothing. Unknown messages: the message, then the remaining keys as `k=v` (pid,
 hostname, level, time, v and reqId dropped; `err=` its message). Control characters in any value become a space. A line that is not JSON
 is written unchanged. Anything else (pipe, file, Docker, tests) keeps pino's JSON.

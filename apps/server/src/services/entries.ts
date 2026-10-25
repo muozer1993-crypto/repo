@@ -459,13 +459,13 @@ function disputedEntries(
  * `announceDisputeClocks`).
  *
  * A running clock is measured against the players who were in when it
- * started: a friend who joins later (the creator's "Kanka ekle") raises the
- * count but cast no vote, and stopping the clock then would let the disputed
- * number count, and win, without anybody being told.
+ * started (`answer_from`): a friend who joins later (the creator's "Kanka
+ * ekle") raises the count but cast no vote, and stopping the clock then would
+ * let the disputed number count, and win, without anybody being told.
  */
 export function syncDisputeClocks(db: Database, challengeId: string, now: Date, entryId?: string): EntryRow[] {
   const threshold = disputeThreshold(acceptedCount(db, challengeId));
-  const setClock = db.prepare('UPDATE entries SET answer_by = ? WHERE id = ?');
+  const setClock = db.prepare('UPDATE entries SET answer_by = ?, answer_from = ? WHERE id = ?');
   // a row from before `joined_at` was always set counts as in from the start
   const inBy = db.prepare(
     `SELECT COUNT(*) AS n FROM challenge_participants
@@ -476,15 +476,19 @@ export function syncDisputeClocks(db: Database, challengeId: string, now: Date, 
     const { open_count: open, ...entry } = row;
     const onClock = entry.answer_by !== null && entry.answer_by !== undefined;
     if (open >= threshold && !onClock) {
+      const answerFrom = nowIso(now);
       const answerBy = nowIso(new Date(now.getTime() + LIMITS.DISPUTE_ANSWER_MS));
-      setClock.run(answerBy, entry.id);
-      started.push({ ...entry, answer_by: answerBy });
+      setClock.run(answerBy, answerFrom, entry.id);
+      started.push({ ...entry, answer_by: answerBy, answer_from: answerFrom });
     } else if (onClock) {
-      const startedAt = Date.parse(entry.answer_by as string) - LIMITS.DISPUTE_ANSWER_MS;
+      // a clock from before migration 011 started a full window before its end
+      const startedAt = entry.answer_from
+        ? Date.parse(entry.answer_from)
+        : Date.parse(entry.answer_by as string) - LIMITS.DISPUTE_ANSWER_MS;
       const then = Number.isFinite(startedAt)
         ? disputeThreshold((inBy.get(challengeId, nowIso(new Date(startedAt))) as { n: number }).n)
         : threshold;
-      if (open < then) setClock.run(null, entry.id);
+      if (open < then) setClock.run(null, null, entry.id);
     }
   }
   return started;
@@ -746,6 +750,25 @@ export function upholdDisputes(db: Database, challenge: ChallengeRow, entry: Ent
 }
 
 /**
+ * Gives the owner of every entry whose window ran out before `bootAt` the hour
+ * after it (`LIMITS.DEVICE_SETTLE_MS`): the server was off or asleep then, so
+ * the photo they sent in the last hours never got through. Written to
+ * `answer_by` itself, so the feed's countdown and the app's "Kanıt ekle" show
+ * the same hour; `answer_from` keeps the start, so a friend who joined in
+ * between still cannot stop the clock (`syncDisputeClocks`).
+ */
+function extendClocksPastBoot(db: Database, challengeId: string, bootAt: Date): void {
+  const answerBy = nowIso(new Date(bootAt.getTime() + LIMITS.DEVICE_SETTLE_MS));
+  const move = db.prepare(
+    "UPDATE entries SET answer_by = ?, answer_from = COALESCE(answer_from, ?) WHERE id = ? AND status = 'disputed'",
+  );
+  for (const [entryId, deadline] of disputeDeadlines(db, challengeId)) {
+    if (deadline >= bootAt.getTime()) continue;
+    move.run(answerBy, nowIso(new Date(deadline - LIMITS.DISPUTE_ANSWER_MS)), entryId);
+  }
+}
+
+/**
  * Scheduler step: every disputed entry whose answer window ran out without a
  * photo is thrown out (`upholdDisputes`). It runs right before `finalize` in the
  * same pass, so a çelınc that was only waiting on this entry finishes without it
@@ -755,8 +778,11 @@ export function upholdDisputes(db: Database, challenge: ChallengeRow, entry: Ent
  * First it brings every clock up to date (`announceDisputeClocks`): that is
  * what starts one on a database written before `answer_by` existed, always with
  * a full window from now and a word to the owner, never one already run out.
+ * In the hour after `bootAt` (the scheduler's start, or the PC waking up) a
+ * window that ran out while the server was not running gets that hour first
+ * (`extendClocksPastBoot`); without `bootAt` nothing is extended.
  */
-export function resolveDisputes(db: Database, now: Date = new Date()): number {
+export function resolveDisputes(db: Database, now: Date = new Date(), options: { bootAt?: Date } = {}): number {
   const challenges = db
     .prepare(
       `SELECT DISTINCT c.* FROM challenges c
@@ -765,9 +791,12 @@ export function resolveDisputes(db: Database, now: Date = new Date()): number {
     )
     .all() as ChallengeRow[];
 
+  const { bootAt } = options;
+  const justBooted = bootAt !== undefined && now.getTime() < bootAt.getTime() + LIMITS.DEVICE_SETTLE_MS;
   let upheld = 0;
   for (const challenge of challenges) {
     db.transaction(() => announceDisputeClocks(db, challenge.id, now))();
+    if (justBooted) db.transaction(() => extendClocksPastBoot(db, challenge.id, bootAt))();
     for (const [entryId, deadline] of disputeDeadlines(db, challenge.id)) {
       if (now.getTime() < deadline) continue;
       const entry = getEntryRow(db, entryId);

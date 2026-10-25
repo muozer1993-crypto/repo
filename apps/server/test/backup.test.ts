@@ -158,6 +158,8 @@ describe('BACKUP_DIR', () => {
     fs.writeFileSync(blocked, '');
     harness = await makeApp({ now: day(22), config: { ...config, backupCopyDir: path.join(blocked, 'yedek') } });
     const warn = vi.spyOn(harness.app.log, 'warn');
+    // an hour between two beats also reads as a sleep, and says so: count only the copy's lines
+    const copyWarnings = () => warn.mock.calls.filter((call) => String(call[1]).includes('BACKUP_DIR')).length;
     let flushes = 0;
     const push: PushSender = {
       flush: async () => {
@@ -169,22 +171,21 @@ describe('BACKUP_DIR', () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     try {
       const stop = startScheduler(harness.app, harness.db, harness.config, { push });
-      await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1), { interval: 10, timeout: 5000 });
+      await vi.waitFor(() => expect(copyWarnings()).toBe(1), { interval: 10, timeout: 5000 });
       expect(fs.existsSync(path.join(backupDir(config), 'koydum-2026-09-22.db'))).toBe(true);
 
       // the next pass, 30 s on: still unreachable, not worth a second line yet
       await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
       await vi.waitFor(() => expect(flushes).toBe(2), { interval: 10, timeout: 5000 });
       await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(warn).toHaveBeenCalledTimes(1);
+      expect(copyWarnings()).toBe(1);
 
       // an hour later it tries again
       harness.advance(BACKUP_COPY_RETRY_MS);
       await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
       await vi.waitFor(() => expect(flushes).toBe(3), { interval: 10, timeout: 5000 });
       await stop();
-      expect(warn).toHaveBeenCalledTimes(2);
-      expect(warn.mock.calls[0]![1]).toContain('BACKUP_DIR');
+      expect(copyWarnings()).toBe(2);
     } finally {
       vi.useRealTimers();
     }

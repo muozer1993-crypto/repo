@@ -67,7 +67,7 @@ export interface SchedulerSummary {
 export interface SchedulerDeps {
   /** Called for anything that goes wrong inside one step (never throws out). */
   onError?: (step: string, err: unknown) => void;
-  /** When this server process started; see `finalizeEndedChallenges`. */
+  /** When this server started, or last woke from sleep (`startScheduler`); see `stillSettling` and `resolveDisputes`. */
   bootAt?: Date;
 }
 
@@ -758,10 +758,12 @@ export function disputesCloseAt(challenge: ChallengeRow): number {
  * a 22:15 reading cannot be taken back (the fan-out stops at `finished`). Typed
  * çelınclar have nothing more to receive and finish on the dot.
  *
- * The hour runs from the end or from this process's start, whichever is later: a
- * server that was off at midnight must not crown anybody on boot before a single
- * phone could reach it, and a restart during the hour starts it again, which
- * needs no bookkeeping table.
+ * The hour runs from the end or from `bootAt`, whichever is later: a server
+ * that was off at midnight must not crown anybody on boot before a single phone
+ * could reach it, and a restart during the hour starts it again, which needs no
+ * bookkeeping table. A PC that slept through midnight is the same server off at
+ * midnight (the phones' syncs failed all night), so the scheduler moves `bootAt`
+ * to the moment it wakes.
  */
 function stillSettling(db: Database, challenge: ChallengeRow, now: Date, bootAt?: Date): boolean {
   const metric = typeForChallenge(challenge).deviceMetric;
@@ -1066,7 +1068,7 @@ export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: Sch
 
   step('activate', () => activateDueChallenges(db, now), (n) => (summary.activated = n));
   // before finalize, so a çelınc that only waited on an unanswered itiraz ends without that entry
-  step('disputes', () => resolveDisputes(db, now), (n) => (summary.disputes = n));
+  step('disputes', () => resolveDisputes(db, now, { bootAt: deps.bootAt }), (n) => (summary.disputes = n));
   step('finalize', () => finalizeEndedChallenges(db, now, { bootAt: deps.bootAt }), (n) => (summary.finalized = n));
   step('cancel', () => cancelUnderfilled(db, now), (n) => (summary.cancelled = n));
   step('reminders', () => sendReminders(db, now), (n) => (summary.reminders = n));
