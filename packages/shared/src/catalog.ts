@@ -5,6 +5,7 @@
  * to be measurable on a phone — see `howMeasuredTr` — and carries anti-abuse
  * caps used by the server when validating entries.
  */
+import { hhmmToMinutes, isValidHHmm } from './time';
 import type { ChallengeType, DeviceMetric, MetricType } from './types';
 
 export const CHALLENGE_TYPES: readonly ChallengeType[] = [
@@ -427,6 +428,27 @@ export function challengeTypesForMetric(metricType: MetricType): ChallengeType[]
 /** The catalog types a given phone reading fills in (`deviceMetric`). */
 export function challengeTypesForDevice(metric: DeviceMetric): ChallengeType[] {
   return CHALLENGE_TYPES.filter((type) => type.deviceMetric === metric);
+}
+
+/**
+ * A check-in deadline has to fall after the type's window opens, or no
+ * check-in can ever count: erken_yat at 00:00 refuses everything before 19:00
+ * and scores everything after 19:00 as late, so the çelınc ends 0-0. The
+ * window never wraps past midnight, so 23:59 is the latest a deadline can be.
+ */
+export function deadlineFitsWindow(type: ChallengeType, hhmm: string): boolean {
+  return !type.checkinWindowStart || hhmmToMinutes(hhmm) > hhmmToMinutes(type.checkinWindowStart);
+}
+
+/**
+ * The deadline a check-in is actually judged against. A row stored before the
+ * window rule (or a rematch cloned from one) falls back to the type's default
+ * instead of quietly scoring every day 0.
+ */
+export function effectiveDeadline(type: ChallengeType, stored: string | null): string {
+  return stored && isValidHHmm(stored) && deadlineFitsWindow(type, stored)
+    ? stored
+    : (type.defaultDeadlineTime ?? '23:59');
 }
 
 /** Turkish labels for the catalog categories, in display order. */

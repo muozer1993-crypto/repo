@@ -4,7 +4,9 @@ import {
   CHALLENGE_TYPES,
   LIMITS,
   addDays,
+  deadlineFitsWindow,
   getChallengeType,
+  hhmmToMinutes,
   isValidHHmm,
   t,
   type ChallengeType,
@@ -281,7 +283,17 @@ export default function NewChallengeScreen() {
     Number.isInteger(days) &&
     durationMs > LIMITS.MIN_DURATION_MS &&
     durationMs <= LIMITS.MAX_DURATION_MS;
-  const deadlineValid = !needsDeadline || isValidHHmm(deadlineTime.trim());
+  const trimmedDeadline = deadlineTime.trim();
+  const deadlineFormatOk = isValidHHmm(trimmedDeadline);
+  // erken_yat at 00:00 would refuse every check-in before 19:00 and score every
+  // one after it 0: the server turns it down too, this just says so on the spot
+  const deadlineValid =
+    !needsDeadline || (deadlineFormatOk && !!type && deadlineFitsWindow(type, trimmedDeadline));
+  const deadlineError = deadlineFormatOk
+    ? `Check-in saati ${type?.checkinWindowStart ?? ''} sonrası, en geç 23:59 olmalı.`
+    : 'Saat SS:DD olmalı (ör. 07:30).';
+  // an evening window ends at midnight, and "gece yarısı" is the natural thing to type
+  const eveningWindow = !!type?.checkinWindowStart && hhmmToMinutes(type.checkinWindowStart) >= 12 * 60;
   const settingsValid = !!type && daysValid && deadlineValid;
 
   const friends = friendsQuery.data?.friends ?? [];
@@ -317,7 +329,7 @@ export default function NewChallengeScreen() {
       return `Gün sayısı 1 ile ${LIMITS.MAX_DURATION_DAYS} arasında olmalı.`;
     }
     if (step === 1 && !deadlineValid) {
-      return 'Check-in saatini SS:DD yaz (ör. 07:30).';
+      return deadlineFormatOk ? deadlineError : 'Check-in saatini SS:DD yaz (ör. 07:30).';
     }
     if (step === 2 && participantIds.length === 0) {
       return byLevel(
@@ -568,8 +580,12 @@ export default function NewChallengeScreen() {
                 onChangeText={(value) => setDeadlineTime(value.replace(/[^0-9:]/g, '').slice(0, 5))}
                 keyboardType="numbers-and-punctuation"
                 maxLength={5}
-                error={deadlineTime && !deadlineValid ? 'Saat SS:DD olmalı (ör. 07:30).' : null}
-                hint="Bu saatten sonraki check-in o gün için sayılmaz."
+                error={deadlineTime && !deadlineValid ? deadlineError : null}
+                hint={
+                  eveningWindow
+                    ? 'Bu saatten sonraki check-in o gün için sayılmaz. Gece yarısını geçen saat olmaz, en geç 23:59.'
+                    : 'Bu saatten sonraki check-in o gün için sayılmaz.'
+                }
               />
             ) : null}
 

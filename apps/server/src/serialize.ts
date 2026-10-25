@@ -13,6 +13,8 @@ import {
   NOTIFICATION_TYPES,
   PARTICIPANT_STATUSES,
   CHALLENGE_STATUSES,
+  effectiveDeadline,
+  getChallengeType,
   isVulgarityLevel,
   type Challenge,
   type ChallengeStatus,
@@ -110,6 +112,17 @@ export function toPublicProfile(db: Database, row: UserRow, now: Date = new Date
 // Challenges & entries
 // ---------------------------------------------------------------------------
 
+/**
+ * The check-in deadline entries are judged against (`effectiveDeadline`), so
+ * the detail screen and the phone's reminder never show an 00:00 the server
+ * does not use. A type this build does not know keeps what was stored.
+ */
+function deadlineOf(row: ChallengeRow): string | null {
+  if (row.metric_type !== 'checkin_deadline') return row.deadline_time;
+  const type = getChallengeType(row.type_key);
+  return type ? effectiveDeadline(type, row.deadline_time) : row.deadline_time;
+}
+
 export function toChallenge(row: ChallengeRow): Challenge {
   return {
     id: row.id,
@@ -124,7 +137,7 @@ export function toChallenge(row: ChallengeRow): Challenge {
     status: asChallengeStatus(row.status),
     rewardText: row.reward_text,
     penaltyText: row.penalty_text,
-    deadlineTime: row.deadline_time,
+    deadlineTime: deadlineOf(row),
     dailyTarget: row.daily_target === null ? null : Number(row.daily_target),
     proofRequired: row.proof_required === 1,
     createdAt: row.created_at,

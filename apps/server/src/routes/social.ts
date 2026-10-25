@@ -16,6 +16,7 @@ import {
   TauntBodySchema,
   addDays,
   dayKeyInTz,
+  effectiveDeadline,
   isValidTimeZone,
   startOfDayInTz,
   type Challenge,
@@ -29,7 +30,7 @@ import {
 import { badRequest, conflict, forbidden, notFound, parseBody } from '../errors.js';
 import { newId, nowIso, type ChallengeRow, type Database, type ParticipantRow, type UserRow } from '../db/index.js';
 import { toPublicUser, toTaunt } from '../serialize.js';
-import { challengeWindow, computeStandings, dayOverByEnd, participantTimezone } from '../services/challenges.js';
+import { challengeWindow, computeStandings, dayOverByEnd, participantTimezone, typeForChallenge } from '../services/challenges.js';
 import { notify } from '../services/notifications.js';
 import { toChallenge } from '../serialize.js';
 import { computeUserStats } from '../services/stats.js';
@@ -328,7 +329,11 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
         ends_at: endsAt,
         reward_text: challenge.reward_text,
         penalty_text: challenge.penalty_text,
-        deadline_time: challenge.deadline_time,
+        // a deadline stored before the window check would carry its 0-0 into the rematch
+        deadline_time:
+          challenge.metric_type === 'checkin_deadline'
+            ? effectiveDeadline(typeForChallenge(challenge), challenge.deadline_time)
+            : challenge.deadline_time,
         daily_target: challenge.daily_target,
         proof_required: challenge.proof_required,
         created_at: createdAt,

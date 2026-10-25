@@ -117,6 +117,25 @@ export function tick(session: FocusSession, now: number): FocusSession {
   return session;
 }
 
+/**
+ * The çelınc is about to end: a running (or briefly paused) session stops here
+ * and counts its whole minutes, because the server refuses a focus entry once
+ * the çelınc is over and the session would be lost. The target shrinks to what
+ * was done, so the done screen and `snapshot().earnedMinutes` say the same.
+ */
+export function finishEarly(session: FocusSession, now: number): FocusSession {
+  if (session.status !== 'running' && session.status !== 'paused') return session;
+  const elapsed = Math.min(elapsedMs(session, now), session.targetMinutes * 60_000);
+  return {
+    ...session,
+    accumulatedMs: elapsed,
+    segmentStartedAt: null,
+    leftAt: null,
+    targetMinutes: Math.floor(elapsed / 60_000),
+    status: 'done',
+  };
+}
+
 /** User pressed "vazgeç". */
 export function abandon(session: FocusSession, now: number): FocusSession {
   return {

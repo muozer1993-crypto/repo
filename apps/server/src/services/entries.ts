@@ -14,6 +14,7 @@ import {
   LIMITS,
   compareDayKeys,
   diffDayKeys,
+  effectiveDeadline,
   formatNumberTr,
   isBeforeOrEqualHHmm,
   localTimeHHmm,
@@ -351,13 +352,16 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
       }
       // The verdict is the SERVER's wall-clock time in the zone pinned at join time:
       // neither a phone with its clock rolled back nor a profile timezone edited
-      // mid-challenge can buy an extra hour.
-      const deadline = challenge.deadline_time ?? type.defaultDeadlineTime ?? '23:59';
+      // mid-challenge can buy an extra hour. A deadline stored before the window
+      // check (erken_yat at 00:00) is read as the type's default, or no check-in
+      // in that çelınc could ever count.
+      const deadline = effectiveDeadline(type, challenge.deadline_time);
       const localNow = localTimeHHmm(now, tz);
       // "yattım" at 02:00 is not an early bedtime, it is last night's late one:
       // before the type's window opens the button does nothing for today.
       if (type.checkinWindowStart && isBeforeOrEqualHHmm(localNow, type.checkinWindowStart) && localNow !== type.checkinWindowStart) {
-        throw badRequest('checkin_too_early', `Bu check-in ${type.checkinWindowStart}'den sonra sayılıyor. Biraz erken geldin.`);
+        // no suffix after the time: 04:00, 05:00 and 19:00 each want a different one
+        throw badRequest('checkin_too_early', `Bu check-in saat ${type.checkinWindowStart} olmadan sayılmıyor. Biraz erken geldin.`);
       }
       const onTime = isBeforeOrEqualHHmm(localNow, deadline);
       return { entry: insertEntry(db, input, onTime ? 1 : 0, !onTime), created: true };

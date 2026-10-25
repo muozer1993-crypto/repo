@@ -29,7 +29,12 @@ Bir çelınc "gün" üzerinden puanlanır ve gün, **kullanıcının kendi saat 
 günü kendi yerel gece yarısında döner. Sunucu hiçbir zaman istemcinin gönderdiği saate güvenmez:
 
 * `clientTime` sadece kayıt amaçlıdır, doğrulamada kullanılmaz.
-* Check-in'in "geç mi" olduğuna sunucu kendi saatiyle karar verir.
+* Check-in'in "geç mi" olduğuna sunucu kendi saatiyle karar verir. Son saat, türün açılış
+  saatinden sonra olmak zorunda (`deadlineFitsWindow`): erken yatmada 00:00 her check-in'i ya
+  erken ya geç sayardı. Bu kuraldan önce yazılmış böyle bir saat türün varsayılanıyla okunur
+  (`effectiveDeadline`); ekranda görünen, hatırlatmanın kurulduğu ve rövanşa geçen saat de odur.
+* Sunucu çelınc bittikten sonra odak dakikası almaz. Odak ekranı seansı kalan süreye sığdırır,
+  molalarla uzayan seansı da bitişe 30 saniye kala kapatıp tam dakikalarını gönderir.
 * Geçmiş güne giriş penceresi (manuel 2 gün, adım 7 gün) sunucunun "şimdi"sine göredir.
 
 Sunucudaki tek "şimdi" kaynağı `app.now()`'dur. Testler oraya kontrollü bir saat enjekte eder,

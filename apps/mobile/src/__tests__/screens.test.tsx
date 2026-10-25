@@ -1057,7 +1057,7 @@ describe('a check-in', () => {
     searchParams.id = 'c-1';
     api.challenge = jest.fn(async () => checkinDetail());
     api.addEntry = jest.fn(async () => {
-      throw new ApiError('checkin_too_early', "Bu check-in 04:00'den sonra sayılıyor. Biraz erken geldin.", 400);
+      throw new ApiError('checkin_too_early', 'Bu check-in saat 04:00 olmadan sayılmıyor. Biraz erken geldin.', 400);
     });
     const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
     const tree = renderScreen(<ChallengeScreen />);
@@ -2714,6 +2714,91 @@ describe('the Android back button', () => {
     await act(async () => {
       await saveSession(null);
     });
+  });
+});
+
+describe('effort that would not count', () => {
+  /** A focus çelınc that ends `msLeft` from now. */
+  function focusEndingIn(msLeft: number) {
+    const detail = challengeDetail();
+    return {
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        typeKey: 'odak_seansi',
+        metricType: 'focus_minutes' as const,
+        unit: 'dk',
+        endsAt: new Date(Date.now() + msLeft).toISOString(),
+      },
+    };
+  }
+
+  function pickPreset(tree: ReactTestRenderer, minutes: number): void {
+    const [control] = tree.root.findAll(
+      (node) => Array.isArray(node.props.options) && typeof node.props.onChange === 'function'
+    );
+    if (!control) throw new Error('süre seçici bulunamadı');
+    act(() => {
+      control.props.onChange(minutes);
+    });
+  }
+
+  afterEach(async () => {
+    const { saveSession } = require('@/services/focus') as typeof import('@/services/focus');
+    await act(async () => {
+      await saveSession(null);
+    });
+  });
+
+  it('fits a focus session into the time the çelınc has left', async () => {
+    searchParams.id = 'c-1';
+    // 20 minutes once the half-minute margin for the upload is taken off
+    api.challenge = jest.fn(async () => focusEndingIn(20 * 60_000 + 45_000));
+    const FocusScreen = require('@/app/(app)/focus/[id]').default;
+    const tree = renderScreen(<FocusScreen />);
+    await settle();
+
+    expect(rendered(tree)).toMatch(/en fazla\s+20dk\s+sayılır/);
+    pickPreset(tree, 45);
+    press(tree, 'Başlat');
+    // 45 minutes at 23:30 on the last night used to be refused whole at midnight
+    expect(rendered(tree)).toMatch(/Hedef\s+20dk/);
+    expect(rendered(tree)).toContain('20:00');
+  });
+
+  it('does not start a focus session the çelınc cannot take any more', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => focusEndingIn(50_000));
+    const FocusScreen = require('@/app/(app)/focus/[id]').default;
+    const tree = renderScreen(<FocusScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Çelıncın bitmesine bir dakika bile yok, seans skora yazılmaz.');
+    expect(findWith(tree, 'title', 'Başlat', 'onPress').props.disabled).toBe(true);
+  });
+
+  it("says the check-in deadline has to fall in the type's window", async () => {
+    const NewChallengeScreen = require('@/app/(app)/challenge/new').default;
+    const tree = renderScreen(<NewChallengeScreen />);
+    await settle();
+    const [row] = tree.root.findAll(
+      (node) => typeof node.props.onSelect === 'function' && node.props.type?.key === 'erken_yat'
+    );
+    if (!row) throw new Error('erken_yat bulunamadı');
+    act(() => {
+      row.props.onSelect(row.props.type);
+    });
+    press(tree, 'İleri');
+    expect(rendered(tree)).toContain('Gece yarısını geçen saat olmaz, en geç 23:59.');
+
+    // "gece yarısından önce yat": every check-in would be too early or late
+    typeInto(tree, 'Check-in saati', '00:00');
+    expect(rendered(tree)).toContain('Check-in saati 19:00 sonrası, en geç 23:59 olmalı.');
+    expect(findWith(tree, 'title', 'İleri', 'onPress').props.disabled).toBe(true);
+
+    typeInto(tree, 'Check-in saati', '23:30');
+    expect(rendered(tree)).not.toContain('sonrası, en geç 23:59 olmalı');
+    expect(findWith(tree, 'title', 'İleri', 'onPress').props.disabled).toBe(false);
   });
 });
 

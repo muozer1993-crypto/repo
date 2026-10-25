@@ -236,6 +236,23 @@ describe('POST /challenges', () => {
     expect(ok.json<Challenge>().deadlineTime).toBe('07:00');
   });
 
+  it("refuses a check-in deadline before the type's window opens", async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+    const veli = await registerUser(harness.app, 'veli');
+    befriend(harness.app, ali.me.id, veli.me.id);
+
+    // "gece yarısından önce yat": erken_yat opens at 19:00, so 00:30 would score every night 0
+    const midnight = await createChallenge(harness, ali, {
+      typeKey: 'erken_yat',
+      participantIds: [veli.me.id],
+      deadlineTime: '00:30',
+    });
+    expect(midnight.statusCode).toBe(400);
+    expect(midnight.json().error.code).toBe('validation');
+    expect(midnight.json().error.issues[0].path).toEqual(['deadlineTime']);
+  });
+
   it('rejects an unknown type key', async () => {
     harness = await makeApp({ now: NOW });
     const ali = await registerUser(harness.app, 'ali');
@@ -1166,6 +1183,24 @@ describe('POST /challenges/:id/rematch', () => {
     const rematch = (await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })).json<Challenge>();
     // three London days, 10-12 January, ending at London midnight
     expect(rematch.endsAt).toBe('2026-01-12T23:59:59.999Z');
+  });
+
+  it("does not carry a check-in deadline outside the type's window into the rematch", async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const created = await createChallenge(harness, ali, { typeKey: 'erken_yat', participantIds: [veli.me.id], deadlineTime: '23:30' });
+    const challengeId = created.json<Challenge>().id;
+    // a row written before the wizard and the schema checked the window
+    harness.db.prepare("UPDATE challenges SET deadline_time = '00:00' WHERE id = ?").run(challengeId);
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await harness.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` });
+
+    const rematch = (await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })).json<Challenge>();
+    const stored = harness.db.prepare('SELECT deadline_time FROM challenges WHERE id = ?').get(rematch.id) as { deadline_time: string };
+    expect(stored.deadline_time).toBe('23:00');
+    expect(rematch.deadlineTime).toBe('23:00');
   });
 
   it('runs a one-day rematch asked for late at night to the end of the next day, not for half an hour', async () => {

@@ -662,8 +662,8 @@ iste-geri çek-iste biriyle bütün gün telefonunu öttürebilirdi.
 Ölçüm altı yöntemden birine oturur:
 
 * **Otomatik adım** — telefonun adım sayacı, elle giriş yok.
-* **Odak dakikası** — uygulama içi sayaç; uygulamadan çıkarsan seans yanar. Geri tuşu seansı yakmaz, önce "bitirelim mi?" diye sorar.
-* **Saatli check-in** — belirlenen saatten önce "GELDİM" demen gerekir, saati sunucu doğrular. Her türün bir de açılış saati var (uyanma 04:00, yatma 19:00, yatak 05:00); ondan önce basılan check-in sayılmaz, yoksa gece ikideki "yattım" erken yatma sayılırdı.
+* **Odak dakikası** — uygulama içi sayaç; uygulamadan çıkarsan seans yanar. Geri tuşu seansı yakmaz, önce "bitirelim mi?" diye sorar. Çelınc bittikten sonra sunucu odak dakikası almadığı için seans, çelıncın kalan süresine sığacak kadar kısaltılır: son gece 23:30'da 45 dakika seçersen seans 29 dakika sürer ve bitince yazılır, kaybolmaz.
+* **Saatli check-in** — belirlenen saatten önce "GELDİM" demen gerekir, saati sunucu doğrular. Her türün bir de açılış saati var (uyanma 04:00, yatma 19:00, yatak 05:00); ondan önce basılan check-in sayılmaz, yoksa gece ikideki "yattım" erken yatma sayılırdı. Bu yüzden check-in saati açılış saatinden sonra, en geç 23:59 olmalı: Erken Yatma Sözü'nde 00:00 seçilirse hiçbir gece sayılmaz, çelınc 0-0 biterdi. Sihirbaz böyle bir saati kabul etmiyor; eskiden böyle açılmış bir çelınc türün kendi saatiyle (yatma için 23:00) sayılır.
 * **Sayı girişi** — bardak, sayfa, km, tekrar. Çelıncı açan isterse fotoğraf kanıtı zorunlu olur; fotoğraf sadece bu tür girişlerde vardır.
 * **Az olan kazanır** — ekran süresi gibi; günlük ortalama yarışır, girmediğin gün en kötü değerden (1440 dk) sayılır. Bugün, değeri gelene kadar ortalamaya girmez (iPhone'da gece yazınca girer). Yarışa sonradan katılan, katıldığı günün bir gün öncesinden itibaren sayılır; ondan önceki günler için ceza yemez.
 * **Günlük evet/hayır** — sigara içmedim, şeker yemedim. Gün sayısı yarışır.

@@ -18,7 +18,13 @@ import {
   evaluateBadges,
   t,
 } from '../copy';
-import { CATEGORY_LABELS_TR, getChallengeType, requireChallengeType } from '../catalog';
+import {
+  CATEGORY_LABELS_TR,
+  deadlineFitsWindow,
+  effectiveDeadline,
+  getChallengeType,
+  requireChallengeType,
+} from '../catalog';
 import { containsBanned } from '../banned';
 import { pickTaunt, renderTaunt, resolveTauntForRecipient, tauntsFor } from '../taunts';
 import type { BadgeStats, TauntContext, VulgarityLevel } from '../types';
@@ -60,6 +66,8 @@ describe('challenge catalog', () => {
     for (const type of CHALLENGE_TYPES) {
       if (type.metricType === 'checkin_deadline') {
         expect(type.defaultDeadlineTime).toMatch(/^\d{2}:\d{2}$/);
+        // the fallback effectiveDeadline() hands out has to be one a check-in can meet
+        expect({ key: type.key, fits: deadlineFitsWindow(type, type.defaultDeadlineTime!) }).toEqual({ key: type.key, fits: true });
       }
       if (type.metricType === 'manual_lower_is_better') {
         expect(type.missingDayPenalty).toBeGreaterThan(0);
@@ -80,6 +88,18 @@ describe('challenge catalog', () => {
     for (const type of CHALLENGE_TYPES) {
       expect(CATEGORY_LABELS_TR[type.category]).toBeTruthy();
     }
+  });
+
+  it('reads a check-in deadline outside the window as the type default', () => {
+    const erkenYat = requireChallengeType('erken_yat');
+    expect(effectiveDeadline(erkenYat, '23:30')).toBe('23:30');
+    expect(effectiveDeadline(erkenYat, '00:00')).toBe('23:00');
+    expect(effectiveDeadline(erkenYat, '19:00')).toBe('23:00');
+    expect(effectiveDeadline(erkenYat, null)).toBe('23:00');
+    expect(effectiveDeadline(erkenYat, '7:00')).toBe('23:00');
+    const erkenKus = requireChallengeType('erken_kus');
+    expect(effectiveDeadline(erkenKus, '06:30')).toBe('06:30');
+    expect(effectiveDeadline(erkenKus, '03:59')).toBe('07:00');
   });
 
   it('looks types up by key', () => {

@@ -419,6 +419,44 @@ describe('checkin_deadline entries', () => {
     expect(errorCode(again)).toBe('already_checked_in');
   });
 
+  it("judges a stored deadline outside the type's window by the type default, and reports that one", async () => {
+    harness = await makeApp({ now: '2026-01-05T19:30:00.000Z' }); // 22:30 in Istanbul
+    const { ali, challengeId } = await liveChallenge(harness, 'erken_yat', { deadlineTime: '23:30' });
+    // a row written before the window was checked: with 00:00 every evening check-in was late
+    harness.db.prepare("UPDATE challenges SET deadline_time = '00:00' WHERE id = ?").run(challengeId);
+
+    const response = await post(harness, ali, challengeId, {
+      dayKey: today(harness),
+      value: 1,
+      source: 'checkin',
+      clientTime: iso(harness),
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json<{ entry: Entry }>().entry.value).toBe(1);
+    expect(response.json<{ entry: Entry }>().entry.late).toBeUndefined();
+
+    // the detail screen and the phone's reminder read the deadline that is enforced
+    const detail = await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+    expect(detail.json<ChallengeDetail>().challenge.deadlineTime).toBe('23:00');
+  });
+
+  it('says when the check-in window opens without a suffix after the time', async () => {
+    harness = await makeApp({ now: NOW }); // 12:00 in Istanbul
+    const { ali, challengeId } = await liveChallenge(harness, 'erken_yat', { deadlineTime: '23:00' });
+
+    const early = await post(harness, ali, challengeId, {
+      dayKey: today(harness),
+      value: 1,
+      source: 'checkin',
+      clientTime: iso(harness),
+    });
+    expect(early.statusCode).toBe(400);
+    // "19:00'den" was wrong: on dokuzdan
+    expect((early.json() as { error: { message: string } }).error.message).toBe(
+      'Bu check-in saat 19:00 olmadan sayılmıyor. Biraz erken geldin.',
+    );
+  });
+
   it('only accepts today and only the checkin source', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await liveChallenge(harness, 'erken_kus', { deadlineTime: '23:00' });

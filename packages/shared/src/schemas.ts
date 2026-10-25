@@ -9,9 +9,9 @@ import {
   type VulgarityLevel,
 } from './types';
 import { LIMITS } from './scoring';
-import { DAY_KEY_REGEX, HHMM_REGEX, DEFAULT_TIMEZONE, isValidDayKey, isValidTimeZone } from './time';
+import { DAY_KEY_REGEX, HHMM_REGEX, DEFAULT_TIMEZONE, isValidDayKey, isValidHHmm, isValidTimeZone } from './time';
 import { countGraphemes, foldUsername, hasVisibleChar, stripInvisible } from './text';
-import { getChallengeType } from './catalog';
+import { deadlineFitsWindow, getChallengeType } from './catalog';
 
 export { DAY_KEY_REGEX, HHMM_REGEX };
 
@@ -303,6 +303,17 @@ export function createChallengeBodySchema(opts: ChallengeSchemaOptions = {}) {
       } else if (type.metricType === 'checkin_deadline' && v.deadlineTime === undefined) {
         // An empty/malformed string is already reported by HHmmSchema; only absence is ours.
         ctx.addIssue({ code: 'custom', message: 'Check-in çelıncı için bir saat seçmelisin', path: ['deadlineTime'] });
+      } else if (
+        type.metricType === 'checkin_deadline' &&
+        isValidHHmm(v.deadlineTime) &&
+        !deadlineFitsWindow(type, v.deadlineTime)
+      ) {
+        // No suffix after the time: 04:00, 05:00 and 19:00 each want a different one.
+        ctx.addIssue({
+          code: 'custom',
+          message: `Check-in saati ${type.checkinWindowStart} sonrası, en geç 23:59 olmalı`,
+          path: ['deadlineTime'],
+        });
       }
 
       const start = Date.parse(v.startsAt);

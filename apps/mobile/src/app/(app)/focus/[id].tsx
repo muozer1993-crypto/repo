@@ -21,6 +21,7 @@ import {
   GRACE_MS,
   abandon,
   createSession,
+  finishEarly,
   loadSession,
   onBackground,
   onForeground,
@@ -40,6 +41,11 @@ import { formatClock, formatMinutes } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
 
 const KEEP_AWAKE_TAG = 'koydum-focus';
+/**
+ * A session stops this long before the çelınc ends, so its minutes still reach
+ * the server (which refuses a focus entry from `endsAt` on) over a slow network.
+ */
+const END_MARGIN_MS = 30_000;
 
 
 export default function FocusScreen() {
@@ -51,6 +57,9 @@ export default function FocusScreen() {
   const query = useChallenge(id);
   const detail = query.data;
   const type = detail ? getChallengeType(detail.challenge.typeKey) : undefined;
+  // an end that cannot be read caps nothing, rather than every session at NaN
+  const parsedEnd = detail ? Date.parse(detail.challenge.endsAt) : NaN;
+  const endsAtMs = Number.isNaN(parsedEnd) ? Infinity : parsedEnd;
   const addEntry = useAddEntry(id);
 
   const [restored, setRestored] = useState(false);
@@ -90,8 +99,22 @@ export default function FocusScreen() {
     const timer = setInterval(() => {
       const stamp = Date.now();
       setNow(stamp);
-      setSession((prev) => (prev ? tick(prev, stamp) : prev));
+      setSession((prev) => {
+        if (!prev) return prev;
+        const next = tick(prev, stamp);
+        // start() fits the session before the end, but pauses stretch it: stop
+        // in time for the minutes to post through the 'done' effect below
+        return stamp >= endsAtMs - END_MARGIN_MS ? finishEarly(next, stamp) : next;
+      });
     }, 1000);
+    return () => clearInterval(timer);
+  }, [live, endsAtMs]);
+
+  // Nothing else moves `now` on the picker, and its "en fazla" line counts
+  // down to the çelınc's end.
+  useEffect(() => {
+    if (live) return;
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(timer);
   }, [live]);
 
@@ -189,11 +212,16 @@ export default function FocusScreen() {
 
   const start = () => {
     const stamp = Date.now();
+    // 45 minutes at 23:30 on the last night would all be refused at midnight:
+    // the session only runs for the time the çelınc has left
+    const target = Math.min(preset, Math.floor((endsAtMs - stamp - END_MARGIN_MS) / 60_000));
+    setNow(stamp);
+    // the picker was a little behind; it now shows why nothing starts
+    if (target < LIMITS.FOCUS_MIN_MINUTES) return;
     postedRef.current = null;
     setSavedMinutes(null);
     setSaveError(null);
-    setNow(stamp);
-    setSession(createSession(id, preset, uuidV4(), stamp));
+    setSession(createSession(id, target, uuidV4(), stamp));
     if (Platform.OS !== 'web') {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     }
@@ -277,7 +305,10 @@ export default function FocusScreen() {
   }
 
   const snap = session ? snapshot(session, now) : null;
-  const blocked = detail.challenge.status !== 'active' || detail.me?.status !== 'accepted';
+  // whole minutes a session started now may run (Infinity when the end is unknown)
+  const minutesLeft = Math.floor((endsAtMs - now - END_MARGIN_MS) / 60_000);
+  const tooLate = minutesLeft < LIMITS.FOCUS_MIN_MINUTES;
+  const blocked = detail.challenge.status !== 'active' || detail.me?.status !== 'accepted' || tooLate;
 
   /* ------------------------------------------------------------- picker */
 
@@ -314,7 +345,17 @@ export default function FocusScreen() {
             <Text variant="small">
               {detail.challenge.status !== 'active'
                 ? 'Çelınc aktif değil, seans süresi skora yazılmaz.'
-                : 'Bu çelıncta oyuncu değilsin. Önce daveti kabul et.'}
+                : detail.me?.status !== 'accepted'
+                  ? 'Bu çelıncta oyuncu değilsin. Önce daveti kabul et.'
+                  : now >= endsAtMs
+                    ? 'Çelıncın süresi doldu, seans skora yazılmaz.'
+                    : 'Çelıncın bitmesine bir dakika bile yok, seans skora yazılmaz.'}
+            </Text>
+          </Card>
+        ) : minutesLeft < FOCUS_PRESETS[FOCUS_PRESETS.length - 1] ? (
+          <Card edgeColor={Colors.yellow}>
+            <Text variant="small">
+              Çelıncın bitmesine az kaldı, seans en fazla {formatMinutes(minutesLeft)} sayılır.
             </Text>
           </Card>
         ) : null}

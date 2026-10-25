@@ -224,6 +224,22 @@ describe('CreateChallengeBody', () => {
     expect(schema.safeParse({ ...base, typeKey: 'su_bardak' }).success).toBe(true);
   });
 
+  it("refuses a check-in deadline the type's window never reaches", () => {
+    // erken_yat opens at 19:00: at 00:00 every check-in is too early or late, the çelınc ends 0-0
+    expect(issuePaths(schema.safeParse({ ...base, typeKey: 'erken_yat', deadlineTime: '00:00' }))).toEqual(['deadlineTime']);
+    expect(issuePaths(schema.safeParse({ ...base, typeKey: 'erken_yat', deadlineTime: '19:00' }))).toEqual(['deadlineTime']);
+    expect(schema.safeParse({ ...base, typeKey: 'erken_yat', deadlineTime: '23:30' }).success).toBe(true);
+    expect(schema.safeParse({ ...base, typeKey: 'erken_yat', deadlineTime: '23:59' }).success).toBe(true);
+    // erken_kus opens at 04:00
+    expect(issuePaths(schema.safeParse({ ...base, typeKey: 'erken_kus', deadlineTime: '03:00' }))).toEqual(['deadlineTime']);
+    expect(schema.safeParse({ ...base, typeKey: 'erken_kus', deadlineTime: '07:00' }).success).toBe(true);
+
+    const refused = schema.safeParse({ ...base, typeKey: 'erken_yat', deadlineTime: '00:30' });
+    expect(refused.error?.issues[0]?.message).toBe('Check-in saati 19:00 sonrası, en geç 23:59 olmalı');
+    // only check-in types have a window; others never read the field
+    expect(schema.safeParse({ ...base, deadlineTime: '00:00' }).success).toBe(true);
+  });
+
   it('accepts an injected catalog lookup', () => {
     const custom = createChallengeBodySchema({
       now: () => now,
