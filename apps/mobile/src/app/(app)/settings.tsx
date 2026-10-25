@@ -10,8 +10,18 @@ import {
 } from '@koydum/shared';
 import * as Application from 'expo-application';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  AppState,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  View,
+  type TextInput,
+} from 'react-native';
 
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
@@ -231,6 +241,8 @@ function PasswordSheet({ visible, onClose }: { visible: boolean; onClose: () => 
   const [repeat, setRepeat] = useState('');
   const [errors, setErrors] = useState<PasswordErrors>({});
   const [busy, setBusy] = useState(false);
+  const nextRef = useRef<TextInput>(null);
+  const repeatRef = useRef<TextInput>(null);
 
   // nothing typed here should still be sitting in the fields next time
   const close = () => {
@@ -288,9 +300,13 @@ function PasswordSheet({ visible, onClose }: { visible: boolean; onClose: () => 
           setErrors((prev) => ({ ...prev, current: undefined }));
         }}
         returnKeyType="next"
+        // "İleri" goes on to the next field with the keyboard still up (on its own it only closed it)
+        submitBehavior="submit"
+        onSubmitEditing={() => nextRef.current?.focus()}
         error={errors.current}
       />
       <Input
+        ref={nextRef}
         label="Yeni şifre"
         placeholder="••••••"
         secureTextEntry
@@ -303,10 +319,13 @@ function PasswordSheet({ visible, onClose }: { visible: boolean; onClose: () => 
         }}
         maxLength={LIMITS.PASSWORD_MAX}
         returnKeyType="next"
+        submitBehavior="submit"
+        onSubmitEditing={() => repeatRef.current?.focus()}
         error={errors.next}
         hint={`En az ${LIMITS.PASSWORD_MIN} karakter.`}
       />
       <Input
+        ref={repeatRef}
         label="Yeni şifre (tekrar)"
         placeholder="••••••"
         secureTextEntry

@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors, Layout, Spacing } from '@/theme';
+import { keyboardBehavior } from '@/utils/keyboard';
 
 export interface ScreenProps {
   children: ReactNode;
@@ -91,8 +92,12 @@ export function Screen({
       {keyboard ? (
         <KeyboardAvoidingView
           style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={insets.top}>
+          behavior={keyboardBehavior()}
+          // Its frame is measured below the root's paddingTop, and every Android
+          // route starts at the top of the window, so no offset is owed there:
+          // insets.top would lift the content that much too far. iOS keeps it,
+          // since its modal routes are page sheets that start below the status bar.
+          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}>
           {content}
         </KeyboardAvoidingView>
       ) : (

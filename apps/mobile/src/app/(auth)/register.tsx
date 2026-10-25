@@ -9,8 +9,8 @@ import {
   type VulgarityLevel,
 } from '@koydum/shared';
 import { Link, router } from 'expo-router';
-import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { StyleSheet, View, type TextInput } from 'react-native';
 
 import { PendingInviteBanner } from '@/components/PendingInviteBanner';
 import { Button } from '@/components/Button';
@@ -61,6 +61,8 @@ export default function RegisterScreen() {
   const [level, setLevel] = useState<VulgarityLevel>(2);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const displayNameRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
   const chooseFirst = needsServerChoice(serverUrl);
 
   // React Compiler memoises this for us: the preview follows the picker live.
@@ -149,8 +151,12 @@ export default function RegisterScreen() {
           onChangeText={(text) => setUsername(foldUsername(text))}
           hint="Kankalar seni bu adla bulacak. Türkçe harfler çevrilir (ş→s, ı→i). Görünen adında Türkçe harf kullanabilirsin."
           returnKeyType="next"
+          // "İleri" goes on to the next field with the keyboard still up (on its own it only closed it)
+          submitBehavior="submit"
+          onSubmitEditing={() => displayNameRef.current?.focus()}
         />
         <Input
+          ref={displayNameRef}
           label="Görünen ad"
           placeholder="Mustafa"
           autoCapitalize="words"
@@ -159,11 +165,16 @@ export default function RegisterScreen() {
           onChangeText={setDisplayName}
           maxLength={30}
           returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRef.current?.focus()}
         />
         <Input
+          ref={passwordRef}
           label="Şifre"
           placeholder="••••••"
           secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
           autoComplete="new-password"
           value={password}
           onChangeText={setPassword}

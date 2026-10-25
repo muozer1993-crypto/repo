@@ -1,7 +1,7 @@
 import { foldUsername } from '@koydum/shared';
 import { Link, router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View, type TextInput } from 'react-native';
 
 import { PendingInviteBanner } from '@/components/PendingInviteBanner';
 import { Button } from '@/components/Button';
@@ -34,6 +34,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const passwordRef = useRef<TextInput>(null);
   const chooseFirst = needsServerChoice(serverUrl);
 
   const submit = async () => {
@@ -109,11 +110,17 @@ export default function LoginScreen() {
           value={username}
           onChangeText={setUsername}
           returnKeyType="next"
+          // "İleri" goes on to the password with the keyboard still up (on its own it only closed it)
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRef.current?.focus()}
         />
         <Input
+          ref={passwordRef}
           label="Şifre"
           placeholder="••••••"
           secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
           autoComplete="current-password"
           value={password}
           onChangeText={setPassword}

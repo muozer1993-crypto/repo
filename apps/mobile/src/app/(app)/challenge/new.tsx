@@ -453,6 +453,7 @@ export default function NewChallengeScreen() {
           accessibilityRole="button"
           accessibilityLabel="Kapat"
           onPress={close}
+          hitSlop={8}
           style={({ pressed }) => [styles.close, pressed && styles.pressed]}>
           <Text variant="lead" muted>
             ✕

@@ -724,7 +724,7 @@ function Header({ title, onClose }: { title: string; onClose: () => void }) {
       <Text variant="title" numberOfLines={2} style={styles.grow}>
         {title}
       </Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Kapat" onPress={onClose} style={styles.closeBtn}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Kapat" onPress={onClose} style={styles.closeBtn} hitSlop={8}>
         <Text variant="lead">✕</Text>
       </Pressable>
     </View>

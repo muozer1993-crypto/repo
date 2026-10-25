@@ -3,6 +3,7 @@ import { LIMITS, addDays, todayKey } from '@koydum/shared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
+import { TextInput } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -2051,6 +2052,50 @@ describe('usernames with Turkish letters', () => {
   });
 });
 
+/** The (mocked) native TextInput inside the Input labelled `label`. */
+function fieldOf(tree: ReactTestRenderer, label: string) {
+  return findWith(tree, 'label', label, 'onChangeText').findByType(TextInput);
+}
+
+/**
+ * Presses "İleri" on each field in turn and returns, for every press, whether
+ * the field after it was focused. jest-expo's TextInput shares one focus() mock
+ * on its prototype between every field, so each field gets its own here.
+ */
+function walkWithNext(tree: ReactTestRenderer, labels: string[]): boolean[] {
+  const focused = labels.map((label) => {
+    const focus = jest.fn();
+    (fieldOf(tree, label).instance as { focus: () => void }).focus = focus;
+    return focus;
+  });
+  return labels.slice(0, -1).map((label, index) => {
+    act(() => {
+      findWith(tree, 'label', label, 'onSubmitEditing').props.onSubmitEditing();
+    });
+    return focused[index + 1]!.mock.calls.length === 1;
+  });
+}
+
+describe('the keyboard\'s "İleri" on the auth forms', () => {
+  it('login goes from the username to the password, and the password is typed as it is', async () => {
+    const LoginScreen = require('@/app/(auth)/login').default;
+    const tree = renderScreen(<LoginScreen />);
+    await settle();
+    expect(walkWithNext(tree, ['Kullanıcı adı', 'Şifre'])).toEqual([true]);
+    // "submit" keeps the keyboard up while the focus moves on
+    expect(fieldOf(tree, 'Kullanıcı adı').props.submitBehavior).toBe('submit');
+    expect(fieldOf(tree, 'Şifre').props).toMatchObject({ autoCapitalize: 'none', autoCorrect: false });
+  });
+
+  it('register walks username, display name and password', async () => {
+    const RegisterScreen = require('@/app/(auth)/register').default;
+    const tree = renderScreen(<RegisterScreen />);
+    await settle();
+    expect(walkWithNext(tree, ['Kullanıcı adı', 'Görünen ad', 'Şifre'])).toEqual([true, true]);
+    expect(fieldOf(tree, 'Şifre').props).toMatchObject({ autoCapitalize: 'none', autoCorrect: false });
+  });
+});
+
 describe('settings password sheet', () => {
   function openSheet(): ReactTestRenderer {
     const SettingsScreen = require('@/app/(app)/settings').default;
@@ -2116,6 +2161,12 @@ describe('settings password sheet', () => {
 
     expect(mockSetSession).toHaveBeenCalledWith('yeni-token', ME);
     expect(rendered(tree)).toContain('Tamamdır, yeni şifre işlendi');
+  });
+
+  it('goes from field to field on "İleri"', async () => {
+    const tree = openSheet();
+    await settle();
+    expect(walkWithNext(tree, ['Mevcut şifre', 'Yeni şifre', 'Yeni şifre (tekrar)'])).toEqual([true, true]);
   });
 });
 

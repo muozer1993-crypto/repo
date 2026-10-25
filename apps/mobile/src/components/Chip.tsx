@@ -50,11 +50,24 @@ export function Chip({
   );
   if (!onPress) return body;
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={icon ? `${icon} ${label}` : label}
+      accessibilityState={{ selected: !!selected }}
+      hitSlop={CHIP_SLOP}
+      onPress={onPress}
+      style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}>
       {body}
     </Pressable>
   );
 }
+
+/**
+ * A chip is 22-27 dp tall, well under a fingertip, so the touch area reaches
+ * past it. Never further than the 8 dp gap of a chip row, though: the slop must
+ * not reach onto a neighbour, beside it or in the wrapped row above or below.
+ */
+const CHIP_SLOP = { top: 8, bottom: 8, left: 4, right: 4 };
 
 /** black text on light chips, white on dark ones */
 function pickForeground(hex: string): string {

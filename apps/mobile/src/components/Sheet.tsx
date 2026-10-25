@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
 import { Colors, Layout, Radius, Spacing } from '@/theme';
+import { keyboardBehavior } from '@/utils/keyboard';
 
 export interface SheetProps {
   visible: boolean;
@@ -35,7 +36,11 @@ export function Sheet({ visible, onClose, title, children, scroll = true }: Shee
       animationType={Platform.OS === 'web' ? 'fade' : 'slide'}
       onRequestClose={onClose}
       statusBarTranslucent>
-      <View style={styles.root}>
+      {/* The Modal's window is edge-to-edge on Android, so the keyboard covers
+          it instead of shrinking it. This lifts the sheet clear of the keyboard;
+          its maxHeight is then a share of what the keyboard leaves, so a tall
+          sheet scrolls rather than running off the top. */}
+      <KeyboardAvoidingView style={styles.root} behavior={keyboardBehavior()}>
         <Pressable
           style={styles.backdrop}
           onPress={onClose}
@@ -56,7 +61,7 @@ export function Sheet({ visible, onClose, title, children, scroll = true }: Shee
             body
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

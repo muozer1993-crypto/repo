@@ -341,6 +341,12 @@ Cihaza dokunan her modül web'de de derlenir: `steps.ts` (web) ve `steps.native.
 çifti Metro tarafından platforma göre seçilir. Bu sayede `expo export --platform web` çalışır ve
 uçtan uca test tarayıcıda koşabilir.
 
+Klavye: uygulama Android'in her sürümünde kenardan kenara (edge-to-edge) çizilir, RN'in Modal'ı
+da öyle. Klavye açılınca ekran artık küçülmez, klavye içeriğin üstüne biner. Bu yüzden
+`Screen keyboard` ve her `Sheet` (alttan açılan kart), iOS'taki gibi Android'de de
+KeyboardAvoidingView'i `padding` ile kullanır (`utils/keyboard.ts`). Yoksa alttaki alanlar da,
+şifre ve sunucu adresi kartları da klavyenin altında kalır.
+
 ## Bağlantı yokken
 
 Giriş en çok çekmeyen yerde yapılır: bodrumdaki spor salonu, metro, merdiven boşluğu. Sunucuya

@@ -505,7 +505,7 @@ export default function ChallengeDetailScreen() {
 function Header({ onBack, title }: { onBack: () => void; title: string }) {
   return (
     <View style={styles.header}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Geri" onPress={onBack} style={styles.backBtn}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Geri" onPress={onBack} style={styles.backBtn} hitSlop={8}>
         <Text variant="title">‹</Text>
       </Pressable>
       <Text variant="label" numberOfLines={1} style={styles.headerTitle}>

@@ -1,9 +1,13 @@
-import { StyleSheet } from 'react-native';
+import type { ReactElement } from 'react';
+import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { Chip } from '@/components/Chip';
 import { formatRemaining } from '@/components/Countdown';
 import { ProgressBar } from '@/components/ProgressBar';
+import { Screen } from '@/components/Screen';
+import { Sheet } from '@/components/Sheet';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 
@@ -50,6 +54,10 @@ describe('TauntBubble', () => {
 });
 
 describe('Chip', () => {
+  /** the native views a screen reader would announce as buttons */
+  const buttonsIn = (tree: ReactTestRenderer) =>
+    tree.root.findAll((node) => typeof node.type === 'string' && node.props.accessibilityRole === 'button');
+
   it('shows the label and icon', () => {
     let tree: ReactTestRenderer;
     act(() => {
@@ -58,6 +66,87 @@ describe('Chip', () => {
     const strings = textIn(tree!.toJSON()).join(' ');
     expect(strings).toContain('ÖNDESİN');
     expect(strings).toContain('🔥');
+    // nothing to press, so nothing announced as a button
+    expect(buttonsIn(tree!)).toHaveLength(0);
+  });
+
+  it('reaches past its 22-27 dp to a fingertip, and says when it is the chosen one', () => {
+    let tree: ReactTestRenderer;
+    act(() => {
+      tree = create(<Chip label="7 gün" selected onPress={() => {}} />);
+    });
+    const [button] = buttonsIn(tree!);
+    // vertically no further than the 8 dp gap between wrapped chip rows
+    expect(button!.props.hitSlop).toEqual({ top: 8, bottom: 8, left: 4, right: 4 });
+    expect(button!.props.accessibilityState).toMatchObject({ selected: true });
+    expect(button!.props.accessibilityLabel).toBe('7 gün');
+
+    act(() => {
+      tree!.update(<Chip label="Kanıt ekle" icon="📸" onPress={() => {}} />);
+    });
+    const [plain] = buttonsIn(tree!);
+    expect(plain!.props.accessibilityState).toMatchObject({ selected: false });
+    expect(plain!.props.accessibilityLabel).toBe('📸 Kanıt ekle');
+  });
+});
+
+describe('keyboard avoidance', () => {
+  const SAFE_AREA = {
+    frame: { x: 0, y: 0, width: 390, height: 844 },
+    insets: { top: 24, left: 0, right: 0, bottom: 48 },
+  };
+
+  let os: jest.ReplaceProperty<typeof Platform.OS> | null = null;
+  afterEach(() => {
+    os?.restore();
+    os = null;
+  });
+
+  /** behavior and offset of every KeyboardAvoidingView the element renders */
+  function avoiders(element: ReactElement): { behavior?: string; keyboardVerticalOffset?: number }[] {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<SafeAreaProvider initialMetrics={SAFE_AREA}>{element}</SafeAreaProvider>);
+    });
+    const found = tree.root
+      .findAllByType(KeyboardAvoidingView)
+      .map(({ props }) => ({ behavior: props.behavior, keyboardVerticalOffset: props.keyboardVerticalOffset }));
+    act(() => {
+      tree.unmount();
+    });
+    return found;
+  }
+
+  const screen = (
+    <Screen keyboard>
+      <Text>Şifre</Text>
+    </Screen>
+  );
+  const sheet = (
+    <Sheet visible onClose={() => {}} title="Şifreni değiştir">
+      <Text>Şifre</Text>
+    </Sheet>
+  );
+
+  // Android is edge-to-edge, so the window no longer shrinks for the keyboard:
+  // without 'padding' the fields and the sheets stayed under it
+  it('pads a form and a sheet clear of the keyboard on Android', () => {
+    os = jest.replaceProperty(Platform, 'OS', 'android');
+    // the frame is already measured below insets.top; adding it again lifted the form too far
+    expect(avoiders(screen)).toStrictEqual([{ behavior: 'padding', keyboardVerticalOffset: 0 }]);
+    expect(avoiders(sheet)).toStrictEqual([{ behavior: 'padding', keyboardVerticalOffset: undefined }]);
+  });
+
+  it('keeps the iOS offset for the page-sheet modals', () => {
+    expect(Platform.OS).toBe('ios');
+    expect(avoiders(screen)).toStrictEqual([{ behavior: 'padding', keyboardVerticalOffset: 24 }]);
+    expect(avoiders(sheet)).toStrictEqual([{ behavior: 'padding', keyboardVerticalOffset: undefined }]);
+  });
+
+  it('leaves the web to the browser', () => {
+    os = jest.replaceProperty(Platform, 'OS', 'web');
+    expect(avoiders(screen)).toStrictEqual([{ behavior: undefined, keyboardVerticalOffset: 0 }]);
+    expect(avoiders(sheet)).toStrictEqual([{ behavior: undefined, keyboardVerticalOffset: undefined }]);
   });
 });
 
