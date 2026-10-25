@@ -550,6 +550,89 @@ describe('standings verdict', () => {
   });
 });
 
+describe('a "Hemen" çelınc nobody else has joined yet', () => {
+  it('waits for a rival instead of calling the lone creator "öndesin"', async () => {
+    searchParams.id = 'c-1';
+    // live since its creation, the invite still unanswered
+    const detail = challengeDetail();
+    const ali = {
+      ...detail.me,
+      user: { ...detail.me.user, id: 'u-2', username: 'ali', displayName: 'Ali' },
+      status: 'invited' as const,
+      score: 0,
+      rank: 0,
+    };
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      participants: [detail.me, ali],
+      pokeTargets: [{ toUserId: 'u-2', done: false }],
+    }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toMatch(/RAKİP BEKLENİYOR 1 ?\/2 kişi/);
+    expect(text).toContain('kimse katılmazsa çelınc bitişte iptal olur');
+    // the end still shows, small
+    expect(text).toContain('⏳ Bitmesine');
+    expect(text).not.toContain('Aferin lan koçum');
+    expect(text).not.toContain('laf sokma hakkı');
+    // the clock runs, so what the player logs counts
+    expect(text).toContain('SENİN SIRAN');
+  });
+
+  it('home calls it "RAKİP YOK" rather than "ÖNDESİN"', async () => {
+    const { challenge, participants, me } = challengeDetail();
+    api.challenges = jest.fn(async () => [{ challenge, participants, me, unreadTaunts: 0 }]);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('RAKİP YOK');
+    expect(text).not.toContain('ÖNDESİN');
+    expect(text).not.toContain('Aferin lan koçum');
+  });
+
+  it('says a pending çelınc past its start is waiting for a yes, not "Bitti"', async () => {
+    const { challenge, participants, me } = challengeDetail();
+    const waiting = { ...challenge, status: 'pending' as const, startsAt: new Date(Date.now() - 60 * 60_000).toISOString() };
+    api.challenges = jest.fn(async () => [{ challenge: waiting, participants, me, unreadTaunts: 0 }]);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('🚦 kabul bekleniyor');
+    expect(text).not.toContain('Bitti');
+  });
+});
+
+describe('saying yes to a çelınc the phone counts', () => {
+  it('sends the phone\'s steps right after "Varım"', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    const invited = { ...detail.me, status: 'invited' as const, score: 0, rank: 0 };
+    const creator = { ...detail.me, user: { ...detail.me.user, id: 'u-2', username: 'ali', displayName: 'Ali' } };
+    detail.challenge.creatorId = 'u-2';
+    api.challenge = jest.fn(async () => ({ ...detail, participants: [creator, invited], me: invited }));
+    api.acceptChallenge = jest.fn(async () => ({ ...detail, participants: [creator, detail.me] }));
+    const steps = require('@/services/steps') as { getDailySteps: jest.Mock };
+    steps.getDailySteps.mockClear();
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(steps.getDailySteps).not.toHaveBeenCalled();
+
+    press(tree, 'Varım');
+    await settle();
+    expect(api.acceptChallenge).toHaveBeenCalledWith('c-1');
+    expect(steps.getDailySteps).toHaveBeenCalledWith(LIMITS.STEPS_BACKFILL_DAYS);
+  });
+});
+
 describe('a step çelınc past its end, still active on the server', () => {
   it('says the last steps are coming in, offers no entry, and sends this phone\'s count', async () => {
     searchParams.id = 'c-1';
@@ -612,7 +695,11 @@ describe('a step çelınc past its end, still active on the server', () => {
 
   it('counts down and offers the entry while the time is not up', async () => {
     searchParams.id = 'c-1';
-    api.challenge = jest.fn(async () => challengeDetail());
+    // a race: alone in it, the hero waits for a rival instead
+    const detail = challengeDetail();
+    const ali = { ...detail.me, user: { ...detail.me.user, id: 'u-2', username: 'ali', displayName: 'Ali' }, score: 4201, rank: 2 };
+    detail.participants = [detail.me, ali];
+    api.challenge = jest.fn(async () => detail);
     const steps = require('@/services/steps') as { getDailySteps: jest.Mock };
     steps.getDailySteps.mockClear();
 

@@ -31,10 +31,15 @@
  * While friends dispute a typed number the phone leaves that row alone: the
  * itiraz is about the number typed, and a reading written over it would turn
  * it into a "phone" row, which an upheld itiraz throws out for good.
+ *
+ * A friend who accepts a running çelınc gets the days their phone already
+ * reported right away (`backfillFromPhone`), through this same fan-out:
+ * `steps_daily` and `screen_time_daily` hold every sync, çelınc or not, and
+ * without it they sat at 0 and typed from memory what the server already had.
  */
 import { challengeTypesForDevice, type DeviceMetric, type EntrySource } from '@koydum/shared';
 import { newId, nowIso, type ChallengeRow, type Database, type EntryRow, type UserRow } from '../db/index.js';
-import { getUserRow } from './challengeViews.js';
+import { getParticipant, getUserRow } from './challengeViews.js';
 import { challengeWindow, dayOverByEnd, participantTimezone, typeForChallenge } from './challenges.js';
 import { dayWindowIssue, forgetDismissedDisputes, isDeviceSource } from './entries.js';
 
@@ -148,6 +153,30 @@ export function fanOutDeviceDays(
 }
 
 /**
+ * What the phone already reported between two day keys (both included), the
+ * way a sync hands it to the fan-out: a step day keeps the source it came
+ * from, a screen-time day is always the phone's own reading.
+ */
+export function phoneDays(db: Database, userId: string, metric: DeviceMetric, fromDay: string, toDay: string): DeviceDay[] {
+  const rows = (
+    metric === 'steps'
+      ? db
+          .prepare(
+            `SELECT day_key AS dayKey, steps AS value, source FROM steps_daily
+              WHERE user_id = ? AND day_key BETWEEN ? AND ? ORDER BY day_key ASC`,
+          )
+          .all(userId, fromDay, toDay)
+      : db
+          .prepare(
+            `SELECT day_key AS dayKey, minutes AS value, 'usage_stats' AS source FROM screen_time_daily
+              WHERE user_id = ? AND day_key BETWEEN ? AND ? ORDER BY day_key ASC`,
+          )
+          .all(userId, fromDay, toDay)
+  ) as DeviceDay[];
+  return rows.map((row) => ({ dayKey: row.dayKey, value: Number(row.value), source: row.source }));
+}
+
+/**
  * The phone's reading for a typed day friends just threw out (`upholdDisputes`),
  * from what it already reported (`steps_daily`, `screen_time_daily`). Without
  * it the day waits for the next sync, and an itiraz upheld past the end would
@@ -159,16 +188,29 @@ export function restoreFromPhone(db: Database, challenge: ChallengeRow, entry: E
   if (!metric || isDeviceSource(entry.source)) return false;
   const owner = getUserRow(db, entry.user_id);
   if (!owner || owner.deleted_at !== null) return false;
-  const reading =
-    metric === 'steps'
-      ? (db.prepare('SELECT steps AS value, source FROM steps_daily WHERE user_id = ? AND day_key = ?').get(owner.id, entry.day_key) as
-          | { value: number; source: EntrySource }
-          | undefined)
-      : (db
-          .prepare("SELECT minutes AS value, 'usage_stats' AS source FROM screen_time_daily WHERE user_id = ? AND day_key = ?")
-          .get(owner.id, entry.day_key) as { value: number; source: EntrySource } | undefined);
-  if (!reading) return false;
-  fanOutDeviceDays(db, owner, metric, [{ dayKey: entry.day_key, value: Number(reading.value), source: reading.source }], now, challenge.id);
+  const reading = phoneDays(db, owner.id, metric, entry.day_key, entry.day_key);
+  if (reading.length === 0) return false;
+  fanOutDeviceDays(db, owner, metric, reading, now, challenge.id);
   const after = db.prepare('SELECT status FROM entries WHERE id = ?').get(entry.id) as { status: string } | undefined;
   return after?.status === 'ok';
+}
+
+/**
+ * The days `user`'s phone already reported, written into a çelınc they just
+ * accepted. A friend added on day three (`/invite`), or one taking a "Reddet"
+ * back, otherwise sat at 0 until the next sync, and the app offered "Eksik
+ * günü yaz" for days whose real reading was already here: typed from memory,
+ * they became disputable beyan rows. Same rules as a sync (`fanOutDeviceDays`):
+ * the day window in the zone pinned at the accept, the device backfill limit,
+ * no future day, steps only ever raised, a rejected device row left alone.
+ * Runs inside the accept's transaction. Returns how many entries were touched.
+ */
+export function backfillFromPhone(db: Database, user: UserRow, challenge: ChallengeRow, now: Date): number {
+  const metric = typeForChallenge(challenge).deviceMetric;
+  if (!metric) return 0;
+  const window = challengeWindow(challenge, participantTimezone(getParticipant(db, challenge.id, user.id), user));
+  const first = window[0];
+  const last = window.at(-1);
+  if (first === undefined || last === undefined) return 0;
+  return fanOutDeviceDays(db, user, metric, phoneDays(db, user.id, metric, first, last), now, challenge.id);
 }

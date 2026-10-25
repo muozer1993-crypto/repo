@@ -22,6 +22,7 @@ import { useApi } from '@/hooks/useApi';
 import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { ApiError } from '@/lib/api';
 import { openAppSettings } from '@/services/deviceHealth';
+import { syncDeviceNow } from '@/services/deviceSyncNow';
 import {
   getStepAvailability,
   getTodaySteps,
@@ -513,6 +514,9 @@ function InviteCard({
 }) {
   const action = useChallengeAction(summary.challenge.id);
   const toast = useToast();
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const refreshMe = useAuth((s) => s.refreshMe);
   const type = getChallengeType(summary.challenge.typeKey);
   const inviter = summary.participants.find((p) => p.user.id === summary.challenge.creatorId)?.user;
 
@@ -523,6 +527,8 @@ function InviteCard({
     }
     action.mutate(kind, {
       onSuccess: () => {
+        // the days the phone never sent yet, so the çelınc does not open at 0
+        if (kind === 'accept') void syncDeviceNow(type?.deviceMetric, { client: api, queryClient, refreshMe });
         toast({
           title: kind === 'accept' ? 'Kabul ettin' : 'Reddettin',
           body:

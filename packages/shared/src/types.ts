@@ -69,6 +69,11 @@ export const NOTIFICATION_TYPES = [
   'challenge_declined',
   /** to the players still in: somebody walked out mid-çelınc ("Ali havlu attı") */
   'challenge_left',
+  /**
+   * somebody said yes ("Ali kabul etti"): to the creator before the start, to
+   * every other player once it runs. An older app shows it with the 🔔 icon.
+   */
+  'challenge_accepted',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

@@ -61,7 +61,14 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
             bold
           />
         ) : challenge.status === 'pending' ? (
-          <Countdown target={challenge.startsAt} prefix="🚦 başlıyor:" variant="tiny" muted />
+          // past its start a pending çelınc is waiting for a second yes, not over
+          <Countdown
+            target={challenge.startsAt}
+            prefix="🚦 başlıyor:"
+            finishedLabel="🚦 kabul bekleniyor"
+            variant="tiny"
+            muted
+          />
         ) : (
           <Text variant="tiny" muted>
             {challenge.isTie && status.key !== 'lost'
@@ -71,7 +78,7 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
                 : '🚫 İptal'}
           </Text>
         )}
-        {me && challenge.status === 'active' ? (
+        {me && challenge.status === 'active' && status.key !== 'pending' ? (
           <Text variant="tiny" muted numberOfLines={1} style={styles.hint}>
             {/* the same reading as the chip: rank 1 is shared in a dead heat,
                 so "sen koyuyorsun" on equal scores would be a lie */}
@@ -108,6 +115,11 @@ function statusOf(summary: ChallengeSummary): StatusView {
     }
     if (me && challenge.winnerId === me.user.id) return { key: 'won', label: 'KOYDUN', color: Colors.success };
     return { key: 'lost', label: 'YEDİN', color: Colors.danger };
+  }
+  // A "Hemen" çelınc runs from its creation with only its creator in it: first
+  // in a field of one is not "ÖNDESİN", and nothing to cheer or nag about yet.
+  if (summary.participants.filter((p) => p.status === 'accepted').length < 2) {
+    return { key: 'pending', label: 'RAKİP YOK', color: Colors.info };
   }
   if (me && me.rank === 1) {
     // rank 1 is shared on equal scores, so "ÖNDESİN" would be a lie in a dead heat

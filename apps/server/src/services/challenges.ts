@@ -370,7 +370,7 @@ function levelOf(user: UserRow): VulgarityLevel {
   return asVulgarityLevel(user.vulgarity_max);
 }
 
-function startedCopy(level: VulgarityLevel, title: string): { title: string; body: string } {
+export function startedCopy(level: VulgarityLevel, title: string): { title: string; body: string } {
   if (level === 1) return { title: '🔔 Çelınc başladı', body: `${title} başladı. Bol şans.` };
   if (level === 3) return { title: '🍆 ÇELINC BAŞLADI', body: `${title} başladı. Bugün başlamazsan yersin.` };
   return { title: '🔥 Çelınc başladı', body: `${title} başladı. Hadi bakalım.` };

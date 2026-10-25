@@ -68,6 +68,16 @@ dendi, itiraz çoğunluğu da ona göre küçüldü. Sessiz bir davetli yüzünd
 tek kişiyle biten çelınc da zamanlayıcıda "herkes kaçtı" diye kapanır, kabul edip giden biri
 varsa "kimse kabul etmedi" yazmaz.
 
+Kabul de sessiz değildir. "Hemen" başlayan çelınc oluştuğu anda `active` olur ve içinde sadece
+açan vardır; zamanlayıcı yalnızca `pending` çelıncları başlattığı için böyle bir çelıncta
+"başladı" hiç denmiyordu. Onu iki kişi yapan ilk kabul (daha önce kimse katılmadıysa) ikisine
+`challenge_started` gönderir. Başlangıç saati geçmiş bir `pending` çelıncı iki kişi yapan kabul
+hiçbir şey göndermez: zamanlayıcı onu 30 saniye içinde başlatır ve aynısını söyler. Diğer her
+kabul `challenge_accepted` olur ("Ali kabul etti"): başlamamış çelıncta açana, süren çelıncta
+içerideki herkese; ret ve ayrılmayla aynı yoldan (`tellWhoIsIn`), engelli ikiliye ve silinmiş
+hesaba gitmez. Kimse katılmadan süren bir çelıncta uygulama "öndesin" demez, "Rakip bekleniyor"
+der.
+
 Çelıncı açan, çelınc sürerken kanka da ekleyebilir (`POST /challenges/:id/invite`): uygulamayı
 herkes aynı gün kurmuyor, ikinci gün gelen kanka için açılan ikinci bir çelınc grubu böler. Eklenen,
 sihirbazda seçilmiş gibi `invited` girer ve aynı kapıdan kabul eder. Kapı da ikisi için aynı anda
@@ -443,6 +453,14 @@ fotoğrafla kapanmış itirazlar unutulur, haklı çıkan (`upheld`) itirazlar `
 yerinde kalır. Adımda 0 hiçbir şeyi geri getirmez.
 Telefonun kendi okuduğu bir gün düştüyse senkron ona dokunmaz, yoksa itiraz boşa giderdi. Geri
 gelen adım gününe elle sayı yazmak 409 `day_rejected` alır, o günü artık sadece telefon yazar.
+
+`steps_daily` ve `screen_time_daily` her senkronu, çelınc olsun olmasın, saklar. Süren bir çelınca
+sonradan katılan (ikinci gün eklenen ya da "Reddet"ini geri alan) kanka bu yüzden kabul ettiği
+anda telefonunun zaten gönderdiği günleri alır (`backfillFromPhone`, kabulün kendi işleminde):
+aynı dağıtım, aynı kurallar, sadece o çelınc için. Yoksa bir sonraki senkrona kadar 0'da
+oturuyor, uygulama da ona "Eksik günü yaz" diyordu; ezberden yazılan sayılar da itiraz edilebilir
+beyan satırlarına dönüşüyordu. Uygulama kabulün ardından bir kere de senkron olur
+(`services/deviceSyncNow.ts`), telefonun hiç göndermediği günler için.
 Telefonun sayısı yeni bir sayıdır ve "telefon" kaynağını gönderen de uygulamanın kendisidir:
 itirazı kazanan kanka ona yeniden itiraz edebilir. Kişi başına bir itiraz satırı olduğu için
 aynı satır yeniden açılır ve `won_before = 1` alır (göç 010); ilk kazanç `disputesWon`'da kalır,

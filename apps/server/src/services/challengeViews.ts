@@ -310,6 +310,20 @@ export function declinedCopy(level: VulgarityLevel, who: string, title: string):
   return { title: `${who} tırstı, reddetti`, body: `"${title}" davetine yok dedi.` };
 }
 
+/**
+ * To the creator of a çelınc that has not started, or to the players of one
+ * already running: somebody said yes. `count` is how many are in now. Nothing
+ * hangs off the name: "de/da" and every case suffix follow its last vowel, and
+ * a display name can be "MSN" or "🔥".
+ */
+export function acceptedCopy(level: VulgarityLevel, who: string, title: string, count: number): CopyText {
+  if (level === 1) {
+    return { title: `${who} kabul etti`, body: `${who}, "${title}" çelıncına katıldı. Artık ${count} kişisiniz.` };
+  }
+  if (level === 3) return { title: `${who} sahaya indi 🍆`, body: `"${title}" çelıncına daldı, kurban sayısı ${count} oldu.` };
+  return { title: `${who} "varım" dedi`, body: `"${title}" çelıncında artık ${count} kişisiniz.` };
+}
+
 /** To the players still in: somebody walked out mid-çelınc. */
 export function leftCopy(level: VulgarityLevel, who: string, title: string): CopyText {
   if (level === 1) return { title: `${who} çelınctan ayrıldı`, body: `${who}, "${title}" çelıncında artık yok. Sıralamadan düştü.` };

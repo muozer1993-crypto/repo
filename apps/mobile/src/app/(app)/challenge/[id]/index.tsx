@@ -2,6 +2,7 @@ import type {
   Challenge,
   ChallengeDetail,
   ChallengeType,
+  DeviceMetric,
   Dispute,
   DisputeStatus,
   EntrySource,
@@ -59,6 +60,7 @@ import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { useTimezone } from '@/hooks/useTimezone';
+import { syncDeviceNow } from '@/services/deviceSyncNow';
 import { recordingSince } from '@/services/recordingSteps';
 import { skipTodayCheckinReminder } from '@/services/reminders';
 import {
@@ -290,6 +292,13 @@ export default function ChallengeDetailScreen() {
   );
   const canEnter = challenge.status === 'active' && !settling && isPlayer && !!type;
   /**
+   * A "Hemen" çelınc is live from the moment it is made, with only its creator
+   * in it. Until a rival says yes there is no race: no "öndesin" for leading a
+   * field of one, and nobody to poke. The clock runs anyway, and with nobody
+   * else in by the end the server cancels it.
+   */
+  const waitingForRival = challenge.status === 'active' && !settling && accepted.length < 2;
+  /**
    * The creator may call more friends in while somebody new could still accept:
    * the server closes invites together with accepts (`acceptClosesAt`), so a
    * button past that would only earn an error.
@@ -360,6 +369,27 @@ export default function ChallengeDetailScreen() {
                 {settlingNote(type, awaitingProof)}
               </Text>
             </>
+          ) : waitingForRival ? (
+            <>
+              <Text variant="label">Rakip bekleniyor</Text>
+              <Text variant="big">{accepted.length}/2 kişi</Text>
+              <Text variant="tiny" faint>
+                Süre işliyor, girişlerin de sayılıyor. Ama tek başına yarış olmaz: kimse katılmazsa
+                çelınc bitişte iptal olur.
+                {canInvite ? ' Aşağıdan kanka da ekleyebilirsin.' : ''}
+              </Text>
+              <Countdown
+                target={challenge.endsAt}
+                prefix="⏳ Bitmesine"
+                variant="tiny"
+                muted
+                finishedLabel="Süre doldu"
+                onFinish={() => {
+                  setRenderedAt(Date.now());
+                  void query.refetch();
+                }}
+              />
+            </>
           ) : challenge.status === 'active' ? (
             <>
               <Text variant="label">Bitmesine</Text>
@@ -416,8 +446,9 @@ export default function ChallengeDetailScreen() {
           finished={challenge.status === 'finished'}
           onPressUser={(userId) => router.push({ pathname: '/user/[id]', params: { id: userId } })}
         />
-        {/* "küçük bir gayret yeter" is a lie once nothing more counts */}
-        {challenge.status === 'active' && !settling && isPlayer ? (
+        {/* "küçük bir gayret yeter" is a lie once nothing more counts, and
+            "öndesin" is one with nobody else in the race */}
+        {challenge.status === 'active' && !settling && isPlayer && !waitingForRival ? (
           <Text
             variant="small"
             bold
@@ -439,11 +470,16 @@ export default function ChallengeDetailScreen() {
 
       {/* -------------------------------------------------- invite reply */}
       {mine?.status === 'invited' && (challenge.status === 'pending' || challenge.status === 'active') ? (
-        <InviteActions id={id} level={level} endsIt={endsWithoutMe(participants, meId)} />
+        <InviteActions
+          id={id}
+          level={level}
+          endsIt={endsWithoutMe(participants, meId)}
+          metric={type?.deviceMetric}
+        />
       ) : null}
       {/* a "Reddet" is not final while the çelınc still takes players */}
       {mine?.status === 'declined' && (challenge.status === 'pending' || (challenge.status === 'active' && !settling)) ? (
-        <RejoinCard id={id} level={level} />
+        <RejoinCard id={id} level={level} metric={type?.deviceMetric} />
       ) : null}
 
       {/* ------------------------------------------------------- actions */}
@@ -475,7 +511,7 @@ export default function ChallengeDetailScreen() {
       />
 
       {/* --------------------------------------------------------- pokes */}
-      {challenge.status === 'active' && !settling && isPlayer && targets.length > 0 ? (
+      {challenge.status === 'active' && !settling && isPlayer && !waitingForRival && targets.length > 0 ? (
         <PokeSection
           id={id}
           challenge={challenge}
@@ -527,9 +563,27 @@ function Header({ onBack, title }: { onBack: () => void; title: string }) {
 
 /* --------------------------------------------------------- invite actions */
 
-function InviteActions({ id, level, endsIt }: { id: string; level: VulgarityLevel; endsIt: boolean }) {
+/**
+ * After a "Varım" the phone sends its reading at once (`syncDeviceNow`): the
+ * server already filled in the days it reported, this brings the ones it never
+ * sent, so the newcomer is not at 0 until the next background run.
+ */
+function InviteActions({
+  id,
+  level,
+  endsIt,
+  metric,
+}: {
+  id: string;
+  level: VulgarityLevel;
+  endsIt: boolean;
+  metric: DeviceMetric | undefined;
+}) {
   const action = useChallengeAction(id);
   const toast = useToast();
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const refreshMe = useAuth((s) => s.refreshMe);
 
   const run = async (kind: 'accept' | 'decline') => {
     if (kind === 'decline') {
@@ -538,6 +592,7 @@ function InviteActions({ id, level, endsIt }: { id: string; level: VulgarityLeve
     }
     try {
       await action.mutateAsync(kind);
+      if (kind === 'accept') void syncDeviceNow(metric, { client: api, queryClient, refreshMe });
       toast({
         title: kind === 'accept' ? 'Girdin' : 'Kaçtın',
         body:
@@ -580,15 +635,20 @@ function InviteActions({ id, level, endsIt }: { id: string; level: VulgarityLeve
 /**
  * The way back from a "Reddet": the server lets a declined invite accept while
  * the çelınc still takes players. Too late (its last hour) comes back as the
- * server's own words in the toast.
+ * server's own words in the toast. A yes sends the phone's reading like
+ * `InviteActions` does.
  */
-function RejoinCard({ id, level }: { id: string; level: VulgarityLevel }) {
+function RejoinCard({ id, level, metric }: { id: string; level: VulgarityLevel; metric: DeviceMetric | undefined }) {
   const action = useChallengeAction(id);
   const toast = useToast();
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const refreshMe = useAuth((s) => s.refreshMe);
 
   const join = () => {
     action.mutate('accept', {
       onSuccess: () => {
+        void syncDeviceNow(metric, { client: api, queryClient, refreshMe });
         toast({
           title: 'Girdin',
           body: byLevel(

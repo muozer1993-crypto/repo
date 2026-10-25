@@ -47,6 +47,7 @@ const TYPE_EMOJI: Record<NotificationType, string> = {
   recap: '📊',
   challenge_declined: '🙅',
   challenge_left: '🏃',
+  challenge_accepted: '🤝',
 };
 
 const TYPE_COLOR: Partial<Record<NotificationType, string>> = {
@@ -65,6 +66,7 @@ const TYPE_COLOR: Partial<Record<NotificationType, string>> = {
   rematch: Colors.accent,
   nudge: Colors.yellow,
   recap: Colors.yellow,
+  challenge_accepted: Colors.success,
 };
 
 const EMPTY_TITLE: Record<1 | 2 | 3, string> = {

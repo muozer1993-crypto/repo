@@ -697,13 +697,24 @@ telefonda tuttuğu geçici bir kopyadır; telefon yer açmak için onu silerse g
 fotoğraf zorunluysa düşer ve uygulama "Kanıt fotoğrafı telefonda bulunamadı" der. Bağlantı
 koptuğunda açık olan çelınc ekranı kapanmaz, son bilinen hali gösterir; yazdığın sayı silinmez.
 
+### Kabul edince ne oluyor?
+
+Sihirbazda başlangıcı **Hemen** seçersen süre o an işlemeye başlar, ama kankan kabul edene kadar
+yarış yok: listedeki kart **RAKİP YOK** der, çelınc ekranı "Rakip bekleniyor, 1/2 kişi" gösterir
+ve tek başınayken "öndesin" demez. İlk kabul edenle ikinize "Çelınc başladı" bildirimi gider;
+sonradan katılan her kanka için içeridekilere "Ali kabul etti" gelir (seviyene göre "Ali varım
+dedi" ya da "Ali sahaya indi 🍆"). İleri bir tarihte başlayan çelıncta kabulleri sadece açan duyar,
+başlangıç saatinde herkese "başladı" gider. Kimse katılmazsa çelınc bitişte iptal olur. Engellediğin
+(ya da seni engelleyen) birinin kabulü sana bildirilmez.
+
 ### Çelınc sürerken kanka ekleme
 
 Uygulamayı herkes aynı gün kurmuyor. Çelıncı sen açtıysan çelınc ekranında, sıralamanın altında
 **Kankaları Çağır** düğmesi durur (seviyene göre "Arkadaş Davet Et" ya da "Kurban Getir" yazar).
 Dokununca çelıncta olmayan kankaların çıkar; seçtiklerine davet bildirimi gider, kabul eden
-sıralamaya girer. İkinci gün katılan kanka adım yarışında önceki günleri **Eksik günü yaz** ile
-doldurabilir (bkz. [Adım sayımı nasıl çalışıyor](#adım-sayımı-nasıl-çalışıyor)). Böylece "beni de
+sıralamaya girer. İkinci gün katılan kankanın telefonunun zaten saydığı günler (adım, Android'de
+ekran süresi) kabul ettiği anda kendiliğinden dolar; **Eksik günü yaz** sadece telefonun bilmediği
+günler için (bkz. [Adım sayımı nasıl çalışıyor](#adım-sayımı-nasıl-çalışıyor)). Böylece "beni de
 ekle" diyen için ikinci bir çelınc açıp grubu bölmen gerekmez.
 
 * Sadece çelıncı açan ekler. Yeni gelen önce kankan olmalı: davet bağlantından geldiyse
@@ -750,9 +761,13 @@ Adımlar sunucuya günlük özet olarak gider (`POST /me/steps`), ham konum veya
 asla gönderilmez. Uygulama açıldığında, ön plana geldiğinde ve arka plan görevinde
 (15 dakikada bir, platformun izin verdiği ölçüde) senkronize olur.
 
-Yarışa geç katılan ya da telefonu adım saymaya yarışın ortasında başlayan kankanın önceki günleri
-boş kalır. Çelınc ekranındaki **Eksik günü yaz** en eski boş günü açar; adım 7 gün geriye kadar
-elle yazılabilir. Telefon sonradan o güne daha fazlasını sayarsa telefonunki geçer.
+Yarışa geç katılan kankanın telefonu o günleri zaten sunucuya göndermişse (uygulama her
+senkronda son 7 günü yollar, çelınc olsun olmasın), kabul ettiği anda o günler çelınca yazılır;
+kabulün hemen ardından telefon bir kere daha senkron olur, göndermediği günler de gelir. Çelınc
+başlamadan önceki ve 7 günden eski günler yazılmaz.
+Telefonu adım saymaya yarışın ortasında başlayan kankanın önceki günleri ise boş kalır. Çelınc
+ekranındaki **Eksik günü yaz** en eski boş günü açar; adım 7 gün geriye kadar elle yazılabilir.
+Telefon sonradan o güne daha fazlasını sayarsa telefonunki geçer.
 
 Elle yazılan bir adım günü itirazla düştüyse o gün sıfırda kalmaz: telefonun o gün saydığı adım,
 yazılandan az da olsa, yerine geçer ve sayılır. Telefon o günü zaten gönderdiyse itiraz düştüğü

@@ -27,6 +27,7 @@ import { newId, nowIso, type ChallengeRow, type Database, type UserRow } from '.
 import { notify } from '../services/notifications.js';
 import { toChallenge } from '../serialize.js';
 import {
+  acceptedCopy,
   buildDetail,
   buildSummary,
   cancelledByCreatorCopy,
@@ -41,7 +42,14 @@ import {
   requireMembership,
   requireUserRow,
 } from '../services/challengeViews.js';
-import { acceptedParticipants, cancelIfAbandoned, stillOpen } from '../services/challenges.js';
+import {
+  acceptedParticipants,
+  cancelIfAbandoned,
+  participantRows,
+  startedCopy,
+  stillOpen,
+} from '../services/challenges.js';
+import { backfillFromPhone } from '../services/deviceSync.js';
 import { announceDisputeClocks } from '../services/entries.js';
 import { assertNotBlocked, isBlockedBetween } from '../services/friends.js';
 
@@ -98,24 +106,31 @@ function requireFriend(db: Database, meId: string, userId: string): UserRow {
 
 /**
  * "Ali tırstı": a no goes to the creator, a walk-out to the players still in,
- * each at their own level. Only people still in the race hear it, and never
- * across a block: somebody who blocked Ali does not want that name in the inbox.
+ * each at their own level. A yes goes to the creator while the çelınc has not
+ * started (the one waiting for answers), and to every other player once it
+ * runs. Only people still in the race hear it, and never across a block:
+ * somebody who blocked Ali does not want that name in the inbox.
  */
 function tellWhoIsIn(
   db: Database,
   challenge: ChallengeRow,
   who: UserRow,
-  type: 'challenge_declined' | 'challenge_left',
+  type: 'challenge_declined' | 'challenge_left' | 'challenge_accepted',
   at: string,
 ): void {
-  const copyFor = type === 'challenge_declined' ? declinedCopy : leftCopy;
-  for (const participant of acceptedParticipants(db, challenge.id)) {
+  const players = acceptedParticipants(db, challenge.id);
+  const creatorOnly =
+    type === 'challenge_declined' || (type === 'challenge_accepted' && challenge.status === 'pending');
+  for (const participant of players) {
     if (participant.user_id === who.id) continue;
-    if (type === 'challenge_declined' && participant.user_id !== challenge.creator_id) continue;
+    if (creatorOnly && participant.user_id !== challenge.creator_id) continue;
     if (isBlockedBetween(db, who.id, participant.user_id)) continue;
     const user = getUserRow(db, participant.user_id);
     if (!user || user.deleted_at !== null) continue;
-    const copy = copyFor(levelOf(user), who.display_name, challenge.title);
+    const copy =
+      type === 'challenge_accepted'
+        ? acceptedCopy(levelOf(user), who.display_name, challenge.title, players.length)
+        : (type === 'challenge_declined' ? declinedCopy : leftCopy)(levelOf(user), who.display_name, challenge.title);
     notify(db, {
       userId: user.id,
       type,
@@ -125,6 +140,45 @@ function tellWhoIsIn(
       createdAt: at,
     });
   }
+}
+
+/**
+ * Who hears about a yes, once it is written.
+ *
+ * A "Hemen" çelınc is `active` from its creation with only the creator in it,
+ * and the scheduler only ever starts `pending` ones, so the yes that first
+ * makes it two is its start: "başladı" to both players, as the scheduler says
+ * it. A yes that makes a `pending` çelınc past its start time two is left to
+ * the scheduler, which starts it within 30 s and says the same; a second
+ * notification on top would only be noise. Every other yes is a
+ * `challenge_accepted` (`tellWhoIsIn`), also the one that brings a çelınc back
+ * to two after somebody walked out: it had its start already.
+ */
+function announceAccept(db: Database, challenge: ChallengeRow, who: UserRow, now: Date): void {
+  const at = nowIso(now);
+  const players = acceptedParticipants(db, challenge.id);
+  if (challenge.status === 'pending' && Date.parse(challenge.starts_at) <= now.getTime() && players.length >= 2) {
+    return;
+  }
+  // rows from before `joined_at` was always set count as having joined
+  const everJoined = participantRows(db, challenge.id).filter((p) => p.status === 'accepted' || p.joined_at !== null);
+  if (challenge.status === 'active' && players.length === 2 && everJoined.length === 2) {
+    for (const participant of players) {
+      const user = getUserRow(db, participant.user_id);
+      if (!user || user.deleted_at !== null) continue;
+      const copy = startedCopy(levelOf(user), challenge.title);
+      notify(db, {
+        userId: user.id,
+        type: 'challenge_started',
+        title: copy.title,
+        body: copy.body,
+        data: { challengeId: challenge.id },
+        createdAt: at,
+      });
+    }
+    return;
+  }
+  tellWhoIsIn(db, challenge, who, 'challenge_accepted', at);
 }
 
 export default async function challengeRoutes(app: FastifyInstance): Promise<void> {
@@ -284,9 +338,16 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     }
 
     const iso = nowIso(now);
-    db.prepare(
-      "UPDATE challenge_participants SET status = 'accepted', joined_at = ?, timezone = ? WHERE challenge_id = ? AND user_id = ?",
-    ).run(iso, me.row.timezone, challenge.id, me.id);
+    const run = db.transaction(() => {
+      db.prepare(
+        "UPDATE challenge_participants SET status = 'accepted', joined_at = ?, timezone = ? WHERE challenge_id = ? AND user_id = ?",
+      ).run(iso, me.row.timezone, challenge.id, me.id);
+      // the days this phone already reported count from the first look, not
+      // from the next sync (and are not typed again from memory meanwhile)
+      backfillFromPhone(db, me.row, challenge, now);
+      announceAccept(db, challenge, me.row, now);
+    });
+    run();
 
     return freshDetail(db, challenge.id, me.id, app.now());
   });

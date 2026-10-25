@@ -6,6 +6,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { LIMITS, addDays, todayKey, DEFAULT_TIMEZONE, type ChallengeDetail, type ChallengeResults, type LeaderboardEntry, type Challenge } from '@koydum/shared';
+import { runSchedulerOnce } from '../src/services/challenges.js';
 import { listByType } from '../src/services/notifications.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
@@ -479,6 +480,251 @@ describe('accept / decline / leave / cancel', () => {
     const response = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/cancel` });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('challenge_started');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Saying yes
+// ---------------------------------------------------------------------------
+
+describe('saying yes: who hears it', () => {
+  const HOUR = 60 * 60 * 1000;
+  const DAY = 24 * HOUR;
+
+  function accept(h: TestApp, user: RegisteredUser, challengeId: string) {
+    return authed(h.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+  }
+
+  function titles(h: TestApp, user: RegisteredUser, type: 'challenge_accepted' | 'challenge_started') {
+    return listByType(h.db, user.me.id, type).map((row) => row.title);
+  }
+
+  /** Ali (polite) with two friends: Veli (crude) and Cem (casual). */
+  async function trio(h: TestApp) {
+    const ali = await registerUser(h.app, 'ali', { displayName: 'Ali', vulgarityMax: 1 });
+    const veli = await registerUser(h.app, 'veli', { displayName: 'Veli', vulgarityMax: 3 });
+    const cem = await registerUser(h.app, 'cem', { displayName: 'Cem', vulgarityMax: 2 });
+    befriend(h.app, ali.me.id, veli.me.id);
+    befriend(h.app, ali.me.id, cem.me.id);
+    return { ali, veli, cem };
+  }
+
+  it('starts a "Hemen" çelınc for both players on the first yes, and tells the players about the next one', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, cem } = await trio(harness);
+    const created = await createChallenge(harness, ali, { participantIds: [veli.me.id, cem.me.id] });
+    const id = created.json<Challenge>().id;
+    expect(created.json<Challenge>().status).toBe('active');
+
+    expect((await accept(harness, veli, id)).statusCode).toBe(200);
+    // the scheduler only starts pending ones: this yes is the start
+    expect(titles(harness, ali, 'challenge_started')).toEqual(['🔔 Çelınc başladı']);
+    expect(titles(harness, veli, 'challenge_started')).toEqual(['🍆 ÇELINC BAŞLADI']);
+    expect(JSON.parse(listByType(harness.db, ali.me.id, 'challenge_started')[0]!.data)).toEqual({ challengeId: id });
+    expect(titles(harness, ali, 'challenge_accepted')).toEqual([]);
+
+    harness.advance(HOUR);
+    await accept(harness, cem, id);
+    const [toAli] = listByType(harness.db, ali.me.id, 'challenge_accepted');
+    expect(toAli!.title).toBe('Cem kabul etti');
+    expect(toAli!.body).toBe('Cem, "Adım Yarışı" çelıncına katıldı. Artık 3 kişisiniz.');
+    expect(JSON.parse(toAli!.data)).toEqual({ challengeId: id, fromUserId: cem.me.id });
+    expect(listByType(harness.db, veli.me.id, 'challenge_accepted').map((row) => [row.title, row.body])).toEqual([
+      ['Cem sahaya indi 🍆', '"Adım Yarışı" çelıncına daldı, kurban sayısı 3 oldu.'],
+    ]);
+    expect(titles(harness, cem, 'challenge_accepted')).toEqual([]);
+    // it started once, before Cem came
+    expect(titles(harness, ali, 'challenge_started')).toHaveLength(1);
+    expect(titles(harness, cem, 'challenge_started')).toEqual([]);
+  });
+
+  it('does not start a running çelınc twice when a yes brings it back to two', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, cem } = await trio(harness);
+    const id = (await createChallenge(harness, ali, { participantIds: [veli.me.id, cem.me.id] })).json<Challenge>().id;
+    await accept(harness, veli, id);
+    // Cem has not answered, so the çelınc goes on without Veli
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${id}/leave` });
+
+    harness.advance(HOUR);
+    await accept(harness, cem, id);
+    expect(titles(harness, ali, 'challenge_started')).toHaveLength(1);
+    expect(titles(harness, ali, 'challenge_accepted')).toEqual(['Cem kabul etti']);
+    expect(listByType(harness.db, ali.me.id, 'challenge_accepted')[0]!.body).toContain('Artık 2 kişisiniz.');
+  });
+
+  it('tells only the creator about each yes before the start, and the scheduler starts it once', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, cem } = await trio(harness);
+    const created = await createChallenge(harness, ali, {
+      participantIds: [veli.me.id, cem.me.id],
+      startsAt: iso(harness, 2 * HOUR),
+      endsAt: iso(harness, 3 * DAY),
+    });
+    const id = created.json<Challenge>().id;
+
+    await accept(harness, veli, id);
+    harness.advance(10 * 60 * 1000);
+    await accept(harness, cem, id);
+    expect(listByType(harness.db, ali.me.id, 'challenge_accepted').map((row) => row.body)).toEqual([
+      'Cem, "Adım Yarışı" çelıncına katıldı. Artık 3 kişisiniz.',
+      'Veli, "Adım Yarışı" çelıncına katıldı. Artık 2 kişisiniz.',
+    ]);
+    // the creator is the one waiting for answers
+    expect(titles(harness, veli, 'challenge_accepted')).toEqual([]);
+    expect(titles(harness, ali, 'challenge_started')).toEqual([]);
+
+    harness.advance(2 * HOUR);
+    expect(runSchedulerOnce(harness.db, harness.now()).activated).toBe(1);
+    for (const user of [ali, veli, cem]) expect(titles(harness, user, 'challenge_started')).toHaveLength(1);
+  });
+
+  it('leaves a çelınc already past its start time to the scheduler, which says "başladı" once', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli } = await trio(harness);
+    const created = await createChallenge(harness, ali, {
+      participantIds: [veli.me.id],
+      startsAt: iso(harness, HOUR),
+      endsAt: iso(harness, 3 * DAY),
+    });
+    const id = created.json<Challenge>().id;
+    harness.advance(2 * HOUR);
+    // alone, the creator's çelınc does not start
+    expect(runSchedulerOnce(harness.db, harness.now()).activated).toBe(0);
+
+    const accepted = await accept(harness, veli, id);
+    expect(accepted.json<ChallengeDetail>().challenge.status).toBe('pending');
+    expect(titles(harness, ali, 'challenge_accepted')).toEqual([]);
+    expect(titles(harness, ali, 'challenge_started')).toEqual([]);
+
+    harness.advance(30 * 1000);
+    expect(runSchedulerOnce(harness.db, harness.now()).activated).toBe(1);
+    runSchedulerOnce(harness.db, harness.now());
+    expect(titles(harness, ali, 'challenge_started')).toEqual(['🔔 Çelınc başladı']);
+    expect(titles(harness, veli, 'challenge_started')).toEqual(['🍆 ÇELINC BAŞLADI']);
+  });
+
+  it('says nothing across a block, or to an account that is gone', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, cem } = await trio(harness);
+    const can = await registerUser(harness.app, 'can', { displayName: 'Can' });
+    befriend(harness.app, ali.me.id, can.me.id);
+    const id = (
+      await createChallenge(harness, ali, { participantIds: [veli.me.id, cem.me.id, can.me.id] })
+    ).json<Challenge>().id;
+    await accept(harness, veli, id);
+    harness.advance(60 * 1000);
+    await accept(harness, cem, id);
+    // Veli wants nothing to do with Can; Cem's account is gone while still on
+    // the line-up (the route keeps that from happening, the guard holds anyway)
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/users/${can.me.id}/block` });
+    harness.db.prepare('UPDATE users SET deleted_at = ? WHERE id = ?').run(iso(harness), cem.me.id);
+
+    harness.advance(60 * 1000);
+    expect((await accept(harness, can, id)).statusCode).toBe(200);
+    expect(titles(harness, ali, 'challenge_accepted')).toEqual(['Can kabul etti', 'Cem kabul etti']);
+    expect(titles(harness, veli, 'challenge_accepted')).toEqual(['Cem sahaya indi 🍆']);
+    expect(titles(harness, cem, 'challenge_accepted')).toEqual([]);
+  });
+});
+
+describe('saying yes: the days the phone already sent', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  function entryRows(h: TestApp, challengeId: string, userId: string) {
+    return h.db
+      .prepare('SELECT day_key, value, source FROM entries WHERE challenge_id = ? AND user_id = ? ORDER BY day_key ASC')
+      .all(challengeId, userId) as { day_key: string; value: number; source: string }[];
+  }
+
+  async function pair(h: TestApp, typeKey = 'adim_yarisi', days = 5) {
+    const ali = await registerUser(h.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(h.app, 'veli', { displayName: 'Veli' });
+    befriend(h.app, ali.me.id, veli.me.id);
+    const created = await createChallenge(h, ali, { typeKey, participantIds: [veli.me.id], endsAt: iso(h, days * DAY) });
+    return { ali, veli, challengeId: created.json<Challenge>().id };
+  }
+
+  it('fills in the step days a friend\'s phone reported before they said yes', async () => {
+    harness = await makeApp({ now: NOW });
+    const { veli, challengeId } = await pair(harness);
+    harness.advance(2 * DAY);
+    const start = addDays(today(harness), -2);
+    const days = [
+      // the day before the çelınc is not one of its days
+      { dayKey: addDays(start, -1), steps: 20000, source: 'pedometer' },
+      { dayKey: start, steps: 8000, source: 'pedometer' },
+      { dayKey: addDays(start, 1), steps: 9000, source: 'health_connect' },
+      { dayKey: addDays(start, 2), steps: 4000, source: 'pedometer' },
+    ];
+    const synced = await authed(harness.app, veli.token)({ method: 'POST', url: '/me/steps', payload: { days } });
+    // not in it yet: nothing to fan out to
+    expect(synced.json<{ updated: number }>().updated).toBe(0);
+
+    const accepted = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    expect(entryRows(harness, challengeId, veli.me.id)).toEqual([
+      { day_key: start, value: 8000, source: 'pedometer' },
+      { day_key: addDays(start, 1), value: 9000, source: 'health_connect' },
+      { day_key: addDays(start, 2), value: 4000, source: 'pedometer' },
+    ]);
+    // the answer already shows them, no second sync needed
+    const detail = accepted.json<ChallengeDetail>();
+    expect(detail.participants.find((p) => p.user.id === veli.me.id)?.score).toBe(21000);
+  });
+
+  it('leaves out a day older than the phone may fill in', async () => {
+    harness = await makeApp({ now: NOW });
+    const { veli, challengeId } = await pair(harness, 'adim_yarisi', 14);
+    const call = authed(harness.app, veli.token);
+    const start = today(harness);
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: start, steps: 15000, source: 'pedometer' }] } });
+
+    harness.advance((LIMITS.STEPS_BACKFILL_DAYS + 2) * DAY);
+    const oldest = addDays(today(harness), -LIMITS.STEPS_BACKFILL_DAYS);
+    await call({
+      method: 'POST',
+      url: '/me/steps',
+      payload: {
+        days: [
+          { dayKey: oldest, steps: 7000, source: 'pedometer' },
+          { dayKey: today(harness), steps: 3000, source: 'pedometer' },
+        ],
+      },
+    });
+
+    await call({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    // a typed entry could not go that far back either
+    expect(entryRows(harness, challengeId, veli.me.id)).toEqual([
+      { day_key: oldest, value: 7000, source: 'pedometer' },
+      { day_key: today(harness), value: 3000, source: 'pedometer' },
+    ]);
+  });
+
+  it('fills an Ekran Süresi çelınc from the minutes the phone already sent', async () => {
+    harness = await makeApp({ now: NOW });
+    const { veli, challengeId } = await pair(harness, 'ekran_suresi_beyani');
+    harness.advance(DAY);
+    const call = authed(harness.app, veli.token);
+    const days = [
+      { dayKey: addDays(today(harness), -1), minutes: 240 },
+      { dayKey: today(harness), minutes: 90 },
+    ];
+    await call({ method: 'POST', url: '/me/screen-time', payload: { days } });
+
+    await call({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    expect(entryRows(harness, challengeId, veli.me.id)).toEqual([
+      { day_key: addDays(today(harness), -1), value: 240, source: 'usage_stats' },
+      { day_key: today(harness), value: 90, source: 'usage_stats' },
+    ]);
+  });
+
+  it('writes nothing for a çelınc the phone does not count', async () => {
+    harness = await makeApp({ now: NOW });
+    const { veli, challengeId } = await pair(harness, 'kitap_sayfa');
+    const call = authed(harness.app, veli.token);
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: today(harness), steps: 15000, source: 'pedometer' }] } });
+    await call({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    expect(entryRows(harness, challengeId, veli.me.id)).toEqual([]);
   });
 });
 
