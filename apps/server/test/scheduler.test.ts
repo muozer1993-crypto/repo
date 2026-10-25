@@ -940,6 +940,71 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
     }
   });
 
+  it('takes an itiraz on the last evening that a phone sent after it woke', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+    at(harness, '2026-01-06T19:00:00.000Z');
+    await phoneSync(harness, ali, { '2026-01-06': 10_000 });
+    await phoneSync(harness, veli, { '2026-01-06': 9_000 });
+
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      // running at 23:00, then the laptop sleeps until 08:00
+      at(harness, MIDNIGHT_END, -HOUR);
+      stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush });
+      at(harness, MIDNIGHT_END, 8 * HOUR);
+      const wokeAt = new Date(harness.now().getTime()).toISOString();
+      await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(challengeRow(harness, challengeId).status).toBe('active');
+
+      // 08:05: Veli's phone finally sends the last day
+      at(harness, wokeAt, 5 * MINUTE);
+      await phoneSync(harness, veli, { '2026-01-06': 45_000 });
+      const veliDay = harness.db
+        .prepare('SELECT id FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ?')
+        .get(challengeId, veli.me.id, '2026-01-06') as { id: string };
+
+      // 08:10: Ali sees it and may still call it out, and the app is told until when
+      at(harness, wokeAt, 10 * MINUTE);
+      const detail = await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+      expect(detail.json<{ disputesCloseAt: string }>().disputesCloseAt).toBe(
+        new Date(Date.parse(wokeAt) + LIMITS.DEVICE_SETTLE_MS).toISOString(),
+      );
+      await dispute(harness, ali, challengeId, veliDay.id);
+      expect(entryStatus(harness, veliDay.id)).toBe('disputed');
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not reopen itirazlar on a çelınc that only waits for a photo', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'su_bardak');
+    at(harness, MIDNIGHT_END, -2 * HOUR);
+    const first = await logWater(harness, ali, challengeId, 8);
+    const second = await logWater(harness, ali, challengeId, 9);
+    await logWater(harness, veli, challengeId, 5);
+    at(harness, MIDNIGHT_END, -HOUR);
+    await dispute(harness, veli, challengeId, first);
+
+    // restarted at 01:00: the çelınc waits for Ali's photo, not for any phone
+    harness.app.schedulerBootAt.at = new Date(Date.parse(MIDNIGHT_END) + HOUR);
+    at(harness, MIDNIGHT_END, HOUR + 10 * MINUTE);
+    expect(runSchedulerOnce(harness.db, harness.now(), { bootAt: harness.app.schedulerBootAt.at })).toMatchObject({
+      finalized: 0,
+    });
+    const late = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${second}/dispute`,
+      payload: { reason: 'bu da yalan' },
+    });
+    expect(late.statusCode).toBe(400);
+    expect(late.json<{ error: { code: string } }>().error.code).toBe('challenge_ended');
+  });
+
   it('gives the owner of an itiraz that ran out in the night an hour after it wakes, on the clock the app shows', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await endingAtMidnight(harness, 'su_bardak');

@@ -12,7 +12,7 @@
  *     record could lose the challenge. Scoring and write validation must therefore
  *     be derived from the same expression. Scoring may only cut it, never widen it:
  *     a late joiner is scored from the first day the app let them write
- *     (`lateJoinFloor`), and a running çelınc only up to the days that have started
+ *     (`lateJoinFloor`), and a running çelınc only up to the days that are over
  *     (`rankAccepted`), so nobody is charged for a day they could not, or could
  *     not yet, report;
  *   - that timezone is the one PINNED on `challenge_participants` when the player
@@ -195,25 +195,62 @@ export function dayOverByEnd(challenge: Pick<ChallengeRow, 'ends_at'>, tz: strin
 }
 
 /**
- * The first day a friend who joined a running çelınc is scored from, or null
- * for everybody who was in from the start.
+ * When a çelınc could first take a typed number (epoch ms).
  *
- * A late joiner can only type today and yesterday (`LIMITS.MANUAL_PICKER_DAYS`),
- * so charging them the missing-day penalty for the days before that would hand
- * the çelınc to whoever was there first. Only `joined_at` after `starts_at`
- * counts as late: a Hemen creator joins a few seconds after the start, and a
- * floor on the day before the start day changes nothing. Rows from before
- * `joined_at` was always set count as in from the start.
+ * One created already running (a "Hemen" one) could from its start. One created
+ * for later sat `pending` until its start AND a second yes
+ * (`activateDueChallenges`), and `validateAndUpsertEntry` refuses every entry
+ * while it is `pending`: a rematch nobody answered over the weekend, or a
+ * "Yarın" çelınc whose friends said yes on day three, could not be played by
+ * anybody before that, its creator included. That moment is the later of the
+ * start and the second-earliest `joined_at`; a row accepted before `joined_at`
+ * was always set counts as joined at creation. A yes taken back before the
+ * start still counts (the row keeps no time of leaving), which at worst leaves
+ * the whole window, as before. Fewer than two ever joined: it never started,
+ * and the start stands.
  */
-function lateJoinFloor(participant: ParticipantRow, challenge: ChallengeRow, tz: string): string | null {
-  if (!participant.joined_at) return null;
-  const joinedAt = new Date(participant.joined_at);
-  if (!(joinedAt.getTime() > Date.parse(challenge.starts_at))) return null;
+function playableFrom(db: Database, challenge: ChallengeRow): number {
+  const startsAt = Date.parse(challenge.starts_at);
+  if (!(Date.parse(challenge.created_at) < startsAt)) return startsAt;
+  const joined = participantRows(db, challenge.id)
+    .filter((p) => p.joined_at !== null || p.status === 'accepted')
+    .map((p) => Date.parse(p.joined_at ?? challenge.created_at))
+    .filter((at) => Number.isFinite(at))
+    .sort((a, b) => a - b);
+  const second = joined[1];
+  return second === undefined ? startsAt : Math.max(startsAt, second);
+}
+
+/**
+ * The first day a player is scored from, or null for everybody who could play
+ * from the start.
+ *
+ * What counts is when the player COULD first have written, not when they said
+ * yes: `invited_at` (the wizard's and a rematch's invitees get the creation
+ * time, "Kanka ekle" the time of that invite, a declined friend asked again a
+ * fresh one) or the moment the çelınc became playable (`playableFrom`),
+ * whichever is later. An invitee who sits on the invite watching the standings
+ * pays for the days they sat out, like anybody in from the start; an Android
+ * phone's days come in with the yes anyway (`backfillFromPhone`).
+ *
+ * The floor is `LIMITS.MANUAL_PICKER_DAYS` (1) day before that day: the entry
+ * picker offers it then and, on a lower-is-better çelınc, all of the next day
+ * (`LIMITS.MANUAL_BACKFILL_DAYS`), so an evening yes still gets a whole day to
+ * type it. Charging the missing-day penalty for the days before would hand the
+ * çelınc to whoever was there first. Only a moment after `starts_at` counts as
+ * late: a Hemen creator's invites go out a few seconds after the start, and a
+ * floor on the day before the start day changes nothing.
+ */
+function lateJoinFloor(participant: ParticipantRow, challenge: ChallengeRow, tz: string, playable: number): string | null {
+  const invitedAt = Date.parse(participant.invited_at);
+  const from = Number.isFinite(invitedAt) ? Math.max(invitedAt, playable) : playable;
+  if (!(from > Date.parse(challenge.starts_at))) return null;
+  const at = new Date(from);
   let joinDay: string;
   try {
-    joinDay = dayKeyInTz(joinedAt, tz);
+    joinDay = dayKeyInTz(at, tz);
   } catch {
-    joinDay = dayKeyInTz(joinedAt, DEFAULT_TIMEZONE);
+    joinDay = dayKeyInTz(at, DEFAULT_TIMEZONE);
   }
   return addDays(joinDay, -LIMITS.MANUAL_PICKER_DAYS);
 }
@@ -230,8 +267,8 @@ function lateJoinFloor(participant: ParticipantRow, challenge: ChallengeRow, tz:
  * That window is cut twice. A late joiner's starts at `lateJoinFloor`, and their
  * entries before it go with it (a phone syncs a week back): `computeScore` divides
  * every counted entry by the window's size, so a dropped day whose entry stayed
- * would skew the average. And until `ends_at` it stops at the last day that has
- * started, with today in it only once something was reported for it.
+ * would skew the average. And until `ends_at` it stops at the last day that is
+ * over: today, with its entries, only joins the average tomorrow.
  */
 function rankAccepted(
   db: Database,
@@ -244,6 +281,7 @@ function rankAccepted(
 ): { ranking: RankingResult; days: Map<string, number> } {
   const perUserWindow = type.metricType === 'manual_lower_is_better';
   const days = new Map<string, number>();
+  const playable = perUserWindow ? playableFrom(db, challenge) : 0;
 
   const inputs: ScoreInput[] = accepted.map((participant) => {
     let entries = entriesByUser.get(participant.user_id) ?? [];
@@ -251,21 +289,21 @@ function rankAccepted(
     if (perUserWindow) {
       const tz = participantTimezone(participant, users.get(participant.user_id));
       window = challengeWindow(challenge, tz);
-      const floor = lateJoinFloor(participant, challenge, tz);
+      const floor = lateJoinFloor(participant, challenge, tz, playable);
       if (floor) {
         window = window.filter((key) => compareDayKeys(key, floor) >= 0);
         entries = entries.filter((entry) => compareDayKeys(entry.dayKey, floor) >= 0);
       }
-      // While the çelınc runs, only the days that have started count as
-      // "missing": day 2 of 7 shows the days so far, not five days of penalty
-      // for a future nobody has lived yet. Today joins once it has a
-      // row: an iPhone player types theirs at night, and charging it as an
-      // unreported 1440 all day would rank them last and nudge them every
-      // afternoon. A row friends threw out still counts as reported, the day
-      // is decided. With nothing before today (day one, unreported) today
-      // stays, so silence shows the worst case instead of leading with 0.
-      // From `ends_at` on nothing can be typed any more, so the full window
-      // applies, also to an end in the middle of a day.
+      // While the çelınc runs, only the days that are over count: day 2 of 7
+      // shows day 1, not five days of penalty for a future nobody has lived
+      // yet. Today is left out, its entries too, until tomorrow: an Android
+      // phone sends a half day at noon (40 dk so far) while an iPhone player
+      // types theirs at night, and averaging the half day in would rank the
+      // typer last and nudge them every afternoon. On day one there is no day
+      // before, so today stays with what it has, and silence shows the worst
+      // case instead of leading with 0. From `ends_at` on nothing can be typed
+      // any more, so the full window applies, also to an end in the middle of
+      // a day.
       if (challenge.status !== 'finished' && now.getTime() < Date.parse(challenge.ends_at)) {
         let today: string;
         try {
@@ -273,11 +311,13 @@ function rankAccepted(
         } catch {
           today = todayKey(DEFAULT_TIMEZONE, now);
         }
-        const reportedToday = entries.some((entry) => entry.dayKey === today);
-        const started = window.filter(
-          (key) => compareDayKeys(key, today) < 0 || (key === today && reportedToday),
-        );
-        window = started.length > 0 ? started : window.filter((key) => key === today);
+        const over = window.filter((key) => compareDayKeys(key, today) < 0);
+        if (over.length > 0) {
+          window = over;
+          entries = entries.filter((entry) => compareDayKeys(entry.dayKey, today) < 0);
+        } else {
+          window = window.filter((key) => key === today);
+        }
       }
     }
     const scored = computeScore(type, window, entries);
@@ -844,6 +884,22 @@ function everyPhoneReported(db: Database, challenge: ChallengeRow, metric: Devic
 export function disputesCloseAt(challenge: ChallengeRow): number {
   const settle = typeForChallenge(challenge).deviceMetric ? LIMITS.DEVICE_SETTLE_MS : 0;
   return Date.parse(challenge.ends_at) + settle;
+}
+
+/**
+ * Until when an itiraz may be filed, as things stand at `now` (epoch ms):
+ * `disputesCloseAt`, or the end of the phones' hour while it still holds the
+ * çelınc after the server started or woke past the end (`stillSettling` from
+ * `bootAt`). The last evening's numbers land in that hour wherever it falls:
+ * a reading a phone sends at 08:05, after the PC slept through midnight, can
+ * be disputed like one sent at 00:05. Only the phones keep it open; a restart
+ * does not reopen a çelınc that only waits for an itiraz's photo, nor one
+ * every phone has reported for (the next pass crowns it).
+ */
+export function disputesOpenUntil(db: Database, challenge: ChallengeRow, now: Date, bootAt?: Date): number {
+  const fixed = disputesCloseAt(challenge);
+  if (!bootAt || !stillSettling(db, challenge, now, bootAt)) return fixed;
+  return Math.max(fixed, bootAt.getTime() + LIMITS.DEVICE_SETTLE_MS);
 }
 
 /**

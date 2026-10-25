@@ -22,7 +22,7 @@ import {
 } from '@koydum/shared';
 import { badRequest, forbidden, notFound, parseBody } from '../errors.js';
 import { nowIso, type ChallengeRow, type EntryRow, type UserRow } from '../db/index.js';
-import { computeStandings, disputesCloseAt } from '../services/challenges.js';
+import { computeStandings, disputesOpenUntil } from '../services/challenges.js';
 import { notify } from '../services/notifications.js';
 import { awardBadges } from '../services/stats.js';
 import {
@@ -184,8 +184,9 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       if (challenge.status !== 'active') {
         throw badRequest('challenge_not_active', 'Bu çelınc bitti, artık itiraz edilemez.');
       }
-      // still `active` past its end only while it waits (disputesCloseAt)
-      if (now.getTime() >= disputesCloseAt(challenge)) {
+      // still `active` past its end only while it waits; only the phones'
+      // hour takes new ones (disputesOpenUntil)
+      if (now.getTime() >= disputesOpenUntil(db, challenge, now, app.schedulerBootAt.at)) {
         throw badRequest('challenge_ended', 'Süre bitti, artık itiraz edilemez.');
       }
 

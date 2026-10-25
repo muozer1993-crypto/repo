@@ -173,10 +173,13 @@ Bilinmesi gerekenler:
   **Denetim Masası → Güç Seçenekleri → Kapağı kapatmanın yapacağı işlemi seçin → Prize
   takılıyken: Hiçbir şey yapma**. Pencerede "bilgisayarı uyanık tutamadım" yazıyorsa (okulun ya da
   işin kısıtladığı bir bilgisayar) **Ayarlar → Sistem → Güç**'te uykuyu **Hiçbir zaman** yap.
-  Bilgisayar yine de uyursa sonuç yanlış çıkmaz: uyanınca pencerede "bilgisayar 8 saat uyumuş"
-  gibi bir satır çıkar. Uyurken biten bir adım ya da ekran süresi çelıncında kazanan, telefonlar
-  bir saat daha beklendikten sonra belli olur; uykudayken süresi dolan bir itirazın sahibi de
-  fotoğraf eklemek için bir saat daha alır.
+  Bilgisayar yine de uyursa adım ve ekran süresi çelınclarıyla itirazlar telafi edilir: uyanınca
+  pencerede "bilgisayar 8 saat uyumuş" gibi bir satır çıkar. Uyurken biten bir adım ya da ekran
+  süresi çelıncında kazanan, telefonlar bir saat daha beklendikten sonra belli olur, o saatte gelen
+  sayılara itiraz da edilebilir; uykudayken süresi dolan bir itirazın sahibi de fotoğraf eklemek
+  için bir saat daha alır. Ama uyurken basılan "Geldim" sunucuya ancak uyanınca ulaşır ve saati
+  geçtiyse geç sayılır; son gece elle yazılan sayılar ve odak seansları da süre bittiyse reddedilir.
+  Check-in, elle sayı ve odak çelınclarında bilgisayarın uyumaması şart.
 * **Sunucu çökerse pencere onu kendisi yeniden açar.** "Sunucu düştü, yeniden açıyorum" yazar,
   birkaç saniye sonra sunucu geri gelir. Tünel yerinde kaldığı için adres de aynıdır, kimseye
   yeni bağlantı atmana gerek yok. On dakikada beş kere çökerse bırakır ve kapanır; sebebi hemen
@@ -670,7 +673,7 @@ iste-geri çek-iste biriyle bütün gün telefonunu öttürebilirdi.
 * **Odak dakikası** — uygulama içi sayaç; uygulamadan çıkarsan seans yanar. Geri tuşu seansı yakmaz, önce "bitirelim mi?" diye sorar. Çelınc bittikten sonra sunucu odak dakikası almadığı için seans, çelıncın kalan süresine sığacak kadar kısaltılır: son gece 23:30'da 45 dakika seçersen seans 29 dakika sürer ve bitince yazılır, kaybolmaz.
 * **Saatli check-in** — belirlenen saatten önce "GELDİM" demen gerekir, saati sunucu doğrular. Her türün bir de açılış saati var (uyanma 04:00, yatma 19:00, yatak 05:00); ondan önce basılan check-in sayılmaz, yoksa gece ikideki "yattım" erken yatma sayılırdı. Bu yüzden check-in saati açılış saatinden sonra, en geç 23:59 olmalı: Erken Yatma Sözü'nde 00:00 seçilirse hiçbir gece sayılmaz, çelınc 0-0 biterdi. Sihirbaz böyle bir saati kabul etmiyor; eskiden böyle açılmış bir çelınc türün kendi saatiyle (yatma için 23:00) sayılır.
 * **Sayı girişi** — bardak, sayfa, km, tekrar. Çelıncı açan isterse fotoğraf kanıtı zorunlu olur; fotoğraf sadece bu tür girişlerde vardır.
-* **Az olan kazanır** — ekran süresi gibi; günlük ortalama yarışır, girmediğin gün en kötü değerden (1440 dk) sayılır. Bugün, değeri gelene kadar ortalamaya girmez (iPhone'da gece yazınca girer). Yarışa sonradan katılan, katıldığı günün bir gün öncesinden itibaren sayılır; ondan önceki günler için ceza yemez.
+* **Az olan kazanır** — ekran süresi gibi; günlük ortalama yarışır, girmediğin gün en kötü değerden (1440 dk) sayılır. Bugün ortalamaya ancak gün bitince girer, Android'in öğlen gönderdiği yarım gün kimseyi öne geçirmez; yalnız ilk gün hiçbir şey girmeyen 1440 dk görünür. Yarışa sonradan çağrılan ("Kanka ekle"), çağrıldığı günün bir gün öncesinden itibaren sayılır; ondan önceki günler için ceza yemez. Baştan çağrılıp daveti bekleten ise beklediği günlerin cezasını öder. İleri bir saate kurulan çelınc, kuranın yanına biri "Varım" diyene kadar başlamaz; o güne kadar kimse yazamadığı için kimse o günlerden ceza yemez.
 * **Günlük evet/hayır** — sigara içmedim, şeker yemedim. Gün sayısı yarışır.
 
 Şüpheli girişlere arkadaşlar **itiraz** edebilir; itirazın sebebi akışta o girişin altında herkese
@@ -686,8 +689,8 @@ giriş sayılır, yani teke tek çelıncta rakip tek dokunuşla senin gününü 
 değiştirirse "Geri çek" ile itirazını kaldırır (aynı girişe bir daha itiraz edemez; giriş sonradan
 sayısını ya da fotoğrafını değiştirirse edebilir). Bitişe yakın gelen bir itiraz yüzünden sonuç
 en fazla 12 saat bekleyebilir. İtiraz sadece çelınc sürerken açılır; adım ve ekran süresi çelınclarında
-son akşamın sayıları bitişten sonraki bir saatte geldiği için o saat de sayılır. Uygulama itiraz
-düğmesini de sadece bu sürede gösterir. Fotoğraf kanıtı, bir
+son akşamın sayıları bitişten sonraki bir saatte geldiği için o saat de sayılır (bilgisayar bitişte
+uyuyorduysa o saat uyandığı andan başlar). Uygulama itiraz düğmesini de sadece bu sürede gösterir. Fotoğraf kanıtı, bir
 sayı yazılan türlerde çelıncı açan kişi isterse zorunlu olur; evet/hayır günleri ve check-in'lerde
 fotoğraf yok.
 

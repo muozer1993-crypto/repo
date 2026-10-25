@@ -172,17 +172,24 @@ türü eklemek katalogda bir satır demektir — sunucu ve uygulama kodu değiş
 İki istisna bilinsin. `manual_lower_is_better` (ekran süresi) toplam değil **günlük ortalama**
 ile yarışır: girilmeyen gün en kötü değerden sayılır, toplam pencere gün sayısına bölünür. Böylece
 saat dilimi yüzünden bir gün fazla penceresi olan oyuncu cezalandırılmaz ve katalogdaki "ortalaması
-en düşük olan kazanır" cümlesi doğru olur. Çelınc sürerken pencere başlamış günlere kırpılır; ikinci
-günde beş günlük "girilmedi" cezası gösterilmez. Bugün ise pencereye ancak o güne bir değer gelince
-girer: iPhone'cu ekran süresini gece yazar; bugün gün boyu 1440 dakika sayılsa hep sonuncu
-görünür ve her öğleden sonra "sana fark koymuş" dürtmesi yer. İlk gün hiçbir şey girmeyen
-yine de 0 ile öne geçmez, bugünün cezasıyla görünür. `ends_at` gelince tam pencere uygulanır; gün
-ortasında biten bir çelıncta girilmeyen son gün de sayılır, çünkü artık yazılamaz. Sonradan katılan
-(daveti geç kabul eden ya da "Kanka ekle" ile gelen) katıldığı günün bir gün öncesinden
-(`LIMITS.MANUAL_PICKER_DAYS`) puanlanır: uygulama ona bugünden ve dünden geriye yazdırmaz, daha
-önceki günlere ceza kesmek çelıncı baştan başkasına vermek olurdu. O günlerin girişleri de (Android
-telefon bir hafta geriye senkronlar) toplama girmez; ortalama her girişi pencerenin gün sayısına
-böldüğü için kalsalar ortalamayı bozarlardı. İkincisi: `manual_count` ve `focus_minutes` girişleri
+en düşük olan kazanır" cümlesi doğru olur. Çelınc sürerken pencere bitmiş günlere kırpılır; ikinci
+günde beş günlük "girilmedi" cezası gösterilmez. Bugün, girişleriyle birlikte, ortalamaya ancak
+yarın girer: Android telefon öğlen yarım günü gönderir (şimdiye kadar 40 dk), iPhone'cu ekran
+süresini gece yazar; yarım gün ortalamaya girse iPhone'cu bütün öğleden sonra geride görünür ve
+"sana fark koymuş" dürtmesi yer. İlk gün öncesinde gün olmadığı için bugün kalır: hiçbir şey
+girmeyen 0 ile öne geçmez, bugünün cezasıyla (1440 dk) görünür. `ends_at` gelince tam pencere
+uygulanır; gün ortasında biten bir çelıncta girilmeyen son gün de sayılır, çünkü artık
+yazılamaz. Sonradan gelen, yazmaya başlayabildiği günün bir gün öncesinden
+(`LIMITS.MANUAL_PICKER_DAYS`) puanlanır. O an, davetin geldiği an (`invited_at`: sihirbazın ve
+rövanşın davetlileri için çelıncın açıldığı an, "Kanka ekle" ile gelen için o davetin anı) ile
+çelıncın oynanabilir olduğu andan hangisi sonraysa odur; ileri bir saate kurulan çelınc, kuranın
+yanına biri "Varım" diyene kadar `pending` kalır ve kimse, kuran da, giriş yazamaz. Daveti bekletip sonra
+"Varım" diyen geç gelmiş sayılmaz: sıralamayı izleyip kötü günlerini atmasın diye beklediği
+günlerin cezasını öder. Ekran süresinde giriş ekranı iki gün geriye yazdırır; gece "Varım" diyen
+de o ilk günü ertesi gün boyunca yazabilir. Daha önceki günlere ceza kesmek çelıncı baştan
+başkasına vermek olurdu. O günlerin girişleri de (Android telefon bir hafta geriye senkronlar)
+toplama girmez; ortalama her girişi pencerenin gün sayısına böldüğü için kalsalar ortalamayı
+bozarlardı. İkincisi: `manual_count` ve `focus_minutes` girişleri
 bir `sessionId` taşır ve aynı kimlikle gelen ikinci istek yeni bir satır değil, ilk satırın kendisidir. Telefon her dokunuşta
 yeni bir kimlik üretir; zaman aşımına uğrayıp çevrimdışı kuyruğundan tekrar gönderilen istek
 böylece bir bardak suyu iki kez saymaz.

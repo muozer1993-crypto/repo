@@ -42,8 +42,9 @@ export const LIMITS = {
    * Days before today the app's entry picker offers for a typed number: today
    * and yesterday, inside the server's `MANUAL_BACKFILL_DAYS`. A friend who
    * joined a lower-is-better çelınc late is scored from this many days before
-   * their join day, the first day the app let them write, so the picker and
-   * the scoring read the same number.
+   * the day they could first write; that çelınc's picker reaches back the full
+   * `MANUAL_BACKFILL_DAYS`, so after an evening yes that first day can still
+   * be typed all of the next day.
    */
   MANUAL_PICKER_DAYS: 1,
   STEPS_BACKFILL_DAYS: 7,

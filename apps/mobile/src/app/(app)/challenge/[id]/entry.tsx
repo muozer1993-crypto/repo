@@ -66,9 +66,16 @@ export default function EntryModalScreen() {
     : [];
   // Steps go back a week like the server takes them: somebody who joined on
   // day two, or whose phone started counting mid-race, writes the days before.
-  // Typed counts keep today and yesterday.
+  // Screen time goes back as far as the server takes a typed number: a late
+  // joiner is scored from the day before their yes, and after a yes at 23:40
+  // that day must still be writable tomorrow. Other typed counts keep today
+  // and yesterday.
   const backfillDays =
-    type?.metricType === 'auto_steps' ? LIMITS.STEPS_BACKFILL_DAYS : LIMITS.MANUAL_PICKER_DAYS;
+    type?.metricType === 'auto_steps'
+      ? LIMITS.STEPS_BACKFILL_DAYS
+      : type?.metricType === 'manual_lower_is_better'
+        ? LIMITS.MANUAL_BACKFILL_DAYS
+        : LIMITS.MANUAL_PICKER_DAYS;
   const pickableDays = windowKeys
     .filter((day) => day <= today && diffDayKeys(day, today) <= backfillDays)
     .reverse();

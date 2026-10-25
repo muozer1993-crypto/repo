@@ -459,6 +459,14 @@ export interface ChallengeDetail extends ChallengeSummary {
    * of. `done` means that one is still inside the poke cooldown.
    */
   pokeTargets: CanTaunt[];
+  /**
+   * Until when an itiraz may be filed (ISO), by the server's own rule: the
+   * end, plus the phones' hour on a çelınc the phone counts, and that hour
+   * starts again when the owner's PC wakes past the end. The app hides its
+   * itiraz chip by it. `null` for dates the server cannot read; an older server leaves
+   * it out, and the app falls back to the end plus `LIMITS.DEVICE_SETTLE_MS`.
+   */
+  disputesCloseAt?: string | null;
 }
 
 /** `GET /challenges/:id/results` */

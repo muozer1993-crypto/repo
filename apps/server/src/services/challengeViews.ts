@@ -23,7 +23,7 @@ import type {
 import { countOf, type ChallengeRow, type Database, type DisputeRow, type EntryRow, type ParticipantRow, type TauntRow, type UserRow } from '../db/index.js';
 import { badRequest, forbidden, notFound } from '../errors.js';
 import { asVulgarityLevel, toChallenge, toDispute, toEntry, toFeedItem, toTaunt } from '../serialize.js';
-import { computeStandings, getChallengeRow } from './challenges.js';
+import { computeStandings, disputesOpenUntil, getChallengeRow } from './challenges.js';
 import { disputeDeadlines } from './entries.js';
 
 /** How many recent entries the detail feed carries (SPEC 2.2). */
@@ -238,16 +238,24 @@ export function buildSummary(db: Database, challenge: ChallengeRow, userId: stri
   };
 }
 
+/**
+ * `bootAt` is the scheduler's (`app.schedulerBootAt.at`): the phones' hour it
+ * starts on waking moves the itiraz window too, and the app hides its itiraz
+ * chip by the instant sent here.
+ */
 export function buildDetail(
   db: Database,
   challenge: ChallengeRow,
   userId: string,
   now: Date = new Date(),
+  bootAt?: Date,
 ): ChallengeDetail {
   const summary = buildSummary(db, challenge, userId, now);
   const pokeTargets = pokeTargetList(db, challenge, userId, now);
+  const disputesClose = disputesOpenUntil(db, challenge, now, bootAt);
   return {
     ...summary,
+    disputesCloseAt: Number.isFinite(disputesClose) ? new Date(disputesClose).toISOString() : null,
     myEntries: myEntries(db, challenge.id, userId),
     feed: challengeFeed(db, challenge.id),
     disputes: challengeDisputes(db, challenge.id),
@@ -265,8 +273,9 @@ export function freshDetail(
   challengeId: string,
   userId: string,
   now: Date = new Date(),
+  bootAt?: Date,
 ): ChallengeDetail {
-  return buildDetail(db, requireChallengeRow(db, challengeId), userId, now);
+  return buildDetail(db, requireChallengeRow(db, challengeId), userId, now, bootAt);
 }
 
 // ---------------------------------------------------------------------------

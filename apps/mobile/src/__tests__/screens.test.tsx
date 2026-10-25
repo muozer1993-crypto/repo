@@ -1051,6 +1051,33 @@ describe('the entry modal', () => {
     expect(dayChip(tree, 'Bugün')).toBeUndefined();
   });
 
+  it('lets screen time go back as far as the server takes a typed number', async () => {
+    // a friend who said yes at 23:40 is scored from the day before; that day
+    // must still be on offer the morning after
+    searchParams.id = 'c-1';
+    searchParams.day = addDays(today(), -LIMITS.MANUAL_BACKFILL_DAYS);
+    const detail = challengeDetail();
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        typeKey: 'ekran_suresi_beyani',
+        metricType: 'manual_lower_is_better' as const,
+        direction: 'lower' as const,
+        unit: 'dk',
+      },
+    }));
+
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    expect(dayChip(tree, 'Bugün')?.props.selected).toBe(false);
+    expect(dayChip(tree, 'Dün')).toBeDefined();
+    expect(dayChip(tree, formatDayKey(addDays(today(), -LIMITS.MANUAL_BACKFILL_DAYS)))?.props.selected).toBe(true);
+    expect(dayChip(tree, formatDayKey(addDays(today(), -LIMITS.MANUAL_BACKFILL_DAYS - 1)))).toBeUndefined();
+  });
+
   it('locks a step day friends threw out: only the phone writes it now', async () => {
     const day = addDays(today(), -1);
     searchParams.id = 'c-1';
@@ -1101,6 +1128,48 @@ describe('the entry modal', () => {
     expect(text).toContain('Dün için telefonun saydığını kankalar itirazla yaktı. O güne artık bir şey yazılmaz.');
     expect(text).not.toContain('sadece telefonun saydığı');
     expect(findWith(tree, 'title', 'Kaydet', 'onPress').props.disabled).toBe(true);
+  });
+});
+
+describe('the screen-time card', () => {
+  /** Mustafa in a screen-time çelınc that started `startsAgo` ms ago, nothing typed today. */
+  function screenTime(startsAgo: number) {
+    const detail = challengeDetail();
+    return {
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        typeKey: 'ekran_suresi_beyani',
+        metricType: 'manual_lower_is_better' as const,
+        direction: 'lower' as const,
+        unit: 'dk',
+        startsAt: new Date(Date.now() - startsAgo).toISOString(),
+      },
+    };
+  }
+
+  it('says today joins the average once it is over', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => screenTime(2 * 86_400_000));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toMatch(/Girmediğin gün\s+1\.440\s+dk\s+sayılır;\s+bugün ise gün bitince ortalamana katılır\./);
+    expect(text).not.toContain('ilk gün');
+  });
+
+  it('says on day one that silence shows as the penalty, the way the standings show it', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => screenTime(0));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('bugün ilk gün, değerin gelene kadar 1.440 dk görünürsün.');
+    expect(text).not.toContain('gün bitince');
   });
 });
 

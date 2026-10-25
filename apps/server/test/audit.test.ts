@@ -772,19 +772,26 @@ describe('device readings versus typed declarations', () => {
 });
 
 describe('lower-is-better standings while the çelınc runs', () => {
-  it('averages over the days that have started, not the whole week', async () => {
+  it('averages over the days that are over, not the whole week', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await livePair(harness, 'ekran_suresi_beyani', {}, 7);
     const call = authed(harness.app, ali.token);
     await call({ method: 'POST', url: '/me/screen-time', payload: { days: [{ dayKey: today(harness), minutes: 120 }] } });
     harness.advance(DAY_MS);
     await call({ method: 'POST', url: '/me/screen-time', payload: { days: [{ dayKey: today(harness), minutes: 60 }] } });
+    const scoreOf = async (userId: string): Promise<number | undefined> => {
+      const detail = await call({ method: 'GET', url: `/challenges/${challengeId}` });
+      return detail.json<ChallengeDetail>().participants.find((p) => p.user.id === userId)?.score;
+    };
+    // day two: only day one is over, today's 60 so far waits for tomorrow
+    expect(await scoreOf(ali.me.id)).toBe(120);
+    harness.advance(DAY_MS);
 
     const detail = await call({ method: 'GET', url: `/challenges/${challengeId}` });
     const standings = detail.json<ChallengeDetail>().participants;
     const me = standings.find((p) => p.user.id === ali.me.id);
     const rival = standings.find((p) => p.user.id === veli.me.id);
-    // two days started: Ali averages (120 + 60) / 2, Veli has two unreported days
+    // two days over: Ali averages (120 + 60) / 2, Veli has two unreported days
     expect(me?.score).toBe(90);
     expect(rival?.score).toBe(1440);
     expect(me?.rank).toBe(1);

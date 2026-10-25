@@ -73,6 +73,8 @@ export function startScheduler(
   // the interval moves it on when it comes back (`nextBootAt`).
   let bootAt = app.now();
   let lastBeatMs = bootAt.getTime();
+  // the itiraz route and the çelınc detail read it (`disputesOpenUntil`)
+  app.schedulerBootAt.at = bootAt;
 
   const tick = async (): Promise<void> => {
     try {
@@ -137,6 +139,7 @@ export function startScheduler(
       app.log.warn({ minutes: Math.round((now.getTime() - lastBeatMs) / 60_000) }, 'scheduler resumed after a pause');
     }
     bootAt = next;
+    app.schedulerBootAt.at = bootAt;
     lastBeatMs = now.getTime();
 
     if (inFlight) return; // never overlap two passes

@@ -308,7 +308,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const { id } = request.params as IdParams;
     const challenge = requireChallengeRow(db, id);
     requireMembership(db, challenge, me.id);
-    return buildDetail(db, challenge, me.id, app.now());
+    return buildDetail(db, challenge, me.id, app.now(), app.schedulerBootAt.at);
   });
 
   // -------------------------------------------------------------------------
@@ -349,7 +349,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     });
     run();
 
-    return freshDetail(db, challenge.id, me.id, app.now());
+    return freshDetail(db, challenge.id, me.id, app.now(), app.schedulerBootAt.at);
   });
 
   // -------------------------------------------------------------------------
@@ -378,7 +378,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       cancelIfAbandoned(db, challenge.id, now);
     });
     run();
-    return freshDetail(db, challenge.id, me.id, app.now());
+    return freshDetail(db, challenge.id, me.id, app.now(), app.schedulerBootAt.at);
   });
 
   // -------------------------------------------------------------------------
@@ -429,7 +429,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       announceDisputeClocks(db, challenge.id, now);
     });
     run();
-    return freshDetail(db, challenge.id, me.id, app.now());
+    return freshDetail(db, challenge.id, me.id, app.now(), app.schedulerBootAt.at);
   });
 
   // -------------------------------------------------------------------------
@@ -538,7 +538,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     });
     run();
 
-    return freshDetail(db, challenge.id, me.id, app.now());
+    return freshDetail(db, challenge.id, me.id, app.now(), app.schedulerBootAt.at);
   });
 
   // -------------------------------------------------------------------------
@@ -584,6 +584,6 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     });
     run();
 
-    return freshDetail(db, challenge.id, me.id, app.now());
+    return freshDetail(db, challenge.id, me.id, app.now(), app.schedulerBootAt.at);
   });
 }

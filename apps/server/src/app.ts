@@ -42,6 +42,13 @@ declare module 'fastify' {
     config: Config;
     /** The single source of "now" for every route and service. */
     now: () => Date;
+    /**
+     * When the scheduler started, or last woke from sleep (`startScheduler`
+     * keeps `at` up to date): the phones' hour after an end runs from here
+     * too, and an itiraz may be filed in it (`disputesOpenUntil`). Unset while
+     * no scheduler runs (tests, `/dev/advance`).
+     */
+    schedulerBootAt: { at?: Date };
   }
 }
 
@@ -88,6 +95,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
   app.decorate('db', db);
   app.decorate('config', config);
   app.decorate('now', now);
+  app.decorate('schedulerBootAt', {} as { at?: Date });
 
   app.setErrorHandler(errorHandler);
   app.setNotFoundHandler(notFoundHandler);

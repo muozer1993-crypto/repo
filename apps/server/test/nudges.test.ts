@@ -258,6 +258,30 @@ describe('mid-day nudges', () => {
     expect(nudgesOf(harness!, veli.me.id)[0].body).toContain('340 dk');
   });
 
+  it('does not tell the iPhone player they are behind because the Android phone sent half of today', async () => {
+    // 13:00 in Istanbul on day two
+    const { app, ali, veli } = await twoPlayers('2026-01-06T10:00:00.000Z');
+    const id = seedActive(app, {
+      creatorId: ali.me.id,
+      accepted: [ali.me.id, veli.me.id],
+      startsAt: '2026-01-04T21:00:00.000Z',
+      endsAt: '2026-01-11T21:00:00.000Z',
+      typeKey: 'ekran_suresi_beyani',
+      metricType: 'manual_lower_is_better',
+      direction: 'lower',
+      unit: 'dk',
+    });
+    // day one: Veli typed 250 last night, Ali's phone 300; today so far Ali's phone says 40
+    addSteps(app, id, veli.me.id, TODAY, 250, 'manual');
+    addSteps(app, id, ali.me.id, TODAY, 300, 'usage_stats');
+    addSteps(app, id, ali.me.id, '2026-01-06', 40, 'usage_stats');
+
+    // (300 + 40) / 2 = 170 against 250 was "Mahmut sana 80 dk fark koymuş"
+    expect(sendNudges(app.db, app.now())).toBe(1);
+    expect(nudgesOf(harness!, veli.me.id)).toHaveLength(0);
+    expect(nudgesOf(harness!, ali.me.id)[0].body).toContain('50 dk');
+  });
+
   it('keeps quiet in the final hour, where the device already warns', async () => {
     const { app, ali, veli } = await twoPlayers(AFTERNOON);
     const id = seedActive(app, {

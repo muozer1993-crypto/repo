@@ -1382,7 +1382,7 @@ function CountAction({ id, detail, type, today }: ActionProps) {
  * iPhone / Expo Go / no permission: the honest fallback, a typed value with a
  * screenshot, plus the one-tap permission request where that is the blocker.
  */
-function LowerAction({ id, detail, type, level, today }: ActionProps) {
+function LowerAction({ id, detail, type, level, today, dayKeys }: ActionProps) {
   const api = useApi();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -1423,6 +1423,11 @@ function LowerAction({ id, detail, type, level, today }: ActionProps) {
   const needsPermission = deviceFed && availability?.available === false && availability.reason === 'permission';
   const locked = entry?.source === 'usage_stats';
   const shown = deviceOn ? (deviceMinutes ?? entry?.value ?? null) : (entry?.value ?? null);
+  const penalty = formatNumber(type.missingDayPenalty ?? type.maxPerDay);
+  // The server averages the days that are over and leaves today for tomorrow;
+  // on day one there is no such day, so today counts with what it has, or at
+  // the penalty while nothing came in (services/challenges rankAccepted).
+  const firstDay = !dayKeys.some((key) => key < today);
 
   const sync = async () => {
     setSyncing(true);
@@ -1464,8 +1469,10 @@ function LowerAction({ id, detail, type, level, today }: ActionProps) {
         </Text>
       </View>
       <Text variant="tiny" faint>
-        Az olan kazanır. Girmediğin gün {formatNumber(type.missingDayPenalty ?? type.maxPerDay)}{' '}
-        {type.unitTr} sayılır; bugün ise değeri gelene kadar ortalamana katılmaz.
+        Az olan kazanır. Girmediğin gün {penalty} {type.unitTr} sayılır;{' '}
+        {firstDay
+          ? `bugün ilk gün, değerin gelene kadar ${penalty} ${type.unitTr} görünürsün.`
+          : 'bugün ise gün bitince ortalamana katılır.'}
       </Text>
 
       {deviceOn ? (
@@ -1612,10 +1619,13 @@ function Feed({
   // lets you delete your own manual rows while the çelınc is running.
   const active = detail.challenge.status === 'active';
   // A new itiraz is refused from the end on, except in the hour a phone-counted
-  // çelınc waits for the last evening's numbers (the server's disputesCloseAt):
-  // an "itiraz et" chip after that would only earn a 400.
-  const disputesCloseAt =
-    Date.parse(detail.challenge.endsAt) + (type?.deviceMetric ? LIMITS.DEVICE_SETTLE_MS : 0);
+  // çelınc waits for the last evening's numbers: an "itiraz et" chip after that
+  // would only earn a 400. That hour starts again when the owner's PC wakes
+  // past the end, so the server's instant wins; an older server sends none.
+  const sentClose = detail.disputesCloseAt ? Date.parse(detail.disputesCloseAt) : Number.NaN;
+  const disputesCloseAt = Number.isFinite(sentClose)
+    ? sentClose
+    : Date.parse(detail.challenge.endsAt) + (type?.deviceMetric ? LIMITS.DEVICE_SETTLE_MS : 0);
   // a malformed end date leaves the call to the server rather than hiding the chip
   const canDispute = active && (!Number.isFinite(disputesCloseAt) || now < disputesCloseAt);
   const canDelete = (item: FeedItem) =>
