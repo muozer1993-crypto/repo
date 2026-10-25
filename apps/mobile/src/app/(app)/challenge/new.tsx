@@ -36,7 +36,7 @@ import { Colors, Radius, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
 import { endOfDayInTz, safeDayKey, safeTodayKey, zonedInstant } from '@/utils/datetime';
 import { formatDayKey, formatTime } from '@/utils/format';
-import { byLevel } from '@/utils/levelCopy';
+import { byLevel, typeDescription } from '@/utils/levelCopy';
 
 /* ------------------------------------------------------------------ copy */
 
@@ -91,10 +91,6 @@ function computeWindow(startMode: StartMode, days: number, tz: string): { starts
   const end =
     snapped && snapped.getTime() - start.getTime() > LIMITS.MIN_DURATION_MS ? snapped : fallback;
   return { startsAt: start.toISOString(), endsAt: end.toISOString() };
-}
-
-function describeType(type: ChallengeType, level: VulgarityLevel): string {
-  return level === 1 ? type.descriptionPoliteTr : type.descriptionTr;
 }
 
 /** The catalog's suggested reward can be longer than the field allows. */
@@ -214,7 +210,7 @@ function TypeRow({ type, level, selected, onSelect }: TypeRowProps) {
             <Chip label={type.unitTr} size="sm" color={selected ? Colors.accent : Colors.textFaint} />
           </View>
           <Text variant="tiny" muted style={styles.typeDesc}>
-            {describeType(type, level)}
+            {typeDescription(type, level)}
           </Text>
         </View>
       </Pressable>
@@ -512,7 +508,7 @@ export default function NewChallengeScreen() {
                 {type.emoji} {type.nameTr}
               </Text>
               <Text variant="tiny" muted style={styles.typeDesc}>
-                {describeType(type, level)}
+                {typeDescription(type, level)}
               </Text>
             </Card>
 

@@ -633,6 +633,183 @@ describe('saying yes to a çelınc the phone counts', () => {
   });
 });
 
+describe('an invite, before and after the door closes', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const DAY = 86_400_000;
+
+  /**
+   * Ali's screen-time çelınc with a photo on every typed number, the reader
+   * still invited. By default it starts tomorrow and runs seven days; `startsIn`
+   * and `endsIn` move either end relative to now.
+   */
+  function screenTimeInvite(
+    options: { status?: 'pending' | 'active' | 'finished'; startsIn?: number; endsIn?: number } = {}
+  ) {
+    const detail = challengeDetail();
+    const startsIn = options.startsIn ?? DAY;
+    const ali = { ...detail.me, user: ALI };
+    const me = { ...detail.me, status: 'invited' as const, score: 0, days: 0, rank: 0, lastEntryAt: null };
+    return {
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        creatorId: ALI.id,
+        typeKey: 'ekran_suresi_beyani',
+        metricType: 'manual_lower_is_better' as const,
+        direction: 'lower' as const,
+        unit: 'dk',
+        title: 'Telefonu Bırak',
+        status: options.status ?? ('pending' as const),
+        startsAt: new Date(Date.now() + startsIn).toISOString(),
+        // the same hour six days on: seven day keys whatever the time of day
+        endsAt: new Date(Date.now() + (options.endsIn ?? startsIn + 6 * DAY)).toISOString(),
+        proofRequired: true,
+        penaltyText: 'Kaybeden bulaşık yıkar',
+      },
+      participants: [ali, me],
+      me,
+    };
+  }
+
+  /** Ends in half an hour, so the door closed half an hour ago. */
+  const closed = () => screenTimeInvite({ status: 'active', startsIn: -2 * DAY, endsIn: 30 * 60_000 });
+
+  it('shows the invitee who wins, for how long, the photo rule and the empty-day cost above "Varım"', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => screenTimeInvite());
+    api.acceptChallenge = jest.fn(async () => ({}));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Günlük ekran süresi ortalaması en düşük olan kazanır.');
+    expect(text).toContain('📅 7 gün · ');
+    expect(text).toContain('📸 Elle girdiğin her sayıya kanıt fotoğrafı lazım');
+    expect(text).toContain('⚠️ Girmediğin gün 1.440 dk yazılır');
+    // "Nasıl sayılıyor?" is unfolded for somebody about to say yes
+    expect(text).toContain('Girmediğin gün 1440 dakika yazılıyor.');
+    expect(text).toContain('Kaybeden bulaşık yıkar');
+    expect(text.indexOf('KURALLAR')).toBeGreaterThan(-1);
+    expect(text.indexOf('KURALLAR')).toBeLessThan(text.indexOf('Davet sende'));
+
+    // a yes to a çelınc that has not started counts nothing yet
+    press(tree, 'Varım');
+    await settle();
+    expect(api.acceptChallenge).toHaveBeenCalledWith('c-1');
+    expect(rendered(tree)).toContain('Çelınc başlayınca skorun sayılmaya başlar.');
+    expect(rendered(tree)).not.toContain('Skorun sayılmaya başladı.');
+  });
+
+  it('puts the days, the photo rule and the stakes on the home card', async () => {
+    const { challenge, participants, me } = screenTimeInvite();
+    api.challenges = jest.fn(async () => [{ challenge, participants, me, unreadTaunts: 0 }]);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Ali davet etti');
+    expect(text).toMatch(/📅 7 gün · .+ · 📸 Kanıt lazım/);
+    expect(text).toContain('🎁 Kaybeden kahve ısmarlar · 💀 Kaybeden bulaşık yıkar');
+  });
+
+  it('leaves an invite nobody can accept any more out of Davetler', async () => {
+    const late = closed();
+    const open = screenTimeInvite();
+    api.challenges = jest.fn(async () => [
+      { challenge: { ...late.challenge, id: 'c-9', title: 'Kapanan Çelınc' }, participants: late.participants, me: late.me, unreadTaunts: 0 },
+      { challenge: open.challenge, participants: open.participants, me: open.me, unreadTaunts: 0 },
+    ]);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Telefonu Bırak');
+    expect(text).not.toContain('Kapanan Çelınc');
+    expect(tree.root.findAll((node) => node.props.title === 'Kabul' && typeof node.props.onPress === 'function')).toHaveLength(1);
+  });
+
+  it('says the door is closed on the çelınc screen instead of offering a "Varım" that can only fail', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => closed());
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Bu çelınca katılım kapandı.');
+    expect(() => findWith(tree, 'title', 'Varım', 'onPress')).toThrow();
+    expect(text).not.toContain('Davet sende');
+    // the rules stay, folded, for somebody only watching
+    expect(text).toContain('Nasıl sayılıyor? ▾');
+    expect(text).not.toContain('Girmediğin gün 1440 dakika yazılıyor.');
+    const [toggle] = tree.root.findAll(
+      (node) => node.props.accessibilityState?.expanded === false && typeof node.props.onPress === 'function'
+    );
+    act(() => {
+      toggle!.props.onPress();
+    });
+    expect(rendered(tree)).toContain('Girmediğin gün 1440 dakika yazılıyor.');
+    expect(rendered(tree)).toContain('Nasıl sayılıyor? ▴');
+  });
+
+  it('goes by the closing instant the server sends rather than its own sums', async () => {
+    searchParams.id = 'c-1';
+    // three days to go, yet this server already stopped taking players
+    const detail = screenTimeInvite({ status: 'active', startsIn: -DAY, endsIn: 3 * DAY });
+    const acceptClosesAt = new Date(Date.now() - 60_000).toISOString();
+    api.challenge = jest.fn(async () => ({ ...detail, challenge: { ...detail.challenge, acceptClosesAt } }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Bu çelınca katılım kapandı.');
+    expect(() => findWith(tree, 'title', 'Varım', 'onPress')).toThrow();
+  });
+
+  it('calls a finished çelınc the reader never answered "KAÇIRDIN", with nobody "bekliyor"', async () => {
+    const { challenge, participants, me } = screenTimeInvite({ status: 'finished', startsIn: -8 * DAY, endsIn: -DAY });
+    api.challenges = jest.fn(async () => [
+      { challenge: { ...challenge, finalizedAt: challenge.endsAt, winnerId: ALI.id }, participants, me, unreadTaunts: 0 },
+    ]);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('KAÇIRDIN');
+    expect(text).not.toContain('DAVET');
+    expect(text).not.toContain('YEDİN');
+    expect(text).not.toContain('bekliyor');
+  });
+
+  it('leaves an unanswered invite off the final table', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    const CEM = { id: 'u-3', username: 'cem', displayName: 'Cem', avatarEmoji: '🦁', createdAt: '2026-09-01T00:00:00.000Z' };
+    const finalizedAt = new Date(Date.now() - 3_600_000).toISOString();
+    api.results = jest.fn(async () => ({
+      challenge: { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: 'me-1' },
+      standings: [
+        { ...detail.me, rank: 1, isWinner: true },
+        { ...detail.me, user: ALI, score: 8000, rank: 2 },
+        { ...detail.me, user: CEM, status: 'invited' as const, score: 0, rank: 0 },
+      ],
+      taunts: [],
+    }));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Ali');
+    expect(text).not.toContain('Cem');
+    expect(text).not.toContain('bekliyor');
+  });
+});
+
 describe('a step çelınc past its end, still active on the server', () => {
   it('says the last steps are coming in, offers no entry, and sends this phone\'s count', async () => {
     searchParams.id = 'c-1';

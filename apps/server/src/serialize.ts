@@ -13,6 +13,7 @@ import {
   NOTIFICATION_TYPES,
   PARTICIPANT_STATUSES,
   CHALLENGE_STATUSES,
+  acceptClosesAt,
   effectiveDeadline,
   getChallengeType,
   isVulgarityLevel,
@@ -124,6 +125,9 @@ function deadlineOf(row: ChallengeRow): string | null {
 }
 
 export function toChallenge(row: ChallengeRow): Challenge {
+  // the instant the accept and invite routes refuse from, so the app hides its
+  // buttons by the server's clock rule instead of keeping a copy of it
+  const closes = acceptClosesAt(row.starts_at, row.ends_at);
   return {
     id: row.id,
     creatorId: row.creator_id,
@@ -145,6 +149,7 @@ export function toChallenge(row: ChallengeRow): Challenge {
     winnerId: row.winner_id,
     isTie: row.is_tie === 1,
     rematchOfId: row.rematch_of_id,
+    acceptClosesAt: Number.isFinite(closes) ? new Date(closes).toISOString() : null,
   };
 }
 

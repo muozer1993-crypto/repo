@@ -1,5 +1,7 @@
 import { formatDayKeyTr } from '@koydum/shared';
 
+import { safeDayKey } from '@/utils/datetime';
+
 /** Turkish-locale formatting helpers shared by every screen. */
 
 export function formatNumber(value: number): string {
@@ -72,6 +74,15 @@ export function formatWeekRange(startKey: string, endKey: string): string {
   const [, ...endMonth] = end.split(' ');
   if (startMonth.length > 0 && startMonth.join(' ') === endMonth.join(' ')) return `${startDay} – ${end}`;
   return `${start} – ${end}`;
+}
+
+/** "1 Eylül – 8 Eylül" in the reader's timezone. */
+export function dateRange(startsAt: string, endsAt: string, tz: string): string {
+  const startKey = safeDayKey(startsAt, tz);
+  const endKey = safeDayKey(endsAt, tz);
+  if (!startKey || !endKey) return '';
+  if (startKey === endKey) return formatDayKey(startKey);
+  return `${formatDayKey(startKey)} – ${formatDayKey(endKey)}`;
 }
 
 /** "2026-09-08" -> "Bugün" / "Dün" / "8 Eylül" */

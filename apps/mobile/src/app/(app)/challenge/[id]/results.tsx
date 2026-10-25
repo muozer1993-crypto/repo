@@ -25,9 +25,8 @@ import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { USE_NATIVE_DRIVER, useAnimatedValue } from '@/utils/animation';
-import { safeDayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
-import { formatDayKey, relativeTime } from '@/utils/format';
+import { dateRange, relativeTime } from '@/utils/format';
 import {
   BEHIND_THE_TIE,
   REMATCH_WINNER,
@@ -1057,17 +1056,6 @@ function Confetti() {
       ))}
     </View>
   );
-}
-
-/* ------------------------------------------------------------------ dates */
-
-/** "1 Eylül – 8 Eylül" in the reader's timezone. */
-function dateRange(startsAt: string, endsAt: string, tz: string): string {
-  const startKey = safeDayKey(startsAt, tz);
-  const endKey = safeDayKey(endsAt, tz);
-  if (!startKey || !endKey) return '';
-  if (startKey === endKey) return formatDayKey(startKey);
-  return `${formatDayKey(startKey)} – ${formatDayKey(endKey)}`;
 }
 
 /* ----------------------------------------------------------------- styles */

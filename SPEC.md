@@ -123,7 +123,9 @@ export function rankParticipants(type: ChallengeType, dayKeys: string[], inputs:
   the loser's score.
 - `acceptClosesAt(startsAt, endsAt)` (epoch ms) is when a çelınc stops taking players:
   `endsAt − min(LIMITS.ACCEPT_CUTOFF_MS, duration / 4)`. The server refuses an accept or an invite
-  from then on (2.2), and the app hides "Kanka ekle" by the same instant (3.3).
+  from then on (2.2) and sends the instant with every çelınc (`Challenge.acceptClosesAt`, 1.7); the
+  app hides "Kanka ekle", the home card's invite and the çelınc screen's "Varım" / "Katıl" by it (3.3),
+  falling back to this function for a server that does not send it.
 
 ### 1.4 Taunts (`taunts.ts`)
 
@@ -192,7 +194,9 @@ InboxReadBody { ids?: string[]; all?: boolean }
 PublicUser { id, username, displayName, avatarEmoji, createdAt }
 Me extends PublicUser { vulgarityMax, timezone, reminderHour, nudgesEnabled, recapEnabled, inviteCode, hasPushToken, stats: UserStats, badges: string[] }
 UserStats { wins, losses, ties, tauntsSent, tauntsReceived, stepsSingleDayMax, focusTotalMinutes, checkinsStreakMax, disputesWon, challengesPlayed, pokesSent, revengeWins, stepsToday }
-Challenge { id, creatorId, typeKey, metricType, direction, unit, title, startsAt, endsAt, status, rewardText, penaltyText, deadlineTime, dailyTarget, proofRequired, createdAt, finalizedAt, winnerId, isTie, rematchOfId }
+Challenge { id, creatorId, typeKey, metricType, direction, unit, title, startsAt, endsAt, status, rewardText, penaltyText, deadlineTime, dailyTarget, proofRequired, createdAt, finalizedAt, winnerId, isTie, rematchOfId, acceptClosesAt?: string | null }
+  -- acceptClosesAt: the ISO instant the accept and invite routes refuse from (1.3), on every çelınc the
+     server returns; null only for dates it cannot read. Optional because an older server leaves it out.
 ParticipantView { user: PublicUser, status, score, days, rank, lastEntryAt, isWinner }
 ChallengeSummary { challenge: Challenge, participants: ParticipantView[], me: ParticipantView | null, unreadTaunts: number }
 ChallengeDetail extends ChallengeSummary { myEntries: Entry[], feed: FeedItem[], disputes: Dispute[], taunts: Taunt[], canTaunt: { toUserId: string; done: boolean }[], canPoke: boolean, pokeTargets: { toUserId: string; done: boolean }[] }
@@ -566,7 +570,8 @@ theme/                   colors, spacing, typography (dark neon), components: Sc
 components/Toast.tsx     ToastProvider + useToast; ToastView draws the toast. A Sheet is an RN Modal (its own window on Android and iOS, a body portal on web), so a toast drawn in the root tree sat under its scrim: every visible Sheet registers with useToastLayer, the one opened last draws the toast inside its Modal (after the KeyboardAvoidingView, so the keyboard does not move it), and the provider draws it only while no Sheet is open. Animated stops a running fade when the last view on its value unmounts, so the view that draws the toast next finishes the fade (a "Şikayet alındı" raised in the tap that closed the sheet stayed invisible otherwise)
 hooks/usePullRefresh.ts  usePullRefresh(run) → { refreshing, onRefresh } for every pull-to-refresh: the spinner runs from the pull until `run` settles and at no other time. react-query's `isRefetching` is also true for the 45 s / 60 s polls, push invalidations and step syncs, which dropped the spinner in by itself
 utils/keyboard.ts        keyboardBehavior(): 'padding' on iOS and Android, none on web. `Screen keyboard` and every Sheet (a KeyboardAvoidingView around backdrop and sheet, so only the sheet rises; its 88% maxHeight is of what the keyboard leaves) lift their content with it: Android builds and RN Modals are edge-to-edge on every version, so `adjustResize` no longer shrinks the window. Screen's offset is 0 on Android (the frame is measured below the root's paddingTop) and stays insets.top on iOS, whose modal routes are page sheets, plus the offline strip's height while it shows. Forms with several fields chain "İleri" (`returnKeyType="next"`, `submitBehavior="submit"`, focus the next field's ref): login, register, "Şifreni değiştir"; password fields are `autoCapitalize="none"`, `autoCorrect={false}`. A pressable Chip reaches 8 dp above and below and 4 dp to the sides (`hitSlop`, never past a chip row's 8 dp gap) and reports `accessibilityState.selected`; the header back/close circles take `hitSlop={8}`
-utils/format.ts          formatNumber (tr-TR), formatDuration, relativeTime (tr), dayKey helpers (formatDayKey is shared formatDayKeyTr)
+utils/format.ts          formatNumber (tr-TR), formatDuration, relativeTime (tr), dayKey helpers (formatDayKey is shared formatDayKeyTr), dateRange(startsAt, endsAt, tz) → "1 Eylül – 8 Eylül" / "8 Eylül" (results and the rules card)
+utils/joinWindow.ts      joinClosesAt(challenge) (the server's `acceptClosesAt`, else the shared function) and stillJoinable(challenge, clock): pending/active and `clock` before it. `clock` is the last fetch's time, never `Date.now()` in render
 utils/turkish.ts         upperTr (İ/I by hand before toUpperCase), dativeTr(name) → "Can'a" / "Gül'e" / "Ali'ye" / "Mustafa'ya" by the last vowel (a short list of soft-"l" names takes "e": "Kemal'e", "Hilal'e"), null when the name ends in no letter or has no Turkish vowel
 ```
 
@@ -585,12 +590,16 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             + home, whatever was answered. Leaving any other way (Android back) also clears the flag (unmount)
 (app)/(tabs)/_layout.tsx    Tabs: index "Çelınclar", friends "Kankalar", inbox "Gelen Kutusu" (badge = unread), profile "Ben"
 (app)/(tabs)/index.tsx      header: today's steps + sync button + level chip; sections: Davetler (accept/decline inline;
-                            "Reddet" asks first, and says so when the no would cancel the çelınc),
+                            "Reddet" asks first, and says so when the no would cancel the çelınc; each card says who invited,
+                            "📅 7 gün · 1 Eylül – 7 Eylül" in the account's zone, "· 📸 Kanıt lazım" when a typed number needs a
+                            photo, and "🎁 … · 💀 …" on up to two lines; only invites still open: `stillJoinable`, pending/active
+                            and before `acceptClosesAt`, read against the list's last fetch),
                             Aktif (cards: emoji, title, countdown, mini standings, my rank; losing → red "yiyorsun" chip;
                             fewer than two accepted → "RAKİP YOK" chip and no verdict line; a pending card past its start
                             → "🚦 kabul bekleniyor", not the countdown's "Bitti"),
                             Bekleyen, Biten (newest 5; the header counts all of them, and past 5 a "Hepsini gör (N)"
-                            button opens history); FAB "Çelınc Aç". Under the header: UpdateBanner, PermissionBanner, then BatteryBanner.
+                            button opens history; a finished çelınc I never answered → "KAÇIRDIN" chip, not "DAVET");
+                            FAB "Çelınc Aç". Under the header: UpdateBanner, PermissionBanner, then BatteryBanner.
                             A refused "İZİN VER" toasts "Dokun, ayarları açayım" (8 s); the tap → openAppSettings
 (app)/(tabs)/friends.tsx    list friends (tap → user/[id]), incoming/outgoing requests (an outgoing one has "Geri çek":
                             confirm → DELETE /friends/:userId?only=request), search by username, my invite code (copy/share)
@@ -607,8 +616,15 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             3) kankalar seç (multi-select friends) 4) özet + "KOY BAKALIM" create;
                             Android back steps back like "Geri"; on step 1 with a type chosen it asks before closing
                             (nothing chosen → the modal closes)
-(app)/challenge/[id].tsx    detail: hero (emoji, title, status/countdown, reward), standings (ranked bars with scores + "koyuyor/yiyor" labels;
-                            every row but mine opens that player's profile),
+(app)/challenge/[id].tsx    detail: hero (emoji, title, status/countdown), standings (ranked bars with scores + "koyuyor/yiyor" labels;
+                            every row but mine opens that player's profile; once finished an unanswered invite is not listed),
+                            a "Kurallar" card (components/ChallengeRules.tsx): the type's description at my level, "📅 N gün ·
+                            1 Eylül – 7 Eylül", "⏰ Her gün saat 07:00 olmadan “Geldim” demen lazım" with a deadline, "📸 Elle
+                            girdiğin her sayıya kanıt fotoğrafı lazım" (only where a photo can back a number, the server's rule),
+                            "⚠️ Girmediğin gün 1.440 dk yazılır" for a type with `missingDayPenalty`, 🎁 reward and 💀 penalty,
+                            and "Nasıl sayılıyor?" folding `howMeasuredTr`; somebody invited, or who said no, while the çelınc
+                            still takes players gets it right above "Varım" / "Katıl" with "Nasıl sayılıyor?" open, everybody
+                            else below the action area, folded,
                             my action area per metric type (see 3.4), feed of recent entries with dispute button (only while
                             the server takes one: `active` and before `endsAt`, plus the settle hour of a phone-counted type)
                             (every open dispute's `{ad}: “{reason}”` under a disputed row, an upheld one's under a rejected
@@ -624,8 +640,11 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             running (before `endsAt`) with fewer than two accepted → "Rakip bekleniyor / 1/2 kişi" hero
                             (the clock runs; nobody in by the end → cancelled) with a small end countdown, no
                             "öndesin" verdict and no "laf sok",
-                            invited → "Varım" / "Yokum" ("Yokum" asks first, like the home card); declined while it
-                            still runs → "Reddetmiştin..." card with "Katıl" (accept); a successful "Varım", "Katıl" or the
+                            invited → "Varım" / "Yokum" ("Yokum" asks first, like the home card; a "Varım" before the start
+                            toasts "Çelınc başlayınca skorun sayılmaya başlar."); declined → "Reddetmiştin..." card with "Katıl"
+                            (accept); both only while `stillJoinable` (pending/active and before `acceptClosesAt`, against the
+                            last fetch): past it, the settle hour included, "Bu çelınca katılım kapandı." under the hero and no
+                            "Kabul et" line under the standings; a successful "Varım", "Katıl" or the
                             home card's "Kabul" on a phone-counted type runs one device sync (`services/deviceSyncNow.ts`)
                             for the days the phone never sent,
                             the creator, still in it, while `pending` or running and before `acceptClosesAt` → an
@@ -643,7 +662,8 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             "aşağıda" once there is one; under a received laf "Cevap ver" (L1 "Cevap yaz", L3 "Lafı geri sok 🍆") →
                             taunt picker `to` the winner, or, once answered, my answer as a smaller TauntBubble; the winner's
                             loser rows show each loser's answer under the name, "💬 …"), rewards/penalty text, "Rövanş" button with a note naming `rematchLeftOut`
-                            ("Veli kankan değil, rövanşa çağrılmaz. Tablodan adına dokun, ekle."; final-table rows open profiles),
+                            ("Veli kankan değil, rövanşa çağrılmaz. Tablodan adına dokun, ekle."; final-table rows open profiles, and an
+                            invite nobody answered is not on the table: Standings drops `invited` rows once `finished`),
                             and a success toast naming whoever the new çelınc really invited (read back from its detail); once
                             `rematch` names one, the button leads there instead ("Rövanş daveti sende" / "Rövanşa git" → its çelınc,
                             once it is over "Rövanşın sonucu" → its results) with a line under it ("Ali rövanş açtı, davet sende.",

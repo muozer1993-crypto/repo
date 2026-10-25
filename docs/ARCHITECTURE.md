@@ -82,12 +82,19 @@ der.
 herkes aynı gün kurmuyor, ikinci gün gelen kanka için açılan ikinci bir çelınc grubu böler. Eklenen,
 sihirbazda seçilmiş gibi `invited` girer ve aynı kapıdan kabul eder. Kapı da ikisi için aynı anda
 kapanır (`acceptClosesAt`: bitişten bir saat önce, kısa çelıncta sürenin son dörtte biri); kabul
-edilemeyecek bir davet boş bir bildirimdir. Bitişten sonraki bekleyişte kimse eklenmez. Reddeden
-yeniden çağrılabilir ve yeni bir davet bildirimi alır; oynayıp ayrılan çağrılamaz, kabul kuralıyla
-aynı sebepten. Çelınctaki biriyle (kabul etmiş ya da davetli) arasında engel olan da çağrılamaz
-(`blocked_in_challenge`): sihirbazda herkes kimlerle oynayacağını kabul etmeden görüyordu, sonradan
-gelen davette kimse bir şey kabul etmedi, ve akış engelleyenin her sayısını, fotoğrafını engellenene
-gösterirdi. Ret kimin kimi engellediğini söylemez.
+edilemeyecek bir davet boş bir bildirimdir. Sunucu bu anı her çelıncla gönderir
+(`Challenge.acceptClosesAt`) ve uygulama kapıyı kuralın kendi kopyasına değil, ona bakarak kapatır:
+ana sayfa, kapısı kapanmış daveti "Davetler"de göstermez; çelınc ekranı "Varım" ve "Katıl" yerine
+"Bu çelınca katılım kapandı." der. Eskiden ikisi de her dokunuşta yalnızca hata veren bir düğme
+sunuyordu. Kapı açıkken davetli, "Varım"ın hemen üstünde kuralları görür (kim kazanır, kaç gün, hangi
+saate kadar, elle girilen sayıya fotoğraf gerekir mi, girilmeyen gün kaç sayılır, ödül ve ceza):
+arkadaşlar kör kabul edip sonra kaçıyordu. Biten çelıncta cevaplanmamış bir davet artık "DAVET" ya da
+"bekliyor" diye görünmez: kart "KAÇIRDIN" der, final tablosu onu hiç göstermez. Bitişten sonraki
+bekleyişte kimse eklenmez. Reddeden yeniden çağrılabilir ve yeni bir davet bildirimi alır; oynayıp
+ayrılan çağrılamaz, kabul kuralıyla aynı sebepten. Çelınctaki biriyle (kabul etmiş ya da davetli)
+arasında engel olan da çağrılamaz (`blocked_in_challenge`): sihirbazda herkes kimlerle oynayacağını
+kabul etmeden görüyordu, sonradan gelen davette kimse bir şey kabul etmedi, ve akış engelleyenin her
+sayısını, fotoğrafını engellenene gösterirdi. Ret kimin kimi engellediğini söylemez.
 
 Rövanş, eskisi kaç yerel gün sürdüyse o kadar gün sürer ve sihirbaz gibi açanın saat diliminde bir
 günün son milisaniyesinde biter. Önceden "şimdi + eski süre" ile düğmeye basılan saatte bitiyordu;

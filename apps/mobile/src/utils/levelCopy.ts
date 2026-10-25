@@ -1,4 +1,4 @@
-import type { ParticipantView, VulgarityLevel } from '@koydum/shared';
+import type { ChallengeType, ParticipantView, VulgarityLevel } from '@koydum/shared';
 
 /**
  * Copy that has no MICROCOPY key but still has to speak in all three registers.
@@ -12,6 +12,15 @@ export function byLevel(level: VulgarityLevel, l1: string, l2: string, l3: strin
   if (level === 1) return l1;
   if (level === 3) return l3;
   return l2;
+}
+
+/**
+ * What a çelınc type is about and who wins it, in the reader's register: the
+ * wizard's type list and the rules an invitee reads before "Varım" say the same.
+ * The catalog has a polite text and one for the other two levels.
+ */
+export function typeDescription(type: ChallengeType, level: VulgarityLevel): string {
+  return level === 1 ? type.descriptionPoliteTr : type.descriptionTr;
 }
 
 /** The button that opens the taunt picker (home card + results row). */

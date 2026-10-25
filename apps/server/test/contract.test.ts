@@ -34,7 +34,9 @@ function isChallenge(value: unknown): boolean {
     typeof c.unit === 'string' &&
     typeof c.status === 'string' &&
     typeof c.startsAt === 'string' &&
-    typeof c.endsAt === 'string'
+    typeof c.endsAt === 'string' &&
+    // home hides an invite past it, the çelınc screen its "Varım"
+    typeof c.acceptClosesAt === 'string'
   );
 }
 

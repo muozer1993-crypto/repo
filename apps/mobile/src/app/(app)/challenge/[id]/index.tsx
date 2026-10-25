@@ -13,7 +13,6 @@ import type {
 } from '@koydum/shared';
 import {
   LIMITS,
-  acceptClosesAt,
   addDays,
   diffDayKeys,
   formatScore,
@@ -31,6 +30,7 @@ import { AppState, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { ChallengeRules } from '@/components/ChallengeRules';
 import { Chip } from '@/components/Chip';
 import { Countdown, formatRemaining } from '@/components/Countdown';
 import { EmptyState } from '@/components/EmptyState';
@@ -87,6 +87,7 @@ import {
   relativeTime,
 } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
+import { stillJoinable } from '@/utils/joinWindow';
 import { dativeTr } from '@/utils/turkish';
 import { resolveServerUrl } from '@/utils/url';
 
@@ -299,15 +300,22 @@ export default function ChallengeDetailScreen() {
    */
   const waitingForRival = challenge.status === 'active' && !settling && accepted.length < 2;
   /**
-   * The creator may call more friends in while somebody new could still accept:
-   * the server closes invites together with accepts (`acceptClosesAt`), so a
-   * button past that would only earn an error.
+   * Whether a yes can still go through: the server's own closing instant
+   * (`acceptClosesAt`, sent with the çelınc) against the last fetch. Past it
+   * "Varım" and "Katıl" could only fail, so an invitee, or somebody who said no,
+   * reads "katılım kapandı" instead; before it they get the rules right above
+   * the buttons, to say yes knowing what they are in for.
    */
-  const canInvite =
-    isCreator &&
-    isPlayer &&
-    (challenge.status === 'pending' || (challenge.status === 'active' && !settling)) &&
-    clock < acceptClosesAt(challenge.startsAt, challenge.endsAt);
+  const joinable = stillJoinable(challenge, clock);
+  const answering = mine?.status === 'invited' || mine?.status === 'declined';
+  const deciding = answering && joinable;
+  const joinClosed = answering && (challenge.status === 'pending' || challenge.status === 'active') && !joinable;
+  /**
+   * The creator may call more friends in while somebody new could still accept:
+   * the server closes invites together with accepts, so a button past that
+   * would only earn an error.
+   */
+  const canInvite = isCreator && isPlayer && !settling && joinable;
 
   return (
     <Screen
@@ -417,22 +425,12 @@ export default function ChallengeDetailScreen() {
             </Text>
           ) : null}
         </View>
-
-        {challenge.rewardText || challenge.penaltyText ? (
-          <View style={styles.prizes}>
-            {challenge.rewardText ? (
-              <Text variant="small">
-                🎁 <Text variant="small" bold>{challenge.rewardText}</Text>
-              </Text>
-            ) : null}
-            {challenge.penaltyText ? (
-              <Text variant="small" color={Colors.danger}>
-                💀 {challenge.penaltyText}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
       </Card>
+      {joinClosed ? (
+        <Text variant="small" muted style={styles.closed}>
+          Bu çelınca katılım kapandı.
+        </Text>
+      ) : null}
 
       {/* ---------------------------------------------------- standings */}
       <Card>
@@ -460,7 +458,7 @@ export default function ChallengeDetailScreen() {
             )}
           </Text>
         ) : null}
-        {challenge.status === 'pending' && mine?.status === 'invited' ? (
+        {challenge.status === 'pending' && mine?.status === 'invited' && joinable ? (
           <Text variant="small" muted style={styles.verdict}>
             {t('challenge_pending_you', level)}
           </Text>
@@ -469,16 +467,18 @@ export default function ChallengeDetailScreen() {
       </Card>
 
       {/* -------------------------------------------------- invite reply */}
-      {mine?.status === 'invited' && (challenge.status === 'pending' || challenge.status === 'active') ? (
+      {deciding ? <ChallengeRules challenge={challenge} type={type} level={level} tz={tz} initiallyOpen /> : null}
+      {mine?.status === 'invited' && joinable ? (
         <InviteActions
           id={id}
           level={level}
           endsIt={endsWithoutMe(participants, meId)}
           metric={type?.deviceMetric}
+          pending={challenge.status === 'pending'}
         />
       ) : null}
       {/* a "Reddet" is not final while the çelınc still takes players */}
-      {mine?.status === 'declined' && (challenge.status === 'pending' || (challenge.status === 'active' && !settling)) ? (
+      {mine?.status === 'declined' && joinable ? (
         <RejoinCard id={id} level={level} metric={type?.deviceMetric} />
       ) : null}
 
@@ -495,6 +495,10 @@ export default function ChallengeDetailScreen() {
           tz={tz}
         />
       ) : null}
+
+      {/* --------------------------------------------------------- rules */}
+      {/* below "Senin sıran", which a player opens the screen for every day */}
+      {!deciding ? <ChallengeRules challenge={challenge} type={type} level={level} tz={tz} /> : null}
 
       {/* ---------------------------------------------------------- feed */}
       <Feed
@@ -566,18 +570,21 @@ function Header({ onBack, title }: { onBack: () => void; title: string }) {
 /**
  * After a "Varım" the phone sends its reading at once (`syncDeviceNow`): the
  * server already filled in the days it reported, this brings the ones it never
- * sent, so the newcomer is not at 0 until the next background run.
+ * sent, so the newcomer is not at 0 until the next background run. A yes to a
+ * çelınc that has not started counts nothing yet, and the toast says so.
  */
 function InviteActions({
   id,
   level,
   endsIt,
   metric,
+  pending,
 }: {
   id: string;
   level: VulgarityLevel;
   endsIt: boolean;
   metric: DeviceMetric | undefined;
+  pending: boolean;
 }) {
   const action = useChallengeAction(id);
   const toast = useToast();
@@ -597,7 +604,9 @@ function InviteActions({
         title: kind === 'accept' ? 'Girdin' : 'Kaçtın',
         body:
           kind === 'accept'
-            ? 'Skorun sayılmaya başladı.'
+            ? pending
+              ? 'Çelınc başlayınca skorun sayılmaya başlar.'
+              : 'Skorun sayılmaya başladı.'
             : endsIt
               ? 'Rakip kalmadı, çelınc iptal oldu.'
               : 'Bu çelınc sensiz devam ediyor.',
@@ -2274,7 +2283,7 @@ const styles = StyleSheet.create({
   heroEmoji: { fontSize: 38 },
   heroBody: { flex: 1, gap: 2 },
   heroClock: { marginTop: Spacing.lg, gap: 2 },
-  prizes: { marginTop: Spacing.md, gap: 4 },
+  closed: { marginTop: -Spacing.sm },
 
   sectionLabel: { marginBottom: Spacing.md },
   verdict: { marginTop: Spacing.md },

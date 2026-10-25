@@ -105,8 +105,13 @@ interface StatusView {
 
 function statusOf(summary: ChallengeSummary): StatusView {
   const { challenge, me } = summary;
-  if (me?.status === 'invited') return { key: 'invited', label: 'DAVET', color: Colors.yellow };
   if (challenge.status === 'cancelled') return { key: 'cancelled', label: 'İPTAL', color: Colors.textFaint };
+  // an invite nobody answered is no "DAVET" once it is over: it was missed,
+  // neither won nor lost (history's outcomeOf says 'none' too)
+  if (challenge.status === 'finished' && me?.status === 'invited') {
+    return { key: 'cancelled', label: 'KAÇIRDIN', color: Colors.textFaint };
+  }
+  if (me?.status === 'invited') return { key: 'invited', label: 'DAVET', color: Colors.yellow };
   if (challenge.status === 'pending') return { key: 'pending', label: 'BAŞLAMADI', color: Colors.info };
   if (challenge.status === 'finished') {
     // a tie is the co-leaders' draw: whoever finished behind them lost to both

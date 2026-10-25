@@ -697,6 +697,20 @@ telefonda tuttuğu geçici bir kopyadır; telefon yer açmak için onu silerse g
 fotoğraf zorunluysa düşer ve uygulama "Kanıt fotoğrafı telefonda bulunamadı" der. Bağlantı
 koptuğunda açık olan çelınc ekranı kapanmaz, son bilinen hali gösterir; yazdığın sayı silinmez.
 
+### Davet gelince
+
+Ana sayfadaki **Davetler** kartı kimin çağırdığını, kaç gün süreceğini ve hangi tarihler arasında
+olduğunu ("📅 7 gün · 1 Eylül – 7 Eylül"), elle girilen sayıya fotoğraf gerekiyorsa "📸 Kanıt lazım"
+yazısını, bir de ödülle cezayı gösterir. Karta dokununca çelınc ekranında **Varım** düğmesinin hemen
+üstünde kurallar durur: kim kazanır, her gün hangi saate kadar, fotoğraf gerekir mi, girmediğin gün
+kaç sayılır (Ekran Süresi Düellosu'nda 1.440 dk) ve **Nasıl sayılıyor?** altında ölçümün ayrıntısı.
+Kankan kabul etmeden önce neye girdiğini görür.
+
+Kapısı kapanmış bir davet (bitişe bir saat kala, kısa çelınclarda sürenin son dörtte birinde) ana
+sayfadan kalkar; bildirimden açılırsa çelınc ekranı **Varım** yerine "Bu çelınca katılım kapandı."
+der. Hiç cevap vermediğin bir çelınc bitince **Bitenler**'de **KAÇIRDIN** yazar; final tablosunda
+cevap vermeyenler görünmez.
+
 ### Kabul edince ne oluyor?
 
 Sihirbazda başlangıcı **Hemen** seçersen süre o an işlemeye başlar, ama kankan kabul edene kadar

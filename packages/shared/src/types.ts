@@ -362,6 +362,14 @@ export interface Challenge {
   winnerId: string | null;
   isTie: boolean;
   rematchOfId: string | null;
+  /**
+   * When the çelınc stops taking players (ISO): the server's own
+   * `acceptClosesAt`, from which it refuses an accept or an invite. The app
+   * hides "Kabul", "Varım" and "Kanka ekle" by it rather than by a copy of the
+   * rule. `null` for dates the server cannot read; an older server leaves it
+   * out, and the app falls back to the shared `acceptClosesAt`.
+   */
+  acceptClosesAt?: string | null;
 }
 
 export interface ParticipantView {

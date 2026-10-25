@@ -9,6 +9,7 @@ import { BatteryBanner } from '@/components/BatteryBanner';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ChallengeCard } from '@/components/ChallengeCard';
+import { needsProof, scheduleLine } from '@/components/ChallengeRules';
 import { Chip } from '@/components/Chip';
 import { EmptyState } from '@/components/EmptyState';
 import { Skeleton } from '@/components/Loading';
@@ -20,6 +21,7 @@ import { UpdateBanner } from '@/components/UpdateBanner';
 import { useChallengeAction, useChallenges, useFriends } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { usePullRefresh } from '@/hooks/usePullRefresh';
+import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { openAppSettings } from '@/services/deviceHealth';
 import { syncDeviceNow } from '@/services/deviceSyncNow';
@@ -36,6 +38,7 @@ import { Colors, Radius, Shadow, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
 import { formatNumber } from '@/utils/format';
 import { pastChallenges } from '@/utils/history';
+import { stillJoinable } from '@/utils/joinWindow';
 import { TAUNT_CTA, TAUNT_CTA_ICON, byLevel, declineQuestion, endsWithoutMe } from '@/utils/levelCopy';
 
 const LEVEL_LABEL: Record<VulgarityLevel, string> = {
@@ -63,12 +66,11 @@ export default function HomeScreen() {
   const noFriends = friends.data ? friends.data.friends.length === 0 : false;
 
   const list = challenges.data ?? [];
+  // Only invites a yes can still go through on: from the server's closing
+  // instant on, "Kabul" only ever earned an error. The list refetches every
+  // minute, so its last fetch is a fresh enough clock, and a pure one.
   const invited = list
-    .filter(
-      (s) =>
-        s.me?.status === 'invited' &&
-        (s.challenge.status === 'pending' || s.challenge.status === 'active')
-    )
+    .filter((s) => s.me?.status === 'invited' && stillJoinable(s.challenge, challenges.dataUpdatedAt))
     .sort(byNewest);
   const active = list
     .filter((s) => s.challenge.status === 'active' && s.me?.status !== 'invited')
@@ -517,8 +519,21 @@ function InviteCard({
   const api = useApi();
   const queryClient = useQueryClient();
   const refreshMe = useAuth((s) => s.refreshMe);
+  const tz = useTimezone();
   const type = getChallengeType(summary.challenge.typeKey);
   const inviter = summary.participants.find((p) => p.user.id === summary.challenge.creatorId)?.user;
+  // How long, whether a typed number wants a photo, and what is at stake: what
+  // friends used to say yes to blind and then bail over. The full rules are one
+  // tap away, on the çelınc screen above "Varım".
+  const schedule = [scheduleLine(summary.challenge, tz), needsProof(summary.challenge) ? '📸 Kanıt lazım' : '']
+    .filter(Boolean)
+    .join(' · ');
+  const stakes = [
+    summary.challenge.rewardText ? `🎁 ${summary.challenge.rewardText}` : '',
+    summary.challenge.penaltyText ? `💀 ${summary.challenge.penaltyText}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   const run = async (kind: 'accept' | 'decline') => {
     if (kind === 'decline') {
@@ -563,8 +578,17 @@ function InviteCard({
           </Text>
           <Text variant="tiny" muted numberOfLines={1}>
             {inviter ? `${inviter.displayName} davet etti` : 'Bir kanka davet etti'}
-            {summary.challenge.rewardText ? ` · 🎁 ${summary.challenge.rewardText}` : ''}
           </Text>
+          {schedule ? (
+            <Text variant="tiny" muted numberOfLines={2}>
+              {schedule}
+            </Text>
+          ) : null}
+          {stakes ? (
+            <Text variant="tiny" muted numberOfLines={2}>
+              {stakes}
+            </Text>
+          ) : null}
         </View>
       </View>
 

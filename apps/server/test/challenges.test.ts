@@ -388,6 +388,28 @@ describe('accept / decline / leave / cancel', () => {
     expect(response.json().error.code).toBe('accept_closed');
   });
 
+  it('sends the instant it stops taking players, the one the accept route refuses from', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+    const veli = await registerUser(harness.app, 'veli');
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const created = (await createChallenge(harness, ali, { participantIds: [veli.me.id] })).json<Challenge>();
+    // three days long: the door closes an hour before the end
+    const closesAt = new Date(Date.parse(created.endsAt) - LIMITS.ACCEPT_CUTOFF_MS).toISOString();
+    expect(created.acceptClosesAt).toBe(closesAt);
+
+    // the invitee's home list and çelınc screen carry it too
+    const list = await authed(harness.app, veli.token)({ method: 'GET', url: '/challenges' });
+    expect(list.json<{ challenge: Challenge }[]>()[0]!.challenge.acceptClosesAt).toBe(closesAt);
+    const detail = await authed(harness.app, veli.token)({ method: 'GET', url: `/challenges/${created.id}` });
+    expect(detail.json<ChallengeDetail>().challenge.acceptClosesAt).toBe(closesAt);
+
+    harness.setNow(closesAt);
+    const late = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${created.id}/accept` });
+    expect(late.statusCode).toBe(400);
+    expect(late.json().error.code).toBe('accept_closed');
+  });
+
   it('declines an invite', async () => {
     harness = await makeApp({ now: NOW });
     const ali = await registerUser(harness.app, 'ali');

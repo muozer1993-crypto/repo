@@ -1,4 +1,5 @@
 import {
+  dateRange,
   formatClock,
   formatDayKey,
   formatDayKeyAttributive,
@@ -58,6 +59,19 @@ describe('Turkish formatting', () => {
   it('writes a week the short way when it stays in one month', () => {
     expect(formatWeekRange('2026-01-05', '2026-01-11')).toBe('5 – 11 Ocak');
     expect(formatWeekRange('2026-09-28', '2026-10-04')).toBe('28 Eylül – 4 Ekim');
+  });
+
+  it('names a çelınc\'s days in the reader\'s zone, both ends written out', () => {
+    // a one-day çelınc: 09:00 to the last millisecond of 8 Eylül in Istanbul
+    expect(dateRange('2026-09-08T06:00:00.000Z', '2026-09-08T20:59:59.999Z', 'Europe/Istanbul')).toBe('8 Eylül');
+    // 01:00 on 1 Eylül in Istanbul is still 31 Ağustos in UTC
+    expect(dateRange('2026-08-31T22:00:00.000Z', '2026-09-07T20:59:59.999Z', 'Europe/Istanbul')).toBe(
+      '1 Eylül – 7 Eylül'
+    );
+    expect(dateRange('2026-09-28T06:00:00.000Z', '2026-10-04T20:59:59.999Z', 'Europe/Istanbul')).toBe(
+      '28 Eylül – 4 Ekim'
+    );
+    expect(dateRange('bozuk', '2026-10-04T20:59:59.999Z', 'Europe/Istanbul')).toBe('');
   });
 
   it('describes recent times in Turkish without Intl.RelativeTimeFormat', () => {

@@ -28,7 +28,8 @@ const MEDALS = ['🥇', '🥈', '🥉'];
 
 /** Ranked bar chart of everyone's score — the heart of every challenge screen. */
 export function Standings({ participants, type, meId, limit, finished, onPressUser, style }: StandingsProps) {
-  const playing = participants.filter((p) => p.status === 'accepted' || p.status === 'invited');
+  // "bekliyor" is a lie once it is over: an invite nobody answered is not on the final table
+  const playing = participants.filter((p) => p.status === 'accepted' || (!finished && p.status === 'invited'));
   // rank 0 means "not ranked" (still invited), not "above first place"
   const ranked = [...playing].sort((a, b) => {
     const ra = a.rank > 0 ? a.rank : Number.MAX_SAFE_INTEGER;
