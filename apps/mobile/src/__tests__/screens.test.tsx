@@ -580,6 +580,25 @@ describe('a "Hemen" çelınc nobody else has joined yet', () => {
     expect(text).not.toContain('laf sokma hakkı');
     // the clock runs, so what the player logs counts
     expect(text).toContain('SENİN SIRAN');
+    expect(text).toContain('girişlerin de sayılıyor');
+  });
+
+  it('does not tell the invitee their entries count before they are in', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    const invited = { ...detail.me, status: 'invited' as const, score: 0, rank: 0 };
+    const creator = { ...detail.me, user: { ...detail.me.user, id: 'u-2', username: 'ali', displayName: 'Ali' } };
+    detail.challenge.creatorId = 'u-2';
+    api.challenge = jest.fn(async () => ({ ...detail, participants: [creator, invited], me: invited }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toMatch(/RAKİP BEKLENİYOR 1 ?\/2 kişi/);
+    expect(text).toMatch(/Süre işliyor\. +Ama tek başına yarış olmaz/);
+    expect(text).not.toContain('girişlerin de sayılıyor');
+    expect(text).not.toContain('kanka da ekleyebilirsin');
   });
 
   it('home calls it "RAKİP YOK" rather than "ÖNDESİN"', async () => {

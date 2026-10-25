@@ -14,6 +14,7 @@ import {
   LIMITS,
   PokeBodySchema,
   TauntBodySchema,
+  acceptClosesAt,
   addDays,
   dayKeyInTz,
   effectiveDeadline,
@@ -166,14 +167,17 @@ function rematchLineUp(
  * çelınclar. With this the second tap leads to the first one instead. A
  * rematch nobody can join does not count: one turned down (and so cancelled),
  * one I declined or walked out of, or one I was never invited to because I am
- * not its creator's friend. Then I may still open my own. So does an invite a
- * block came between since: accept refuses it, and it would neither lead
- * anywhere nor let me open mine (which leaves the blocked creator out).
+ * not its creator's friend. Then I may still open my own. Neither does an
+ * invite I can no longer take, the accept route's own refusals: past its
+ * `acceptClosesAt` or over (I never played it, so I could not rematch from its
+ * result either), or one a block came between since (opening mine leaves the
+ * blocked creator out). It would only lead to a closed door and keep me from
+ * opening mine.
  */
-function findRematch(db: Database, challengeId: string, meId: string): RematchView | null {
+function findRematch(db: Database, challengeId: string, meId: string, now: Date): RematchView | null {
   const rows = db
     .prepare(
-      `SELECT c.id, c.status, c.creator_id, u.display_name AS creator_name, p.status AS my_status
+      `SELECT c.id, c.status, c.creator_id, c.starts_at, c.ends_at, u.display_name AS creator_name, p.status AS my_status
          FROM challenges c
          JOIN challenge_participants p ON p.challenge_id = c.id AND p.user_id = ?
          JOIN users u ON u.id = c.creator_id
@@ -184,10 +188,18 @@ function findRematch(db: Database, challengeId: string, meId: string): RematchVi
     id: string;
     status: ChallengeStatus;
     creator_id: string;
+    starts_at: string;
+    ends_at: string;
     creator_name: string;
     my_status: 'accepted' | 'invited';
   }[];
-  const row = rows.find((r) => r.my_status === 'accepted' || !isBlockedBetween(db, meId, r.creator_id));
+  const row = rows.find(
+    (r) =>
+      r.my_status === 'accepted' ||
+      ((r.status === 'pending' || r.status === 'active') &&
+        now.getTime() < acceptClosesAt(r.starts_at, r.ends_at) &&
+        !isBlockedBetween(db, meId, r.creator_id)),
+  );
   if (!row) return null;
   return {
     id: row.id,
@@ -332,7 +344,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     // One rematch per group: when a rival already opened one I am in or invited
     // to, a second would invite the same friends twice. The results screen
     // links to it; this is for a tap that raced the other side's.
-    const existing = findRematch(db, challenge.id, me.id);
+    const existing = findRematch(db, challenge.id, me.id, now);
     if (existing && existing.creatorId !== me.id) {
       throw conflict(
         'rematch_exists',
@@ -457,7 +469,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       results.rematchLeftOut = lineUp.notFriends;
       // nobody to invite: the button would only earn a 400 `no_participants`
       results.rematchInvitable = lineUp.invitees.length;
-      results.rematch = findRematch(db, challenge.id, me.id);
+      results.rematch = findRematch(db, challenge.id, me.id, app.now());
     }
 
     return results;

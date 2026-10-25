@@ -468,8 +468,9 @@ gün sürer ve açanın saatiyle gece yarısı biter; reddedilen bir rövanş ip
 açmana engel olmaz. Bir çelıncın rövanşı bir tane olur: kankan senden önce açtıysa düğme
 **Rövanş daveti sende** der ve seni o rövanşa götürür (içindeysen **Rövanşa git**, bittiyse
 **Rövanşın sonucu**). İkiniz aynı anda bassanız bile ikinci rövanş açılmaz, uygulama seni
-açılmış olana götürür. Reddettiğin bir rövanş sayılmaz, istersen kendininkini açarsın. Davet
-edilecek kanka kalmadıysa düğme sönük durur.
+açılmış olana götürür. Reddettiğin ya da artık katılamayacağın (kapısı kapanmış, sen cevap
+vermeden bitmiş) bir rövanş sayılmaz, istersen kendininkini açarsın. Davet edilecek kanka
+kalmadıysa düğme sönük durur.
 
 **Sonucu WhatsApp grubuna atmak:** sonuç ekranında, rövanş düğmesinin altında **Gruba at** durur
 (seviyene göre "Sonucu paylaş" ya da "Gruba at, herkes görsün" yazar). Dokununca telefonun paylaş

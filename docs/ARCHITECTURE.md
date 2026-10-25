@@ -107,9 +107,12 @@ açtığı ve içinde olduğun (kabul etmiş ya da davetli) bir rövanş varken 
 (`rematch_exists`, "Ali rövanşı zaten açtı, davet sende."). Sonuç ekranı bunu baştan bilir
 (`rematch`): düğme o rövanşa gider ("Rövanş daveti sende", "Rövanşa git", bittiyse "Rövanşın
 sonucu"). İptal olan, reddettiğin, ayrıldığın ya da hiç çağrılmadığın (açanın kankası değilsin) bir
-rövanş sayılmaz, kendi rövanşını açabilirsin. Açanla arana sonradan engel girdiyse davet de sayılmaz:
-kabul kapısı onu zaten geri çevirir. Davet edilecek kimse kalmadıysa (`rematchInvitable` 0) düğme
-sönük durur; önceden basınca 400 `no_participants` dönüyordu.
+rövanş sayılmaz, kendi rövanşını açabilirsin. Artık kabul edemeyeceğin bir davet de sayılmaz, kabul
+kapısının kendi kuralıyla: kapısı kapanmış (`acceptClosesAt`) ya da sen cevap vermeden bitmiş bir
+rövanş (onu oynamadığın için sonucundan da rövanş açamazsın), ya da açanla arana sonradan engel
+girmiş bir davet. Yoksa düğme kapalı bir kapıya götürür, kendi rövanşını açmana da izin vermezdi.
+Davet edilecek kimse kalmadıysa (`rematchInvitable` 0) düğme sönük durur; önceden basınca 400
+`no_participants` dönüyordu.
 
 Adımı ya da ekran süresini telefonun kendisinin saydığı çelınclar bitişte hemen kapanmaz. Son
 akşamın adımları telefonda bir sonraki arka plan senkronunu bekler (15 dakika ve üstü), gece
@@ -460,6 +463,10 @@ fotoğrafla kapanmış itirazlar unutulur, haklı çıkan (`upheld`) itirazlar `
 yerinde kalır. Adımda 0 hiçbir şeyi geri getirmez.
 Telefonun kendi okuduğu bir gün düştüyse senkron ona dokunmaz, yoksa itiraz boşa giderdi. Geri
 gelen adım gününe elle sayı yazmak 409 `day_rejected` alır, o günü artık sadece telefon yazar.
+Telefonun sayısı yeni bir sayıdır ve "telefon" kaynağını gönderen de uygulamanın kendisidir:
+itirazı kazanan kanka ona yeniden itiraz edebilir. Kişi başına bir itiraz satırı olduğu için
+aynı satır yeniden açılır ve `won_before = 1` alır (göç 010); ilk kazanç `disputesWon`'da kalır,
+gün de elle yazmaya kapalı kalır. Bu itiraz da haklı çıkarsa telefonun günü kalıcı olarak düşer.
 
 `steps_daily` ve `screen_time_daily` her senkronu, çelınc olsun olmasın, saklar. Süren bir çelınca
 sonradan katılan (ikinci gün eklenen ya da "Reddet"ini geri alan) kanka bu yüzden kabul ettiği
@@ -468,10 +475,6 @@ aynı dağıtım, aynı kurallar, sadece o çelınc için. Yoksa bir sonraki sen
 oturuyor, uygulama da ona "Eksik günü yaz" diyordu; ezberden yazılan sayılar da itiraz edilebilir
 beyan satırlarına dönüşüyordu. Uygulama kabulün ardından bir kere de senkron olur
 (`services/deviceSyncNow.ts`), telefonun hiç göndermediği günler için.
-Telefonun sayısı yeni bir sayıdır ve "telefon" kaynağını gönderen de uygulamanın kendisidir:
-itirazı kazanan kanka ona yeniden itiraz edebilir. Kişi başına bir itiraz satırı olduğu için
-aynı satır yeniden açılır ve `won_before = 1` alır (göç 010); ilk kazanç `disputesWon`'da kalır,
-gün de elle yazmaya kapalı kalır. Bu itiraz da haklı çıkarsa telefonun günü kalıcı olarak düşer.
 
 Android'de adımın üç kaynağı var: Health Connect (izin verildiyse), Google Play hizmetlerinin
 Recording API'si (`apps/mobile/modules/koydum-steps/`) ve uygulama açıkken sayım. Üçü yan yana

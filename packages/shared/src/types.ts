@@ -481,10 +481,10 @@ export interface ChallengeResults {
    */
   rematchLeftOut?: string[];
   /**
-   * Only for an accepted player: the rematch of this çelınc they are already in
-   * or invited to (their own first), so the results screen links to it instead
-   * of opening a second one. `null` when there is none; an older server leaves
-   * it out.
+   * Only for an accepted player: the rematch of this çelınc they are already in,
+   * or invited to and can still accept (their own first), so the results screen
+   * links to it instead of opening a second one. `null` when there is none; an
+   * older server leaves it out.
    */
   rematch?: RematchView | null;
   /**

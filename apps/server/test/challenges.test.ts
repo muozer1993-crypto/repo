@@ -1595,6 +1595,46 @@ describe('POST /challenges/:id/rematch', () => {
     expect((await resultsFor(ali)).rematch).toMatchObject({ id: own.json<Challenge>().id, myStatus: 'accepted' });
   });
 
+  it('does not hold a friend to a group rematch invite they can no longer take', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const can = await registerUser(harness.app, 'can', { displayName: 'Can' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, can.me.id);
+    befriend(harness.app, veli.me.id, can.me.id);
+    const challengeId = (await createChallenge(harness, ali, { participantIds: [veli.me.id, can.me.id] })).json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await harness.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` });
+
+    // Veli's rematch runs with Can; Ali never answers it
+    const rematch = (
+      await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })
+    ).json<Challenge>();
+    await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${rematch.id}/accept` });
+    const resultsForAli = async () =>
+      (await authed(harness!.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}/results` })).json<ChallengeResults>();
+    expect((await resultsForAli()).rematch).toMatchObject({ id: rematch.id, myStatus: 'invited' });
+
+    // its door closed: "davet sende" would lead to "katılım kapandı"
+    harness.setNow(new Date(Date.parse(rematch.endsAt) - 30 * 60 * 1000).toISOString());
+    runSchedulerOnce(harness.db, harness.now());
+    expect((await resultsForAli()).rematch).toBeNull();
+
+    // over, and he was never in it: no rematch of his own to open from there
+    await harness.app.inject({ method: 'POST', url: `/dev/finalize/${rematch.id}` });
+    expect((await resultsForAli()).rematch).toBeNull();
+    // Can played Veli's to the end, so for him it still counts
+    const forCan = await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(forCan.json().error).toMatchObject({
+      code: 'rematch_exists',
+      message: 'Bu çelıncın rövanşı zaten oynandı. Yenisini onun sonucundan aç.',
+    });
+    const own = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(own.statusCode).toBe(201);
+  });
+
   it('lets a friend who turned a group rematch down open their own', async () => {
     harness = await makeApp({ now: NOW });
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });

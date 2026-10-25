@@ -381,9 +381,10 @@ export default function ChallengeDetailScreen() {
             <>
               <Text variant="label">Rakip bekleniyor</Text>
               <Text variant="big">{accepted.length}/2 kişi</Text>
+              {/* an invitee opening it has no entries to count yet */}
               <Text variant="tiny" faint>
-                Süre işliyor, girişlerin de sayılıyor. Ama tek başına yarış olmaz: kimse katılmazsa
-                çelınc bitişte iptal olur.
+                {isPlayer ? 'Süre işliyor, girişlerin de sayılıyor. ' : 'Süre işliyor. '}
+                Ama tek başına yarış olmaz: kimse katılmazsa çelınc bitişte iptal olur.
                 {canInvite ? ' Aşağıdan kanka da ekleyebilirsin.' : ''}
               </Text>
               <Countdown
