@@ -1,6 +1,7 @@
 import {
   formatClock,
   formatDayKey,
+  formatDayKeyAttributive,
   formatDayKeyFriendly,
   formatWeekRange,
   formatMinutes,
@@ -83,5 +84,13 @@ describe('upperTr', () => {
     expect(upperTr('Yedin')).toBe('YEDİN');
     expect(upperTr('Hepsini okundu yap')).toBe('HEPSİNİ OKUNDU YAP');
     expect(upperTr('çelınc ığdır')).toBe('ÇELINC IĞDIR');
+  });
+});
+
+describe('formatDayKeyAttributive', () => {
+  it('names the day before a noun, with no suffix glued to "Bugün"', () => {
+    expect(formatDayKeyAttributive('2026-09-08', '2026-09-08', '2026-09-07')).toBe('bugünkü');
+    expect(formatDayKeyAttributive('2026-09-07', '2026-09-08', '2026-09-07')).toBe('dünkü');
+    expect(formatDayKeyAttributive('2026-09-01', '2026-09-08', '2026-09-07')).toBe('1 Eylül günkü');
   });
 });

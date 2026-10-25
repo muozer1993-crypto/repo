@@ -82,6 +82,17 @@ export function formatDayKeyFriendly(dayKey: string, todayKey: string, yesterday
 }
 
 /**
+ * The same day as an adjective before a noun: "bugünkü", "dünkü", "8 Eylül
+ * günkü" girişin. A bare "Bugün girişine" reads as "to Today's entry" with the
+ * suffix glued to the wrong word.
+ */
+export function formatDayKeyAttributive(dayKey: string, todayKey: string, yesterdayKey: string): string {
+  if (dayKey === todayKey) return 'bugünkü';
+  if (dayKey === yesterdayKey) return 'dünkü';
+  return `${formatDayKey(dayKey)} günkü`;
+}
+
+/**
  * "14:30" from an ISO timestamp. Pass the account's IANA zone whenever the time
  * is read against something the server decided in that zone (a check-in
  * deadline, a challenge window); without it the device zone is used, which can

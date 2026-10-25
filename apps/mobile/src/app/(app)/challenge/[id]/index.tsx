@@ -76,7 +76,14 @@ import { byLevel, declineQuestion, endsWithoutMe } from '@/utils/levelCopy';
 import { confirmTr } from '@/utils/confirm';
 import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
-import { formatDayKeyFriendly, formatMinutes, formatNumber, formatTime, relativeTime } from '@/utils/format';
+import {
+  formatDayKeyAttributive,
+  formatDayKeyFriendly,
+  formatMinutes,
+  formatNumber,
+  formatTime,
+  relativeTime,
+} from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
 import { dativeTr } from '@/utils/turkish';
 import { resolveServerUrl } from '@/utils/url';
@@ -1597,7 +1604,7 @@ function Feed({
   const takeBack = async (item: FeedItem) => {
     const ok = await confirmTr(
       'İtirazı geri çek',
-      `${item.displayName} · ${formatDayKeyFriendly(item.dayKey, today, yesterday)} girişine itirazın kalkar. Bu girişe bir daha itiraz edemezsin.`,
+      `${item.displayName} · ${formatDayKeyAttributive(item.dayKey, today, yesterday)} girişine itirazın kalkar. Bu girişe bir daha itiraz edemezsin.`,
       'Geri çek'
     );
     if (!ok) return;
