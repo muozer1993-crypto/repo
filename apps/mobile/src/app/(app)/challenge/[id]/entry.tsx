@@ -68,7 +68,7 @@ export default function EntryModalScreen() {
   // day two, or whose phone started counting mid-race, writes the days before.
   // Typed counts keep today and yesterday.
   const backfillDays =
-    type?.metricType === 'auto_steps' ? LIMITS.STEPS_BACKFILL_DAYS : Math.min(1, LIMITS.MANUAL_BACKFILL_DAYS);
+    type?.metricType === 'auto_steps' ? LIMITS.STEPS_BACKFILL_DAYS : LIMITS.MANUAL_PICKER_DAYS;
   const pickableDays = windowKeys
     .filter((day) => day <= today && diffDayKeys(day, today) <= backfillDays)
     .reverse();

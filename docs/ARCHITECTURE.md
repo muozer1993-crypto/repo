@@ -133,10 +133,18 @@ türü eklemek katalogda bir satır demektir — sunucu ve uygulama kodu değiş
 İki istisna bilinsin. `manual_lower_is_better` (ekran süresi) toplam değil **günlük ortalama**
 ile yarışır: girilmeyen gün en kötü değerden sayılır, toplam pencere gün sayısına bölünür. Böylece
 saat dilimi yüzünden bir gün fazla penceresi olan oyuncu cezalandırılmaz ve katalogdaki "ortalaması
-en düşük olan kazanır" cümlesi doğru olur. Çelınc sürerken pencere bugüne kadar kırpılır; ikinci
-günde beş günlük "girilmedi" cezası gösterilmez, çelınc bitince tam pencere uygulanır (o an zaten
-aynı şeydir). İkincisi: `manual_count` ve `focus_minutes` girişleri bir `sessionId` taşır ve aynı
-kimlikle gelen ikinci istek yeni bir satır değil, ilk satırın kendisidir. Telefon her dokunuşta
+en düşük olan kazanır" cümlesi doğru olur. Çelınc sürerken pencere başlamış günlere kırpılır; ikinci
+günde beş günlük "girilmedi" cezası gösterilmez. Bugün ise pencereye ancak o güne bir değer gelince
+girer: iPhone'cu ekran süresini gece yazar; bugün gün boyu 1440 dakika sayılsa hep sonuncu
+görünür ve her öğleden sonra "sana fark koymuş" dürtmesi yer. İlk gün hiçbir şey girmeyen
+yine de 0 ile öne geçmez, bugünün cezasıyla görünür. `ends_at` gelince tam pencere uygulanır; gün
+ortasında biten bir çelıncta girilmeyen son gün de sayılır, çünkü artık yazılamaz. Sonradan katılan
+(daveti geç kabul eden ya da "Kanka ekle" ile gelen) katıldığı günün bir gün öncesinden
+(`LIMITS.MANUAL_PICKER_DAYS`) puanlanır: uygulama ona bugünden ve dünden geriye yazdırmaz, daha
+önceki günlere ceza kesmek çelıncı baştan başkasına vermek olurdu. O günlerin girişleri de (Android
+telefon bir hafta geriye senkronlar) toplama girmez; ortalama her girişi pencerenin gün sayısına
+böldüğü için kalsalar ortalamayı bozarlardı. İkincisi: `manual_count` ve `focus_minutes` girişleri
+bir `sessionId` taşır ve aynı kimlikle gelen ikinci istek yeni bir satır değil, ilk satırın kendisidir. Telefon her dokunuşta
 yeni bir kimlik üretir; zaman aşımına uğrayıp çevrimdışı kuyruğundan tekrar gönderilen istek
 böylece bir bardak suyu iki kez saymaz.
 
@@ -235,6 +243,10 @@ Spam olmaması dört kurala bağlı:
 
 Bunlardan ayrı, dürtmeyi kapatan (`users.nudges_enabled = 0`) hiç almaz. Bu kontrol `nudges_sent`
 kaydından **önce** yapılır: kapatıp aynı öğleden sonra yeniden açan o günün dürtmesini kaçırmaz.
+
+Ekran süresinde henüz hiçbir gün girmemiş olan da dürtülmez: onun "farkı" girilmeyen günün
+1440 dakikalık cezasıdır, kimsenin öne geçtiği yok. Bu kontrol de kayıttan önce yapılır; aynı gün
+bir değer girip gerçekten geride kalan o günün dürtmesini alır.
 
 Kapanış cümlesi metriğe göre değişir: "kalk da iki dolaş" odak çelıncında saçmadır, orada
 "telefonu bırak da bir seans yap" der.

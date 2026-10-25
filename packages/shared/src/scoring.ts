@@ -38,6 +38,14 @@ export const LIMITS = {
    * itself (steps, screen time) this many — the device remembers about a week.
    */
   MANUAL_BACKFILL_DAYS: 2,
+  /**
+   * Days before today the app's entry picker offers for a typed number: today
+   * and yesterday, inside the server's `MANUAL_BACKFILL_DAYS`. A friend who
+   * joined a lower-is-better çelınc late is scored from this many days before
+   * their join day, the first day the app let them write, so the picker and
+   * the scoring read the same number.
+   */
+  MANUAL_PICKER_DAYS: 1,
   STEPS_BACKFILL_DAYS: 7,
   SCREEN_TIME_BACKFILL_DAYS: 7,
   FOCUS_MIN_MINUTES: 1,

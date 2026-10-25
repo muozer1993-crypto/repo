@@ -1385,7 +1385,7 @@ function LowerAction({ id, detail, type, level, today }: ActionProps) {
       </View>
       <Text variant="tiny" faint>
         Az olan kazanır. Girmediğin gün {formatNumber(type.missingDayPenalty ?? type.maxPerDay)}{' '}
-        {type.unitTr} sayılır.
+        {type.unitTr} sayılır; bugün ise değeri gelene kadar ortalamana katılmaz.
       </Text>
 
       {deviceOn ? (

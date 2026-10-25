@@ -665,7 +665,7 @@ iste-geri çek-iste biriyle bütün gün telefonunu öttürebilirdi.
 * **Odak dakikası** — uygulama içi sayaç; uygulamadan çıkarsan seans yanar. Geri tuşu seansı yakmaz, önce "bitirelim mi?" diye sorar.
 * **Saatli check-in** — belirlenen saatten önce "GELDİM" demen gerekir, saati sunucu doğrular. Her türün bir de açılış saati var (uyanma 04:00, yatma 19:00, yatak 05:00); ondan önce basılan check-in sayılmaz, yoksa gece ikideki "yattım" erken yatma sayılırdı.
 * **Sayı girişi** — bardak, sayfa, km, tekrar. Çelıncı açan isterse fotoğraf kanıtı zorunlu olur; fotoğraf sadece bu tür girişlerde vardır.
-* **Az olan kazanır** — ekran süresi gibi; günlük ortalama yarışır, girmediğin gün en kötü değerden (1440 dk) sayılır.
+* **Az olan kazanır** — ekran süresi gibi; günlük ortalama yarışır, girmediğin gün en kötü değerden (1440 dk) sayılır. Bugün, değeri gelene kadar ortalamaya girmez (iPhone'da gece yazınca girer). Yarışa sonradan katılan, katıldığı günün bir gün öncesinden itibaren sayılır; ondan önceki günler için ceza yemez.
 * **Günlük evet/hayır** — sigara içmedim, şeker yemedim. Gün sayısı yarışır.
 
 Şüpheli girişlere arkadaşlar **itiraz** edebilir; itirazın sebebi akışta o girişin altında herkese

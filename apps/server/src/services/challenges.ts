@@ -10,13 +10,18 @@
  *     penalty, and a shared (union) window would charge a friend whose local window
  *     is one day shorter for a day the API refuses to let them log — a perfect
  *     record could lose the challenge. Scoring and write validation must therefore
- *     be derived from the same expression;
+ *     be derived from the same expression. Scoring may only cut it, never widen it:
+ *     a late joiner is scored from the first day the app let them write
+ *     (`lateJoinFloor`), and a running çelınc only up to the days that have started
+ *     (`rankAccepted`), so nobody is charged for a day they could not, or could
+ *     not yet, report;
  *   - that timezone is the one PINNED on `challenge_participants` when the player
  *     joined, so editing `users.timezone` mid-challenge cannot move anybody's days.
  */
 import {
   DEFAULT_TIMEZONE,
   LIMITS,
+  addDays,
   compareDayKeys,
   computeScore,
   formatScore,
@@ -190,6 +195,30 @@ export function dayOverByEnd(challenge: Pick<ChallengeRow, 'ends_at'>, tz: strin
 }
 
 /**
+ * The first day a friend who joined a running çelınc is scored from, or null
+ * for everybody who was in from the start.
+ *
+ * A late joiner can only type today and yesterday (`LIMITS.MANUAL_PICKER_DAYS`),
+ * so charging them the missing-day penalty for the days before that would hand
+ * the çelınc to whoever was there first. Only `joined_at` after `starts_at`
+ * counts as late: a Hemen creator joins a few seconds after the start, and a
+ * floor on the day before the start day changes nothing. Rows from before
+ * `joined_at` was always set count as in from the start.
+ */
+function lateJoinFloor(participant: ParticipantRow, challenge: ChallengeRow, tz: string): string | null {
+  if (!participant.joined_at) return null;
+  const joinedAt = new Date(participant.joined_at);
+  if (!(joinedAt.getTime() > Date.parse(challenge.starts_at))) return null;
+  let joinDay: string;
+  try {
+    joinDay = dayKeyInTz(joinedAt, tz);
+  } catch {
+    joinDay = dayKeyInTz(joinedAt, DEFAULT_TIMEZONE);
+  }
+  return addDays(joinDay, -LIMITS.MANUAL_PICKER_DAYS);
+}
+
+/**
  * Ranks the accepted participants, each against their OWN day window.
  *
  * `rankParticipants` only knows a single shared window, so for
@@ -197,6 +226,12 @@ export function dayOverByEnd(challenge: Pick<ChallengeRow, 'ends_at'>, tz: strin
  * computed here per participant (sum + their own missing days × penalty) and handed
  * over as one pre-summed value. Every other metric ignores the window entirely and
  * is ranked from its raw entries.
+ *
+ * That window is cut twice. A late joiner's starts at `lateJoinFloor`, and their
+ * entries before it go with it (a phone syncs a week back): `computeScore` divides
+ * every counted entry by the window's size, so a dropped day whose entry stayed
+ * would skew the average. And until `ends_at` it stops at the last day that has
+ * started, with today in it only once something was reported for it.
  */
 function rankAccepted(
   db: Database,
@@ -211,23 +246,38 @@ function rankAccepted(
   const days = new Map<string, number>();
 
   const inputs: ScoreInput[] = accepted.map((participant) => {
-    const entries = entriesByUser.get(participant.user_id) ?? [];
+    let entries = entriesByUser.get(participant.user_id) ?? [];
     let window: string[] = [];
     if (perUserWindow) {
       const tz = participantTimezone(participant, users.get(participant.user_id));
       window = challengeWindow(challenge, tz);
+      const floor = lateJoinFloor(participant, challenge, tz);
+      if (floor) {
+        window = window.filter((key) => compareDayKeys(key, floor) >= 0);
+        entries = entries.filter((entry) => compareDayKeys(entry.dayKey, floor) >= 0);
+      }
       // While the çelınc runs, only the days that have started count as
-      // "missing": day 2 of 7 shows the average of two days, not five days of
-      // penalty for a future nobody has lived yet. Once it is over the clip is
-      // a no-op and the full window applies.
-      if (challenge.status !== 'finished') {
+      // "missing": day 2 of 7 shows the days so far, not five days of penalty
+      // for a future nobody has lived yet. Today joins once it has a
+      // row: an iPhone player types theirs at night, and charging it as an
+      // unreported 1440 all day would rank them last and nudge them every
+      // afternoon. A row friends threw out still counts as reported, the day
+      // is decided. With nothing before today (day one, unreported) today
+      // stays, so silence shows the worst case instead of leading with 0.
+      // From `ends_at` on nothing can be typed any more, so the full window
+      // applies, also to an end in the middle of a day.
+      if (challenge.status !== 'finished' && now.getTime() < Date.parse(challenge.ends_at)) {
         let today: string;
         try {
           today = todayKey(tz, now);
         } catch {
           today = todayKey(DEFAULT_TIMEZONE, now);
         }
-        window = window.filter((key) => compareDayKeys(key, today) <= 0);
+        const reportedToday = entries.some((entry) => entry.dayKey === today);
+        const started = window.filter(
+          (key) => compareDayKeys(key, today) < 0 || (key === today && reportedToday),
+        );
+        window = started.length > 0 ? started : window.filter((key) => key === today);
       }
     }
     const scored = computeScore(type, window, entries);
@@ -924,7 +974,8 @@ const NUDGE_MIN_RELATIVE_GAP = 0.1;
  * and 22:00 where that person actually lives, only when somebody is genuinely
  * ahead, and never on a check-in çelınc — those have their own deadline
  * reminder and "you are behind" means nothing there. And somebody who switched
- * it off (`users.nudges_enabled`) gets none at all.
+ * it off (`users.nudges_enabled`) gets none at all, nor does a screen-time
+ * player with nothing reported yet: their gap is the missing-day penalty.
  */
 export function sendNudges(db: Database, now: Date = new Date()): number {
   const iso = nowIso(now);
@@ -953,6 +1004,10 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
       if (view.user.id === leader.user.id) continue;
       // invited / declined / left rows ride along at rank 0 — not players to nudge
       if (view.status !== 'accepted') continue;
+      // On screen time a player with nothing reported sits at the missing-day
+      // penalty: that says "you have not entered anything yet", not "1.380 dk
+      // fark koymuş".
+      if (challenge.metric_type === 'manual_lower_is_better' && view.days === 0) continue;
       const gap = Math.abs(leader.score - view.score);
       if (gap <= 0) continue;
       // a gap only counts when it is big next to what the leader has

@@ -27,6 +27,7 @@ interface SeedOptions {
   endsAt: string;
   typeKey?: string;
   metricType?: string;
+  direction?: 'higher' | 'lower';
   unit?: string;
   deadlineTime?: string | null;
 }
@@ -39,13 +40,14 @@ function seedActive(app: FastifyInstance, options: SeedOptions): string {
       `INSERT INTO challenges (id, creator_id, type_key, metric_type, direction, unit, title, starts_at, ends_at,
                                status, reward_text, penalty_text, deadline_time, daily_target, proof_required,
                                created_at, finalized_at, winner_id, is_tie, rematch_of_id)
-       VALUES (?, ?, ?, ?, 'higher', ?, 'Adım Yarışı', ?, ?, 'active', NULL, NULL, ?, NULL, 0, ?, NULL, NULL, 0, NULL)`,
+       VALUES (?, ?, ?, ?, ?, ?, 'Adım Yarışı', ?, ?, 'active', NULL, NULL, ?, NULL, 0, ?, NULL, NULL, 0, NULL)`,
     )
     .run(
       id,
       options.creatorId,
       options.typeKey ?? 'adim_yarisi',
       options.metricType ?? 'auto_steps',
+      options.direction ?? 'higher',
       options.unit ?? 'adım',
       options.startsAt,
       options.endsAt,
@@ -60,15 +62,22 @@ function seedActive(app: FastifyInstance, options: SeedOptions): string {
   return id;
 }
 
-function addSteps(app: FastifyInstance, challengeId: string, userId: string, dayKey: string, value: number): void {
+function addSteps(
+  app: FastifyInstance,
+  challengeId: string,
+  userId: string,
+  dayKey: string,
+  value: number,
+  source = 'pedometer',
+): void {
   const at = nowIso(app.now());
   app.db
     .prepare(
       `INSERT INTO entries (id, challenge_id, user_id, day_key, value, source, note, proof_url, status, client_time,
                             session_id, late, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'pedometer', NULL, NULL, 'ok', ?, NULL, 0, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 'ok', ?, NULL, 0, ?, ?)`,
     )
-    .run(newId(), challengeId, userId, dayKey, value, at, at, at);
+    .run(newId(), challengeId, userId, dayKey, value, source, at, at, at);
 }
 
 function nudgesOf(harnessApp: TestApp, userId: string) {
@@ -223,6 +232,30 @@ describe('mid-day nudges', () => {
     addSteps(app, id, ali.me.id, TODAY, 3);
 
     expect(sendNudges(app.db, app.now())).toBe(0);
+  });
+
+  it('does not tell a screen-time player who has reported nothing yet that they are 1.380 dk behind', async () => {
+    // 13:00 in Istanbul on day one: the Android phone has synced, the iPhone types tonight
+    const { app, ali, veli } = await twoPlayers('2026-01-05T10:00:00.000Z');
+    const id = seedActive(app, {
+      creatorId: ali.me.id,
+      accepted: [ali.me.id, veli.me.id],
+      startsAt: '2026-01-05T00:00:00.000Z',
+      endsAt: '2026-01-08T00:00:00.000Z',
+      typeKey: 'ekran_suresi_beyani',
+      metricType: 'manual_lower_is_better',
+      direction: 'lower',
+      unit: 'dk',
+    });
+    addSteps(app, id, ali.me.id, TODAY, 60, 'usage_stats');
+
+    expect(sendNudges(app.db, app.now())).toBe(0);
+    expect(nudgesOf(harness!, veli.me.id)).toHaveLength(0);
+
+    // a real number that is worse is a real gap, and the day was not used up
+    addSteps(app, id, veli.me.id, TODAY, 400, 'manual');
+    expect(sendNudges(app.db, app.now())).toBe(1);
+    expect(nudgesOf(harness!, veli.me.id)[0].body).toContain('340 dk');
   });
 
   it('keeps quiet in the final hour, where the device already warns', async () => {

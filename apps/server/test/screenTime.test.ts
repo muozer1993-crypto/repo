@@ -3,10 +3,19 @@
  * minutes and the server fans them out into every open Ekran Süresi çelınc,
  * exactly like steps. Plus the two rules that keep the reading honest: a typed
  * number cannot replace a day the phone reported, and a device reading needs
- * no screenshot.
+ * no screenshot. And the days a player is scored against: today only once it
+ * is reported, and for a friend who joined late, only the days they could write.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_TIMEZONE, addDays, todayKey, type Challenge, type ChallengeDetail } from '@koydum/shared';
+import {
+  DEFAULT_TIMEZONE,
+  addDays,
+  todayKey,
+  type Challenge,
+  type ChallengeDetail,
+  type ChallengeResults,
+  type ParticipantView,
+} from '@koydum/shared';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
@@ -252,5 +261,193 @@ describe('usage_stats as an entry source', () => {
     });
     expect(response.statusCode).toBe(400);
     expect(errorCode(response)).toBe('invalid_source');
+  });
+});
+
+function scores(standings: ParticipantView[]): [string, number, number][] {
+  return standings.map((p) => [p.user.username, p.score, p.rank]);
+}
+
+async function liveStandings(h: TestApp, user: RegisteredUser, challengeId: string): Promise<ParticipantView[]> {
+  const detail = await authed(h.app, user.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+  expect(detail.statusCode).toBe(200);
+  return detail.json<ChallengeDetail>().participants;
+}
+
+/** A screenshot-backed typed number, the way an iPhone enters screen time. */
+async function typeMinutes(h: TestApp, user: RegisteredUser, challengeId: string, dayKey: string, value: number): Promise<void> {
+  const response = await authed(h.app, user.token)({
+    method: 'POST',
+    url: `/challenges/${challengeId}/entries`,
+    payload: { dayKey, value, source: 'manual', proofUrl: '/uploads/x.jpg', clientTime: iso(h) },
+  });
+  expect(response.statusCode).toBeLessThan(300);
+}
+
+describe('screen-time standings while the çelınc runs', () => {
+  it('leaves today out until it is reported, so the iPhone that types at night is not 1440 behind all day', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await screenTimePair(harness);
+    const dayOne = today(harness);
+    await typeMinutes(harness, veli, challengeId, dayOne, 100);
+
+    // day 2, 12:30 in Istanbul: Ali's phone has synced half a day, Veli types tonight
+    harness.setNow('2026-01-06T09:30:00.000Z');
+    const synced = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/me/screen-time',
+      payload: { days: [{ dayKey: dayOne, minutes: 300 }, { dayKey: today(harness), minutes: 60 }] },
+    });
+    expect(synced.json<{ updated: number }>().updated).toBe(2);
+
+    expect(scores(await liveStandings(harness, ali, challengeId))).toEqual([
+      ['veli', 100, 1],
+      ['ali', 180, 2],
+    ]);
+
+    // once typed, today counts like any other day
+    await typeMinutes(harness, veli, challengeId, today(harness), 50);
+    expect(scores(await liveStandings(harness, ali, challengeId))).toEqual([
+      ['veli', 75, 1],
+      ['ali', 180, 2],
+    ]);
+  });
+
+  it('shows somebody silent on day one at the worst case, never at a free 0', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await screenTimePair(harness);
+    await authed(harness.app, ali.token)({ method: 'POST', url: '/me/screen-time', payload: { days: [{ dayKey: today(harness), minutes: 60 }] } });
+
+    expect(scores(await liveStandings(harness, veli, challengeId))).toEqual([
+      ['ali', 60, 1],
+      ['veli', 1440, 2],
+    ]);
+  });
+});
+
+describe('screen-time standings once the çelınc is over', () => {
+  it('charges an unreported last day even when the end cut it in half', async () => {
+    harness = await makeApp({ now: NOW });
+    // ends at 18:00 on day 2 in Istanbul; the result comes out the same evening
+    const { ali, veli, challengeId } = await screenTimePair(harness, 1 + 6 / 24);
+    const dayOne = today(harness);
+    await typeMinutes(harness, ali, challengeId, dayOne, 200);
+    await typeMinutes(harness, veli, challengeId, dayOne, 100);
+    harness.setNow('2026-01-06T12:00:00.000Z');
+    await typeMinutes(harness, ali, challengeId, today(harness), 50);
+
+    harness.setNow('2026-01-06T16:30:00.000Z'); // 19:30, still day 2: typing is over
+    const advanced = await harness.app.inject({ method: 'POST', url: '/dev/advance' });
+    expect(advanced.json<{ finalized: number }>().finalized).toBe(1);
+
+    const results = await authed(harness.app, veli.token)({ method: 'GET', url: `/challenges/${challengeId}/results` });
+    expect(scores(results.json<ChallengeResults>().standings)).toEqual([
+      ['ali', 125, 1],
+      ['veli', 770, 2],
+    ]);
+  });
+});
+
+/** Start of the screen-time çelınc below: 12:00 on 2026-01-05 in Istanbul. */
+const TRIO_START = NOW;
+/** The last millisecond of 2026-01-11 in Istanbul: seven whole days. */
+const TRIO_END = '2026-01-11T20:59:59.999Z';
+
+/** Noon in Istanbul on day `n` (1-based) of the çelınc. */
+function noonOfDay(n: number): string {
+  return new Date(Date.parse(TRIO_START) + (n - 1) * DAY_MS).toISOString();
+}
+
+/** Ali and Veli in a seven-day Ekran Süresi Düellosu; Can is Ali's friend, not in it yet. */
+async function screenTimeTrio(h: TestApp): Promise<Pair & { can: RegisteredUser }> {
+  const ali = await registerUser(h.app, 'ali', { displayName: 'Ali' });
+  const veli = await registerUser(h.app, 'veli', { displayName: 'Veli' });
+  const can = await registerUser(h.app, 'can', { displayName: 'Can' });
+  befriend(h.app, ali.me.id, veli.me.id);
+  befriend(h.app, ali.me.id, can.me.id);
+  const created = await authed(h.app, ali.token)({
+    method: 'POST',
+    url: '/challenges',
+    payload: { typeKey: 'ekran_suresi_beyani', startsAt: TRIO_START, endsAt: TRIO_END, participantIds: [veli.me.id] },
+  });
+  expect(created.statusCode).toBe(201);
+  const challengeId = created.json<Challenge>().id;
+  expect((await authed(h.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+  return { ali, veli, can, challengeId };
+}
+
+/** Ali brings Can in with "Kanka ekle" and Can says "Varım". */
+async function bringIn(h: TestApp, pair: Pair & { can: RegisteredUser }): Promise<void> {
+  const invited = await authed(h.app, pair.ali.token)({
+    method: 'POST',
+    url: `/challenges/${pair.challengeId}/invite`,
+    payload: { userIds: [pair.can.me.id] },
+  });
+  expect(invited.statusCode).toBe(200);
+  const accepted = await authed(h.app, pair.can.token)({ method: 'POST', url: `/challenges/${pair.challengeId}/accept` });
+  expect(accepted.statusCode).toBe(200);
+}
+
+describe('a friend who joined a screen-time çelınc late', () => {
+  it('is scored from the first day the app let them type, and can win', async () => {
+    harness = await makeApp({ now: TRIO_START });
+    const trio = await screenTimeTrio(harness);
+    const { ali, veli, can, challengeId } = trio;
+
+    for (let day = 1; day <= 7; day += 1) {
+      harness.setNow(noonOfDay(day));
+      if (day === 4) {
+        await bringIn(harness, trio);
+        // the entry picker offers today and yesterday, no further
+        await typeMinutes(harness, can, challengeId, addDays(today(harness), -1), 100);
+      }
+      await typeMinutes(harness, ali, challengeId, today(harness), 200);
+      await typeMinutes(harness, veli, challengeId, today(harness), 200);
+      if (day >= 4) await typeMinutes(harness, can, challengeId, today(harness), 100);
+    }
+
+    // past the end and the hour the phones get to report screen time
+    harness.setNow(new Date(Date.parse(TRIO_END) + 2 * 60 * 60 * 1000));
+    const advanced = await harness.app.inject({ method: 'POST', url: '/dev/advance' });
+    expect(advanced.json<{ finalized: number }>().finalized).toBe(1);
+
+    // Days 1 and 2 were never Can's to write: charged 1440 each, he would
+    // average 483 and finish last with the best week of the three.
+    const results = await authed(harness.app, can.token)({ method: 'GET', url: `/challenges/${challengeId}/results` });
+    const standings = results.json<ChallengeResults>().standings;
+    expect(scores(standings)).toEqual([
+      ['can', 100, 1],
+      ['ali', 200, 2],
+      ['veli', 200, 2],
+    ]);
+    expect(standings[0]?.isWinner).toBe(true);
+  });
+
+  it('drops what an Android phone synced for the days before that, instead of averaging it in', async () => {
+    harness = await makeApp({ now: TRIO_START });
+    const trio = await screenTimeTrio(harness);
+    const { ali, veli, can, challengeId } = trio;
+
+    for (let day = 1; day <= 4; day += 1) {
+      harness.setNow(noonOfDay(day));
+      await typeMinutes(harness, ali, challengeId, today(harness), 200);
+      await typeMinutes(harness, veli, challengeId, today(harness), 200);
+    }
+    await bringIn(harness, trio);
+    // the first sync after joining reports the whole week the phone remembers
+    const dayFour = today(harness);
+    const days = [600, 600, 100, 100].map((minutes, i) => ({ dayKey: addDays(dayFour, i - 3), minutes }));
+    const synced = await authed(harness.app, can.token)({ method: 'POST', url: '/me/screen-time', payload: { days } });
+    expect(synced.json<{ updated: number }>().updated).toBe(4);
+    expect(entries(harness, challengeId, can.me.id)).toHaveLength(4);
+
+    // only yesterday and today count: (600 + 600 + 100 + 100) / 4 would be 350
+    const standings = await liveStandings(harness, can, challengeId);
+    expect(scores(standings)).toEqual([
+      ['can', 100, 1],
+      ['ali', 200, 2],
+      ['veli', 200, 2],
+    ]);
+    expect(standings.find((p) => p.user.id === can.me.id)?.days).toBe(2);
   });
 });

@@ -286,6 +286,15 @@ describe('acceptClosesAt', () => {
   });
 });
 
+describe('LIMITS.MANUAL_PICKER_DAYS', () => {
+  it('offers yesterday, and never a day the server would refuse', () => {
+    // A late joiner is scored from this many days before their join day: wider
+    // than the server's backfill, they would be charged for a day it refuses.
+    expect(LIMITS.MANUAL_PICKER_DAYS).toBeGreaterThanOrEqual(1);
+    expect(LIMITS.MANUAL_PICKER_DAYS).toBeLessThanOrEqual(LIMITS.MANUAL_BACKFILL_DAYS);
+  });
+});
+
 describe('formatting', () => {
   it('formats numbers tr-TR style', () => {
     expect(formatNumberTr(12430)).toBe('12.430');
