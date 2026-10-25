@@ -215,6 +215,38 @@ describe('challenge lifecycle', () => {
     expect(getBadges(db, ali.me.id)).not.toContain('yiyis_1');
   });
 
+  it('names the co-leaders in the final table order, not by their random ids', async () => {
+    harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+    const { app, db } = harness;
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(app, 'veli', { displayName: 'Veli' });
+    const can = await registerUser(app, 'can', { displayName: 'Can' });
+    // the line-up runs against the id order, whichever way the UUIDs fell
+    const [first, second] = ali.me.id > veli.me.id ? [ali, veli] : [veli, ali];
+
+    const challengeId = seedChallenge(app, {
+      creatorId: first.me.id,
+      accepted: [first.me.id, second.me.id, can.me.id],
+      startsAt: '2026-01-05T08:00:00.000Z',
+      endsAt: '2026-01-05T20:59:59.999Z',
+      status: 'active',
+      typeKey: 'sosyal_medya_orucu',
+      metricType: 'daily_boolean',
+      unit: 'gün',
+      title: 'Sosyal Medya Orucu',
+    });
+    for (const leader of [first, second]) addSteps(app, challengeId, leader.me.id, '2026-01-05', 1);
+    addSteps(app, challengeId, can.me.id, '2026-01-05', 0);
+
+    harness.setNow('2026-01-05T21:00:00.000Z');
+    expect(finalizeEndedChallenges(db, app.now())).toBe(1);
+    const [behind] = listByType(db, can.me.id, 'challenge_finished');
+    expect(behind!.body).toContain(`${first.me.displayName} ve ${second.me.displayName} berabere kaldı`);
+    // the results screen reads the same order
+    const table = computeStandings(db, getChallengeRow(db, challengeId) as ChallengeRow, app.now());
+    expect(table.map((p) => p.user.id)).toEqual([first.me.id, second.me.id, can.me.id]);
+  });
+
   it('cancels a pending challenge nobody joined', async () => {
     harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
     const { app, db } = harness;

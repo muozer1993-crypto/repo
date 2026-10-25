@@ -423,7 +423,7 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    winner_id/is_tie, `finished`, `finalized_at`; notifications: winner → `challenge_finished` with data
    `{ role: 'winner' }`, losers → `{ role: 'loser', winnerId }`, a tie → `{ role: 'tie' }` to the players sharing
    first place ("… berabere bitti. Senin skorun … İsteyen rövanş açsın."). Whoever finished behind a tie lost:
-   `{ role: 'loser', winnerId: null }`, the loser title, and a body naming the co-leaders, the shared top score and
+   `{ role: 'loser', winnerId: null }`, the loser title, and a body naming the co-leaders (in the final table's order, `participantRows`, never by user id), the shared top score and
    their own place ("Sosyal Medya Orucu bitti. Ali ve Veli berabere kaldı (7 gün), sen 3. oldun (4 gün). Ceza sende,
    rövanş aç."; L1 "… birinciliği paylaştı … İstersen rövanş aç.", L3 "… Ceza sende 🍆 Rövanşı aç da görelim."),
    never the `challenge_finished_lost` sentence, which promises a laf no co-leader may send them. The TITLE is a short

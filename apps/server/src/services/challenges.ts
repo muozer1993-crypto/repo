@@ -707,11 +707,14 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
   const isTie = ranking.isTie;
   const winnerUser = winnerId ? users.get(winnerId) : undefined;
   const scoreById = new Map(ranking.results.map((r) => [r.userId, r]));
-  // who shares first place in a tie, named to everybody who finished behind them
+  // who shares first place in a tie, named to everybody who finished behind them,
+  // in the final table's order (`participantRows`): the ranking breaks an equal
+  // score by user id, a random UUID, so "Ali ve Veli" would read "Veli ve Ali"
+  // on the next çelınc and disagree with the results screen and the share text
   const leaders = isTie
-    ? ranking.results
-        .filter((r) => r.rank === 1)
-        .map((r) => users.get(r.userId)?.display_name)
+    ? participantRows(db, challenge.id)
+        .filter((p) => scoreById.get(p.user_id)?.rank === 1)
+        .map((p) => users.get(p.user_id)?.display_name)
         .filter((name): name is string => !!name)
     : [];
   const leaderScore = scoreLabel(type, ranking.results[0]?.score ?? 0);
