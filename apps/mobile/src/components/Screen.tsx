@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useOfflineStripHeight } from '@/components/OfflineBanner';
 import { Colors, Layout, Spacing } from '@/theme';
 import { keyboardBehavior } from '@/utils/keyboard';
 
@@ -44,6 +45,7 @@ export function Screen({
   keyboard,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
+  const stripHeight = useOfflineStripHeight();
   const body = (
     <View
       style={[
@@ -97,7 +99,9 @@ export function Screen({
           // route starts at the top of the window, so no offset is owed there:
           // insets.top would lift the content that much too far. iOS keeps it,
           // since its modal routes are page sheets that start below the status bar.
-          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}>
+          // The offline strip pushes every route down by its height, which the
+          // frame does not see either (insets.top reads 0 under it).
+          keyboardVerticalOffset={(Platform.OS === 'ios' ? insets.top : 0) + stripHeight}>
           {content}
         </KeyboardAvoidingView>
       ) : (

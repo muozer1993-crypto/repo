@@ -18,6 +18,13 @@ function isVowel(ch: string): boolean {
 }
 
 /**
+ * Names whose last "l" is the soft one of an Arabic loan: they take the front
+ * suffix whatever their last vowel, "Kemal'e", "Hilal'e" (as "hilale" does).
+ * The spelling cannot tell, and these are the ones a friend is likely to have.
+ */
+const SOFT_L_NAMES = new Set(['kemal', 'cemal', 'celal', 'bilal', 'hilal', 'nihal', 'ikbal', 'iclal']);
+
+/**
  * A name in the dative, "kime?": Can'a, Gül'e, Ali'ye, Mustafa'ya.
  *
  * The suffix follows the name's last vowel, and a name ending in a vowel takes
@@ -33,6 +40,7 @@ export function dativeTr(name: string): string | null {
   if (!/[a-zçğıöşüâîû]/.test(last)) return null;
   const vowel = [...lower].reverse().find(isVowel);
   if (!vowel) return null;
-  const suffix = BACK_VOWELS.includes(vowel) ? 'a' : 'e';
+  const lastWord = lower.slice(lower.lastIndexOf(' ') + 1).replace(/â/g, 'a');
+  const suffix = BACK_VOWELS.includes(vowel) && !SOFT_L_NAMES.has(lastWord) ? 'a' : 'e';
   return `${trimmed}'${isVowel(last) ? 'y' : ''}${suffix}`;
 }

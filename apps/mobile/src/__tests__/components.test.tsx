@@ -458,4 +458,39 @@ describe('the offline strip', () => {
     expect(seen.mounts).toBe(1);
     act(() => tree.unmount());
   });
+
+  // A KeyboardAvoidingView measures its frame against its parent, not the
+  // window, and the strip pushes every screen down by its own height: left out
+  // of the offset, a form typed offline (an entry in the basement gym, the
+  // server address) stopped that far short of the keyboard
+  it('tells a keyboard form how far down the strip pushed it', () => {
+    const os = jest.replaceProperty(Platform, 'OS', 'android');
+    const form = () => (
+      <SafeAreaProvider initialMetrics={SAFE_AREA}>
+        <OfflineFrame>
+          <Screen keyboard>
+            <Text>Adım</Text>
+          </Screen>
+        </OfflineFrame>
+      </SafeAreaProvider>
+    );
+    const offsetOf = (tree: ReactTestRenderer) => tree.root.findByType(KeyboardAvoidingView).props.keyboardVerticalOffset;
+    try {
+      mockConnection.online = false;
+      let tree!: ReactTestRenderer;
+      act(() => {
+        tree = create(form());
+      });
+      const [strip] = stripOf(tree);
+      act(() => strip!.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 62 } } }));
+      expect(offsetOf(tree)).toBe(62);
+
+      mockConnection.online = true;
+      act(() => tree.update(form()));
+      expect(offsetOf(tree)).toBe(0);
+      act(() => tree.unmount());
+    } finally {
+      os.restore();
+    }
+  });
 });

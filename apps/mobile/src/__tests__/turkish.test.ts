@@ -16,6 +16,15 @@ describe('dativeTr', () => {
     expect(dativeTr('Ayşegül ')).toBe("Ayşegül'e");
   });
 
+  it('fronts the suffix after the soft "l" of Kemal and Hilal', () => {
+    expect(dativeTr('Kemal')).toBe("Kemal'e");
+    expect(dativeTr('Mustafa Kemal')).toBe("Mustafa Kemal'e");
+    expect(dativeTr('Celâl')).toBe("Celâl'e");
+    expect(dativeTr('HİLAL')).toBe("HİLAL'e");
+    // a Turkish "l" stays back
+    expect(dativeTr('Vural')).toBe("Vural'a");
+  });
+
   it('reads capitals the Turkish way', () => {
     expect(dativeTr('EMRE')).toBe("EMRE'ye");
     expect(dativeTr('İLKER')).toBe("İLKER'e");

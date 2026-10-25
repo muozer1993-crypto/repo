@@ -360,7 +360,11 @@ kart kendi içinde çizer, kök yalnızca hiçbir kart açık değilken çizer.
 Bağlantı şeridi (`OfflineFrame`) de kenardan kenara çizimin altında kalıyordu: saatin ve kameranın
 arkasında duruyor, dokununca bildirim perdesi iniyordu. Şerit artık durum çubuğunun arkasına kadar
 uzanır, yazısını ve dokunulan yerini onun altına iter; şerit görünürken altındaki ekranlara üst
-boşluk 0 diye söylenir ki her ekran aynı boşluğu bir daha bırakmasın. Toast'lar şeridin dışında kalır ve gerçek boşluğu bilir.
+boşluk 0 diye söylenir ki her ekran aynı boşluğu bir daha bırakmasın. Şerit ekranları kendi
+boyu kadar aşağı da iter; KeyboardAvoidingView yerini pencereye göre değil üstündeki görünüme göre
+ölçtüğü için `Screen keyboard` bu boyu (`useOfflineStripHeight`) klavye payına ekler, yoksa
+bağlantı yokken yazılan bir form (bodrumda girilen adım, şeridin açtığı sunucu adresi ekranı)
+klavyenin o kadar altında kalırdı. Toast'lar şeridin dışında kalır ve gerçek boşluğu bilir.
 
 ## Bağlantı yokken
 

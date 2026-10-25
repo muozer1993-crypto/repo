@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import type { ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -33,6 +33,8 @@ export function OfflineFrame({ children }: { children: ReactNode }) {
   const insets = useSafeAreaInsets();
   const shown = checked && !online;
   const moved = signedIn && longOffline && serverUrlIsEditable();
+  // kept while hidden, so the strip coming back has its height from the first frame
+  const [stripHeight, setStripHeight] = useState(0);
 
   return (
     <>
@@ -41,6 +43,7 @@ export function OfflineFrame({ children }: { children: ReactNode }) {
           accessibilityRole="button"
           accessibilityLabel={moved ? 'Sunucunun adresi değişmiş olabilir, yeni adresi yaz' : 'Sunucuya ulaşılamıyor, adresi düzenle'}
           onPress={() => router.push(signedIn ? '/settings' : '/(auth)/server')}
+          onLayout={(event) => setStripHeight(event.nativeEvent.layout.height)}
           style={[styles.wrap, { paddingTop: insets.top + STRIP_PADDING }]}>
           <View style={styles.dot} />
           <Text variant="micro" color={Colors.white} numberOfLines={1} style={styles.text}>
@@ -52,11 +55,26 @@ export function OfflineFrame({ children }: { children: ReactNode }) {
       ) : null}
       {/* Mounted whether or not the strip shows: putting it in and taking it
           out would remount the Stack below and lose where the user was. */}
-      <SafeAreaInsetsContext.Provider value={shown ? { ...insets, top: 0 } : insets}>
-        {children}
-      </SafeAreaInsetsContext.Provider>
+      <StripHeightContext.Provider value={shown ? stripHeight : 0}>
+        <SafeAreaInsetsContext.Provider value={shown ? { ...insets, top: 0 } : insets}>
+          {children}
+        </SafeAreaInsetsContext.Provider>
+      </StripHeightContext.Provider>
     </>
   );
+}
+
+const StripHeightContext = createContext(0);
+
+/**
+ * How far the offline strip pushes the screens down, 0 while it is hidden. A
+ * KeyboardAvoidingView measures its frame against its parent, not the window,
+ * so a keyboard form under the strip adds this to its offset (Screen), or it
+ * stops this far short of the keyboard: on the entry form typed in a basement,
+ * and on the server-address screen the strip itself leads to.
+ */
+export function useOfflineStripHeight(): number {
+  return useContext(StripHeightContext);
 }
 
 const STRIP_PADDING = 6;
