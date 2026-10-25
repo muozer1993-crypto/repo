@@ -55,6 +55,19 @@ describe('challenge catalog', () => {
     for (const key of keys) expect(key).toMatch(/^[a-z][a-z0-9_]*$/);
   });
 
+  it('names no hour in a check-in description: the çelınc may set another one', () => {
+    // the rules card puts the description right above "⏰ Her gün saat 06:30 olmadan…"
+    const hourWords = /(bir|iki|üç|dört|beş|altı|yedi|sekiz|dokuz|on)(den|dan|ten|tan) önce/i;
+    const checkins = CHALLENGE_TYPES.filter((type) => type.metricType === 'checkin_deadline');
+    expect(checkins.length).toBeGreaterThan(0);
+    for (const type of checkins) {
+      for (const text of [type.descriptionTr, type.descriptionPoliteTr ?? '']) {
+        expect(text, type.key).not.toMatch(/\d{1,2}[:.]\d{2}/);
+        expect(text, type.key).not.toMatch(hourWords);
+      }
+    }
+  });
+
   it('keeps direction consistent with the metric type', () => {
     for (const type of CHALLENGE_TYPES) {
       const expected = type.metricType === 'manual_lower_is_better' ? 'lower' : 'higher';

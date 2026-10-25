@@ -250,8 +250,11 @@ describe('POST /challenges', () => {
       deadlineTime: '00:30',
     });
     expect(midnight.statusCode).toBe(400);
-    expect(midnight.json().error.code).toBe('validation');
-    expect(midnight.json().error.issues[0].path).toEqual(['deadlineTime']);
+    // the 1.0 and 1.1 wizards allow any hour and show only the message: it has to say why
+    expect(midnight.json().error).toMatchObject({
+      code: 'deadline_outside_window',
+      message: 'Check-in saati 19:00 sonrası, en geç 23:59 olmalı. Saati değiştirip tekrar dene.',
+    });
   });
 
   it('rejects an unknown type key', async () => {
@@ -1660,6 +1663,38 @@ describe('POST /challenges/:id/rematch', () => {
       await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}/results` })
     ).json<ChallengeResults>();
     expect(results.rematch).toBeNull();
+    const own = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(own.statusCode).toBe(201);
+  });
+
+  it('lets the creator who walked out of their own group rematch open a new one', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const can = await registerUser(harness.app, 'can', { displayName: 'Can' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, can.me.id);
+    befriend(harness.app, veli.me.id, can.me.id);
+    const challengeId = (await createChallenge(harness, ali, { participantIds: [veli.me.id, can.me.id] })).json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await harness.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` });
+
+    const first = (
+      await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })
+    ).json<Challenge>();
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${first.id}/accept` });
+    await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${first.id}/accept` });
+    // Ali walks out; Veli and Can play it on
+    const left = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${first.id}/leave` });
+    expect(left.json<ChallengeDetail>().challenge.status).toBe('pending');
+
+    // the results screen offers him the button, and the button must work
+    const results = (
+      await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}/results` })
+    ).json<ChallengeResults>();
+    expect(results.rematch).toBeNull();
+    expect(results.rematchInvitable).toBe(2);
     const own = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
     expect(own.statusCode).toBe(201);
   });

@@ -107,7 +107,9 @@ açtığı ve içinde olduğun (kabul etmiş ya da davetli) bir rövanş varken 
 (`rematch_exists`, "Ali rövanşı zaten açtı, davet sende."). Sonuç ekranı bunu baştan bilir
 (`rematch`): düğme o rövanşa gider ("Rövanş daveti sende", "Rövanşa git", bittiyse "Rövanşın
 sonucu"). İptal olan, reddettiğin, ayrıldığın ya da hiç çağrılmadığın (açanın kankası değilsin) bir
-rövanş sayılmaz, kendi rövanşını açabilirsin. Artık kabul edemeyeceğin bir davet de sayılmaz, kabul
+rövanş sayılmaz, kendi rövanşını açabilirsin. Kendi açıp sonra içinden çıktığın da öyle: aynı
+kişiye ikinci rövanşı engelleyen `already_rematched` da yalnız hâlâ içinde olduğun rövanşı sayar,
+yoksa düğme her basışta "zaten rövanş açtın" deyip dururdu. Artık kabul edemeyeceğin bir davet de sayılmaz, kabul
 kapısının kendi kuralıyla: kapısı kapanmış (`acceptClosesAt`) ya da sen cevap vermeden bitmiş bir
 rövanş (onu oynamadığın için sonucundan da rövanş açamazsın), ya da açanla arana sonradan engel
 girmiş bir davet. Yoksa düğme kapalı bir kapıya götürür, kendi rövanşını açmana da izin vermezdi.

@@ -85,6 +85,13 @@ export const BEHIND_THE_TIE: Record<VulgarityLevel, string> = {
   3: 'Laf hakkı öndekilerde, sen arkada kaldın 🍆 Rövanş aç.',
 };
 
+/** The same, on the results screen once a rematch exists: its button is a link to that one. */
+export const BEHIND_THE_TIE_REMATCH_OPEN: Record<VulgarityLevel, string> = {
+  1: 'Mesaj hakkı berabere kalanlarda. Rövanşı aşağıda.',
+  2: 'Laf hakkı berabere kalanlarda, sen arkada kaldın. Rövanşı aşağıda, oraya bak.',
+  3: 'Laf hakkı öndekilerde, sen arkada kaldın 🍆 Rövanşı aşağıda, oraya bak.',
+};
+
 /**
  * Whether saying no (or leaving) would leave nobody to race. The server then
  * cancels the çelınc on the spot (`cancelIfAbandoned`): fewer than two people

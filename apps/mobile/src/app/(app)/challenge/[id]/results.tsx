@@ -29,6 +29,7 @@ import { errorText } from '@/utils/errors';
 import { dateRange, relativeTime } from '@/utils/format';
 import {
   BEHIND_THE_TIE,
+  BEHIND_THE_TIE_REMATCH_OPEN,
   REMATCH_WINNER,
   TAUNT_ALL,
   TAUNT_ALL_DONE,
@@ -64,6 +65,13 @@ const TIE_SUB: Record<VulgarityLevel, string> = {
   1: 'Kimse öne geçemedi. Rövanş açabilirsin.',
   2: 'Kimse öne geçemedi. Rövanş aç da biri yesin.',
   3: 'Ortada sahipsiz bir 🍆 kaldı. Rövanş aç.',
+};
+
+/** Once a rematch exists the button below leads to it; "aç" would ask for a second one. */
+const TIE_SUB_REMATCH_OPEN: Record<VulgarityLevel, string> = {
+  1: 'Kimse öne geçemedi. Rövanşı aşağıda.',
+  2: 'Kimse öne geçemedi. Rövanşı aşağıda, oraya bak.',
+  3: 'Ortada sahipsiz bir 🍆 kaldı. Rövanşı aşağıda, oraya bak.',
 };
 
 const WATCHER_SUB: Record<VulgarityLevel, string> = {
@@ -164,7 +172,12 @@ const TIE_EVEN: Record<VulgarityLevel, string> = {
  */
 const WAIT_GIVES_UP_MS = 24 * 60 * 60_000;
 
-const WAIT_SUB = (level: VulgarityLevel, winner: string, gaveUp: boolean): string => {
+const WAIT_SUB = (level: VulgarityLevel, winner: string, gaveUp: boolean, rematchOpen: boolean): string => {
+  if (gaveUp && rematchOpen) {
+    if (level === 1) return `${winner} bir şey yazmadı, unuttu galiba. Rövanşı aşağıda.`;
+    if (level === 3) return `${winner} unuttu galiba, koyamadı bile 🍆 Rövanşı aşağıda, oraya bak.`;
+    return `${winner} unuttu galiba. Rövanşı aşağıda, oraya bak.`;
+  }
   if (gaveUp) {
     if (level === 1) return `${winner} bir şey yazmadı, unuttu galiba. İstersen rövanş aç, bu sefer sen kazan.`;
     if (level === 3) return `${winner} unuttu galiba, koyamadı bile 🍆 Rövanş aç, bu sefer sen sapla.`;
@@ -402,6 +415,7 @@ export default function ResultsScreen() {
   const nextRound = query.data.rematch && query.data.rematch.status !== 'cancelled' ? query.data.rematch : null;
   // nobody left to invite would only earn a 400; an older server sends no count
   const nobodyToInvite = !nextRound && rematchInvitable === 0;
+  const tieSub = nextRound ? TIE_SUB_REMATCH_OPEN[level] : TIE_SUB[level];
   const senderOf = (taunt: Taunt): ParticipantView | undefined =>
     standings.find((p) => p.user.id === taunt.fromUserId);
 
@@ -462,9 +476,13 @@ export default function ResultsScreen() {
       {iWon ? (
         <WinnerHeader level={level} />
       ) : isTie ? (
-        <NeutralHeader title={TIE_TITLE[level]} subtitle={TIE_SUB[level]} emoji="🤝" />
+        <NeutralHeader title={TIE_TITLE[level]} subtitle={tieSub} emoji="🤝" />
       ) : behindTie ? (
-        <ShameHeader level={level} waiting={false} subtitle={BEHIND_THE_TIE[level]} />
+        <ShameHeader
+          level={level}
+          waiting={false}
+          subtitle={nextRound ? BEHIND_THE_TIE_REMATCH_OPEN[level] : BEHIND_THE_TIE[level]}
+        />
       ) : isPlayer ? (
         <ShameHeader level={level} waiting={!received} />
       ) : (
@@ -520,7 +538,7 @@ export default function ResultsScreen() {
           <Card edgeColor={Colors.accentDim}>
             <Text variant="title">Daha sesi çıkmadı</Text>
             <Text variant="small" muted style={styles.gap}>
-              {WAIT_SUB(level, winner?.user.displayName ?? 'Kazanan', waitGaveUp)}
+              {WAIT_SUB(level, winner?.user.displayName ?? 'Kazanan', waitGaveUp, nextRound !== null)}
             </Text>
           </Card>
         )
@@ -650,7 +668,7 @@ export default function ResultsScreen() {
           {isTie ? (
             <>
               <Text variant="small" muted>
-                {TIE_SUB[level]}
+                {tieSub}
               </Text>
               {tiePending.length > 0 ? (
                 <Button

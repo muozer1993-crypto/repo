@@ -2111,6 +2111,48 @@ describe('a rematch somebody already opened', () => {
     expect(text).not.toContain('Olmadı');
   });
 
+  it('points every "rövanş aç" line to the one that is open', async () => {
+    const base = lost({ rematch: OPEN });
+    const tie = {
+      ...base,
+      challenge: { ...base.challenge, winnerId: null, isTie: true },
+      standings: [
+        { ...base.standings[0]!, rank: 1, isWinner: false },
+        { ...base.standings[1]!, score: 15000, rank: 1 },
+        base.standings[2]!,
+      ],
+    };
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+
+    api.results = jest.fn(async () => tie);
+    const even = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(rendered(even)).toContain('Kimse öne geçemedi. Rövanşı aşağıda, oraya bak.');
+    expect(rendered(even)).not.toContain('Rövanş aç');
+
+    // third behind Ali and Veli's shared first place
+    api.results = jest.fn(async () => ({
+      ...tie,
+      standings: [
+        { ...tie.standings[0]!, rank: 1 },
+        { ...tie.standings[2]!, score: 15000, rank: 1 },
+        { ...tie.standings[1]!, score: 3000, rank: 3 },
+      ],
+    }));
+    const behind = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(rendered(behind)).toContain('sen arkada kaldın. Rövanşı aşağıda, oraya bak.');
+    expect(rendered(behind)).not.toContain('Rövanş aç');
+
+    // a day and more without Ali's laf
+    const longAgo = new Date(Date.now() - 25 * 60 * 60_000).toISOString();
+    api.results = jest.fn(async () => ({ ...base, challenge: { ...base.challenge, endsAt: longAgo, finalizedAt: longAgo } }));
+    const silent = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(rendered(silent)).toContain('Ali unuttu galiba. Rövanşı aşağıda, oraya bak.');
+    expect(rendered(silent)).not.toContain('Rövanş aç');
+  });
+
   it('keeps the button but greys it out when nobody is left to invite', async () => {
     api.results = jest.fn(async () => lost({ rematchInvitable: 0 }));
     const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;

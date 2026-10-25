@@ -356,11 +356,17 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       );
     }
 
-    // A rematch that was turned down (and so cancelled) does not count: the
-    // results screen's "Rövanş" must not dead-end on one nobody can join.
+    // A rematch that was turned down (and so cancelled) does not count, nor
+    // one I opened and walked out of (findRematch's rule, which the results
+    // screen goes by): its "Rövanş" must not dead-end on one I am not in.
     const duplicate = db
-      .prepare("SELECT id FROM challenges WHERE rematch_of_id = ? AND creator_id = ? AND status <> 'cancelled'")
-      .get(challenge.id, me.id) as { id: string } | undefined;
+      .prepare(
+        `SELECT c.id FROM challenges c
+           JOIN challenge_participants p ON p.challenge_id = c.id AND p.user_id = ?
+          WHERE c.rematch_of_id = ? AND c.creator_id = ? AND c.status <> 'cancelled'
+            AND p.status IN ('accepted', 'invited')`,
+      )
+      .get(me.id, challenge.id, me.id) as { id: string } | undefined;
     if (duplicate) throw conflict('already_rematched', 'Bu çelınc için zaten rövanş açtın.');
 
     // Same settings, same number of days; only the calendar moves.

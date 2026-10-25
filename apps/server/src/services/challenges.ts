@@ -435,11 +435,12 @@ function finishedTitle(level: VulgarityLevel, role: 'winner' | 'loser'): string 
 /**
  * The finish body for somebody behind a shared first place. The co-leaders drew
  * with each other, not with them: no winner to name and no laf on its way, but
- * the penalty is still theirs.
+ * the penalty is still theirs. Named when the çelınc has one; most have a
+ * reward instead, and the results screen this opens says "Ceza yazılmamış".
  */
 function behindTieBody(
   level: VulgarityLevel,
-  vars: { title: string; leaders: string[]; leaderScore: string; rank: number; myScore: string },
+  vars: { title: string; leaders: string[]; leaderScore: string; rank: number; myScore: string; penalty: string | null },
 ): string {
   const { title, leaderScore, rank, myScore } = vars;
   const leaders = joinNames(vars.leaders);
@@ -447,8 +448,12 @@ function behindTieBody(
     return `${title} bitti. ${leaders} birinciliği paylaştı (${leaderScore}), sen ${rank}. oldun (${myScore}). İstersen rövanş aç.`;
   }
   const head = `${title} bitti. ${leaders} berabere kaldı (${leaderScore}), sen ${rank}. oldun (${myScore}).`;
-  if (level === 3) return `${head} Ceza sende 🍆 Rövanşı aç da görelim.`;
-  return `${head} Ceza sende, rövanş aç.`;
+  // "Bulaşık sende." + "." would end it twice
+  const penalty = vars.penalty?.trim().replace(/[.!…]+$/u, '') || null;
+  if (level === 3) {
+    return penalty ? `${head} Ceza sende 🍆 ${penalty}. Rövanşı aç da görelim.` : `${head} Yedin 🍆 Rövanşı aç da görelim.`;
+  }
+  return penalty ? `${head} Ceza sende: ${penalty}. Rövanş aç.` : `${head} Yine de yedin, rövanş aç.`;
 }
 
 /**
@@ -798,7 +803,14 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
           userId: user.id,
           type: 'challenge_finished',
           title: finishedTitle(level, 'loser'),
-          body: behindTieBody(level, { title: challenge.title, leaders, leaderScore, rank: myRank, myScore }),
+          body: behindTieBody(level, {
+            title: challenge.title,
+            leaders,
+            leaderScore,
+            rank: myRank,
+            myScore,
+            penalty: challenge.penalty_text,
+          }),
           data: { challengeId: challenge.id, role: 'loser', winnerId: null },
           createdAt: iso,
         });

@@ -449,7 +449,8 @@ hâlâ laf sokmadıysa ona bir kere "Koymayacak mısın? Veli ağzını açmanı
 dokununca sonuç ekranı açılır. Gece gitmez: kazananın saatiyle 12:00–22:00 arasında gelir, yani
 gece yarısı biten çelıncın hatırlatması ertesi öğlen gelir. İki gün geçtiyse hiç gitmez.
 Kazananın adına otomatik laf atılmaz. Kaybeden taraf bir gün boyunca laf gelmezse sonuç
-ekranında "unuttu galiba, rövanş aç" yazısını görür.
+ekranında "unuttu galiba, rövanş aç" yazısını görür; rövanş zaten açıldıysa yazı ona gösterir
+("Rövanşı aşağıda"), berabere biten çelıncın satırları da öyle.
 
 **Cevap hakkı ve beraberlik:** kazanan sana laf soktuysa sonuç ekranında lafın hemen altında
 **Cevap ver** durur. Bir kere ve sadece kazanana cevap verebilirsin ("Yedim, kabul Ali. Rövanşta
@@ -458,7 +459,8 @@ görür. Kazanan hâlâ 1.0 kullanıyorsa cevabı sadece bildirim olarak görür
 için 1.1'i kurması gerekir. 1.0'ın gelen kutusu bu mesajların başına kazananın (beraberlikte
 çelıncın) adını koyar; kimin yazdığını başlık söyler ("Veli cevap verdi", "Ali laf attı"). Berabere biten çelıncta birinciliği paylaşanlar birbirine birer laf atabilir (**Laf at**),
 arkadan gelenler atamaz. Arkadan gelen için o çelınc berabere değil, yenilgidir: bildirimi "Ali ve
-Veli berabere kaldı, sen 3. oldun. Ceza sende" der, profildeki Karne'de **Yedim**'e yazılır, ceza da ondadır.
+Veli berabere kaldı, sen 3. oldun. Ceza sende: Kaybeden bulaşık yıkar." der (ceza yazılmadıysa "Yine
+de yedin"), profildeki Karne'de **Yedim**'e yazılır, ceza da ondadır.
 Telefonlar sonucu hâlâ bekliyorsa (bitişten sonraki bir saat, itiraz)
 kimse konuşamaz, sonuç yazılınca açılır.
 
@@ -468,12 +470,14 @@ beraberlik ya da kayıp seriyi bozar. Rövanş sadece hâlâ kankan olanları ç
 başkası üzerinden tanıştığın biri gelmez. Sonuç ekranı bunu rövanş düğmesinin altında söyler;
 final tablosunda adına dokunup profilinden ekleyebilirsin. Rövanş eskisi kaç gün sürdüyse o kadar
 gün sürer ve açanın saatiyle gece yarısı biter; reddedilen bir rövanş iptal olur ama yenisini
-açmana engel olmaz. Bir çelıncın rövanşı bir tane olur: kankan senden önce açtıysa düğme
-**Rövanş daveti sende** der ve seni o rövanşa götürür (içindeysen **Rövanşa git**, bittiyse
-**Rövanşın sonucu**). İkiniz aynı anda bassanız bile ikinci rövanş açılmaz, uygulama seni
-açılmış olana götürür. Reddettiğin ya da artık katılamayacağın (kapısı kapanmış, sen cevap
-vermeden bitmiş) bir rövanş sayılmaz, istersen kendininkini açarsın. Davet edilecek kanka
-kalmadıysa düğme sönük durur.
+açmana engel olmaz. Bir çelıncın içinde olduğun rövanşı bir tane olur: kankan senden önce
+açtıysa düğme **Rövanş daveti sende** der ve seni o rövanşa götürür (içindeysen **Rövanşa git**,
+bittiyse **Rövanşın sonucu**). İkiniz aynı anda bassanız bile ikinci rövanş açılmaz, uygulama
+seni açılmış olana götürür. Reddettiğin, içinden çıktığın (kendi açtığın da olsa) ya da artık
+katılamayacağın (kapısı kapanmış, sen cevap vermeden bitmiş) bir rövanş sayılmaz, istersen
+kendininkini açarsın. Açanın kankası olmadığın için çağrılmadığın bir rövanş da sayılmaz: grup
+çelıncında kendininkini açarsın, ikinizin ortak kankası da iki rövanş daveti alır. Davet
+edilecek kanka kalmadıysa düğme sönük durur.
 
 **Sonucu WhatsApp grubuna atmak:** sonuç ekranında, rövanş düğmesinin altında **Gruba at** durur
 (seviyene göre "Sonucu paylaş" ya da "Gruba at, herkes görsün" yazar). Dokununca telefonun paylaş

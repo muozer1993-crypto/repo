@@ -16,7 +16,9 @@ import {
   InviteToChallengeBodySchema,
   acceptClosesAt,
   createChallengeBodySchema,
+  deadlineFitsWindow,
   getChallengeType,
+  isValidHHmm,
   ChallengeListQuerySchema,
   type Challenge,
   type ChallengeDetail,
@@ -217,6 +219,21 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
   app.post('/challenges', { preHandler: app.authenticate }, async (request, reply): Promise<Challenge> => {
     const me = request.user;
     const now = app.now();
+    // The check-in window is a schema rule, and a schema 400 says only
+    // "Gönderdiğin bilgiler geçersiz.": the 1.0 and 1.1 wizards take any hour
+    // and show nothing but the message, so its reason must be the message.
+    const raw = typeof request.body === 'object' && request.body !== null ? (request.body as Record<string, unknown>) : {};
+    const rawType = typeof raw.typeKey === 'string' ? getChallengeType(raw.typeKey) : undefined;
+    if (
+      rawType?.metricType === 'checkin_deadline' &&
+      isValidHHmm(raw.deadlineTime) &&
+      !deadlineFitsWindow(rawType, raw.deadlineTime)
+    ) {
+      throw badRequest(
+        'deadline_outside_window',
+        `Check-in saati ${rawType.checkinWindowStart} sonrası, en geç 23:59 olmalı. Saati değiştirip tekrar dene.`,
+      );
+    }
     // The clock is injected so `startsAt >= now - 5min` follows the test clock too.
     const schema = createChallengeBodySchema({ now: () => now.getTime() });
     const body = parseBody(schema, request.body);

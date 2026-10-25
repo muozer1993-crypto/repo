@@ -157,6 +157,36 @@ describe('challenge lifecycle', () => {
     expect(final[0]!.rank).toBe(1);
   });
 
+  it('names the penalty to whoever finished behind a shared first place, when there is one', async () => {
+    harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+    const { app, db } = harness;
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(app, 'veli', { displayName: 'Veli' });
+    const can = await registerUser(app, 'can', { displayName: 'Can', vulgarityMax: 3 });
+    const challengeId = seedChallenge(app, {
+      creatorId: ali.me.id,
+      accepted: [ali.me.id, veli.me.id, can.me.id],
+      startsAt: '2026-01-05T08:00:00.000Z',
+      endsAt: '2026-01-05T20:59:59.999Z',
+      status: 'active',
+      typeKey: 'sosyal_medya_orucu',
+      metricType: 'daily_boolean',
+      unit: 'gün',
+      title: 'Sosyal Medya Orucu',
+    });
+    db.prepare('UPDATE challenges SET penalty_text = ? WHERE id = ?').run('Kaybeden bulaşık yıkar.', challengeId);
+    addSteps(app, challengeId, ali.me.id, '2026-01-05', 1);
+    addSteps(app, challengeId, veli.me.id, '2026-01-05', 1);
+    addSteps(app, challengeId, can.me.id, '2026-01-05', 0);
+
+    harness.setNow('2026-01-05T21:00:00.000Z');
+    expect(finalizeEndedChallenges(db, app.now())).toBe(1);
+    const [behind] = listByType(db, can.me.id, 'challenge_finished');
+    expect(behind!.body).toBe(
+      'Sosyal Medya Orucu bitti. Ali ve Veli berabere kaldı (1 gün), sen 3. oldun (0 gün). Ceza sende 🍆 Kaybeden bulaşık yıkar. Rövanşı aç da görelim.',
+    );
+  });
+
   it('tells whoever finished behind a shared first place that they lost, and counts it so', async () => {
     harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
     const { app, db } = harness;
@@ -195,8 +225,9 @@ describe('challenge lifecycle', () => {
     const [behind] = listByType(db, can.me.id, 'challenge_finished');
     expect(JSON.parse(behind!.data)).toEqual({ challengeId, role: 'loser', winnerId: null });
     expect(behind!.title).toBe('Yedin lan');
+    // no penalty was written, and the results screen it opens says so
     expect(behind!.body).toBe(
-      'Sosyal Medya Orucu bitti. Ali ve Veli berabere kaldı (1 gün), sen 3. oldun (0 gün). Ceza sende, rövanş aç.',
+      'Sosyal Medya Orucu bitti. Ali ve Veli berabere kaldı (1 gün), sen 3. oldun (0 gün). Yine de yedin, rövanş aç.',
     );
     // no co-leader may send him a laf, so nothing may promise one
     expect(behind!.body).not.toContain('Kazanan');
