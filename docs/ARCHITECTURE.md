@@ -84,6 +84,16 @@ günün son milisaniyesinde biter. Önceden "şimdi + eski süre" ile düğmeye 
 yarıda kesilen son günün sonradan gelen telefon sayısı bitişten sonra atılan adımları da taşırdı.
 Reddedilen (yani iptal olan) bir rövanş yenisini açmaya engel değildir.
 
+Bir çelıncın rövanşı bir tane olur. Rövanş düğmesi iki tarafta da kocaman durur; ikisi de basınca
+aynı kankalar iki kere davet ediliyor, grup birbirinin aynısı iki çelınca bölünüyordu. Artık başkasının
+açtığı ve içinde olduğun (kabul etmiş ya da davetli) bir rövanş varken yenisi açılmaz
+(`rematch_exists`, "Ali rövanşı zaten açtı, davet sende."). Sonuç ekranı bunu baştan bilir
+(`rematch`): düğme o rövanşa gider ("Rövanş daveti sende", "Rövanşa git", bittiyse "Rövanşın
+sonucu"). İptal olan, reddettiğin, ayrıldığın ya da hiç çağrılmadığın (açanın kankası değilsin) bir
+rövanş sayılmaz, kendi rövanşını açabilirsin. Açanla arana sonradan engel girdiyse davet de sayılmaz:
+kabul kapısı onu zaten geri çevirir. Davet edilecek kimse kalmadıysa (`rematchInvitable` 0) düğme
+sönük durur; önceden basınca 400 `no_participants` dönüyordu.
+
 Adımı ya da ekran süresini telefonun kendisinin saydığı çelınclar bitişte hemen kapanmaz. Son
 akşamın adımları telefonda bir sonraki arka plan senkronunu bekler (15 dakika ve üstü), gece
 yarısı kapatırsak kazananı eksik sayıyla seçeriz ve sonradan gelen adımlar çöpe gider. Bu yüzden
@@ -203,7 +213,8 @@ KOYDUM ulaşır, sadece anında değil.
 
 Yeni bir satır gelince (push ya da bu yoklama) açık ekranlar da tazelenir
 (`invalidateForNotifications`): gelen kutusu ve rozet her zaman, kanka isteğinde Kankalar,
-çelınca dair bir satırda çelınc listeleri, o çelıncın detayı ve sonucu. Sekmeler açık kalır ve odağa
+çelınca dair bir satırda çelınc listeleri, o çelıncın detayı ve sonucu (rövanş satırında eski
+çelıncınki de: oradaki **Rövanş** düğmesi yeni rövanşa giden bağlantıya döner). Sekmeler açık kalır ve odağa
 dönünce kendiliğinden yenilenmez; o yüzden Gelen, rozetin gördüğü en yeni satır kendi en
 üstündeki değilse kendini yeniler, Kankalar da listesi 20 saniyeden eskiyse sekmeye dönünce.
 Bir bildirime dokunmak onu okunmuş sayar: push da telefonun kendi kopyası da satırın

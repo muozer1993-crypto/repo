@@ -47,6 +47,11 @@ describe('invalidateForNotifications', () => {
     expect(keys).not.toContainEqual(qk.friends);
   });
 
+  it('moves the results of the çelınc a rematch is of, so its "Rövanş" becomes a link', () => {
+    const keys = invalidatedKeys([row('rematch', { challengeId: 'c2', rematchOfId: 'c1', fromUserId: 'u1' })]);
+    expect(keys).toEqual(expect.arrayContaining([qk.challenge('c2'), qk.results('c1'), qk.challenge('c1')]));
+  });
+
   it('reads a push payload the same way, with the çelınc on top of the data', () => {
     const keys = invalidatedKeys([
       { type: 'friend_accepted', data: { type: 'friend_accepted', notificationId: 'n1' } },

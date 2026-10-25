@@ -209,9 +209,12 @@ export function invalidateForNotifications(
   const challengeIds = new Set<string>();
   for (const item of items) {
     if (item.type === 'friend_request' || item.type === 'friend_accepted') friends = true;
-    const challengeId =
-      item.data && typeof item.data === 'object' ? (item.data as Record<string, unknown>).challengeId : undefined;
-    if (typeof challengeId === 'string' && challengeId) challengeIds.add(challengeId);
+    const data = item.data && typeof item.data === 'object' ? (item.data as Record<string, unknown>) : {};
+    // a `rematch` also names the çelınc it is a rematch of: that results screen
+    // turns its "Rövanş" into a link to this one
+    for (const challengeId of [data.challengeId, data.rematchOfId]) {
+      if (typeof challengeId === 'string' && challengeId) challengeIds.add(challengeId);
+    }
   }
 
   if (friends) void qc.invalidateQueries({ queryKey: qk.friends });
@@ -436,6 +439,8 @@ export function useRematch(id: string) {
     },
     onSuccess: () => {
       void invalidate.challenges();
+      // back on the original's results, "Rövanş" is now a link to this one
+      void qc.invalidateQueries({ queryKey: qk.results(id) });
     },
   });
 }

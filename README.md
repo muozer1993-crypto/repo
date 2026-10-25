@@ -465,7 +465,11 @@ beraberlik ya da kayıp seriyi bozar. Rövanş sadece hâlâ kankan olanları ç
 başkası üzerinden tanıştığın biri gelmez. Sonuç ekranı bunu rövanş düğmesinin altında söyler;
 final tablosunda adına dokunup profilinden ekleyebilirsin. Rövanş eskisi kaç gün sürdüyse o kadar
 gün sürer ve açanın saatiyle gece yarısı biter; reddedilen bir rövanş iptal olur ama yenisini
-açmana engel olmaz.
+açmana engel olmaz. Bir çelıncın rövanşı bir tane olur: kankan senden önce açtıysa düğme
+**Rövanş daveti sende** der ve seni o rövanşa götürür (içindeysen **Rövanşa git**, bittiyse
+**Rövanşın sonucu**). İkiniz aynı anda bassanız bile ikinci rövanş açılmaz, uygulama seni
+açılmış olana götürür. Reddettiğin bir rövanş sayılmaz, istersen kendininkini açarsın. Davet
+edilecek kanka kalmadıysa düğme sönük durur.
 
 **Sonucu WhatsApp grubuna atmak:** sonuç ekranında, rövanş düğmesinin altında **Gruba at** durur
 (seviyene göre "Sonucu paylaş" ya da "Gruba at, herkes görsün" yazar). Dokununca telefonun paylaş

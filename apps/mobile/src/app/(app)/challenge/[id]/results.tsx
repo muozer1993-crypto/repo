@@ -1,4 +1,4 @@
-import type { ChallengeType, ParticipantView, Taunt, VulgarityLevel } from '@koydum/shared';
+import type { ChallengeType, ParticipantView, RematchView, Taunt, VulgarityLevel } from '@koydum/shared';
 import { getChallengeType, scoreLabel, t } from '@koydum/shared';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -118,6 +118,20 @@ const LEFT_OUT_NOTE = (level: VulgarityLevel, names: string[]): string => {
   );
 };
 
+/** In place of the rematch button once a rematch exists: where it takes me. */
+const rematchLinkTitle = (rematch: RematchView): string => {
+  if (rematch.status === 'finished') return 'Rövanşın sonucu';
+  return rematch.myStatus === 'invited' ? 'Rövanş daveti sende' : 'Rövanşa git';
+};
+
+/** Under it: whose rematch it is and where I stand in it. */
+const rematchLinkNote = (rematch: RematchView, meId: string | null): string => {
+  if (rematch.status === 'finished') return 'Rövanş da oynandı, sonucu orada.';
+  if (rematch.myStatus === 'invited') return `${rematch.creatorName} rövanş açtı, davet sende.`;
+  if (rematch.creatorId === meId) return 'Rövanşı sen açtın, davetler gitti.';
+  return `${rematch.creatorName} rövanş açtı, sen de içindesin.`;
+};
+
 /** Under the winner's laf: the loser's one answer (the server allows exactly one). */
 const REPLY_CTA: Record<VulgarityLevel, string> = {
   1: 'Cevap yaz',
@@ -221,6 +235,15 @@ export default function ResultsScreen() {
     router.push({ pathname: '/user/[id]', params: { id: userId } });
   };
 
+  /** A rematch that exists: its çelınc while it is on, its result once it is over. */
+  const openRematch = (target: RematchView) => {
+    if (target.status === 'finished') {
+      router.push({ pathname: '/challenge/[id]/results', params: { id: target.id } });
+    } else {
+      router.push({ pathname: '/challenge/[id]', params: { id: target.id } });
+    }
+  };
+
   const startRematch = async () => {
     try {
       const { challenge: created, invited } = await rematch.mutateAsync();
@@ -236,6 +259,18 @@ export default function ResultsScreen() {
       });
       router.replace({ pathname: '/challenge/[id]', params: { id: created.id } });
     } catch (error) {
+      // The other side opened one while this screen still offered the button
+      // (or I did, from another phone): the server names it, the fresh results
+      // say where it is, and the tap lands there instead of on a dead end.
+      if (error instanceof ApiError && (error.code === 'rematch_exists' || error.code === 'already_rematched')) {
+        const fresh = await query.refetch();
+        const existing = fresh.data?.rematch;
+        if (existing) {
+          toast({ title: 'Rövanş zaten var', body: error.message, kind: 'info' });
+          openRematch(existing);
+          return;
+        }
+      }
       toast({ title: 'Olmadı', body: errorText(error, 'Rövanş açılamadı.'), kind: 'danger' });
     }
   };
@@ -295,7 +330,7 @@ export default function ResultsScreen() {
     );
   }
 
-  const { challenge, standings, taunts, rematchLeftOut } = query.data;
+  const { challenge, standings, taunts, rematchLeftOut, rematchInvitable } = query.data;
   const type: ChallengeType | undefined = getChallengeType(challenge.typeKey);
   const scoreText = (value: number) => scoreLabel({ unitTr: challenge.unit }, value);
 
@@ -362,6 +397,12 @@ export default function ResultsScreen() {
     coLeaders.every((p) => taunts.some((x) => x.fromUserId === p.user.id && x.toUserId === meId));
   // the server's list (an older one sends none, and then nothing is claimed)
   const leftOut = ranked.filter((p) => p.user.id !== meId && (rematchLeftOut ?? []).includes(p.user.id));
+  // One rematch per group: once one I am in or invited to exists, the button
+  // leads there instead of opening a second that invites the same friends twice.
+  // The server never sends a cancelled one (nobody can join it).
+  const nextRound = query.data.rematch && query.data.rematch.status !== 'cancelled' ? query.data.rematch : null;
+  // nobody left to invite would only earn a 400; an older server sends no count
+  const nobodyToInvite = !nextRound && rematchInvitable === 0;
   const senderOf = (taunt: Taunt): ParticipantView | undefined =>
     standings.find((p) => p.user.id === taunt.fromUserId);
 
@@ -673,20 +714,42 @@ export default function ResultsScreen() {
             ) : null}
           </View>
         </View>
-        {isPlayer ? (
+        {isPlayer && nextRound ? (
+          <>
+            <Button
+              title={rematchLinkTitle(nextRound)}
+              icon="🔁"
+              size="xl"
+              fullWidth
+              style={styles.gap}
+              onPress={() => openRematch(nextRound)}
+            />
+            <Text variant="tiny" muted style={styles.gapSm}>
+              {rematchLinkNote(nextRound, meId)}
+            </Text>
+          </>
+        ) : isPlayer ? (
           <Button
             title={iWon || isTie ? REMATCH_WINNER[level] : t('rematch_button', level)}
             icon="🔁"
             size="xl"
             fullWidth
             style={styles.gap}
+            disabled={nobodyToInvite}
             loading={rematch.isPending}
             onPress={() => void startRematch()}
           />
         ) : null}
-        {isPlayer && leftOut.length > 0 ? (
+        {/* about a rematch I would open; once there is one it no longer applies */}
+        {isPlayer && !nextRound && leftOut.length > 0 ? (
           <Text variant="tiny" color={Colors.yellow} style={styles.gapSm}>
             {LEFT_OUT_NOTE(level, leftOut.map((p) => p.user.displayName))}
+          </Text>
+        ) : null}
+        {/* everybody gone without a name to show: deleted, or a block either way */}
+        {isPlayer && nobodyToInvite && leftOut.length === 0 ? (
+          <Text variant="tiny" muted style={styles.gapSm}>
+            Rövanşa çağrılacak kimse kalmadı.
           </Text>
         ) : null}
         {isPlayer ? (

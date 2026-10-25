@@ -22,8 +22,10 @@ import {
   type Challenge,
   type ChallengeDetail,
   type ChallengeResults,
+  type ChallengeStatus,
   type LeaderboardEntry,
   type PublicUser,
+  type RematchView,
   type Taunt,
   type VulgarityLevel,
 } from '@koydum/shared';
@@ -153,6 +155,47 @@ function rematchLineUp(
     invitees.push(user);
   }
   return { invitees, notFriends };
+}
+
+/**
+ * The rematch of `challengeId` that `meId` is already in or invited to, their
+ * own first, else the newest somebody else opened.
+ *
+ * Both players get a big "Rövanş" button, and when both tapped it the same
+ * friends were invited twice and the group split across two identical
+ * çelınclar. With this the second tap leads to the first one instead. A
+ * rematch nobody can join does not count: one turned down (and so cancelled),
+ * one I declined or walked out of, or one I was never invited to because I am
+ * not its creator's friend. Then I may still open my own. So does an invite a
+ * block came between since: accept refuses it, and it would neither lead
+ * anywhere nor let me open mine (which leaves the blocked creator out).
+ */
+function findRematch(db: Database, challengeId: string, meId: string): RematchView | null {
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.status, c.creator_id, u.display_name AS creator_name, p.status AS my_status
+         FROM challenges c
+         JOIN challenge_participants p ON p.challenge_id = c.id AND p.user_id = ?
+         JOIN users u ON u.id = c.creator_id
+        WHERE c.rematch_of_id = ? AND c.status <> 'cancelled' AND p.status IN ('accepted', 'invited')
+        ORDER BY (c.creator_id = ?) DESC, c.created_at DESC`,
+    )
+    .all(meId, challengeId, meId) as {
+    id: string;
+    status: ChallengeStatus;
+    creator_id: string;
+    creator_name: string;
+    my_status: 'accepted' | 'invited';
+  }[];
+  const row = rows.find((r) => r.my_status === 'accepted' || !isBlockedBetween(db, meId, r.creator_id));
+  if (!row) return null;
+  return {
+    id: row.id,
+    status: row.status,
+    creatorId: row.creator_id,
+    creatorName: row.creator_name,
+    myStatus: row.my_status,
+  };
 }
 
 /**
@@ -286,6 +329,21 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       throw badRequest('challenge_not_finished', 'Rövanş sadece biten çelınc için istenir.');
     }
 
+    // One rematch per group: when a rival already opened one I am in or invited
+    // to, a second would invite the same friends twice. The results screen
+    // links to it; this is for a tap that raced the other side's.
+    const existing = findRematch(db, challenge.id, me.id);
+    if (existing && existing.creatorId !== me.id) {
+      throw conflict(
+        'rematch_exists',
+        existing.status === 'finished'
+          ? 'Bu çelıncın rövanşı zaten oynandı. Yenisini onun sonucundan aç.'
+          : existing.myStatus === 'invited'
+            ? `${existing.creatorName} rövanşı zaten açtı, davet sende.`
+            : `${existing.creatorName} rövanşı zaten açtı, sen de içindesin.`,
+      );
+    }
+
     // A rematch that was turned down (and so cancelled) does not count: the
     // results screen's "Rövanş" must not dead-end on one nobody can join.
     const duplicate = db
@@ -395,7 +453,11 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       results.tauntContexts = tauntContextsForWinner(db, challenge, me.id, summary.participants);
     }
     if (challenge.status === 'finished' && summary.me?.status === 'accepted') {
-      results.rematchLeftOut = rematchLineUp(db, challenge, me.id).notFriends;
+      const lineUp = rematchLineUp(db, challenge, me.id);
+      results.rematchLeftOut = lineUp.notFriends;
+      // nobody to invite: the button would only earn a 400 `no_participants`
+      results.rematchInvitable = lineUp.invitees.length;
+      results.rematch = findRematch(db, challenge.id, me.id);
     }
 
     return results;

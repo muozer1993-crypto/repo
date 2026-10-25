@@ -467,6 +467,28 @@ export interface ChallengeResults {
    * left out of it too, but not listed.
    */
   rematchLeftOut?: string[];
+  /**
+   * Only for an accepted player: the rematch of this çelınc they are already in
+   * or invited to (their own first), so the results screen links to it instead
+   * of opening a second one. `null` when there is none; an older server leaves
+   * it out.
+   */
+  rematch?: RematchView | null;
+  /**
+   * Only for an accepted player: how many a rematch opened by the reader would
+   * invite. 0 means nobody (the server would answer 400 `no_participants`).
+   */
+  rematchInvitable?: number;
+}
+
+/** A rematch that already exists, as the original's results screen points at it. */
+export interface RematchView {
+  id: string;
+  /** never `cancelled`: a rematch nobody can join does not count */
+  status: ChallengeStatus;
+  creatorId: string;
+  creatorName: string;
+  myStatus: 'accepted' | 'invited';
 }
 
 export interface Notification {

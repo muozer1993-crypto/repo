@@ -234,6 +234,21 @@ describe('API contract as the mobile client consumes it', () => {
     expect(isChallenge(rematch)).toBe(true);
     expect(rematch.rematchOfId).toBe(created.id);
 
+    // the winner's "Rövanş" turns into a link to it (results.tsx reads these)
+    const after = (await call(winner.token, 'GET', `/challenges/${created.id}/results`)).body;
+    expect(after.rematch).toEqual({
+      id: rematch.id,
+      status: rematch.status,
+      creatorId: loser.me.id,
+      creatorName: 'Ali',
+      myStatus: 'invited',
+    });
+    expect(typeof after.rematchInvitable).toBe('number');
+    expect(Array.isArray(after.rematchLeftOut)).toBe(true);
+    const parallel = await call(winner.token, 'POST', `/challenges/${created.id}/rematch`);
+    expect(parallel.status).toBe(409);
+    expect(parallel.body.error.code).toBe('rematch_exists');
+
     /* leaderboard ----------------------------------------------------------- */
     const leaderboard = (await call(winner.token, 'GET', '/leaderboard')).body;
     expect(Array.isArray(leaderboard)).toBe(true);

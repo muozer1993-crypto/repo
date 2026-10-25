@@ -1201,8 +1201,10 @@ describe('POST /challenges/:id/rematch', () => {
     expect(late.startsAt).toBe('2026-01-09T21:02:00.000Z');
     expect(late.endsAt).toBe('2026-01-12T20:59:59.999Z');
 
-    // Veli's, at 16:00 on 10 January: three days, the first one today
+    // Veli's, at 16:00 on 10 January: three days, the first one today. He turns
+    // Ali's down first, since a rival's open rematch would send him to it.
     harness.setNow('2026-01-10T13:00:00.000Z');
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${late.id}/decline` });
     const afternoon = (
       await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })
     ).json<Challenge>();
@@ -1278,6 +1280,111 @@ describe('POST /challenges/:id/rematch', () => {
     const third = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
     expect(third.statusCode).toBe(409);
     expect(third.json().error.code).toBe('already_rematched');
+  });
+
+  it('sends a rival to the rematch the other side already opened instead of opening a second one', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await finishedChallenge(harness);
+    const resultsFor = async (user: RegisteredUser) =>
+      (await authed(harness!.app, user.token)({ method: 'GET', url: `/challenges/${challengeId}/results` })).json<ChallengeResults>();
+    const rematchBy = (user: RegisteredUser) =>
+      authed(harness!.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+
+    // nothing yet: both see the button, and each would invite the other
+    expect((await resultsFor(ali)).rematch).toBeNull();
+    expect((await resultsFor(ali)).rematchInvitable).toBe(1);
+
+    const opened = await rematchBy(veli);
+    expect(opened.statusCode).toBe(201);
+    const rematchId = opened.json<Challenge>().id;
+
+    expect((await resultsFor(ali)).rematch).toEqual({
+      id: rematchId,
+      status: 'pending',
+      creatorId: veli.me.id,
+      creatorName: 'Veli',
+      myStatus: 'invited',
+    });
+    const parallel = await rematchBy(ali);
+    expect(parallel.statusCode).toBe(409);
+    expect(parallel.json().error).toMatchObject({ code: 'rematch_exists', message: 'Veli rövanşı zaten açtı, davet sende.' });
+    expect(harness.db.prepare('SELECT COUNT(*) AS n FROM challenges WHERE rematch_of_id = ?').get(challengeId)).toEqual({ n: 1 });
+
+    // the creator's own second tap is still his own conflict
+    const again = await rematchBy(veli);
+    expect(again.json().error.code).toBe('already_rematched');
+    expect((await resultsFor(veli)).rematch).toMatchObject({ id: rematchId, creatorName: 'Veli', myStatus: 'accepted' });
+
+    await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${rematchId}/accept` });
+    expect((await resultsFor(ali)).rematch?.myStatus).toBe('accepted');
+    expect((await rematchBy(ali)).json().error.message).toBe('Veli rövanşı zaten açtı, sen de içindesin.');
+
+    // called off before it started: nothing to join, so Ali may open his own
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${rematchId}/cancel` });
+    expect((await resultsFor(ali)).rematch).toBeNull();
+    const own = await rematchBy(ali);
+    expect(own.statusCode).toBe(201);
+    expect((await resultsFor(ali)).rematch).toMatchObject({ id: own.json<Challenge>().id, myStatus: 'accepted' });
+  });
+
+  it('lets a friend who turned a group rematch down open their own', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const can = await registerUser(harness.app, 'can', { displayName: 'Can' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, can.me.id);
+    befriend(harness.app, veli.me.id, can.me.id);
+    const created = await createChallenge(harness, ali, { participantIds: [veli.me.id, can.me.id] });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await harness.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` });
+
+    const veliRematch = (
+      await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })
+    ).json<Challenge>();
+    // Can is still invited, so Veli's goes on without Ali
+    const declined = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${veliRematch.id}/decline` });
+    expect(declined.json<ChallengeDetail>().challenge.status).toBe('pending');
+
+    const results = (
+      await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}/results` })
+    ).json<ChallengeResults>();
+    expect(results.rematch).toBeNull();
+    const own = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(own.statusCode).toBe(201);
+  });
+
+  it('does not hold Ali to an invite a block came between since', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await finishedChallenge(harness);
+    const opened = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(opened.statusCode).toBe(201);
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/users/${ali.me.id}/block` });
+
+    // accept would refuse it, so it is no rematch to send him to
+    const results = (
+      await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}/results` })
+    ).json<ChallengeResults>();
+    expect(results.rematch).toBeNull();
+    const own = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(own.json().error.code).toBe('no_participants');
+  });
+
+  it('says nobody is left to invite once the rival is no longer a friend', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await finishedChallenge(harness);
+    await authed(harness.app, ali.token)({ method: 'DELETE', url: `/friends/${veli.me.id}` });
+
+    const results = (
+      await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}/results` })
+    ).json<ChallengeResults>();
+    expect(results.rematchInvitable).toBe(0);
+    expect(results.rematchLeftOut).toEqual([veli.me.id]);
+    expect(results.rematch).toBeNull();
+    const refused = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(refused.json().error.code).toBe('no_participants');
   });
 
   it('refuses while the challenge is still running', async () => {

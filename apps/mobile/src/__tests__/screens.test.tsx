@@ -1669,6 +1669,114 @@ describe('a group rival who is not a friend', () => {
   });
 });
 
+describe('a rematch somebody already opened', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const VELI = { id: 'u-3', username: 'veli', displayName: 'Veli', avatarEmoji: '🦊', createdAt: '2026-09-01T00:00:00.000Z' };
+  const OPEN = { id: 'c-2', status: 'pending' as const, creatorId: ALI.id, creatorName: 'Ali', myStatus: 'invited' as const };
+
+  /** Ali beat me (level 2: "Rövanş İstiyorum") with Veli, not a friend, third. */
+  function lost(extra: Record<string, unknown> = {}) {
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    return {
+      challenge: { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: ALI.id },
+      standings: [
+        { ...detail.me!, user: ALI, score: 15000, rank: 1, isWinner: true },
+        { ...detail.me!, score: 12430, rank: 2 },
+        { ...detail.me!, user: VELI, score: 3000, rank: 3 },
+      ],
+      taunts: [],
+      rematchLeftOut: [VELI.id],
+      rematchInvitable: 1,
+      rematch: null,
+      ...extra,
+    };
+  }
+
+  let router: Record<string, jest.Mock>;
+  beforeEach(() => {
+    ({ router } = require('expo-router') as { router: Record<string, jest.Mock> });
+    router.push!.mockClear();
+    router.replace!.mockClear();
+    searchParams.id = 'c-1';
+    api.rematch = jest.fn(async () => {
+      throw new Error('no second rematch should be asked for');
+    });
+  });
+
+  it('turns the button into a link to the invite instead of opening a second one', async () => {
+    api.results = jest.fn(async () => lost({ rematch: OPEN }));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Ali rövanş açtı, davet sende.');
+    expect(text).not.toContain('Rövanş İstiyorum');
+    // the note is about a rematch I would open, and there will not be one
+    expect(text).not.toContain('rövanşa çağrılmaz');
+    press(tree, 'Rövanş daveti sende');
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/challenge/[id]', params: { id: 'c-2' } });
+    expect(api.rematch).not.toHaveBeenCalled();
+  });
+
+  it('says whose it is once I am in, and leads to its result once it is over', async () => {
+    api.results = jest.fn(async () => lost({ rematch: { ...OPEN, myStatus: 'accepted' } }));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const joined = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(rendered(joined)).toContain('Ali rövanş açtı, sen de içindesin.');
+    expect(() => findWith(joined, 'title', 'Rövanşa git', 'onPress')).not.toThrow();
+
+    api.results = jest.fn(async () => lost({ rematch: { ...OPEN, status: 'finished', myStatus: 'accepted' } }));
+    const over = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(rendered(over)).toContain('Rövanş da oynandı, sonucu orada.');
+    press(over, 'Rövanşın sonucu');
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/challenge/[id]/results', params: { id: 'c-2' } });
+  });
+
+  it('follows a rematch the other side opened while the button was still up', async () => {
+    let opened = false;
+    api.results = jest.fn(async () => lost(opened ? { rematch: OPEN } : {}));
+    api.rematch = jest.fn(async () => {
+      opened = true;
+      throw new ApiError('rematch_exists', 'Ali rövanşı zaten açtı, davet sende.', 409);
+    });
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    await act(async () => {
+      findWith(tree, 'title', 'Rövanş İstiyorum', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(api.results).toHaveBeenCalledTimes(2);
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/challenge/[id]', params: { id: 'c-2' } });
+    const text = rendered(tree);
+    expect(text).toContain('Ali rövanşı zaten açtı, davet sende.');
+    expect(text).not.toContain('Olmadı');
+  });
+
+  it('keeps the button but greys it out when nobody is left to invite', async () => {
+    api.results = jest.fn(async () => lost({ rematchInvitable: 0 }));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    expect(findWith(tree, 'title', 'Rövanş İstiyorum', 'onPress').props.disabled).toBe(true);
+    // Veli is named, so the note already says why
+    expect(rendered(tree)).toContain('Veli kankan değil, rövanşa çağrılmaz.');
+    expect(rendered(tree)).not.toContain('Rövanşa çağrılacak kimse kalmadı.');
+
+    api.results = jest.fn(async () => lost({ rematchInvitable: 0, rematchLeftOut: [] }));
+    const nobody = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(rendered(nobody)).toContain('Rövanşa çağrılacak kimse kalmadı.');
+  });
+});
+
 describe('a result sent to the WhatsApp group', () => {
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
   const VELI = { id: 'u-3', username: 'veli', displayName: 'Veli', avatarEmoji: '🦊', createdAt: '2026-09-01T00:00:00.000Z' };
