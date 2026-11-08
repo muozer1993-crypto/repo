@@ -33,6 +33,7 @@ import { toMe, toNotification } from '../serialize.js';
 import { softDeleteUser } from '../services/accounts.js';
 import { fanOutDeviceDays } from '../services/deviceSync.js';
 import { listInbox, markRead, unreadCount } from '../services/notifications.js';
+import { awardBadges } from '../services/stats.js';
 import { AttemptLimiter, retryAfterText } from '../services/throttle.js';
 import { LOGIN_FAILURES_PER_ACCOUNT } from './auth.js';
 
@@ -204,7 +205,17 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
   app.post('/me/steps', auth, async (request) => {
     const { row } = requireUser(request);
     const body = parseBody(StepsSyncBodySchema, request.body);
-    const updated = syncSteps(db, row, body.days, app.now());
+    const now = app.now();
+    const updated = syncSteps(db, row, body.days, now);
+    // The step ladder ("Yola Çıktın" at 7.500 a day) reads steps_daily, which
+    // only this route writes. Without this the badge waited for some unrelated
+    // event (a finish, a laf) and arrived days after the walk. A failure here
+    // must not fail the sync: the phone would only send the same days again.
+    try {
+      awardBadges(db, row.id, now);
+    } catch (err) {
+      request.log.warn({ err }, 'badge check after steps sync failed');
+    }
     return { updated };
   });
 

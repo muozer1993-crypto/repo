@@ -467,6 +467,28 @@ describe('rematch line-up', () => {
 });
 
 describe('device readings versus typed declarations', () => {
+  it('hands out the step badge with the sync that crossed the line, not days later', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const call = authed(harness.app, ali.token);
+    const day = today(harness);
+    const badges = () =>
+      (harness!.db.prepare('SELECT badge_key FROM badges WHERE user_id = ?').all(ali.me.id) as { badge_key: string }[]).map(
+        (row) => row.badge_key,
+      );
+
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 7000, source: 'pedometer' }] } });
+    expect(badges()).not.toContain('adim_1');
+
+    const synced = await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 8200, source: 'pedometer' }] } });
+    expect(synced.statusCode).toBe(200);
+    expect(badges()).toContain('adim_1');
+    const told = harness.db
+      .prepare("SELECT title FROM notifications WHERE user_id = ? AND type = 'badge'")
+      .all(ali.me.id) as { title: string }[];
+    expect(told.map((row) => row.title)).toContain('🥾 Yeni rozet: Yola Çıktın');
+  });
+
   it('a partial step count never lowers a step declaration, a higher one replaces it', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await livePair(harness, 'adim_yarisi');
