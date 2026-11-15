@@ -239,6 +239,13 @@ bir `sessionId` taşır ve aynı kimlikle gelen ikinci istek yeni bir satır de�
 yeni bir kimlik üretir; zaman aşımına uğrayıp çevrimdışı kuyruğundan tekrar gönderilen istek
 böylece bir bardak suyu iki kez saymaz.
 
+Odak günü katalogun dediği gibi 360 dakikada kesilir (`maxPerDay`, itirazla düşen seanslar
+sayılmaz). Kalanı aşan seans reddedilmez, kalana kırpılarak yazılır: eski APK seansın tamamını
+gönderir, reddetmek sığan kısmı da çöpe atardı. Tekrar gönderilen bir seans bu hesaba hiç gelmez,
+`sessionId` kontrolü önce çalışır. Bir dakika bile kalmadıysa 400 `daily_cap`. Odak ekranı da
+seansı günün kalanına göre kısaltır ve "Bugün 30 dk hakkın kaldı" der; kaydedince sunucunun
+yazdığı sayıyı gösterir.
+
 ## Laf sokma zinciri
 
 1. Çelınc biter, `winner_id` yazılır.
@@ -585,6 +592,14 @@ Cihaz kaynağı (`pedometer`, `health_connect`, `usage_stats`) elle yazılmış 
 tersi yasaktır: telefonun okuduğu bir gün için `manual` yazmaya kalkan istek 409 `device_locked`
 alır. Kanıt fotoğrafı da sadece `manual` için zorunludur.
 
+Telefonun bir güne okuduğu değer sadece büyür: adım da ekran süresi de. Ekran süresi modülü günün
+başından şu ana kadarki ön plan süresini toplar; aynı gün için daha düşük bir okuma ya ikinci bir
+telefondur ya da kullanım geçmişi silinmiş bir telefon, hiçbir zaman düzeltme değil. Bu yüzden
+`screen_time_daily` günün en yüksek okumasını tutar (`MAX`) ve dağıtım da o sayıyı gönderir; 300'ün
+ardından gelen 5 günü kimseye hediye etmez. Elle yazılmış bir günü telefon yine her durumda ezer,
+küçük olsun büyük olsun; sadece telefonun kendi okuduğu bir gün aşağı inmez. `updated_at` sayı
+değişmese de her senkronda yenilenir.
+
 İtirazla düşen (`rejected`) elle yazılmış bir gün sıfırda kalmaz: telefonun o güne okuduğu değer,
 yazılandan az da olsa, yerine geçer. Telefon o günü zaten gönderdiyse bu, itirazı haklı çıkaran
 zamanlayıcı turunda olur (`restoreFromPhone`, bitirmeden önce): bitişten sonra düşen bir gün de
@@ -784,6 +799,14 @@ küçük harf. `toLowerCase()` ise "İsmail"i i + U+0307 + "smail" yapıyordu, b
 eşleşmiyordu. 1.0 uygulaması hâlâ öyle gönderir, sunucu çevirdiği için girer.
 Var olan adlar zaten ASCII, geçiş gerekmedi. Arama da sorguyu böyle çevirip kullanıcı adına bakar:
 "Çağ" yazan @cagri'yi bulur. Görünen ad Türkçe harfleriyle kalır.
+
+Görünen ad ise tek satırdır (`DisplayNameSchema`): görünmez karakterler, kontrol karakterleri ve
+yön değiştiren bidi işaretleri atılır (emojileri birbirine bağlayan ZWJ kalır), satır sonları tek
+boşluğa iner (`singleLine`). Sağdan sola çeviren bir U+202E, adın geçtiği her bildirim satırının
+geri kalanını ters çeviriyordu. Sadece Hangul dolgu harflerinden (U+3164, oyuncuların bildiği "görünmez nick") ya da boş braille
+karakterinden oluşan ad "Görünen ad boş olamaz" alır (`hasVisibleChar`). Çelınc başlığı, ödül,
+ceza ve elle yazılan laf da aynı temizlikten geçer; girişin notu satır sonlarını korur. Zaten
+kayıtlı adlara dokunulmadı; böyle bir ad, sahibi Profil'den adını yeniden kaydettiğinde temizlenir.
 
 ### Aynı sunucu, yeni adres
 

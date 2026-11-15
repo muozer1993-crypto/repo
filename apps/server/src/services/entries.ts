@@ -372,7 +372,29 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
           `Odak seansı ${LIMITS.FOCUS_MIN_MINUTES}-${LIMITS.FOCUS_MAX_MINUTES} dakika arası olmalı.`,
         );
       }
-      return { entry: insertEntry(db, input, body.value, false, sessionId), created: true };
+      // The catalog promises "bir gün en fazla 360 dakika", and badges read these
+      // rows too. A session longer than what is left of the day is cut to fit, not
+      // refused: an older app posts the whole session, and a refusal would throw
+      // away the part that fits. A replayed session never gets here (above), so the
+      // offline queue's retry still answers with the row it wrote.
+      const used = countOf(
+        db,
+        `SELECT COALESCE(SUM(value), 0) AS n FROM entries
+          WHERE challenge_id = ? AND user_id = ? AND day_key = ? AND status <> 'rejected'`,
+        challenge.id,
+        user.id,
+        body.dayKey,
+      );
+      const left = type.maxPerDay - used;
+      if (left < LIMITS.FOCUS_MIN_MINUTES) {
+        throw badRequest(
+          'daily_cap',
+          body.dayKey === todayKey(tz, now)
+            ? `Bugünlük odak tavanı doldu (${unitLabel(type, type.maxPerDay)}). Yarın devam.`
+            : `O günün odak tavanı zaten dolmuştu (${unitLabel(type, type.maxPerDay)}).`,
+        );
+      }
+      return { entry: insertEntry(db, input, Math.min(body.value, left), false, sessionId), created: true };
     }
 
     case 'checkin_deadline': {

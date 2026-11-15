@@ -10,7 +10,7 @@ import {
 } from './types';
 import { LIMITS } from './scoring';
 import { DAY_KEY_REGEX, HHMM_REGEX, DEFAULT_TIMEZONE, isValidDayKey, isValidHHmm, isValidTimeZone } from './time';
-import { countGraphemes, foldUsername, hasVisibleChar, stripInvisible } from './text';
+import { countGraphemes, foldUsername, hasVisibleChar, singleLine, stripInvisible } from './text';
 import { deadlineFitsWindow, getChallengeType } from './catalog';
 
 export { DAY_KEY_REGEX, HHMM_REGEX };
@@ -45,13 +45,16 @@ export const PasswordSchema = z
   .max(LIMITS.PASSWORD_MAX, `Şifre en fazla ${LIMITS.PASSWORD_MAX} karakter olabilir`);
 
 /**
- * Invisible characters (zero-width space, soft hyphen, BOM...) are removed before the
- * emptiness check — `String.prototype.trim` does not touch them, and a name made only
- * of them would render as nothing in standings, feed and taunts.
+ * Invisible characters (zero-width space, soft hyphen, BOM, bidi overrides,
+ * control characters...) are removed before the emptiness check —
+ * `String.prototype.trim` does not touch them, and a name made only of them would
+ * render as nothing in standings, feed and taunts. Line breaks become one space:
+ * a name sits in one line of a push. A name of Hangul fillers is refused by
+ * `hasVisibleChar`. Names already stored are left as they are.
  */
 export const DisplayNameSchema = z
   .string()
-  .transform((s) => stripInvisible(s).trim())
+  .transform((s) => singleLine(stripInvisible(s)))
   .pipe(
     z
       .string()
@@ -67,7 +70,7 @@ export const DisplayNameSchema = z
  */
 export const AvatarEmojiSchema = z
   .string()
-  .transform((s) => stripInvisible(s).trim())
+  .transform((s) => singleLine(stripInvisible(s)))
   .pipe(
     z
       .string()
@@ -109,6 +112,20 @@ function optionalText(max: number) {
     .string()
     .trim()
     .max(max, `En fazla ${max} karakter`)
+    .optional()
+    .transform((v) => (v ? v : undefined));
+}
+
+/**
+ * Optional text shown in one line (a title, the stakes, a custom laf that becomes a
+ * push): invisible characters dropped and line breaks folded into one space, like
+ * a name. Empty strings become `undefined`.
+ */
+function optionalLine(max: number) {
+  return z
+    .string()
+    .transform((s) => singleLine(stripInvisible(s)))
+    .pipe(z.string().max(max, `En fazla ${max} karakter`))
     .optional()
     .transform((v) => (v ? v : undefined));
 }
@@ -281,15 +298,15 @@ export function createChallengeBodySchema(opts: ChallengeSchemaOptions = {}) {
   return z
     .object({
       typeKey: z.string().trim().min(1).max(40),
-      title: optionalText(LIMITS.CHALLENGE_TITLE_MAX),
+      title: optionalLine(LIMITS.CHALLENGE_TITLE_MAX),
       startsAt: IsoDateTimeSchema,
       endsAt: IsoDateTimeSchema,
       participantIds: z
         .array(IdSchema)
         .min(LIMITS.PARTICIPANTS_MIN, 'En az bir kanka seçmelisin')
         .max(LIMITS.PARTICIPANTS_MAX, `En fazla ${LIMITS.PARTICIPANTS_MAX} kişi`),
-      rewardText: optionalText(LIMITS.REWARD_TEXT_MAX),
-      penaltyText: optionalText(LIMITS.PENALTY_TEXT_MAX),
+      rewardText: optionalLine(LIMITS.REWARD_TEXT_MAX),
+      penaltyText: optionalLine(LIMITS.PENALTY_TEXT_MAX),
       deadlineTime: HHmmSchema.optional(),
       dailyTarget: z.number().positive().optional(),
       proofRequired: z.boolean().optional(),
@@ -408,7 +425,7 @@ export const TauntBodySchema = z
   .object({
     toUserId: IdSchema,
     templateId: z.string().trim().min(1).max(64).optional(),
-    customBody: optionalText(LIMITS.CUSTOM_TAUNT_MAX),
+    customBody: optionalLine(LIMITS.CUSTOM_TAUNT_MAX),
   })
   .superRefine((v, ctx) => {
     const provided = [v.templateId, v.customBody].filter((x) => x !== undefined).length;

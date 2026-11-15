@@ -120,6 +120,61 @@ describe('POST /me/screen-time', () => {
     ]);
   });
 
+  it('keeps the highest reading of a day: a second phone or a purged history cannot lower it', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await screenTimePair(harness);
+    const call = authed(harness.app, ali.token);
+    const stored = () =>
+      harness!.db.prepare('SELECT minutes, updated_at FROM screen_time_daily WHERE user_id = ? AND day_key = ?').get(ali.me.id, today(harness!)) as {
+        minutes: number;
+        updated_at: string;
+      };
+
+    await call({ method: 'POST', url: '/me/screen-time', payload: { days: [{ dayKey: today(harness), minutes: 300 }] } });
+    harness.advance(60 * 60 * 1000);
+    const lower = await call({ method: 'POST', url: '/me/screen-time', payload: { days: [{ dayKey: today(harness), minutes: 5 }] } });
+    expect(lower.statusCode).toBe(200);
+    expect(entries(harness, challengeId, ali.me.id)).toEqual([
+      { day_key: today(harness), value: 300, source: 'usage_stats', proof_url: null },
+    ]);
+    // the reading stays, but the phone did speak: "ses vermiyor" reads this
+    expect(stored()).toEqual({ minutes: 300, updated_at: iso(harness) });
+  });
+
+  it('still lets the first phone reading replace a higher or lower typed day', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await screenTimePair(harness);
+    await typeMinutes(harness, ali, challengeId, today(harness), 200);
+
+    const synced = await authed(harness.app, ali.token)({ method: 'POST', url: '/me/screen-time', payload: { days: [{ dayKey: today(harness), minutes: 150 }] } });
+    expect(synced.statusCode).toBe(200);
+    expect(entries(harness, challengeId, ali.me.id)).toEqual([
+      { day_key: today(harness), value: 150, source: 'usage_stats', proof_url: '/uploads/x.jpg' },
+    ]);
+  });
+
+  it('gives a typed day the highest reading the phone already sent, not a lower later one', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await screenTimePair(harness);
+    const call = authed(harness.app, ali.token);
+    await typeMinutes(harness, ali, challengeId, today(harness), 200);
+    const typedId = (harness.db.prepare('SELECT id FROM entries WHERE challenge_id = ? AND user_id = ?').get(challengeId, ali.me.id) as { id: string }).id;
+    // while Veli disputes the typed number, the phone leaves the row alone
+    const disputed = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${typedId}/dispute`,
+      payload: { reason: 'bu kadar az olamaz' },
+    });
+    expect(disputed.statusCode).toBeLessThan(300);
+    await call({ method: 'POST', url: '/me/screen-time', payload: { days: [{ dayKey: today(harness), minutes: 300 }] } });
+    expect(entries(harness, challengeId, ali.me.id)[0]?.value).toBe(200);
+    harness.db.prepare("UPDATE entries SET status = 'ok' WHERE id = ?").run(typedId);
+
+    // the itiraz is gone; a second phone now reports a sliver of the day
+    await call({ method: 'POST', url: '/me/screen-time', payload: { days: [{ dayKey: today(harness), minutes: 5 }] } });
+    expect(entries(harness, challengeId, ali.me.id)[0]).toMatchObject({ value: 300, source: 'usage_stats' });
+  });
+
   it('skips future days and days older than the device window, but records the reading itself', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await screenTimePair(harness, 20);

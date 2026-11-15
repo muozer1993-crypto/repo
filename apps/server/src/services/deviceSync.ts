@@ -14,9 +14,11 @@
  * add the steps walked after the whistle.
  *
  * On a higher-is-better metric (steps) a device reading only ever raises a
- * day's entry; on lower-is-better (screen time) it overwrites whatever is there,
- * typed values included — the phone is the honest one. A typed value may never
- * replace a device reading there (`device_locked` in `validateAndUpsertEntry`).
+ * day's entry; on lower-is-better (screen time) it replaces a typed value
+ * whatever its size — the phone is the honest one — but never lowers what a
+ * phone already read: one phone's count of a day only grows, so a lower one is a
+ * second phone or a purged usage history. A typed value may never replace a
+ * device reading there (`device_locked` in `validateAndUpsertEntry`).
  *
  * A typed day friends threw out (`rejected` after an upheld itiraz) is not a
  * day off for good: the phone's own reading takes its place, whatever its
@@ -139,9 +141,13 @@ export function fanOutDeviceDays(
         // that was reinstalled and started recording this afternoon, a second
         // phone. So on a higher-is-better metric the device can raise a day but
         // never lower it. (Friends can still dispute a fantasy number.)
-        // Lower-is-better readings (screen time) always win: the phone is the
-        // honest one there.
-        const keepExisting = type.direction === 'higher' && Number(existing.value) >= value;
+        // On lower-is-better (screen time) the phone beats a typed number either
+        // way, but a phone's own reading only grows too: 5 after 300 is a second
+        // phone or a purged history, and would hand the day to the wrong player.
+        const keepExisting =
+          type.direction === 'higher'
+            ? Number(existing.value) >= value
+            : isDeviceSource(existing.source) && Number(existing.value) >= value;
         if (!keepExisting) updateEntry.run(value, day.source, at, existing.id);
       } else {
         insertEntry.run(newId(), challenge.id, user.id, day.dayKey, value, day.source, at, at, at);

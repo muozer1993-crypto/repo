@@ -75,6 +75,21 @@ describe('RegisterBody', () => {
     expect(RegisterBodySchema.safeParse({ username: 'okname', password: 'secret1', displayName: family }).data?.displayName).toBe(family);
   });
 
+  it('refuses names that draw nothing and keeps the rest to one plain line', () => {
+    const name = (displayName: string) => RegisterBodySchema.safeParse({ username: 'okname', password: 'secret1', displayName });
+    // the "görünmez nick": Hangul fillers and the blank braille pattern
+    expect(issuePaths(name(String.fromCharCode(0x3164)))).toEqual(['displayName']);
+    expect(issuePaths(name(String.fromCharCode(0x2800, 0x2800)))).toEqual(['displayName']);
+    expect(issuePaths(name(String.fromCharCode(0xffa0)))).toEqual(['displayName']);
+    expect(issuePaths(name(`${String.fromCharCode(0x202e)}\n`))).toEqual(['displayName']);
+    // a right-to-left override would turn the rest of every push line backwards
+    expect(name(`Ali${String.fromCharCode(0x202e)}`).data?.displayName).toBe('Ali');
+    expect(name(`A${String.fromCharCode(0)}B`).data?.displayName).toBe('AB');
+    expect(name('Ali\n\nVeli').data?.displayName).toBe('Ali Veli');
+    expect(name('Şükrü İğneci').data?.displayName).toBe('Şükrü İğneci');
+    expect(UpdateMeBodySchema.safeParse({ displayName: String.fromCharCode(0x3164) }).success).toBe(false);
+  });
+
   it('rejects unknown timezones', () => {
     expect(issuePaths(RegisterBodySchema.safeParse({ username: 'okname', password: 'secret1', displayName: 'x', timezone: 'Mars/Base' }))).toEqual(['timezone']);
     expect(RegisterBodySchema.safeParse({ username: 'okname', password: 'secret1', displayName: 'x', timezone: 'America/New_York' }).success).toBe(true);
@@ -131,6 +146,8 @@ describe('UpdateMeBody', () => {
     expect(issuePaths(UpdateMeBodySchema.safeParse({ avatarEmoji: ZWSP }))).toEqual(['avatarEmoji']);
     expect(issuePaths(UpdateMeBodySchema.safeParse({ avatarEmoji: '   ' }))).toEqual(['avatarEmoji']);
     expect(UpdateMeBodySchema.safeParse({ avatarEmoji: ` ${ZWSP}🍆 ` }).data).toEqual({ avatarEmoji: '🍆' });
+    expect(issuePaths(UpdateMeBodySchema.safeParse({ avatarEmoji: String.fromCharCode(0x3164) }))).toEqual(['avatarEmoji']);
+    expect(UpdateMeBodySchema.safeParse({ avatarEmoji: `🍆\n🔥` }).data).toEqual({ avatarEmoji: '🍆 🔥' });
     // Code-unit abuse guard: four skin-toned families are 4 graphemes but 76 code units.
     const heavy = `👨🏻${ZWJ}👩🏻${ZWJ}👧🏻${ZWJ}👦🏻`;
     expect(UpdateMeBodySchema.safeParse({ avatarEmoji: heavy.repeat(3) }).success).toBe(true);
@@ -209,6 +226,12 @@ describe('CreateChallengeBody', () => {
     expect(issuePaths(schema.safeParse({ ...base, title: 'x'.repeat(41) }))).toEqual(['title']);
     expect(issuePaths(schema.safeParse({ ...base, rewardText: 'x'.repeat(81) }))).toEqual(['rewardText']);
     expect(issuePaths(schema.safeParse({ ...base, dailyTarget: 0 }))).toEqual(['dailyTarget']);
+    // shown in one line (a card, a push): line breaks fold, invisible characters go
+    const oneLine = schema.safeParse({ ...base, title: ` Adım\n\nsavaşı${String.fromCharCode(0x202e)} `, penaltyText: 'Kaybeden\nçay ısmarlar' });
+    expect(oneLine.data).toMatchObject({ title: 'Adım savaşı', penaltyText: 'Kaybeden çay ısmarlar' });
+    expect(schema.safeParse({ ...base, title: `${ZWSP}\n` }).data?.title).toBeUndefined();
+    // the length is counted after the fold
+    expect(schema.safeParse({ ...base, title: `${'x'.repeat(20)}\n\n\n${'x'.repeat(19)}` }).success).toBe(true);
     expect(issuePaths(schema.safeParse({ ...base, startsAt: 'yesterday' }))).toEqual(['startsAt']);
   });
 
@@ -279,6 +302,8 @@ describe('EntryBody', () => {
     expect(r.success).toBe(true);
     expect(r.data?.note).toBe('2 bardak');
     expect(EntryBodySchema.safeParse({ ...ok, note: '' }).data?.note).toBeUndefined();
+    // a note is read under the entry, not in a push line: it keeps its line breaks
+    expect(EntryBodySchema.safeParse({ ...ok, note: '2 bardak\n1 çay' }).data?.note).toBe('2 bardak\n1 çay');
     expect(EntryBodySchema.safeParse({ ...ok, clientTime: '2024-05-01T13:00:00+03:00' }).success).toBe(true);
     expect(EntryBodySchema.safeParse({ ...ok, value: 0 }).success).toBe(true);
     expect(EntryBodySchema.safeParse({ ...ok, proofUrl: '/uploads/a.jpg' }).success).toBe(true);
@@ -332,6 +357,9 @@ describe('small bodies', () => {
     expect(TauntBodySchema.safeParse({ toUserId: 'u1', customBody: '   ' }).success).toBe(false);
     expect(TauntBodySchema.safeParse({ toUserId: 'u1', templateId: 'win_1', customBody: 'x' }).success).toBe(false);
     expect(TauntBodySchema.safeParse({ toUserId: 'u1', customBody: 'x'.repeat(141) }).success).toBe(false);
+    // a custom laf becomes a push body: one line, no direction overrides
+    expect(TauntBodySchema.safeParse({ toUserId: 'u1', customBody: `Yedin\nmi${String.fromCharCode(0x202e)} lan` }).data?.customBody).toBe('Yedin mi lan');
+    expect(TauntBodySchema.safeParse({ toUserId: 'u1', customBody: `${ZWSP}\n` }).success).toBe(false);
   });
 
   it('InboxReadBody', () => {

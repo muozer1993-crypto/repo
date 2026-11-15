@@ -4,6 +4,7 @@ import {
   createSession,
   elapsedMs,
   finishEarly,
+  focusMinutesLeft,
   onBackground,
   onForeground,
   snapshot,
@@ -95,5 +96,28 @@ describe('focus session engine', () => {
     expect(finishEarly(abandoned, T0 + 6 * 60_000)).toBe(abandoned);
     const done = tick(running, T0 + 25 * 60_000);
     expect(finishEarly(done, T0 + 26 * 60_000)).toBe(done);
+  });
+});
+
+describe('focusMinutesLeft', () => {
+  const DAY = '2026-01-05';
+  const entry = (dayKey: string, value: number, status: 'ok' | 'disputed' | 'rejected' = 'ok') => ({ dayKey, value, status });
+
+  it('caps the preset at what the day has left', () => {
+    const left = focusMinutesLeft([entry(DAY, 180), entry(DAY, 150)], DAY, 360);
+    expect(left).toBe(30);
+    expect(Math.min(45, left)).toBe(30);
+    expect(focusMinutesLeft([], DAY, 360)).toBe(360);
+  });
+
+  it('is 0 at the cap and never below it', () => {
+    expect(focusMinutesLeft([entry(DAY, 180), entry(DAY, 180)], DAY, 360)).toBe(0);
+    // rows from before the server held the cap
+    expect(focusMinutesLeft([entry(DAY, 180), entry(DAY, 180), entry(DAY, 180)], DAY, 360)).toBe(0);
+  });
+
+  it('counts only that day, and a session friends threw out gives its minutes back', () => {
+    const entries = [entry('2026-01-04', 360), entry(DAY, 180, 'rejected'), entry(DAY, 100, 'disputed')];
+    expect(focusMinutesLeft(entries, DAY, 360)).toBe(260);
   });
 });

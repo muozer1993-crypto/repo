@@ -1,3 +1,4 @@
+import type { Entry } from '@koydum/shared';
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { StorageKeys, getJson, removeItem, setJson } from '@/lib/storage';
@@ -174,3 +175,21 @@ export function watchAppState(handler: (state: AppStateStatus) => void): () => v
 }
 
 export const FOCUS_PRESETS = [15, 25, 45, 60] as const;
+
+/**
+ * Focus minutes `dayKey` still takes: the type's daily cap (360) minus the
+ * sessions already written that day. A session friends threw out gives its
+ * minutes back. The server cuts a longer session down to this, so the picker
+ * starts no longer one: a 45 that ran in full and then counted 30 would feel
+ * like a lie.
+ */
+export function focusMinutesLeft(
+  entries: readonly Pick<Entry, 'dayKey' | 'value' | 'status'>[],
+  dayKey: string,
+  maxPerDay: number
+): number {
+  const used = entries
+    .filter((entry) => entry.dayKey === dayKey && entry.status !== 'rejected')
+    .reduce((sum, entry) => sum + entry.value, 0);
+  return Math.max(0, maxPerDay - used);
+}

@@ -71,23 +71,30 @@ function syncSteps(db: Database, user: UserRow, days: StepsSyncDay[], now: Date)
 /**
  * Same shape for screen time: `screen_time_daily` keeps the phone's word, the
  * fan-out writes `usage_stats` entries into every open screen-time çelınc.
+ *
+ * A day's minutes only grow here too: one phone's reading of a day sums the
+ * foreground time up to now, so a lower one is a second phone or a phone whose
+ * usage history was purged, never a correction. 5 after 300 would hand the day to
+ * the wrong player. The fan-out gets the day's highest reading, so a typed row it
+ * replaces gets that one as well. `updated_at` moves on every sync all the same:
+ * it says when the phone last spoke.
  */
 function syncScreenTime(db: Database, user: UserRow, days: ScreenTimeSyncDay[], now: Date): number {
   const at = nowIso(now);
   const upsert = db.prepare(
     `INSERT INTO screen_time_daily (user_id, day_key, minutes, updated_at)
      VALUES (?, ?, ?, ?)
-     ON CONFLICT(user_id, day_key) DO UPDATE SET minutes = excluded.minutes, updated_at = excluded.updated_at`,
+     ON CONFLICT(user_id, day_key) DO UPDATE SET
+       minutes = MAX(screen_time_daily.minutes, excluded.minutes),
+       updated_at = excluded.updated_at
+     RETURNING minutes`,
   );
   const run = db.transaction((list: ScreenTimeSyncDay[]) => {
-    for (const day of list) upsert.run(user.id, day.dayKey, day.minutes, at);
-    return fanOutDeviceDays(
-      db,
-      user,
-      'screen_time',
-      list.map((day) => ({ dayKey: day.dayKey, value: day.minutes, source: 'usage_stats' as const })),
-      now,
-    );
+    const stored = list.map((day) => {
+      const row = upsert.get(user.id, day.dayKey, day.minutes, at) as { minutes: number };
+      return { dayKey: day.dayKey, value: Number(row.minutes), source: 'usage_stats' as const };
+    });
+    return fanOutDeviceDays(db, user, 'screen_time', stored, now);
   });
   return run(days);
 }

@@ -7,13 +7,19 @@
  */
 
 /**
- * Invisible formatting code points that never render on their own: soft hyphen,
- * Arabic letter mark, Mongolian vowel separator, zero-width space / non-joiner,
- * LRM/RLM, word joiner, invisible operators and the BOM.
+ * Invisible formatting code points that never render on their own: the C0 and C1
+ * control characters, soft hyphen, Arabic letter mark, Mongolian vowel separator,
+ * zero-width space / non-joiner, LRM/RLM, the bidi embeddings, overrides and
+ * isolates, word joiner, invisible operators and the BOM. A right-to-left override
+ * in a name turned the rest of every push line it appeared in backwards.
  *
  * ZWJ (U+200D) is deliberately NOT included — it glues emoji sequences (👨‍👩‍👧) together.
+ * Neither are tab, line feed, vertical tab, form feed and carriage return: they are
+ * whitespace, which `trim`, `singleLine` and the banned-word filter already handle,
+ * and dropping them would glue "Ali\vVeli" into one word.
  */
-export const INVISIBLE_CHARS_REGEX = /[\u00AD\u061C\u180E\u200B\u200C\u200E\u200F\u2060-\u2064\uFEFF]/g;
+export const INVISIBLE_CHARS_REGEX =
+  /[\u0000-\u0008\u000E-\u001F\u007F-\u009F\u00AD\u061C\u180E\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
 
 /** Remove the characters matched by `INVISIBLE_CHARS_REGEX`. */
 export function stripInvisible(text: string): string {
@@ -55,9 +61,24 @@ export function foldUsername(raw: string): string {
     .replace(/\s+/g, '');
 }
 
-/** True when `text` contains at least one letter, digit, punctuation or symbol (emoji are symbols). */
+/**
+ * Letters and symbols that draw nothing: the Hangul fillers (U+3164 is the "görünmez
+ * nick" every Turkish gamer knows) and the blank braille pattern. Unicode files them
+ * as a letter and a symbol, so they passed for a name on their own.
+ */
+const BLANK_GLYPHS_REGEX = /[\u115F\u1160\u3164\uFFA0\u2800]/g;
+
+/** True when `text` contains at least one letter, digit, punctuation or symbol (emoji are symbols) that draws something. */
 export function hasVisibleChar(text: string): boolean {
-  return /[\p{L}\p{N}\p{P}\p{S}]/u.test(text);
+  return /[\p{L}\p{N}\p{P}\p{S}]/u.test(text.replace(BLANK_GLYPHS_REGEX, ''));
+}
+
+/**
+ * One line: every run of whitespace (line breaks included) becomes a single space,
+ * the ends trimmed. For what is shown in one line: names, titles, a push body.
+ */
+export function singleLine(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 let graphemeSegmenter: Intl.Segmenter | null | undefined;

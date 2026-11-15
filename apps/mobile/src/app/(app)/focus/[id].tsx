@@ -22,6 +22,7 @@ import {
   abandon,
   createSession,
   finishEarly,
+  focusMinutesLeft,
   loadSession,
   onBackground,
   onForeground,
@@ -72,6 +73,9 @@ export default function FocusScreen() {
   const [saving, setSaving] = useState(false);
   const postedRef = useRef<string | null>(null);
   const celebrate = useAnimatedValue(0);
+  // what today still takes of the catalog's 360 a day (Infinity until the çelınc loads)
+  const dayLeft =
+    detail && type ? focusMinutesLeft(detail.myEntries, safeTodayKey(tz, new Date(now)), type.maxPerDay) : Infinity;
 
   /* ------------------------------------------------------------ restore */
   useEffect(() => {
@@ -176,14 +180,15 @@ export default function FocusScreen() {
     setSaving(true);
     setSaveError(null);
     try {
-      await addEntry.mutateAsync({
+      const result = await addEntry.mutateAsync({
         dayKey: safeTodayKey(tz),
         value: Math.min(earned, LIMITS.FOCUS_MAX_MINUTES),
         source: 'focus',
         sessionId: target.sessionId,
         clientTime: new Date().toISOString(),
       });
-      setSavedMinutes(earned);
+      // the server cuts a session to what is left of the day's cap: say what it kept
+      setSavedMinutes(result.entry && !result.queued ? result.entry.value : earned);
     } catch (error) {
       setSaveError(errorText(error, 'Dakikalar sunucuya gitmedi.'));
     } finally {
@@ -213,8 +218,9 @@ export default function FocusScreen() {
   const start = () => {
     const stamp = Date.now();
     // 45 minutes at 23:30 on the last night would all be refused at midnight:
-    // the session only runs for the time the çelınc has left
-    const target = Math.min(preset, Math.floor((endsAtMs - stamp - END_MARGIN_MS) / 60_000));
+    // the session only runs for the time the çelınc has left, and for what the
+    // day's cap has left
+    const target = Math.min(preset, Math.floor((endsAtMs - stamp - END_MARGIN_MS) / 60_000), dayLeft);
     setNow(stamp);
     // the picker was a little behind; it now shows why nothing starts
     if (target < LIMITS.FOCUS_MIN_MINUTES) return;
@@ -308,7 +314,8 @@ export default function FocusScreen() {
   // whole minutes a session started now may run (Infinity when the end is unknown)
   const minutesLeft = Math.floor((endsAtMs - now - END_MARGIN_MS) / 60_000);
   const tooLate = minutesLeft < LIMITS.FOCUS_MIN_MINUTES;
-  const blocked = detail.challenge.status !== 'active' || detail.me?.status !== 'accepted' || tooLate;
+  const capped = dayLeft < LIMITS.FOCUS_MIN_MINUTES;
+  const blocked = detail.challenge.status !== 'active' || detail.me?.status !== 'accepted' || tooLate || capped;
 
   /* ------------------------------------------------------------- picker */
 
@@ -334,6 +341,13 @@ export default function FocusScreen() {
             value={preset}
             onChange={setPreset}
           />
+          {capped ? null : (
+            <Text variant="small" muted style={styles.hint}>
+              {dayLeft < preset
+                ? `Bugün ${dayLeft} dk hakkın kaldı, seans ${dayLeft} dk sürer.`
+                : `Bugün ${dayLeft} dk hakkın kaldı.`}
+            </Text>
+          )}
           <Text variant="tiny" faint style={styles.hint}>
             Uygulamadan {Math.round(GRACE_MS / 1000)} saniyeden uzun çıkarsan seans yanar. Bildirime bakmak bile
             yeter.
@@ -349,7 +363,9 @@ export default function FocusScreen() {
                   ? 'Bu çelıncta oyuncu değilsin. Önce daveti kabul et.'
                   : now >= endsAtMs
                     ? 'Çelıncın süresi doldu, seans skora yazılmaz.'
-                    : 'Çelıncın bitmesine bir dakika bile yok, seans skora yazılmaz.'}
+                    : tooLate
+                      ? 'Çelıncın bitmesine bir dakika bile yok, seans skora yazılmaz.'
+                      : `Bugünlük ${type.maxPerDay} dk doldu. Yarın devam.`}
             </Text>
           </Card>
         ) : minutesLeft < FOCUS_PRESETS[FOCUS_PRESETS.length - 1] ? (
@@ -397,7 +413,9 @@ export default function FocusScreen() {
             <Loading label="Dakikalar yazılıyor..." />
           ) : savedMinutes !== null ? (
             <Text variant="small">
-              {formatMinutes(savedMinutes)} skoruna eklendi.
+              {savedMinutes < session.targetMinutes
+                ? `${formatMinutes(savedMinutes)} skoruna eklendi. Günde en fazla ${type.maxPerDay} dk sayılıyor, fazlası yazılmadı.`
+                : `${formatMinutes(savedMinutes)} skoruna eklendi.`}
             </Text>
           ) : (
             <View style={styles.retryBlock}>

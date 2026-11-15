@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { approximateGraphemeCount, countGraphemes, foldUsername, hasVisibleChar, stripInvisible } from '../text';
+import { approximateGraphemeCount, countGraphemes, foldUsername, hasVisibleChar, singleLine, stripInvisible } from '../text';
 
 const ZWJ = String.fromCharCode(0x200d);
 const ZWSP = String.fromCharCode(0x200b);
@@ -24,6 +24,35 @@ describe('stripInvisible / hasVisibleChar', () => {
     expect(hasVisibleChar('   ')).toBe(false);
     expect(hasVisibleChar(ZWJ + ZWSP)).toBe(false);
   });
+
+  it('removes bidi overrides and isolates and control characters, but keeps line breaks for the caller', () => {
+    const rlo = String.fromCharCode(0x202e);
+    expect(stripInvisible(`Ali${rlo}`)).toBe('Ali');
+    expect(stripInvisible(String.fromCharCode(0x202a, 0x202b, 0x202c, 0x202d, 0x2066, 0x2067, 0x2068, 0x2069))).toBe('');
+    expect(stripInvisible(`A${String.fromCharCode(0)}B${String.fromCharCode(0x1b)}C${String.fromCharCode(0x7f, 0x85, 0x9f)}`)).toBe('ABC');
+    expect(stripInvisible('Ali\tVeli\nCan\r')).toBe('Ali\tVeli\nCan\r');
+    // Turkish letters sit next to the C1 block and must survive it
+    expect(stripInvisible('ÇĞİÖŞÜçğıöşü âîû')).toBe('ÇĞİÖŞÜçğıöşü âîû');
+  });
+
+  it('does not take the Hangul fillers or the blank braille pattern for something visible', () => {
+    for (const blank of [0x3164, 0xffa0, 0x115f, 0x1160, 0x2800]) {
+      expect(hasVisibleChar(String.fromCharCode(blank))).toBe(false);
+      expect(hasVisibleChar(`${String.fromCharCode(blank)} ${String.fromCharCode(blank)}`)).toBe(false);
+    }
+    expect(hasVisibleChar(`${String.fromCharCode(0x3164)}a`)).toBe(true);
+    expect(hasVisibleChar('한')).toBe(true);
+  });
+});
+
+describe('singleLine', () => {
+  it('folds every run of whitespace, line breaks included, into one space', () => {
+    expect(singleLine('Ali\n\nVeli')).toBe('Ali Veli');
+    expect(singleLine('  Ali \t Veli\r\n')).toBe('Ali Veli');
+    expect(singleLine(`Ali${String.fromCharCode(0x2028)}Veli`)).toBe('Ali Veli');
+    expect(singleLine(`👨${ZWJ}👩`)).toBe(`👨${ZWJ}👩`);
+    expect(singleLine('\n')).toBe('');
+  });
 });
 
 describe('foldUsername', () => {
@@ -47,6 +76,7 @@ describe('foldUsername', () => {
   it('drops spaces, invisible characters and other accents', () => {
     expect(foldUsername('ali veli')).toBe('aliveli');
     expect(foldUsername(`ali${ZWSP}${SOFT_HYPHEN}`)).toBe('ali');
+    expect(foldUsername(`ali${String.fromCharCode(0x202e)}`)).toBe('ali');
     expect(foldUsername('José')).toBe('jose');
   });
 

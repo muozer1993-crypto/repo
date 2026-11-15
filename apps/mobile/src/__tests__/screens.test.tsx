@@ -4156,6 +4156,51 @@ describe('effort that would not count', () => {
     expect(findWith(tree, 'title', 'Başlat', 'onPress').props.disabled).toBe(true);
   });
 
+  /** Today's finished sessions, in the zone the screen falls back to (ME.timezone is unusable). */
+  function focusedToday(...minutes: number[]): Entry[] {
+    const day = todayKey('Europe/Istanbul');
+    return minutes.map((value, i) => ({
+      id: `f-${i}`,
+      challengeId: 'c-1',
+      userId: 'me-1',
+      dayKey: day,
+      value,
+      source: 'focus' as const,
+      note: null,
+      proofUrl: null,
+      status: 'ok' as const,
+      createdAt: new Date().toISOString(),
+    }));
+  }
+
+  it("fits a focus session into what the day's 360 minutes have left", async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => ({ ...focusEndingIn(3 * 24 * 60 * 60_000), myEntries: focusedToday(180, 150) }));
+    const FocusScreen = require('@/app/(app)/focus/[id]').default;
+    const tree = renderScreen(<FocusScreen />);
+    await settle();
+
+    // the default 25 still fits
+    expect(rendered(tree)).toContain('Bugün 30 dk hakkın kaldı.');
+    pickPreset(tree, 45);
+    expect(rendered(tree)).toContain('Bugün 30 dk hakkın kaldı, seans 30 dk sürer.');
+    press(tree, 'Başlat');
+    // the server would have cut a full 45 to 30 after the friend sat through it
+    expect(rendered(tree)).toMatch(/Hedef\s+30dk/);
+  });
+
+  it('does not start a focus session once the day has its 360 minutes', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => ({ ...focusEndingIn(3 * 24 * 60 * 60_000), myEntries: focusedToday(180, 180) }));
+    const FocusScreen = require('@/app/(app)/focus/[id]').default;
+    const tree = renderScreen(<FocusScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Bugünlük 360 dk doldu. Yarın devam.');
+    expect(rendered(tree)).not.toContain('hakkın kaldı');
+    expect(findWith(tree, 'title', 'Başlat', 'onPress').props.disabled).toBe(true);
+  });
+
   it("says the check-in deadline has to fall in the type's window", async () => {
     const NewChallengeScreen = require('@/app/(app)/challenge/new').default;
     const tree = renderScreen(<NewChallengeScreen />);

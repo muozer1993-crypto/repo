@@ -393,6 +393,88 @@ describe('focus_minutes entries', () => {
     });
     expect(errorCode(empty)).toBe('invalid_value');
   });
+
+  /** One finished session of `value` minutes on today, under a fresh or given session id. */
+  async function focusSession(h: TestApp, user: RegisteredUser, challengeId: string, value: number, sessionId = randomUUID()) {
+    return post(h, user, challengeId, { dayKey: today(h), value, source: 'focus', clientTime: iso(h), sessionId });
+  }
+
+  it('stops at the catalog cap of 360 minutes a day', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await liveChallenge(harness, 'odak_seansi');
+
+    expect((await focusSession(harness, ali, challengeId, 180)).statusCode).toBe(201);
+    expect((await focusSession(harness, ali, challengeId, 180)).statusCode).toBe(201);
+    const third = await focusSession(harness, ali, challengeId, 180);
+    expect(third.statusCode).toBe(400);
+    expect(errorCode(third)).toBe('daily_cap');
+    expect((third.json() as { error: { message: string } }).error.message).toBe('Bugünlük odak tavanı doldu (360 dk). Yarın devam.');
+    const total = harness.db
+      .prepare('SELECT SUM(value) AS n FROM entries WHERE challenge_id = ? AND user_id = ?')
+      .get(challengeId, ali.me.id) as { n: number };
+    expect(total.n).toBe(360);
+
+    // tomorrow is a new day
+    harness.advance(DAY_MS);
+    expect((await focusSession(harness, ali, challengeId, 45)).statusCode).toBe(201);
+  });
+
+  it('cuts a session that runs past the cap down to what is left of the day', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await liveChallenge(harness, 'odak_seansi');
+
+    // what an older app posts: two long sessions, the second one only partly fits
+    expect((await focusSession(harness, ali, challengeId, 180)).statusCode).toBe(201);
+    expect((await focusSession(harness, ali, challengeId, 120)).statusCode).toBe(201);
+    const over = await focusSession(harness, ali, challengeId, 180);
+    expect(over.statusCode).toBe(201);
+    expect(over.json<{ entry: Entry }>().entry.value).toBe(60);
+    expect(over.json<{ standings: ParticipantView[] }>().standings.find((p) => p.user.id === ali.me.id)?.score).toBe(360);
+  });
+
+  it('still answers a replayed session after the cap with the row it wrote', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await liveChallenge(harness, 'odak_seansi');
+    const sessionId = randomUUID();
+
+    const first = await focusSession(harness, ali, challengeId, 180, sessionId);
+    expect(first.statusCode).toBe(201);
+    expect((await focusSession(harness, ali, challengeId, 180)).statusCode).toBe(201);
+
+    // the offline queue sends the first session again after a lost answer
+    const replay = await focusSession(harness, ali, challengeId, 180, sessionId);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json<{ entry: Entry }>().entry).toMatchObject({ id: first.json<{ entry: Entry }>().entry.id, value: 180 });
+  });
+
+  it('gives back the minutes of a session friends threw out', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await liveChallenge(harness, 'odak_seansi');
+
+    const thrownOut = await focusSession(harness, ali, challengeId, 180);
+    expect((await focusSession(harness, ali, challengeId, 180)).statusCode).toBe(201);
+    expect((await focusSession(harness, ali, challengeId, 30)).statusCode).toBe(400);
+
+    harness.db.prepare("UPDATE entries SET status = 'rejected' WHERE id = ?").run(thrownOut.json<{ entry: Entry }>().entry.id);
+    const again = await focusSession(harness, ali, challengeId, 30);
+    expect(again.statusCode).toBe(201);
+    expect(again.json<{ entry: Entry }>().entry.value).toBe(30);
+  });
+
+  it('says so in the past tense for a session of an earlier day', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await liveChallenge(harness, 'odak_seansi');
+    await focusSession(harness, ali, challengeId, 180);
+    await focusSession(harness, ali, challengeId, 180);
+    const day = today(harness);
+
+    // a session parked on the phone last night, sent this morning
+    harness.advance(DAY_MS);
+    const late = await post(harness, ali, challengeId, { dayKey: day, value: 25, source: 'focus', clientTime: iso(harness), sessionId: randomUUID() });
+    expect(late.statusCode).toBe(400);
+    expect(errorCode(late)).toBe('daily_cap');
+    expect((late.json() as { error: { message: string } }).error.message).toBe('O günün odak tavanı zaten dolmuştu (360 dk).');
+  });
 });
 
 // ---------------------------------------------------------------------------
