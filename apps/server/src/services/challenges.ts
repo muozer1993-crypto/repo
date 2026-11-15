@@ -499,27 +499,34 @@ function nudgeAction(metricType: MetricType, level: VulgarityLevel): string {
 
 /**
  * The mid-day "somebody is ahead of you" notification the server sends by
- * itself, once per çelınc per person per local day.
+ * itself, once per person per local day. `others` is how many more çelınclar
+ * they are behind in today: the one buzz names the worst and counts the rest,
+ * so a number never needs a suffix ("Başka 2 çelıncta da…").
  */
 function nudgeCopy(
   level: VulgarityLevel,
   leader: string,
   gap: number,
   unit: string,
-  metricType: MetricType
+  metricType: MetricType,
+  others: number,
 ): { title: string; body: string } {
   const fark = `${formatScore(gap)} ${unit}`;
   const action = nudgeAction(metricType, level);
+  const count = others === 1 ? 'bir' : String(others);
   if (level === 1) {
-    return { title: 'Fark açılıyor', body: `${leader} önde, aradaki fark ${fark}. ${action}` };
+    const more = others > 0 ? ` Başka ${count} çelıncta da gerideysin.` : '';
+    return { title: 'Fark açılıyor', body: `${leader} önde, aradaki fark ${fark}. ${action}${more}` };
   }
   if (level === 3) {
+    const more = others > 0 ? ` Başka ${count} çelıncta da yiyorsun 🍆` : '';
     return {
       title: 'O NE LAN 🍆',
-      body: `${leader} sana ${fark} fark koymuş 🍆 ${action}`,
+      body: `${leader} sana ${fark} fark koymuş 🍆 ${action}${more}`,
     };
   }
-  return { title: 'O ne lan', body: `${leader} sana ${fark} fark koymuş. ${action}` };
+  const more = others > 0 ? ` ${others === 1 ? 'Bir' : others} çelıncta daha gerideysin.` : '';
+  return { title: 'O ne lan', body: `${leader} sana ${fark} fark koymuş. ${action}${more}` };
 }
 
 function reminderTitle(level: VulgarityLevel): string {
@@ -1032,6 +1039,18 @@ const NUDGE_UNTIL_HOUR = 22;
 /** Below this the "fark" is noise — a 40-step gap is not a story. */
 const NUDGE_MIN_RELATIVE_GAP = 0.1;
 
+/** One çelınc where somebody is far enough behind to hear about it today. */
+interface NudgeCandidate {
+  challenge: ChallengeRow;
+  user: UserRow;
+  leaderId: string;
+  leaderName: string;
+  gap: number;
+  /** The gap next to the bigger of the two scores: 0..1 in either direction. */
+  ratio: number;
+  dayKey: string;
+}
+
 /**
  * The mid-day poke the server sends on its own: "o ne lan, {leader} sana fark
  * koymuş, kalk da iki dolaş".
@@ -1040,22 +1059,26 @@ const NUDGE_MIN_RELATIVE_GAP = 0.1;
  * is looking, and it is what turns a çelınc from a scoreboard into something
  * that follows you around during the day.
  *
- * Four rules keep it from becoming spam: once per çelınc per person per LOCAL
- * day (the primary key of `nudges_sent` IS the rate limit), only between noon
- * and 22:00 where that person actually lives, only when somebody is genuinely
- * ahead, and never on a check-in çelınc — those have their own deadline
- * reminder and "you are behind" means nothing there. And somebody who switched
- * it off (`users.nudges_enabled`) gets none at all, nor does a screen-time
- * player with nothing reported yet: their gap is the missing-day penalty.
+ * Four rules keep it from becoming spam: once per person per LOCAL day, however
+ * many çelınclar they are behind in (being behind is the normal state, and
+ * three buzzes at noon every day only teach the switch in Ayarlar), only
+ * between noon and 22:00 where that person actually lives, only when somebody
+ * is genuinely ahead, and never on a check-in çelınc — those have their own
+ * deadline reminder and "you are behind" means nothing there. And somebody who
+ * switched it off (`users.nudges_enabled`) gets none at all, nor does a
+ * screen-time player with nothing reported yet: their gap is the missing-day
+ * penalty.
+ *
+ * The one nudge names the çelınc with the biggest gap for its size and counts
+ * the others. All of them are claimed in `nudges_sent`, and any row of the
+ * person's day means the day is used up, so a çelınc that falls behind later in
+ * the afternoon does not buzz again. Returns the number of notifications sent.
  */
 export function sendNudges(db: Database, now: Date = new Date()): number {
   const iso = nowIso(now);
   const active = db.prepare(`SELECT * FROM challenges WHERE status = 'active'`).all() as ChallengeRow[];
 
-  const claim = db.prepare(
-    'INSERT OR IGNORE INTO nudges_sent (challenge_id, user_id, day_key) VALUES (?, ?, ?)',
-  );
-  let sent = 0;
+  const candidates = new Map<string, NudgeCandidate[]>();
 
   for (const challenge of active) {
     if (challenge.metric_type === 'checkin_deadline') continue;
@@ -1101,27 +1124,57 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
         continue;
       }
       if (hour < NUDGE_FROM_HOUR || hour >= NUDGE_UNTIL_HOUR) continue;
-      if (claim.run(challenge.id, user.id, dayKey).changes === 0) continue;
 
-      const copy = nudgeCopy(
-        levelOf(user),
-        leader.user.displayName,
+      const mine = candidates.get(user.id) ?? [];
+      mine.push({
+        challenge,
+        user,
+        leaderId: leader.user.id,
+        leaderName: leader.user.displayName,
         gap,
-        challenge.unit,
-        challenge.metric_type as MetricType,
-      );
-      notify(db, {
-        userId: user.id,
-        type: 'nudge',
-        title: copy.title,
-        body: copy.body,
-        data: { challengeId: challenge.id, fromUserId: leader.user.id, dayKey },
-        createdAt: iso,
+        // Against the bigger score, not the leader's: on screen time the leader
+        // has the SMALLER number, and 400 dk against their 60 would weigh 5.7,
+        // beating 0 steps against 10.000 (1.0) every time.
+        ratio: gap / Math.max(Math.abs(leader.score), Math.abs(view.score)),
+        dayKey,
       });
-      sent += 1;
+      candidates.set(user.id, mine);
     }
   }
 
+  const nudgedToday = db.prepare('SELECT 1 FROM nudges_sent WHERE user_id = ? AND day_key = ? LIMIT 1');
+  const claim = db.prepare(
+    'INSERT OR IGNORE INTO nudges_sent (challenge_id, user_id, day_key) VALUES (?, ?, ?)',
+  );
+  const nudge = db.transaction((mine: NudgeCandidate[]): boolean => {
+    // Each çelınc keeps its own pinned zone, so the day is checked in every one
+    // of them; they only differ for somebody who moved between joins.
+    if (mine.some((candidate) => nudgedToday.get(candidate.user.id, candidate.dayKey))) return false;
+    let best = mine[0];
+    for (const candidate of mine) if (candidate.ratio > best.ratio) best = candidate;
+    for (const candidate of mine) claim.run(candidate.challenge.id, candidate.user.id, candidate.dayKey);
+
+    const copy = nudgeCopy(
+      levelOf(best.user),
+      best.leaderName,
+      best.gap,
+      best.challenge.unit,
+      best.challenge.metric_type as MetricType,
+      mine.length - 1,
+    );
+    notify(db, {
+      userId: best.user.id,
+      type: 'nudge',
+      title: copy.title,
+      body: copy.body,
+      data: { challengeId: best.challenge.id, fromUserId: best.leaderId, dayKey: best.dayKey },
+      createdAt: iso,
+    });
+    return true;
+  });
+
+  let sent = 0;
+  for (const mine of candidates.values()) if (nudge(mine)) sent += 1;
   return sent;
 }
 

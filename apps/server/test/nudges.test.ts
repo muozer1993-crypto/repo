@@ -164,6 +164,118 @@ describe('mid-day nudges', () => {
     expect(sendNudges(app.db, app.now())).toBe(1);
   });
 
+  it('sends one a day however many çelınclar they are behind in, about the worst one', async () => {
+    const { app, ali, veli } = await twoPlayers(AFTERNOON);
+    const can = await registerUser(app, 'can', { displayName: 'Can', timezone: 'Europe/Istanbul' });
+    const window = { startsAt: '2026-01-05T00:00:00.000Z', endsAt: '2026-01-08T00:00:00.000Z' };
+    const half = seedActive(app, { creatorId: ali.me.id, accepted: [ali.me.id, veli.me.id], ...window });
+    const worst = seedActive(app, { creatorId: can.me.id, accepted: [can.me.id, veli.me.id], ...window });
+    const alsoHalf = seedActive(app, { creatorId: ali.me.id, accepted: [ali.me.id, veli.me.id], ...window });
+    addSteps(app, half, ali.me.id, TODAY, 12_000);
+    addSteps(app, half, veli.me.id, TODAY, 6_000);
+    addSteps(app, worst, can.me.id, TODAY, 10_000);
+    addSteps(app, worst, veli.me.id, TODAY, 1_000);
+    addSteps(app, alsoHalf, ali.me.id, TODAY, 8_000);
+    addSteps(app, alsoHalf, veli.me.id, TODAY, 4_000);
+
+    expect(sendNudges(app.db, app.now())).toBe(1);
+
+    const nudges = nudgesOf(harness!, veli.me.id);
+    expect(nudges).toHaveLength(1);
+    expect(nudges[0].body).toBe('Can sana 9.000 adım fark koymuş. Kalk da iki dolaş. 2 çelıncta daha gerideysin.');
+    expect(JSON.parse(nudges[0].data!)).toEqual({ challengeId: worst, fromUserId: can.me.id, dayKey: TODAY });
+    // all three were covered, so none of them comes back later today
+    expect(
+      app.db.prepare('SELECT COUNT(*) AS n FROM nudges_sent WHERE user_id = ? AND day_key = ?').get(veli.me.id, TODAY),
+    ).toEqual({ n: 3 });
+  });
+
+  it('does not buzz again the same day for a çelınc that falls behind later', async () => {
+    const { app, ali, veli } = await twoPlayers(AFTERNOON);
+    const window = { startsAt: '2026-01-05T00:00:00.000Z', endsAt: '2026-01-08T00:00:00.000Z' };
+    const first = seedActive(app, { creatorId: ali.me.id, accepted: [ali.me.id, veli.me.id], ...window });
+    addSteps(app, first, ali.me.id, TODAY, 12_000);
+    addSteps(app, first, veli.me.id, TODAY, 2_000);
+    expect(sendNudges(app.db, app.now())).toBe(1);
+
+    harness!.advance(3 * 60 * 60_000);
+    const later = seedActive(app, { creatorId: ali.me.id, accepted: [ali.me.id, veli.me.id], ...window });
+    addSteps(app, later, ali.me.id, TODAY, 9_000);
+    addSteps(app, later, veli.me.id, TODAY, 1_000);
+    expect(sendNudges(app.db, app.now())).toBe(0);
+    expect(nudgesOf(harness!, veli.me.id)).toHaveLength(1);
+
+    // the next local day is one nudge again, counting the other
+    harness!.setNow('2026-01-06T12:00:00.000Z');
+    expect(sendNudges(app.db, app.now())).toBe(1);
+    expect(nudgesOf(harness!, veli.me.id)[0].body).toContain('Bir çelıncta daha gerideysin.');
+  });
+
+  it('counts only the çelınclar they are behind in', async () => {
+    const { app, ali, veli } = await twoPlayers(AFTERNOON);
+    const window = { startsAt: '2026-01-05T00:00:00.000Z', endsAt: '2026-01-08T00:00:00.000Z' };
+    const behind = seedActive(app, { creatorId: ali.me.id, accepted: [ali.me.id, veli.me.id], ...window });
+    const ahead = seedActive(app, { creatorId: ali.me.id, accepted: [ali.me.id, veli.me.id], ...window });
+    addSteps(app, behind, ali.me.id, TODAY, 12_000);
+    addSteps(app, behind, veli.me.id, TODAY, 2_000);
+    addSteps(app, ahead, ali.me.id, TODAY, 3_000);
+    addSteps(app, ahead, veli.me.id, TODAY, 9_000);
+
+    // each is behind in one çelınc: one nudge each, and nothing to count
+    expect(sendNudges(app.db, app.now())).toBe(2);
+    expect(nudgesOf(harness!, veli.me.id)[0].body).toBe('Mahmut sana 10.000 adım fark koymuş. Kalk da iki dolaş.');
+    expect(nudgesOf(harness!, ali.me.id)[0].body).not.toContain('çelıncta');
+  });
+
+  it('weighs a screen-time gap against the bigger number, not the leader’s small one', async () => {
+    // 13:00 in Istanbul on day one, so today's screen time is what the çelınc has
+    const { app, ali, veli } = await twoPlayers('2026-01-05T10:00:00.000Z');
+    const window = { startsAt: '2026-01-05T00:00:00.000Z', endsAt: '2026-01-08T00:00:00.000Z' };
+    const screen = seedActive(app, {
+      creatorId: ali.me.id,
+      accepted: [ali.me.id, veli.me.id],
+      ...window,
+      typeKey: 'ekran_suresi_beyani',
+      metricType: 'manual_lower_is_better',
+      direction: 'lower',
+      unit: 'dk',
+    });
+    const steps = seedActive(app, { creatorId: ali.me.id, accepted: [ali.me.id, veli.me.id], ...window });
+    // 340 dk on 400 is most of it; 340 on the leader's 60 would be "5.7 times" and win every time
+    addSteps(app, screen, ali.me.id, TODAY, 60, 'usage_stats');
+    addSteps(app, screen, veli.me.id, TODAY, 400, 'manual');
+    // nothing at all against 10.000 is all of it
+    addSteps(app, steps, ali.me.id, TODAY, 10_000);
+
+    expect(sendNudges(app.db, app.now())).toBe(1);
+    const nudge = nudgesOf(harness!, veli.me.id)[0];
+    expect(JSON.parse(nudge.data!).challengeId).toBe(steps);
+    expect(nudge.body).toBe('Mahmut sana 10.000 adım fark koymuş. Kalk da iki dolaş. Bir çelıncta daha gerideysin.');
+  });
+
+  it('says how many more at every level', async () => {
+    harness = await makeApp({ now: AFTERNOON });
+    const app = harness.app;
+    const leader = await registerUser(app, 'mahmut', { displayName: 'Mahmut' });
+    const polite = await registerUser(app, 'nazik', { vulgarityMax: 1 });
+    const loud = await registerUser(app, 'agir', { vulgarityMax: 3 });
+    const window = { startsAt: '2026-01-05T00:00:00.000Z', endsAt: '2026-01-08T00:00:00.000Z' };
+    for (let i = 0; i < 3; i++) {
+      const id = seedActive(app, { creatorId: leader.me.id, accepted: [leader.me.id, polite.me.id, loud.me.id], ...window });
+      addSteps(app, id, leader.me.id, TODAY, 12_000 - i * 1_000);
+      addSteps(app, id, polite.me.id, TODAY, 2_000);
+      addSteps(app, id, loud.me.id, TODAY, 2_000);
+    }
+
+    expect(sendNudges(app.db, app.now())).toBe(2);
+    expect(nudgesOf(harness, polite.me.id)[0].body).toBe(
+      'Mahmut önde, aradaki fark 10.000 adım. Bugün biraz yürüsen kapanır. Başka 2 çelıncta da gerideysin.',
+    );
+    expect(nudgesOf(harness, loud.me.id)[0].body).toBe(
+      'Mahmut sana 10.000 adım fark koymuş 🍆 Kalk da iki dolaş. Başka 2 çelıncta da yiyorsun 🍆',
+    );
+  });
+
   it('leaves alone somebody who switched nudges off, without using up their day', async () => {
     const { app, ali, veli } = await twoPlayers(AFTERNOON);
     const id = seedActive(app, {

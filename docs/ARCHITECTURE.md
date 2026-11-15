@@ -303,8 +303,15 @@ kalk da iki dolaş" der. Çelıncı bir skor tablosundan gün içinde peşini b�
 
 Spam olmaması dört kurala bağlı:
 
-* `nudges_sent` tablosunun birincil anahtarı (`challenge_id`, `user_id`, `day_key`) doğrudan hız
-  sınırıdır — `INSERT OR IGNORE` hiçbir şey değiştirmediyse bugün zaten dürtülmüş demektir;
+* kişi başına yerel gün başına **bir** dürtme, kaç çelıncta geride olursa olsun. Geride olmak
+  olağan hal; üç çelıncı olana her gün öğlen üç bildirim gitseydi tek çaresi Ayarlar'dan dürtmeyi
+  kapatmak olurdu. O turda sırası gelen çelınclardan, farkın iki skordan büyüğüne oranı en yüksek
+  olanı söyler, gerisini sayar: "Can sana 9.000 adım fark koymuş. Kalk da iki dolaş. 2 çelıncta
+  daha gerideysin." Oran liderin skoruna göre değildir: ekran süresinde lider küçük sayıdadır ve
+  60 dk'ya karşı 400 dk her seferinde 10.000 adıma karşı sıfır adımı ezerdi. Bahsi geçen her
+  çelınc `nudges_sent`'e (`challenge_id`, `user_id`, `day_key`) yazılır; kişinin o gün için
+  herhangi bir kaydı varsa gün kullanılmıştır, öğleden sonra geride kalınan yeni bir çelınc ikinci
+  bildirim getirmez;
 * saat penceresi **okuyanın kendi saat dilimine** göre 12:00–22:00 arasıdır;
 * fark, lideri skorunun en az onda biri kadar olmalıdır — 40 adımlık fark hikâye değildir;
 * check-in çelınclarında ve son bir saatte hiç gönderilmez, oralarda zaten kendi hatırlatması var.

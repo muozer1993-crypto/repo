@@ -410,6 +410,10 @@ bekletiyordur. Uygulamada **Ayarlar → Arka plan**'a gir:
 Firebase'siz derlemede pil kısıtlaması açıksa ana sayfa bunu bir kere hatırlatır. Bu bölüm yerel
 kod istediği için yeni APK ile gelir; eski APK'da Ayarlar'da hiç görünmez.
 
+Gün ortası dürtme kişi başına günde en fazla bir kere gelir: birkaç çelıncta birden geride
+kalan, en çok geride olduğu çelıncı duyar, gerisi aynı bildirimde sayılır ("2 çelıncta daha
+gerideysin").
+
 Bazı bildirimler fazla geliyorsa kanalı kapatma, uygulamada **Ayarlar → Bildirim tercihleri**'ne
 gir: gün ortası dürtmeyi ("sana fark koymuş"), pazar akşamı haftalık özeti ve telefonun kendi
 kurduğu saatli uyarıları (check-in'e yarım saat kala, çelıncın son saati) ayrı ayrı kapatabilirsin.

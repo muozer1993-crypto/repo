@@ -297,7 +297,8 @@ pokes(id TEXT PK, challenge_id TEXT, from_user_id TEXT, to_user_id TEXT, created
 notifications(id TEXT PK, user_id TEXT, type TEXT, title TEXT, body TEXT, data TEXT (json), read_at TEXT, created_at TEXT, pushed_at TEXT, push_error TEXT)
 badges(user_id TEXT, badge_key TEXT, earned_at TEXT, PRIMARY KEY(user_id, badge_key))
 nudges_sent(challenge_id TEXT, user_id TEXT, day_key TEXT, PRIMARY KEY(challenge_id, user_id, day_key))
-  -- the primary key IS the rate limit for the mid-day nudge: one per çelınc per person per local day
+  -- the çelınclar a person's one mid-day nudge of the local day covered; any (user_id, day_key) row means that day's
+  -- nudge is gone (index (user_id, day_key), migration 013)
 reports(id TEXT PK, reporter_id TEXT, reported_id TEXT, reason TEXT, created_at TEXT)
 reminders_sent(user_id TEXT, day_key TEXT, PRIMARY KEY(user_id, day_key))
 recaps_sent(user_id TEXT, week_key TEXT, sent_at TEXT, PRIMARY KEY(user_id, week_key))
@@ -332,7 +333,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | POST /me/screen-time | upsert screen_time_daily; same fan-out for `deviceMetric: 'screen_time'` types, entries written with source `usage_stats` (7-day device backfill window, capped at maxPerDay). A device reading overwrites a typed value for that day. Returns `{ updated: number }` |
 | GET /me/inbox?before=<iso>&limit=30 | newest first |
 | POST /me/inbox/read | `{ ids }` or `{ all: true }` |
-| (scheduler) reminders | daily reminder only to users with no non-rejected entry today in any active challenge; nudges only to `accepted` participants with `nudges_enabled` (checked before the `nudges_sent` claim, so switching it back on the same day still gets that day's nudge), and on `manual_lower_is_better` only to somebody who has reported a day (`days > 0`): with nothing reported the gap is the missing-day penalty, not a lead |
+| (scheduler) reminders | daily reminder only to users with no non-rejected entry today in any active challenge; nudges only to `accepted` participants with `nudges_enabled` (checked before the `nudges_sent` claim, so switching it back on the same day still gets that day's nudge), and on `manual_lower_is_better` only to somebody who has reported a day (`days > 0`): with nothing reported the gap is the missing-day penalty, not a lead; at most one nudge per person per local day across all their çelınclar: of the çelınclar due in that pass it names the one with the biggest gap ÷ the larger of the two scores (data `{ challengeId, fromUserId, dayKey }` of that one) and counts the rest in the body ("Başka 2 çelıncta da gerideysin." / "2 çelıncta daha gerideysin." / "Başka 2 çelıncta da yiyorsun 🍆"; a single other reads "Başka bir…" / "Bir çelıncta daha…"), claims every one of them, and sends nothing more that day once the person has any `nudges_sent` row for it |
 | (scheduler) recaps | weekly `recap` to users with `recap_enabled` (switched off → no row, no `recaps_sent` claim) from Sunday 20:00 until Monday 12:00 in the reader's timezone, once per week (`recaps_sent`): wins/losses/ties of çelınclar finalized since the previous recap (that recap's `sent_at` when it is ≤ 9 days back — covers a Monday make-up and a DST night — otherwise the last 7 days), Monday–Sunday steps, the king of the week among the reader and their friends (most wins, then steps; exact ties share) and the clear step leader. A Monday make-up says "geçen hafta" / "bu hafta rövanş". Nothing to tell → no row |
 | GET /me/inbox/unread | `{ count, latestId }` |
 | GET /users/search?q= | prefix match on username or display_name (Turkish and plain casing), and the query folded like a username against the username ("Çağ" finds cagri); excludes self, blocked; max 20 |

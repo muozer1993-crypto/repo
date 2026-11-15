@@ -223,8 +223,10 @@ ALTER TABLE challenge_participants ADD COLUMN timezone TEXT;
 `;
 
 /**
- * One mid-day nudge per person per çelınc per local day. The primary key IS the
- * rate limit: an INSERT OR IGNORE that changes nothing means "already nudged".
+ * Which çelınclar a mid-day nudge has covered, per person per local day. It
+ * started as one nudge per çelınc, with the primary key as the rate limit; the
+ * cap is now one per person (`sendNudges`), and any row for their day says that
+ * day's nudge is gone.
  */
 const NUDGES_SENT = `
 CREATE TABLE IF NOT EXISTS nudges_sent (
@@ -341,6 +343,16 @@ const TOKEN_VERSION = `
 ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;
 `;
 
+/**
+ * The nudge cap is one per person per local day across all their çelınclar, so
+ * the scheduler asks "any row for this person today?" on every pass. The
+ * primary key leads with the çelınc and cannot answer that without reading the
+ * whole table, which only grows.
+ */
+const NUDGES_SENT_USER_DAY = `
+CREATE INDEX IF NOT EXISTS idx_nudges_sent_user_day ON nudges_sent(user_id, day_key);
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -354,4 +366,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '010_dispute_won_before', sql: DISPUTE_WON_BEFORE },
   { id: '011_entry_answer_from', sql: ENTRY_ANSWER_FROM },
   { id: '012_token_version', sql: TOKEN_VERSION },
+  { id: '013_nudges_sent_user_day', sql: NUDGES_SENT_USER_DAY },
 ];
