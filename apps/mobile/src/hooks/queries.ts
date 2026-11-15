@@ -360,12 +360,15 @@ export type AddEntryVariables = Parameters<ApiClient['addEntry']>[1] & { proofLo
  */
 export function useAddEntry(id: string, options: { append?: boolean } = {}) {
   const api = useApi();
+  const qc = useQueryClient();
   const invalidate = useInvalidator();
   const { append = false } = options;
   return useMutation<AddEntryResult, Error, AddEntryVariables>({
     mutationFn: async ({ proofLocalUri, ...body }) => {
       const key = `${id}:${body.dayKey}:${body.source}:${body.sessionId ?? ''}${append ? `:${body.clientTime}` : ''}`;
-      const parkable = (error: unknown) => error instanceof ApiError && (error.isNetwork || error.status >= 500);
+      // a page from a Wi-Fi portal or a proxy is not our server saying no (lib/api.ts)
+      const parkable = (error: unknown) =>
+        error instanceof ApiError && (error.isNetwork || error.status >= 500 || error.code === 'not_koydum');
       let send = body;
       if (proofLocalUri && !body.proofUrl) {
         try {
@@ -373,7 +376,7 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
           send = { ...body, proofUrl: url };
         } catch (error) {
           if (!parkable(error)) throw error;
-          await enqueueEntry(id, body, key, proofLocalUri);
+          await enqueueEntry(id, body, key, proofLocalUri, cachedChallengeTitle(qc, id));
           return { entry: null, standings: null, queued: true };
         }
       }
@@ -384,7 +387,7 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
         return { ...result, queued: false };
       } catch (error) {
         if (parkable(error)) {
-          await enqueueEntry(id, send, key);
+          await enqueueEntry(id, send, key, undefined, cachedChallengeTitle(qc, id));
           return { entry: null, standings: null, queued: true };
         }
         throw error;
@@ -392,6 +395,20 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
     },
     onSuccess: () => invalidate.challenge(id),
   });
+}
+
+/**
+ * A çelınc's title from whatever the cache holds: its detail, else any list it
+ * is in. A parked entry carries it, so a refusal can say which çelınc lost it.
+ */
+export function cachedChallengeTitle(qc: QueryClient, id: string): string | undefined {
+  const detail = qc.getQueryData<ChallengeDetail>(qk.challenge(id));
+  if (detail?.challenge.title) return detail.challenge.title;
+  for (const [, list] of qc.getQueriesData<ChallengeSummary[]>({ queryKey: ['challenges'] })) {
+    const row = Array.isArray(list) ? list.find((summary) => summary.challenge.id === id) : undefined;
+    if (row) return row.challenge.title;
+  }
+  return undefined;
 }
 
 export interface AddEntryResult {

@@ -183,6 +183,25 @@ describe('the headless background task', () => {
     expect(mockRefreshReminders).not.toHaveBeenCalled();
   });
 
+  it("keeps the session over a proxy's 401 page: it says nothing about the token", async () => {
+    await setJson(StorageKeys.tokenRenewedAt, new Date().toISOString());
+    await setJson(StorageKeys.me, { id: 'me-1', vulgarityMax: 2, timezone: 'Europe/Istanbul' });
+    (global as unknown as { fetch: unknown }).fetch = jest.fn(async () =>
+      new Response('<h1>401 Authorization Required</h1>', { status: 401, headers: { 'Content-Type': 'text/html' } })
+    );
+    mockSyncStepsNow.mockImplementationOnce(async ({ client }) => {
+      await client.me();
+    });
+
+    await expect(runBackgroundWork()).resolves.toBeUndefined();
+
+    expect(await getJson<string>(StorageKeys.token)).toBe('eski');
+    expect(await getJson<unknown>(StorageKeys.me)).not.toBeNull();
+    expect(mockClearReminders).not.toHaveBeenCalled();
+    // the run goes on as it would with no signal
+    expect(mockDeliverNewInbox).toHaveBeenCalledTimes(1);
+  });
+
   it('gets through the run when the reminders cannot be planned', async () => {
     await setJson(StorageKeys.tokenRenewedAt, new Date().toISOString());
     await setJson(StorageKeys.me, { id: 'me-1', vulgarityMax: 2, timezone: 'Europe/Istanbul' });

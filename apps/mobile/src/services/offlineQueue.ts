@@ -41,6 +41,11 @@ export interface PendingEntry {
    * Items parked before this field existed go with whoever is logged in.
    */
   ownerId?: string;
+  /**
+   * The çelınc's title when it was parked, so a refusal can say which one it
+   * was. Items parked before this field existed are named from the cache.
+   */
+  challengeTitle?: string;
   queuedAt: string;
   attempts: number;
   /** set once the server refused it for good, so we stop retrying */
@@ -56,6 +61,17 @@ async function currentOwnerId(): Promise<string | null> {
   return me && typeof me.id === 'string' ? me.id : null;
 }
 
+/**
+ * Something other than our server answered (the tunnel while the owner's PC
+ * sleeps, a Wi-Fi login page; lib/api.ts): for the queue that is no
+ * connection. Neither a sent entry nor a refused one, and the flush stops
+ * rather than spending a try toward giving up: a PC asleep all night would
+ * otherwise use up all eight by morning.
+ */
+function serverAbsent(error: ApiError): boolean {
+  return error.code === 'server_down' || error.code === 'not_koydum';
+}
+
 export async function readQueue(): Promise<PendingEntry[]> {
   const stored = await getJson<PendingEntry[]>(QUEUE_KEY);
   return Array.isArray(stored) ? stored : [];
@@ -69,7 +85,8 @@ export async function enqueueEntry(
   challengeId: string,
   body: PendingEntry['body'],
   id: string,
-  proofLocalUri?: string
+  proofLocalUri?: string,
+  challengeTitle?: string
 ): Promise<PendingEntry> {
   const [queue, ownerId] = await Promise.all([readQueue(), currentOwnerId()]);
   // two accounts on one phone in the same çelınc build the same id for a day
@@ -80,6 +97,7 @@ export async function enqueueEntry(
     body,
     ...(proofLocalUri ? { proofLocalUri } : {}),
     ...(ownerId ? { ownerId } : {}),
+    ...(challengeTitle ? { challengeTitle } : {}),
     queuedAt: new Date().toISOString(),
     attempts: 0,
   };
@@ -134,6 +152,8 @@ async function sendQueuedPhoto(client: ApiClient, uri: string): Promise<PhotoOut
       return { kind: 'sent', url: (await uploadLocalPhoto(client, uri)).url };
     } catch (error) {
       if (!(error instanceof ApiError)) return { kind: 'later' };
+      // before any status: a portal's 404 or a proxy's 401 is not about the photo
+      if (serverAbsent(error)) return { kind: 'offline' };
       // 429 upload_limit says "in N minutes", not "never"
       if (error.status === 429 || error.status >= 500) return { kind: 'later' };
       // the file's own problems: too big, not an image, empty
@@ -265,7 +285,8 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
       await removeFromQueue(item.id);
       // The photo is left where the picker put it: its cache is the OS's to clear.
     } catch (error) {
-      if (error instanceof ApiError && error.isNetwork) {
+      // before the 4xx below: a 403 page from a portal never refused anything
+      if (error instanceof ApiError && (error.isNetwork || serverAbsent(error))) {
         offline = true;
         touched.set(item.id, { ...item, attempts: item.attempts + 1 });
         continue;
@@ -295,10 +316,15 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
   return { sent, dropped, remaining: keep.filter((item) => mine(item) && !item.failedReason).length };
 }
 
-/** Clears the entries the user has already been told about. */
-export async function clearFailed(): Promise<void> {
+/**
+ * Clears the entries the user has already been told about: the ones in `ids`,
+ * or every refused one without it. With the ids, a refusal that lands while
+ * the toast is up stays for the next one.
+ */
+export async function clearFailed(ids?: readonly string[]): Promise<void> {
+  const told = ids ? new Set(ids) : null;
   const queue = await readQueue();
-  await writeQueue(queue.filter((item) => !item.failedReason));
+  await writeQueue(queue.filter((item) => !item.failedReason || (told !== null && !told.has(item.id))));
 }
 
 export const OfflineQueueKeys = { queue: QUEUE_KEY, storage: StorageKeys };

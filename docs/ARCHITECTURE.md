@@ -485,6 +485,24 @@ ulaşamayan (ya da 5xx alan) bir giriş atılmaz, `services/offlineQueue.ts` kuy
 başarılı yazışta, uygulama açılınca, öne gelince ve arka plan görevinde sırayla gönderilir.
 Sunucunun 4xx ile reddettiği giriş kesin reddir, kullanıcıya bir kez sebebiyle söylenir.
 
+"Sunucu" derken bizim sunucumuz: o her hatayı `{ error: { code, message } }` zarfıyla döner. Arada
+başka biri de cevap verebilir: bilgisayar uyurken Cloudflare tüneli 530'luk bir sayfayla, otelin
+Wi-Fi'ı 200'lük bir giriş sayfasıyla, bir yönlendirici 403'le. Eskiden 200'lük sayfa boş cevap
+sayılıyordu, yani kuyruktaki giriş "gönderildi" diye siliniyordu; zarfsız 4xx kesin ret sayılıp
+atılıyor, zarfsız 401 de kankayı oturumdan atıyordu. Şimdi `lib/api.ts` bunları ayırır:
+502/503/504/520-530 `server_down` ("Sunucu şu an kapalı ya da uyuyor"), gerisi `not_koydum` ("Bu
+adreste KOYDUM sunucusu yok gibi"), 200'lük sayfa da durumu 0 olan bir `not_koydum`. Kuyruk ikisini
+de bağlantı yokmuş gibi karşılar: giriş yerinde kalır, deneme hakkı yemez (bütün gece uyuyan bir
+bilgisayar sekiz hakkı sabaha kadar bitirirdi), oturum kapanmaz. Tek istisna zarfsız 413: VPS'in
+önündeki nginx kendi sınırını aşan fotoğrafı sunucuya varmadan geri çevirir, o da fotoğrafın
+sorunudur.
+
+Reddedilen giriş de artık sessizce gitmez. Arka plan işleyicisi uygulama ekranda değilken de kuyruğu
+boşaltıyordu; ekranda olmayan toast'ı kimse görmüyor, giriş yine de siliniyordu. Şimdi reddedilen
+giriş kuyrukta bekler, uygulama öne gelince söylenir, ancak ondan sonra silinir. Söylerken hangi
+çelınc ve hangi gün olduğunu da söyler ("“Adım savaşı” · Dün: Süre bitti, artık giriş yok."); giriş
+kuyruğa çelıncın adıyla girer.
+
 Kanıt fotoğrafı da bu yoldan gider. Bağlantı yokken seçilen fotoğraf yüklenemez; giriş ekranı onu
 telefonda tutar, "Kaydet"e izin verir ve giriş fotoğrafın telefondaki yeriyle (`proofLocalUri`)
 kuyruğa girer. Kuyruk önce fotoğrafı yükler ve dönen adresi girişe yazıp saklar (giriş yarıda
@@ -688,9 +706,10 @@ atılıyordu, arka plan görevi de 401'i yutup adım göndermeyi sessizce bırak
 `services/session.ts` haftada bir, önce hangisi çalışırsa (uygulamanın açılışı ya da başsız
 görev), `POST /auth/refresh` ile token'ı taze 90 günlükle değiştirir. Süresi dolmuş bir token
 yenilenmez; yenileme içeride kalmanın yolu, geri girmenin değil. Yenileme sürerken çıkış yapan
-birinin token'ı depoya geri yazılmaz. Sunucu yine de bir token'ı reddederse (401) uygulama çıkış
-yapar ve giriş ekranı bir kereliğine nedenini söyler: 401'in kendi mesajını, mesaj yoksa
-"Oturumun düşmüş, bir daha gir." der; önceden hiçbir şey demeden giriş ekranını gösteriyordu.
+birinin token'ı depoya geri yazılmaz. Sunucu yine de bir token'ı reddederse (zarflı 401; aradaki
+bir vekilin zarfsız 401'i kimseyi çıkarmaz, "Bağlantı yokken"e bak) uygulama çıkış yapar ve giriş
+ekranı bir kereliğine nedenini söyler: 401'in kendi mesajını, mesaj yoksa "Oturumun düşmüş, bir
+daha gir." der; önceden hiçbir şey demeden giriş ekranını gösteriyordu.
 
 Şifre, Ayarlar → Hesap → "Şifreni değiştir"den değişir (`POST /me/password`). Yanlış girilen
 mevcut şifre 401 değil 400 `wrong_password` döner, çünkü uygulama her 401'de çıkış yapar; bir

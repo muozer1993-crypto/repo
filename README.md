@@ -165,8 +165,10 @@ evdeki Wi-Fi'da kalabilir; aynı sunucudur.
 Bilinmesi gerekenler:
 
 * **Pencere açık kaldıkça çalışır.** Bilgisayar uyursa ya da pencereyi kapatırsan kankaların
-  bağlanamaz; çelınc sonuçları sunucu tekrar açılınca hesaplanır. Kapatırken **Ctrl+C**'ye bas:
-  sunucu elindeki bildirimleri bitirip veritabanını düzgünce kapatır.
+  bağlanamaz, uygulamada "Sunucu şu an kapalı ya da uyuyor" görürler; o arada girdikleri sayılar
+  telefonda bekler ve sunucu açılınca kendiliğinden gider. Çelınc sonuçları sunucu tekrar açılınca
+  hesaplanır. Kapatırken **Ctrl+C**'ye bas: sunucu elindeki bildirimleri bitirip veritabanını
+  düzgünce kapatır.
 * **Bilgisayar uyumasın.** Sunucu penceresi açıkken (`npm run server` de `npm run internet` de)
   Windows bilgisayarı boşta kaldı diye uyutmaz; ekran kararır, sunucu çalışmaya devam eder.
   Dizüstünün kapağını kapatırsan ise yine uyur. Kapak kapalıyken de çalışsın istiyorsan:
@@ -178,8 +180,9 @@ Bilinmesi gerekenler:
   süresi çelıncında kazanan, telefonlar bir saat daha beklendikten sonra belli olur, o saatte gelen
   sayılara itiraz da edilebilir; uykudayken süresi dolan bir itirazın sahibi de fotoğraf eklemek
   için bir saat daha alır. Ama uyurken basılan "Geldim" sunucuya ancak uyanınca ulaşır ve saati
-  geçtiyse geç sayılır; son gece elle yazılan sayılar ve odak seansları da süre bittiyse reddedilir.
-  Check-in, elle sayı ve odak çelınclarında bilgisayarın uyumaması şart.
+  geçtiyse geç sayılır; son gece elle yazılan sayılar ve odak seansları da süre bittiyse reddedilir
+  (uygulama hangi çelıncın hangi gününün gitmediğini söyler). Check-in, elle sayı ve odak
+  çelınclarında bilgisayarın uyumaması şart.
 * **Sunucu çökerse pencere onu kendisi yeniden açar.** "Sunucu düştü, yeniden açıyorum" yazar,
   birkaç saniye sonra sunucu geri gelir. Tünel yerinde kaldığı için adres de aynıdır, kimseye
   yeni bağlantı atmana gerek yok. On dakikada beş kere çökerse bırakır ve kapanır; sebebi hemen

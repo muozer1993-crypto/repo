@@ -88,8 +88,9 @@ export async function moveSession(rawUrl: string): Promise<MoveOutcome> {
   } catch {
     return 'unreachable';
   }
-  // A hotel Wi-Fi login page (or any site) answers 200 with HTML, which the
-  // client hands back as null: that is not a KOYDUM server answering.
+  // A hotel Wi-Fi login page (or any site) answering 200 with HTML throws
+  // above (`not_koydum`); an empty 200 still comes back as null, and that is
+  // not a KOYDUM server answering either.
   if (!health || typeof health !== 'object') return 'unreachable';
   if (isOtherServer(serverId, health.serverId)) return 'different';
 

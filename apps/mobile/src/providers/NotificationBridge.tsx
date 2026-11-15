@@ -1,3 +1,4 @@
+import { addDays } from '@koydum/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
@@ -21,11 +22,13 @@ import { refreshReminders } from '@/services/reminders';
 import { startForegroundStepTracking } from '@/services/steps';
 import { syncStepsNow } from '@/services/stepSync';
 import { syncScreenTimeNow } from '@/services/screenTimeSync';
-import { invalidateForNotifications } from '@/hooks/queries';
+import { cachedChallengeTitle, invalidateForNotifications } from '@/hooks/queries';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { applyPendingInvite } from '@/services/invite';
 import { deliverNewInbox } from '@/services/inboxNotifier';
+import { safeTodayKey } from '@/utils/datetime';
+import { formatDayKeyFriendly } from '@/utils/format';
 
 /**
  * Glue between the OS and the app:
@@ -278,22 +281,35 @@ export function NotificationBridge() {
           void queryClient.invalidateQueries({ queryKey: ['challenges'] });
           void queryClient.invalidateQueries({ queryKey: ['challenge'] });
         }
+        // The background handler runs this too while the app is alive but off
+        // screen: a toast there reaches nobody, and clearing after it lost the
+        // entries without a word. They wait; coming back to the front drains
+        // again and tells then.
+        if (AppState.currentState !== 'active') return;
         // Read the queue, not this pass's counter: an entry can be refused by a
         // flush this code did not start (the one after a successful write, or the
         // headless background task), and the user still has to hear about it.
         const failed = (await readQueue()).filter((item) => item.failedReason);
-        if (failed.length > 0) {
+        const [first] = failed;
+        if (first) {
           // the server refused these for good; say so once, then stop holding them
-          const reason = failed[0]?.failedReason ?? 'Sunucu kabul etmedi.';
-          await clearFailed();
+          const title = first.challengeTitle ?? cachedChallengeTitle(queryClient, first.challengeId);
+          const today = safeTodayKey(tz);
+          const day = formatDayKeyFriendly(first.body.dayKey, today, addDays(today, -1));
+          const reason = first.failedReason ?? 'Sunucu kabul etmedi.';
+          const more = failed.length > 1 ? `\n${failed.length - 1} giriş daha gitmedi.` : '';
           toast({
             title:
               failed.length > 1
                 ? `${failed.length} giriş gönderilemedi`
                 : 'Bir giriş gönderilemedi',
-            body: reason,
+            // which çelınc and which day: "Süre bitti" alone did not say what was lost
+            body: `${title ? `“${title}” · ` : ''}${day}: ${reason}${more}`,
             kind: 'danger',
+            durationMs: 8000,
           });
+          // only the ones just told: a refusal landing meanwhile waits for its own toast
+          await clearFailed(failed.map((item) => item.id));
         }
       } catch {
         // the queue keeps the entries; we try again on the next foreground

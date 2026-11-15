@@ -104,9 +104,13 @@ describe('ApiClient', () => {
 
   it('survives a body that is not JSON', async () => {
     mockFetch(() => new Response('<html>502</html>', { status: 502 }));
-    await expect(new ApiClient({ baseUrl: BASE }).me()).rejects.toMatchObject({ code: 'http_502' });
+    await expect(new ApiClient({ baseUrl: BASE }).me()).rejects.toMatchObject({ code: 'server_down', status: 502 });
   });
 
+  it('still returns an empty 2xx body as it did', async () => {
+    mockFetch(() => new Response('', { status: 200 }));
+    await expect(new ApiClient({ baseUrl: BASE }).me()).resolves.toBeNull();
+  });
   it('aborts a request that never answers', async () => {
     mockFetch(
       (_url, init) =>
@@ -120,5 +124,82 @@ describe('ApiClient', () => {
     );
     const client = new ApiClient({ baseUrl: BASE, timeoutMs: 20 });
     await expect(client.me()).rejects.toMatchObject({ code: 'timeout' });
+  });
+});
+
+describe('a reply that is not from our server', () => {
+  const html = (status: number, page = '<html><body>Hata</body></html>') =>
+    new Response(page, { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+
+  it("reads the tunnel's 530 (the owner's PC asleep) as the server being off, not as no signal", async () => {
+    mockFetch(() => html(530, '<title>Cloudflare Tunnel error</title>'));
+    const error = (await new ApiClient({ baseUrl: 'https://x.trycloudflare.com' }).me().catch((e: unknown) => e)) as ApiError;
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: 'server_down', status: 530 });
+    expect(error.isNetwork).toBe(false);
+    expect(error.message).toMatch(/kapalı ya da uyuyor/);
+  });
+
+  it("reads a gateway's 502 the same way", async () => {
+    mockFetch(() => html(502));
+    const error = (await new ApiClient({ baseUrl: BASE }).me().catch((e: unknown) => e)) as ApiError;
+    expect(error).toMatchObject({ code: 'server_down', status: 502 });
+    expect(error.isNetwork).toBe(false);
+  });
+
+  it('calls a 404 page somebody else, and never ends the session over it', async () => {
+    mockFetch(() => html(404));
+    const onUnauthorized = jest.fn();
+    const client = new ApiClient({ baseUrl: BASE, token: 'abc', onUnauthorized });
+    await expect(client.me()).rejects.toMatchObject({ code: 'not_koydum', status: 404 });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it("signs nobody out over a proxy's 401 page; our own 401 still does", async () => {
+    const onUnauthorized = jest.fn();
+    const client = new ApiClient({ baseUrl: BASE, token: 'abc', onUnauthorized });
+
+    mockFetch(() => html(401, '<h1>401 Authorization Required</h1>'));
+    await expect(client.me()).rejects.toMatchObject({ code: 'not_koydum', status: 401 });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+
+    mockFetch(() => json({ error: { code: 'unauthorized', message: 'Şifren değişti.' } }, 401));
+    await expect(client.me()).rejects.toMatchObject({ code: 'unauthorized', status: 401 });
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws a 200 Wi-Fi login page instead of handing it back as an empty answer', async () => {
+    mockFetch(() => html(200, '<html>Misafir Wi-Fi girişi</html>'));
+    const error = (await new ApiClient({ baseUrl: BASE })
+      .addEntry('c1', { dayKey: '2026-09-08', value: 3, source: 'manual', clientTime: '2026-09-08T10:00:00.000Z' })
+      .catch((e: unknown) => e)) as ApiError;
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: 'not_koydum', status: 0 });
+    // parked like no signal, wherever an entry is parked
+    expect(error.isNetwork).toBe(true);
+    expect(error.message).toMatch(/Wi-Fi giriş sayfası/);
+  });
+
+  it("keeps a proxy's 413 about the file, not about the address", async () => {
+    mockFetch(() => html(413, '<center>nginx</center>'));
+    await expect(new ApiClient({ baseUrl: BASE }).me()).rejects.toMatchObject({ code: 'too_large', status: 413 });
+  });
+
+  it('keeps our own 5xx envelope as it is', async () => {
+    mockFetch(() => json({ error: { code: 'internal', message: 'Sunucuda bir şeyler ters gitti.' } }, 503));
+    await expect(new ApiClient({ baseUrl: BASE }).me()).rejects.toMatchObject({ code: 'internal', status: 503 });
+  });
+
+  it('asks about the same network only for a home address', async () => {
+    mockFetch(() => {
+      throw new TypeError('Network request failed');
+    });
+    const home = (await new ApiClient({ baseUrl: 'http://192.168.1.5:4000' }).me().catch((e: unknown) => e)) as ApiError;
+    expect(home.message).toMatch(/Aynı ağda/);
+
+    const tunnel = (await new ApiClient({ baseUrl: 'https://x.trycloudflare.com' }).me().catch((e: unknown) => e)) as ApiError;
+    expect(tunnel.isNetwork).toBe(true);
+    expect(tunnel.message).not.toMatch(/Aynı ağda/);
+    expect(tunnel.message).toMatch(/İnternetin açık mı/);
   });
 });

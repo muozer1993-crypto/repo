@@ -79,8 +79,18 @@ describe('a 401 from the server', () => {
     expect(useAuth.getState().sessionEndReason).toBeNull();
   });
 
-  it('keeps no reason from a 401 that is not our envelope', async () => {
-    answer401(null); // a proxy in the way
+  it('keeps the session over a 401 that is not our envelope', async () => {
+    answer401(null); // a proxy in the way: it says nothing about our token
+
+    await expect(useAuth.getState().client().me()).rejects.toMatchObject({ status: 401, code: 'not_koydum' });
+
+    expect(useAuth.getState().token).toBe('eski');
+    expect(useAuth.getState().sessionEnded).toBe(false);
+    expect(mockClearReminders).not.toHaveBeenCalled();
+  });
+
+  it('keeps no reason from a 401 of ours that is not about the session', async () => {
+    answer401({ error: { code: 'bad_credentials', message: 'Kullanıcı adı ya da şifre yanlış.' } });
 
     await expect(useAuth.getState().client().me()).rejects.toMatchObject({ status: 401 });
 

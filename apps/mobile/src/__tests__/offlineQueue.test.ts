@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { ApiError } from '@/lib/api';
+import { ApiClient, ApiError } from '@/lib/api';
 import { StorageKeys, setJson } from '@/lib/storage';
 import {
   clearFailed,
@@ -280,5 +280,119 @@ describe('two accounts on one phone', () => {
     expect(uploadPhoto).toHaveBeenCalledWith(PHOTO, 'ali.jpeg');
     expect(addEntry).toHaveBeenLastCalledWith('c1', { ...body('2026-09-08', 30000), proofUrl: '/uploads/p1.jpg' });
     expect(await readQueue()).toEqual([]);
+  });
+});
+
+describe('a reply that is not from our server', () => {
+  // The real client, so what it makes of each reply is what the queue sees.
+  const realFetch = global.fetch;
+  const onUnauthorized = jest.fn();
+
+  function clientAnswering(status: number, page: string, type = 'text/html; charset=utf-8'): ApiClient {
+    (global as unknown as { fetch: unknown }).fetch = jest.fn(async () =>
+      new Response(page, { status, headers: { 'Content-Type': type } })
+    );
+    const client = new ApiClient({ baseUrl: 'http://192.168.1.20:4000', token: 'tok', onUnauthorized });
+    // React Native's form shape does not exist here; the reply is what matters
+    jest.spyOn(client, 'uploadPhoto').mockImplementation(() => client.request('POST', '/uploads'));
+    return client;
+  }
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    onUnauthorized.mockClear();
+  });
+
+  afterEach(() => {
+    (global as unknown as { fetch: unknown }).fetch = realFetch;
+  });
+
+  it('keeps an entry a Wi-Fi login page answered with 200: it was never sent', async () => {
+    await enqueueEntry('c1', body('2026-09-08', 3), 'a');
+    const result = await flushQueue(clientAnswering(200, '<html>Misafir Wi-Fi girişi</html>'));
+
+    expect(result).toEqual({ sent: 0, dropped: 0, remaining: 1 });
+    const [item] = await readQueue();
+    expect(item?.id).toBe('a');
+    expect(item?.failedReason).toBeUndefined();
+  });
+
+  it("keeps an entry a portal's 403 page turned away: it was never refused", async () => {
+    await enqueueEntry('c1', body('2026-09-08', 3), 'a');
+    const result = await flushQueue(clientAnswering(403, '<h1>Erişim engellendi</h1>'));
+
+    expect(result).toMatchObject({ sent: 0, dropped: 0, remaining: 1 });
+    expect((await readQueue())[0]?.failedReason).toBeUndefined();
+  });
+
+  it("keeps everything over a proxy's 401 page, and signs nobody out", async () => {
+    await enqueueEntry('c1', body('2026-09-08', 3), 'a');
+    const result = await flushQueue(clientAnswering(401, '<h1>401 Authorization Required</h1>'));
+
+    expect(result).toMatchObject({ sent: 0, dropped: 0, remaining: 1 });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it("waits out a PC asleep all night instead of giving up on the tunnel's 530", async () => {
+    await enqueueEntry('c1', body('2026-09-08', 3), 'a');
+    const client = clientAnswering(530, '<title>Cloudflare Tunnel error</title>');
+    // a background run every quarter hour, all night: more than the eight tries
+    for (let run = 0; run < 12; run += 1) await flushQueue(client);
+
+    const [item] = await readQueue();
+    expect(item?.failedReason).toBeUndefined();
+  });
+
+  it('still drops an entry our own server refused', async () => {
+    await enqueueEntry('c1', body('2026-08-01', 3), 'a');
+    const client = clientAnswering(
+      400,
+      JSON.stringify({ error: { code: 'day_out_of_range', message: 'O gün çelıncın dışında.' } }),
+      'application/json'
+    );
+    const result = await flushQueue(client);
+
+    expect(result).toMatchObject({ sent: 0, dropped: 1 });
+    expect((await readQueue())[0]?.failedReason).toBe('O gün çelıncın dışında.');
+  });
+
+  it("keeps the photo when a 404 page answers its upload, instead of dropping it", async () => {
+    const PHOTO = 'file:///data/user/0/com.koydum.app/cache/ImagePicker/abc.jpeg';
+    await enqueueEntry('c1', body('2026-09-08', 5), 'a', PHOTO);
+    const client = clientAnswering(404, '<html>Sayfa bulunamadı</html>');
+    const addEntry = jest.spyOn(client, 'addEntry');
+    const result = await flushQueue(client);
+
+    expect(addEntry).not.toHaveBeenCalled();
+    expect(result).toEqual({ sent: 0, dropped: 0, remaining: 1 });
+    const [item] = await readQueue();
+    expect(item?.proofLocalUri).toBe(PHOTO);
+    expect(item?.failedReason).toBeUndefined();
+  });
+});
+
+describe('telling the user about a refused entry', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  it('keeps the title of the çelınc an entry was parked for', async () => {
+    const item = await enqueueEntry('c1', body('2026-09-08', 3), 'a', undefined, 'Adım savaşı');
+    expect(item.challengeTitle).toBe('Adım savaşı');
+    expect((await readQueue())[0]?.challengeTitle).toBe('Adım savaşı');
+  });
+
+  it('clears only the refusals already told, so one landing meanwhile is not lost', async () => {
+    await enqueueEntry('c1', body('2026-08-01', 3), 'a');
+    const refuse = jest.fn().mockRejectedValue(new ApiError('day_out_of_range', 'O gün çelıncın dışında.', 400));
+    await flushQueue(fakeClient(refuse));
+    const told = (await readQueue()).map((item) => item.id);
+
+    // another flush refuses a second entry while the toast for the first is up
+    await enqueueEntry('c1', body('2026-08-02', 4), 'b');
+    await flushQueue(fakeClient(refuse));
+    await clearFailed(told);
+
+    expect((await readQueue()).map((item) => [item.id, item.failedReason])).toEqual([['b', 'O gün çelıncın dışında.']]);
   });
 });

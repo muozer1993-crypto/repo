@@ -21,8 +21,22 @@ import type {
 } from '@koydum/shared';
 
 import { stripTrailingSlash } from '@/lib/config';
+import { isLocalNetworkUrl } from '@/utils/url';
 
-/** Thrown for every non-2xx response so screens can branch on `code`. */
+/**
+ * A proxy's own "the server behind me is gone": 502/503/504 from any gateway,
+ * 520-530 from Cloudflare (530 is the tunnel with the owner's PC asleep).
+ */
+function gatewayDown(status: number): boolean {
+  return status === 502 || status === 503 || status === 504 || (status >= 520 && status <= 530);
+}
+
+/**
+ * Thrown for every non-2xx response so screens can branch on `code`. Two codes
+ * are the client's own, for replies our server never sends: `server_down` (a
+ * gateway says the server is off, status kept) and `not_koydum` (something
+ * else answered: a page, or an error without our envelope).
+ */
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -133,11 +147,14 @@ export class ApiClient {
     } catch (error) {
       clearTimeout(timer);
       const aborted = error instanceof Error && error.name === 'AbortError';
+      // "the same network" only helps with a home address; a tunnel is reached
+      // from anywhere, so there the PC or its changed address is the suspect
+      const unreachable = isLocalNetworkUrl(this.baseUrl)
+        ? 'Sunucuya ulaşamadım. Aynı ağda mısın, adres doğru mu?'
+        : 'Sunucuya ulaşamadım. İnternetin açık mı? Açıksa sunucu kapalı ya da adresi değişmiş olabilir; kankandan yeni bağlantıyı iste.';
       throw new ApiError(
         aborted ? 'timeout' : 'network',
-        aborted
-          ? 'Sunucu cevap vermedi. Bağlantını kontrol et.'
-          : 'Sunucuya ulaşamadım. Aynı ağda mısın, adres doğru mu?',
+        aborted ? 'Sunucu cevap vermedi. Bağlantını kontrol et.' : unreachable,
         0
       );
     }
@@ -147,21 +164,57 @@ export class ApiClient {
 
     const text = await response.text();
     let payload: unknown = null;
+    let json = true;
     if (text) {
       try {
         payload = JSON.parse(text);
       } catch {
-        payload = null;
+        json = false;
       }
     }
 
+    // Our server renders every failure, its own 404s and 500s included, as this
+    // envelope (server/src/errors.ts). A reply without it came from something
+    // in between: the tunnel while the owner's PC sleeps, a Wi-Fi login page,
+    // a router. None of those speaks for our server, so none of them is ever a
+    // refusal of an entry or the end of a session.
+    const envelope = payload as { error?: { code?: string; message?: string; issues?: unknown } } | null;
+    const ours = typeof envelope?.error?.code === 'string';
+
+    if (!response.ok && !ours) {
+      // The status stays: a 5xx parks an entry for later, as before.
+      if (gatewayDown(response.status)) {
+        throw new ApiError(
+          'server_down',
+          'Sunucu şu an kapalı ya da uyuyor. Sunucuyu açan kankana haber ver; açılınca kendiliğinden düzelir.',
+          response.status
+        );
+      }
+      // nginx in front of a VPS turns a photo past its own limit (1 MB by
+      // default) away before our server sees it: about the file, whoever says it
+      if (response.status === 413) {
+        throw new ApiError('too_large', 'Gönderdiğin dosya çok büyük, sunucu almadı.', 413);
+      }
+      throw new ApiError('not_koydum', 'Bu adreste KOYDUM sunucusu yok gibi. Adresi kontrol et.', response.status);
+    }
+
     if (!response.ok) {
-      const envelope = payload as { error?: { code?: string; message?: string; issues?: unknown } } | null;
       const code = envelope?.error?.code ?? `http_${response.status}`;
       const message = envelope?.error?.message ?? 'Bir şeyler ters gitti.';
       const error = new ApiError(code, message, response.status, envelope?.error?.issues);
       if (response.status === 401) this.onUnauthorized?.(error);
       throw error;
+    }
+
+    // A 200 page in place of our JSON is a captive portal or a router answering
+    // for the address. Handed back as null, it counted a parked entry as sent
+    // and a login as a wrong password. Status 0 parks it like no signal.
+    if (!json) {
+      throw new ApiError(
+        'not_koydum',
+        'Bu adreste KOYDUM sunucusu yok gibi. Wi-Fi giriş sayfası olabilir, adresi kontrol et.',
+        0
+      );
     }
 
     return payload as T;
