@@ -1,15 +1,17 @@
 /**
  * Expo push delivery (SPEC 2.4 step 4).
  *
- * The inbox is the source of truth: every notification row with
- * `pushed_at IS NULL AND push_error IS NULL` whose user has a push token is a
- * pending delivery. `flush()` is safe to call on a machine with no network — every
- * failure is recorded as `push_error` on the row instead of being thrown, so the
- * scheduler never dies and a row is never retried forever.
+ * The inbox is the source of truth: every unread notification row with
+ * `pushed_at IS NULL AND push_error IS NULL`, at most `PUSH_MAX_AGE_MS` old, whose
+ * user has a push token is a pending delivery. Rows written before the phone
+ * registered that token are marked `before_token` by POST /me/push-token.
+ * `flush()` is safe to call on a machine with no network — every failure is
+ * recorded as `push_error` on the row instead of being thrown, so the scheduler
+ * never dies and a row is never retried forever.
  */
 import { Expo, type ExpoPushMessage, type ExpoPushTicket } from 'expo-server-sdk';
 import type { Config } from '../config.js';
-import type { Database } from '../db/index.js';
+import { nowIso, type Database } from '../db/index.js';
 
 export interface FlushResult {
   sent: number;
@@ -17,11 +19,21 @@ export interface FlushResult {
 }
 
 export interface PushSender {
-  flush(db: Database): Promise<FlushResult>;
+  /** `now` is the scheduler's clock: it decides which rows are too old to push. */
+  flush(db: Database, now?: Date): Promise<FlushResult>;
 }
 
 /** How many pending notifications one flush picks up. */
 const BATCH_LIMIT = 200;
+
+/**
+ * A row older than this is never pushed; it stays in the inbox. A laf ringing an
+ * hour late helps nobody, and without a limit the queue had no end: rows of every
+ * account without a token waited forever, so the first token registered after
+ * Firebase was turned on pulled that account's whole history, 200 rows a pass,
+ * ahead of everybody's fresh "KOYDUM MU?".
+ */
+export const PUSH_MAX_AGE_MS = 60 * 60_000;
 
 interface PendingRow {
   id: string;
@@ -39,6 +51,8 @@ SELECT n.id, n.user_id, n.type, n.title, n.body, n.data, u.push_token
   JOIN users u ON u.id = n.user_id
  WHERE n.pushed_at IS NULL
    AND n.push_error IS NULL
+   AND n.read_at IS NULL
+   AND n.created_at >= ?
    AND u.push_token IS NOT NULL
    AND u.deleted_at IS NULL
  ORDER BY n.created_at ASC
@@ -58,14 +72,21 @@ export function createPushSender(config: Config): PushSender {
   const expo = new Expo(config.expoAccessToken ? { accessToken: config.expoAccessToken, useFcmV1: true } : { useFcmV1: true });
 
   return {
-    async flush(db: Database): Promise<FlushResult> {
+    async flush(db: Database, now: Date = new Date()): Promise<FlushResult> {
       const markSent = db.prepare('UPDATE notifications SET pushed_at = ? WHERE id = ?');
       const markFailed = db.prepare('UPDATE notifications SET push_error = ? WHERE id = ?');
       const clearToken = db.prepare('UPDATE users SET push_token = NULL, push_platform = NULL WHERE id = ?');
+      const cutoff = nowIso(new Date(now.getTime() - PUSH_MAX_AGE_MS));
 
       let pending: PendingRow[];
       try {
-        pending = db.prepare(PENDING_SQL).all(BATCH_LIMIT) as PendingRow[];
+        // Marked rather than only skipped, so the queue (indexed on pushed_at,
+        // push_error) stays the last hour and never walks the history again.
+        // A read row is only skipped: it expires here within the hour.
+        db.prepare(
+          "UPDATE notifications SET push_error = 'expired' WHERE pushed_at IS NULL AND push_error IS NULL AND created_at < ?",
+        ).run(cutoff);
+        pending = db.prepare(PENDING_SQL).all(cutoff, BATCH_LIMIT) as PendingRow[];
       } catch {
         return { sent: 0, failed: 0 };
       }

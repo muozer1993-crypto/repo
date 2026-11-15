@@ -249,6 +249,18 @@ dönünce kendiliğinden yenilenmez; o yüzden Gelen, rozetin gördüğü en yen
 Bir bildirime dokunmak onu okunmuş sayar: push da telefonun kendi kopyası da satırın
 `notificationId`'sini taşır.
 
+Push kuyruğu ayrı bir tablo değil, gelen kutusunun `pushed_at` ve `push_error`'u boş satırlarıdır;
+neyin hiç gitmeyeceği de orada yazılır. Bir telefon tek hesaba aittir: `POST /me/push-token` aynı
+token'ı başka hesaplardan siler. Çıkıştaki DELETE'in gideceği garanti değil (sunucu o an uyuyor
+olabilir), önceki hesabın davetleri ve lafları da çelınc adlarıyla birlikte telefonu devralan
+kankada çalıyordu. Hesaba yeni gelen bir token sadece bundan sonra yazılanları alır: o an bekleyen
+satırlar `before_token` olur, çünkü token yokken onları telefonun kendi kontrolü gösterdi ya da yeni
+bir giriş onları zaten geçmiş sayar. Uygulama her açılışta aynı token'ı yine gönderir, bu hiçbir
+şeye dokunmaz. Zamanlayıcının her turu da bir saatten eski bekleyen satırları `expired` diye kapatır
+ve okunmuşları atlar. Eskiden kuyruğun sonu yoktu: Firebase sonradan açılınca kaydolan her telefona
+aylarca birikmiş geçmiş 30 saniyede 200 satır yağardı, öteki kankaların taze "KOYDUM MU?"su da o
+yığının arkasında beklerdi.
+
 Gelen kutusu 30'ar satırlık sayfalarla gelir; listenin dibine inince bir eski sayfa istenir.
 Sunucu `created_at < before` ile keser, zamanlayıcının tek bir turu da aynı kişiye aynı
 milisaniyede birkaç satır yazabilir (bitiş, rozet, laf). İmleç son satırın kendi anı olsaydı

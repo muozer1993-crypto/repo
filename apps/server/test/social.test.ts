@@ -17,6 +17,7 @@ import {
   type Notification,
 } from '@koydum/shared';
 import { newId, nowIso, type ChallengeRow, type EntryRow, type UserRow } from '../src/db/index.js';
+import { createPushSender } from '../src/services/push.js';
 import { GPS_MARKER, JPEG_1X1, JPEG_WITH_GPS, authed, makeApp, multipart, registerUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
@@ -278,6 +279,33 @@ describe('/me', () => {
     const cleared = await call({ method: 'DELETE', url: '/me/push-token' });
     expect(cleared.statusCode).toBe(200);
     expect((await call({ method: 'GET', url: '/me' })).json<Me>().hasPushToken).toBe(false);
+  });
+
+  it("gives a phone's push token to the last account that signed in on it", async () => {
+    const h = await boot();
+    const ali = await registerUser(h.app, 'ali');
+    const veli = await registerUser(h.app, 'veli');
+    const payload = { token: 'ExponentPushToken[abc]', platform: 'android' };
+
+    // ali's logout never reached the server, then veli signed in on the same phone
+    expect((await authed(h.app, ali.token)({ method: 'POST', url: '/me/push-token', payload })).statusCode).toBe(200);
+    expect((await authed(h.app, veli.token)({ method: 'POST', url: '/me/push-token', payload })).statusCode).toBe(200);
+
+    expect(userRow(h, veli.me.id).push_token).toBe('ExponentPushToken[abc]');
+    expect(userRow(h, ali.me.id).push_token).toBeNull();
+    expect(userRow(h, ali.me.id).push_platform).toBeNull();
+    expect((await authed(h.app, ali.token)({ method: 'GET', url: '/me' })).json<Me>().hasPushToken).toBe(false);
+
+    // ali's invite no longer rings on veli's phone (nothing is picked, so no network)
+    const forAli = newId();
+    h.db
+      .prepare(
+        "INSERT INTO notifications (id, user_id, type, title, body, data, read_at, created_at, pushed_at, push_error) VALUES (?, ?, 'poke', 'Dürt', 'Kalk', '{}', NULL, ?, NULL, NULL)",
+      )
+      .run(forAli, ali.me.id, nowIso(h.app.now()));
+    await expect(createPushSender(h.config).flush(h.db, h.app.now())).resolves.toEqual({ sent: 0, failed: 0 });
+    const row = h.db.prepare('SELECT pushed_at, push_error FROM notifications WHERE id = ?').get(forAli);
+    expect(row).toEqual({ pushed_at: null, push_error: null });
   });
 
   it('requires a token', async () => {

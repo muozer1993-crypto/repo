@@ -190,7 +190,28 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
   app.post('/me/push-token', auth, async (request) => {
     const { row } = requireUser(request);
     const body = parseBody(PushTokenBodySchema, request.body);
-    db.prepare('UPDATE users SET push_token = ?, push_platform = ? WHERE id = ?').run(body.token, body.platform, row.id);
+    db.transaction(() => {
+      const current = db.prepare('SELECT push_token FROM users WHERE id = ?').get(row.id) as Pick<UserRow, 'push_token'>;
+      // A token new to the account only takes what is written from now on. The
+      // rows waiting now were the phone's own to show while it had no token (the
+      // app's inbox check), or are history a fresh sign-in does not replay: pushed
+      // now, they would ring twice, or ring a whole history the day Firebase is
+      // turned on. They stay in Gelen. The app sends the same token on every
+      // start, and that must not touch anything.
+      if (current.push_token !== body.token) {
+        db.prepare(
+          "UPDATE notifications SET push_error = 'before_token' WHERE user_id = ? AND pushed_at IS NULL AND push_error IS NULL",
+        ).run(row.id);
+      }
+      // One phone, one account: the last account to sign in on it owns the token.
+      // Logout's DELETE is best effort, and a token left on the previous account
+      // rang its invites and lafs on the next person's phone.
+      db.prepare('UPDATE users SET push_token = NULL, push_platform = NULL WHERE push_token = ? AND id <> ?').run(
+        body.token,
+        row.id,
+      );
+      db.prepare('UPDATE users SET push_token = ?, push_platform = ? WHERE id = ?').run(body.token, body.platform, row.id);
+    })();
     return { ok: true, hasPushToken: true };
   });
 

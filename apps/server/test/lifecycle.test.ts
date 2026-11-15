@@ -520,21 +520,44 @@ describe('declining and leaving', () => {
 });
 
 describe('push queue', () => {
+  const MINUTE = 60_000;
+
+  /** A row waiting for the push queue, written `agoMs` before the clock's now. */
+  function queue(h: TestApp, userId: string, agoMs = 0, readAt: string | null = null): string {
+    const id = newId();
+    h.db
+      .prepare(
+        "INSERT INTO notifications (id, user_id, type, title, body, data, read_at, created_at, pushed_at, push_error) VALUES (?, ?, 'poke', 'Dürt', 'Kalk', '{}', ?, ?, NULL, NULL)",
+      )
+      .run(id, userId, readAt, nowIso(new Date(h.now().getTime() - agoMs)));
+    return id;
+  }
+
+  function pushErrorOf(h: TestApp, id: string): string | null {
+    return (h.db.prepare('SELECT push_error FROM notifications WHERE id = ?').get(id) as { push_error: string | null })
+      .push_error;
+  }
+
+  // A token that is not an Expo one fails every row it is handed without going
+  // to the network, so `failed` counts exactly the rows a flush picked.
+  const registerToken = (h: TestApp, user: RegisteredUser) =>
+    authed(h.app, user.token)({
+      method: 'POST',
+      url: '/me/push-token',
+      payload: { token: 'not-an-expo-token', platform: 'android' },
+    });
+
   it('marks unusable tokens instead of throwing', async () => {
     harness = await makeApp();
     const { app, db, config } = harness;
     const ali = await registerUser(app, 'ali', { pushToken: 'not-an-expo-token' });
     const veli = await registerUser(app, 'veli'); // no token at all
 
-    db.prepare(
-      "INSERT INTO notifications (id, user_id, type, title, body, data, read_at, created_at, pushed_at, push_error) VALUES (?, ?, 'poke', 'Dürt', 'Kalk', '{}', NULL, ?, NULL, NULL)",
-    ).run(newId(), ali.me.id, nowIso(app.now()));
-    db.prepare(
-      "INSERT INTO notifications (id, user_id, type, title, body, data, read_at, created_at, pushed_at, push_error) VALUES (?, ?, 'poke', 'Dürt', 'Kalk', '{}', NULL, ?, NULL, NULL)",
-    ).run(newId(), veli.me.id, nowIso(app.now()));
+    queue(harness, ali.me.id);
+    queue(harness, veli.me.id);
 
     const sender = createPushSender(config);
-    await expect(sender.flush(db)).resolves.toEqual({ sent: 0, failed: 1 });
+    await expect(sender.flush(db, app.now())).resolves.toEqual({ sent: 0, failed: 1 });
 
     const errors = db.prepare('SELECT push_error FROM notifications WHERE push_error IS NOT NULL').all() as {
       push_error: string;
@@ -542,6 +565,83 @@ describe('push queue', () => {
     expect(errors).toEqual([{ push_error: 'invalid_token' }]);
 
     // nothing left to do on the second pass
-    await expect(sender.flush(db)).resolves.toEqual({ sent: 0, failed: 0 });
+    await expect(sender.flush(db, app.now())).resolves.toEqual({ sent: 0, failed: 0 });
+  });
+
+  it('never pushes what was written before the phone registered its token', async () => {
+    harness = await makeApp();
+    const { app, db, config } = harness;
+    const ali = await registerUser(app, 'ali');
+
+    // a month without Firebase, and a poke from a minute ago the phone showed itself
+    const old: string[] = [];
+    for (let i = 0; i < 250; i++) old.push(queue(harness, ali.me.id, 30 * 24 * 60 * MINUTE - i * MINUTE));
+    const recent = queue(harness, ali.me.id, MINUTE);
+
+    expect((await registerToken(harness, ali)).statusCode).toBe(200);
+    const sender = createPushSender(config);
+    await expect(sender.flush(db, app.now())).resolves.toEqual({ sent: 0, failed: 0 });
+    expect(pushErrorOf(harness, recent)).toBe('before_token');
+    expect(pushErrorOf(harness, old[0]!)).toBe('before_token');
+    // still in the inbox, still unread
+    const unread = db
+      .prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL')
+      .get(ali.me.id) as { n: number };
+    expect(unread.n).toBe(251);
+  });
+
+  it('pushes an unread row written after the token, and not a read one', async () => {
+    harness = await makeApp();
+    const { app, db, config } = harness;
+    const ali = await registerUser(app, 'ali');
+    expect((await registerToken(harness, ali)).statusCode).toBe(200);
+
+    harness.advance(MINUTE);
+    const unread = queue(harness, ali.me.id);
+    const read = queue(harness, ali.me.id, 0, nowIso(app.now()));
+
+    const sender = createPushSender(config);
+    await expect(sender.flush(db, app.now())).resolves.toEqual({ sent: 0, failed: 1 });
+    expect(pushErrorOf(harness, unread)).toBe('invalid_token');
+    expect(pushErrorOf(harness, read)).toBeNull();
+
+    // within the hour the read row is only passed over, then it expires
+    harness.advance(61 * MINUTE);
+    await expect(sender.flush(db, app.now())).resolves.toEqual({ sent: 0, failed: 0 });
+    expect(pushErrorOf(harness, read)).toBe('expired');
+  });
+
+  it("does not hold a fresh row back behind another account's old ones", async () => {
+    harness = await makeApp();
+    const { app, db, config } = harness;
+    const ali = await registerUser(app, 'ali', { pushToken: 'not-an-expo-token' });
+    const veli = await registerUser(app, 'veli', { pushToken: 'not-an-expo-token-2' });
+
+    // the server was off with ali's 300 rows still waiting
+    for (let i = 0; i < 300; i++) queue(harness, ali.me.id, 2 * 60 * MINUTE);
+    const fresh = queue(harness, veli.me.id);
+
+    const sender = createPushSender(config);
+    await expect(sender.flush(db, app.now())).resolves.toEqual({ sent: 0, failed: 1 });
+    expect(pushErrorOf(harness, fresh)).toBe('invalid_token');
+    const expired = db
+      .prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND push_error = 'expired'")
+      .get(ali.me.id) as { n: number };
+    expect(expired.n).toBe(300);
+  });
+
+  it('leaves the queue alone when the phone sends the same token again', async () => {
+    harness = await makeApp();
+    const { app, db, config } = harness;
+    const ali = await registerUser(app, 'ali');
+    expect((await registerToken(harness, ali)).statusCode).toBe(200);
+
+    harness.advance(MINUTE);
+    const waiting = queue(harness, ali.me.id);
+    // the app registers again on every start
+    expect((await registerToken(harness, ali)).statusCode).toBe(200);
+    expect(pushErrorOf(harness, waiting)).toBeNull();
+
+    await expect(createPushSender(config).flush(db, app.now())).resolves.toEqual({ sent: 0, failed: 1 });
   });
 });

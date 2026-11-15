@@ -251,7 +251,7 @@ src/routes/catalog.ts   GET /catalog → { types, taunts (levels 1-3, contexts),
 src/services/challenges.ts  lifecycle: activate(), finalize(), computeStandings(), cancelIfUnderfilled()
 src/services/entries.ts     validateAndUpsertEntry() per metric type (see 2.3)
 src/services/notifications.ts  notify(userId, type, title, body, data) → inbox insert + push queue
-src/services/push.ts        Expo push sender (batch, handles DeviceNotRegistered → clears token)
+src/services/push.ts        Expo push sender (batch, handles DeviceNotRegistered → clears token; never a row older than 1 h, read, or from before the token)
 src/services/stats.ts       computeUserStats(userId), evaluate & award badges
 src/services/scheduler.ts   setInterval 30s: activate due, finalize ended, cancel underfilled, reminders; the stop
                             function awaits a pass in flight (≤ 10 s) so a push flush marks its rows first; a beat
@@ -324,7 +324,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | PATCH /me | partial update |
 | DELETE /me | soft delete: anonymize username → `deleted_<id8>`, clear push token, leave active challenges (each one then goes through the abandoned check of 2.4, without a `challenge_left`) — except a çelınc that is already past `ends_at` and still waiting (settle hour, dispute window): an accepted player stays in it, as the leave route refuses, so deleting the account cannot turn a lost result into a cancellation. Every entry of the user's outside such a çelınc loses `note` and `proof_url` (value and status stay, so no standing or result moves), and each photo file those entries pointed at (`…/uploads/<uuid>.<jpg\|png\|webp>`, relative or with a server address in front) is deleted from `UPLOAD_DIR` after the commit, unless an entry still points at it; a file already missing or that cannot be deleted is skipped. The owner's `yonet sil` does the same |
 | POST /me/password | `ChangePasswordBody`. Wrong current password → **400** `wrong_password` (never 401: the app logs out on any 401), new equal to current (after NFKC) → 400 `same_password`, 8 wrong ones per account in 15 min (login's per-account budget) → 429 `too_many_attempts`. Every attempt is counted before the password is checked and a right one clears the count, so a burst sent at once cannot outrun the budget (login counts the same way). Returns `{ token, me }` like login, at the new `token_version`: every other phone signed in to the account gets 401 from then on. The push token is cleared too (the phone holding it may be one of those, and its own logout can no longer clear it); the app sends it again for the new session |
-| POST /me/push-token | store |
+| POST /me/push-token | store. One phone, one account: the same token is cleared from every other account that holds it (the last account to sign in on the phone owns it; logout's DELETE is best effort and may never arrive). A token new to the account (not the one it already holds) marks the account's waiting rows `push_error = 'before_token'`: they were the phone's own inbox check's to show, or history a fresh sign-in does not replay, so they stay in the inbox and are never pushed. The same token again (the app sends it on every start) changes nothing |
 | DELETE /me/push-token | clear (logout) |
 | POST /me/steps | upsert steps_daily; for every active/pending challenge with `deviceMetric: 'steps'` the user has accepted and whose day range contains dayKey → upsert entry(source). From `endsAt` on only days that were over by `endsAt` in the player's pinned zone (`dayOverByEnd`) still move: a later reading of a day the end cut in half would carry steps taken after the end. Returns `{ updated: number }` (`services/deviceSync.ts`)  Then awards any badge the new steps earned (the step ladder reads `steps_daily`), so "Yola Çıktın" arrives with the sync that crossed 7.500, not at the next finish or laf. |
 | POST /me/screen-time | upsert screen_time_daily; same fan-out for `deviceMetric: 'screen_time'` types, entries written with source `usage_stats` (7-day device backfill window, capped at maxPerDay). A device reading overwrites a typed value for that day. Returns `{ updated: number }` |
@@ -464,8 +464,12 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    timezone) is within the nudge window, 12:00–22:00, and checked before the `taunt_followups (challenge_id, 1)`
    claim, so a midnight finish is reminded at noon instead of losing its slot. Once per çelınc; nothing is ever sent
    in the winner's name.
-4. Push queue: every notification row with `pushed_at IS NULL AND push_error IS NULL` for users with a token → Expo push
-   (batched); mark `pushed_at` or `push_error`. Uses `Expo.isExpoPushToken`.
+4. Push queue: every unread notification row with `pushed_at IS NULL AND push_error IS NULL`, at most 1 h old
+   (`PUSH_MAX_AGE_MS`, against the pass's `now`), for users with a token → Expo push (batched, oldest first, 200 a
+   pass); mark `pushed_at` or `push_error`. Uses `Expo.isExpoPushToken`. Each pass first marks the waiting rows older
+   than the hour `push_error = 'expired'`, whoever they belong to. So a row older than an hour, a read row and a row
+   from before the token (`before_token`, see POST /me/push-token) are never pushed; they stay in the inbox. Turning
+   Firebase on later rings nothing old, and one account's backlog never holds back another's fresh row.
 
 ### 2.5 Tests (`apps/server/test/*.test.ts`, vitest, in-memory DB, `app.inject`)
 

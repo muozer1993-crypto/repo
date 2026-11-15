@@ -99,7 +99,7 @@ export function startScheduler(
     }
 
     try {
-      const result = await push.flush(db);
+      const result = await push.flush(db, app.now());
       if (result.sent || result.failed) app.log.info(result, 'push flush');
     } catch (err) {
       app.log.error({ err }, 'push flush failed');
