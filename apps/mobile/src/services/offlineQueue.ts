@@ -123,7 +123,9 @@ type PhotoOutcome =
   | { kind: 'later' }
   /** it will never go up; `reason` is told to the user if the entry is refused without it */
   | { kind: 'lost'; reason: string }
-  /** the server turned the request down, not the file (a session it no longer knows): final for the entry */
+  /** the session ended (a password change elsewhere): stop, keep everything for the next sign-in */
+  | { kind: 'signedOut' }
+  /** the server turned the request down, not the file: final for the entry */
   | { kind: 'refused'; reason: string };
 
 async function sendQueuedPhoto(client: ApiClient, uri: string): Promise<PhotoOutcome> {
@@ -136,6 +138,7 @@ async function sendQueuedPhoto(client: ApiClient, uri: string): Promise<PhotoOut
       if (error.status === 429 || error.status >= 500) return { kind: 'later' };
       // the file's own problems: too big, not an image, empty
       if (error.status === 400 || error.status === 413) return { kind: 'lost', reason: error.message };
+      if (error.status === 401) return { kind: 'signedOut' };
       if (error.status >= 400) return { kind: 'refused', reason: error.message };
       if (error.code === 'timeout') return { kind: 'offline' };
       // React Native fails a form whose file it cannot read exactly like a
@@ -202,6 +205,10 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
   let sent = 0;
   let dropped = 0;
   let offline = false;
+  // A 401 is the session, not the entry: a password changed on another phone
+  // or the owner reset it. The phone is being signed out; whatever waits here
+  // goes up untouched when the same account signs in again.
+  let signedOut = false;
   const delivered = new Set<string>();
   const touched = new Map<string, PendingEntry>();
 
@@ -216,7 +223,7 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
   };
 
   for (const queued of queue) {
-    if (offline || queued.failedReason) continue;
+    if (offline || signedOut || queued.failedReason) continue;
     let item = queued;
     let photoLost: string | null = null;
 
@@ -229,6 +236,10 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
       }
       if (photo.kind === 'later') {
         retryLater(item);
+        continue;
+      }
+      if (photo.kind === 'signedOut') {
+        signedOut = true;
         continue;
       }
       if (photo.kind === 'refused') {
@@ -257,6 +268,10 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
       if (error instanceof ApiError && error.isNetwork) {
         offline = true;
         touched.set(item.id, { ...item, attempts: item.attempts + 1 });
+        continue;
+      }
+      if (error instanceof ApiError && error.status === 401) {
+        signedOut = true;
         continue;
       }
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) {

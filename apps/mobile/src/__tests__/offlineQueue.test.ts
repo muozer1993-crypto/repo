@@ -92,6 +92,26 @@ describe('offline entry queue', () => {
     expect(await readQueue()).toEqual([]);
   });
 
+  it('keeps everything when the session ended, for the next sign-in', async () => {
+    await enqueueEntry('c1', body('2026-09-08', 3), 'a');
+    await enqueueEntry('c1', body('2026-09-07', 4), 'b');
+    const addEntry = jest
+      .fn()
+      .mockRejectedValueOnce(new ApiError('unauthorized', 'Şifren değişti, bu telefondaki oturum kapandı.', 401));
+    const result = await flushQueue(fakeClient(addEntry));
+    expect(addEntry).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ sent: 0, dropped: 0, remaining: 2 });
+    const queue = await readQueue();
+    expect(queue.map((item) => [item.failedReason, item.attempts])).toEqual([
+      [undefined, 0],
+      [undefined, 0],
+    ]);
+
+    // signed in again: both go up
+    addEntry.mockResolvedValue({});
+    expect(await flushQueue(fakeClient(addEntry))).toMatchObject({ sent: 2, remaining: 0 });
+  });
+
   it('removes a single item', async () => {
     await enqueueEntry('c1', body('2026-09-08', 3), 'a');
     await removeFromQueue('a');
