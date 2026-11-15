@@ -291,6 +291,11 @@ export function canTauntList(db: Database, challenge: ChallengeRow, userId: stri
  * Only before `ends_at`: past it an `active` çelınc is only waiting for its
  * result (the phones' hour, an itiraz's photo), entries are closed, and "hâlâ
  * açık, sıra sende" would be a lie.
+ *
+ * On screen time a rival with no day reported yet is nobody's target: their
+ * score is the missing-day penalty, so "Ali 180 dk, sen 1.440" would quote a
+ * number they never wrote. The scheduler's nudge skips them for the same
+ * reason (`sendNudges`); once they write a day they are fair game.
  */
 export function pokeTargetList(
   db: Database,
@@ -317,6 +322,7 @@ export function pokeTargetList(
   const targets: CanTaunt[] = [];
   for (const view of standings) {
     if (view.user.id === userId || view.status !== 'accepted') continue;
+    if (challenge.metric_type === 'manual_lower_is_better' && view.days === 0) continue;
     if (!ahead(view.score)) continue;
     const last = lastPoke.get(challenge.id, userId, view.user.id) as { created_at: string } | undefined;
     const elapsed = last ? now.getTime() - Date.parse(last.created_at) : Number.POSITIVE_INFINITY;

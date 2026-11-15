@@ -5,7 +5,8 @@
  * number cannot replace a day the phone reported, and a device reading needs
  * no screenshot. And the days a player is scored against: today only once it
  * is over, and only the days they could write: from their invite, or from the
- * yes that started a çelınc set for later, never from a yes they sat on.
+ * yes that started a çelınc set for later, never from a yes they sat on. And
+ * nobody pokes a rival whose only score is the missing-day penalty.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -332,6 +333,35 @@ describe('screen-time standings while the çelınc runs', () => {
       ['ali', 60, 1],
       ['veli', 1440, 2],
     ]);
+  });
+});
+
+describe('pokes on screen time', () => {
+  it('lets nobody poke a rival who has not reported a day: their score is only the penalty', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await screenTimePair(harness);
+    await authed(harness.app, ali.token)({ method: 'POST', url: '/me/screen-time', payload: { days: [{ dayKey: today(harness), minutes: 180 }] } });
+
+    const detailFor = async (user: RegisteredUser) =>
+      (await authed(harness!.app, user.token)({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>();
+    // 180 against Veli's 1.440 reads as a lead, but Veli has written nothing yet
+    expect(scores((await detailFor(ali)).participants)).toEqual([
+      ['ali', 180, 1],
+      ['veli', 1440, 2],
+    ]);
+    expect((await detailFor(ali)).pokeTargets).toEqual([]);
+    expect((await detailFor(ali)).canPoke).toBe(false);
+
+    const poke = () =>
+      authed(harness!.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/poke`, payload: { toUserId: veli.me.id } });
+    const early = await poke();
+    expect(early.statusCode).toBe(403);
+    expect(errorCode(early)).toBe('not_ahead');
+
+    // a real number above Ali's makes it a real lead
+    await typeMinutes(harness, veli, challengeId, today(harness), 300);
+    expect((await detailFor(ali)).pokeTargets).toEqual([{ toUserId: veli.me.id, done: false }]);
+    expect((await poke()).statusCode).toBe(201);
   });
 });
 

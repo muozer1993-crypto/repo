@@ -17,6 +17,16 @@ import { clampLevel } from './levels';
 import { formatNumberTr } from './scoring';
 import type { MetricType, TauntContext, TauntTemplate, TauntVars, VulgarityLevel } from './types';
 
+/**
+ * Metrics whose score is a pile that grows during the day, so "hâlâ 4.201 ile
+ * duruyorsun" can be true. A day count moves once a day at most, and screen
+ * time is a daily average where less is better: "donup kalmışsın" there is
+ * nonsense, or advice to lose.
+ */
+const ADDITIVE: readonly MetricType[] = ['auto_steps', 'focus_minutes', 'manual_count'];
+/** Yes/no days and check-ins: the score is days kept, the only thing to say is how many. */
+const DAY_COUNT: readonly MetricType[] = ['daily_boolean', 'checkin_deadline'];
+
 export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l1_win_01", level: 1, context: "win", title: "Sonuç geldi", body: "{winner} kazandı. {winnerScore} - {loserScore} {unit}. Rövanş düğmesi hemen altta." },
   { id: "l1_win_02", level: 1, context: "win", title: "Bu tur ona gitti", body: "{challenge} bitti. {winner} {winnerScore} {unit} yaptı, sen {loserScore}. Arada {diff} {unit} var." },
@@ -37,12 +47,13 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l1_tie_01", level: 1, context: "tie", title: "{winner} bir mesaj bıraktı", body: "Berabere kaldık {loser}, ikimiz de {winnerScore} {unit}. Rövanşta görüşürüz." },
   { id: "l1_tie_02", level: 1, context: "tie", title: "{winner} elini uzattı", body: "{challenge} {winnerScore} - {loserScore} bitti, iyi oyundu {loser}. İstersen bir rövanş açalım." },
   { id: "l1_poke_01", level: 1, context: "poke", title: "Küçük bir dürtme", body: "{winner} seni dürttü. {challenge} devam ediyor, sen {loserScore} {unit} seviyesindesin." },
-  { id: "l1_poke_02", level: 1, context: "poke", title: "Hareket zamanı", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore}. Bugün biraz eklemenin vakti." },
-  { id: "l1_poke_03", level: 1, context: "poke", title: "Hatırlatma", body: "{challenge} hâlâ açık. {winner} bugün çalıştı, sıra sende." },
-  { id: "l1_poke_04", level: 1, context: "poke", title: "İyi misin?", body: "{loser}, {metric} tablosunda uzun süredir hareket yok. {winner} merak etti." },
-  { id: "l1_poke_05", level: 1, context: "poke", title: "Arayı kapat", body: "{winner} ile aranda {diff} {unit} var. Bugün biraz gayret edersen kapanır." },
-  { id: "l1_poke_06", level: 1, context: "poke", title: "Skor güncellendi", body: "{winner} skoruna baktı: {loserScore} {unit}. Bugün biraz ekleyebilirsin." },
+  { id: "l1_poke_02", level: 1, context: "poke", title: "Hareket zamanı", body: "{winner} {winnerScore} {unit} ile önde, sen {loserScore}. Arayı biraz kapatma vakti." },
+  { id: "l1_poke_03", level: 1, context: "poke", title: "Hatırlatma", body: "{challenge} hâlâ açık. {winner} önde, sıra sende." },
+  { id: "l1_poke_04", level: 1, context: "poke", title: "Top sende", body: "{loser}, {metric} tablosunda {winner} önde gidiyor. Senden bir hamle bekliyor." },
+  { id: "l1_poke_05", level: 1, context: "poke", title: "Arayı kapat", body: "{winner} ile aranda {diff} {unit} var. Biraz gayret edersen kapanır." },
+  { id: "l1_poke_06", level: 1, context: "poke", title: "Skora bir bak", body: "{winner} skora baktı: {diff} {unit} geridesin. Arayı kapatmak senin elinde." },
   { id: "l1_poke_07", level: 1, context: "poke", title: "Bir öneri", body: "{winner} {diff} {unit} önde. Kalk bi su iç bence, sonra da biraz yürü.", metrics: ["auto_steps"] },
+  { id: "l1_poke_st_01", level: 1, context: "poke", title: "Telefonu biraz bırak", body: "{winner} günde {winnerScore} {unit} ekranla idare ediyor, sen {loserScore}. Bugün telefona biraz daha az bakabilirsin.", metrics: ["manual_lower_is_better"] },
   { id: "l1_streak_01", level: 1, context: "streak", title: "Seri devam ediyor", body: "{winner} {challenge} çelıncını yine kazandı. {loser}, bu artık alışkanlık oldu." },
   { id: "l1_streak_02", level: 1, context: "streak", title: "Yine {winner}", body: "{winner} üst üste kazanıyor. {winnerScore} - {loserScore}." },
   { id: "l1_revenge_01", level: 1, context: "revenge", title: "Rövanş alındı", body: "{winner} geçen seferin hesabını sordu: {winnerScore} - {loserScore}. Sıra sende {loser}." },
@@ -54,9 +65,10 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l2_win_03", level: 2, context: "win", title: "Ağır mı geldi?", body: "{winner} {winnerScore} {unit} yaptı, sen {loserScore}. {metric} sana ağır geldi galiba lan." },
   { id: "l2_win_04", level: 2, context: "win", title: "Skor konuştu", body: "{winner} {winnerScore}, sen {loserScore}. Yedin {loser}." },
   { id: "l2_win_05", level: 2, context: "win", title: "Rezil oldun {loser}", body: "{winner} bütün grubun önünde sana {diff} {unit} fark attı." },
-  { id: "l2_win_06", level: 2, context: "win", title: "Sürünmüşsün", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore}. Nereye kayboldun?" },
+  { id: "l2_win_06", level: 2, context: "win", title: "Sürünmüşsün", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore}. Nereye kayboldun?", metrics: ADDITIVE },
   { id: "l2_win_07", level: 2, context: "win", title: "Bahaneni hazırla", body: "{winner} {challenge} çelıncını aldı: {winnerScore} - {loserScore}. Grup birazdan soracak." },
   { id: "l2_win_08", level: 2, context: "win", title: "Olmadı", body: "{loser} {loserScore} {unit} yaptı, {winner} {winnerScore}. {diff} {unit} fark, yedin." },
+  { id: "l2_win_st_01", level: 2, context: "win", title: "Ekran başından kalkamadın", body: "{winner} günde {winnerScore} {unit} ekranla kazandı, sen {loserScore}. Telefon sana koydu {loser}.", metrics: ["manual_lower_is_better"] },
   { id: "l2_winbig_01", level: 2, context: "win_big", title: "Silindir gibi geçti", body: "{winner} {winnerScore}, sen {loserScore}. Arada {diff} {unit} var {loser}. Buna çelınc denmez." },
   { id: "l2_winbig_02", level: 2, context: "win_big", title: "Sen katıldın mı?", body: "{winner} {challenge} çelıncında uçmuş, sen {loserScore} {unit} ile kalmışsın. Telefonu evde mi unuttun lan?", metrics: ["auto_steps"] },
   { id: "l2_winbig_03", level: 2, context: "win_big", title: "Özenle koydu", body: "{winner} sana {diff} {unit} fark attı {loser}. Adam üşenmemiş, özene özene koymuş." },
@@ -69,12 +81,14 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l2_tie_02", level: 2, context: "tie", title: "{winner} bırakmıyor", body: "Eşit bitti ama bu iş bitmedi {loser}. Rövanşı aç da kim koyuyor görelim lan." },
   { id: "l2_poke_01", level: 2, context: "poke", title: "Kalk yürü", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore} ile yatıyorsun. Koltuğa yapıştın.", metrics: ["auto_steps"] },
   { id: "l2_poke_02", level: 2, context: "poke", title: "Dürtüldün", body: "{winner} seni dürttü. {challenge} bitmedi, {metric} tarafında bir hareket göreyim." },
-  { id: "l2_poke_03", level: 2, context: "poke", title: "Hayatta mısın {loser}?", body: "Sabahtan beri {loserScore} {unit}. {winner} soruyor: nabız var mı lan?" },
+  { id: "l2_poke_03", level: 2, context: "poke", title: "Hayatta mısın {loser}?", body: "Tabloda hâlâ {loserScore} {unit} ile duruyorsun. {winner} soruyor: nabız var mı lan?", metrics: ADDITIVE },
   { id: "l2_poke_04", level: 2, context: "poke", title: "Aradaki fark {diff}", body: "{winner} ile aranda {diff} {unit} var. Böyle giderse akşam {winner} imzalı bir bildirim gelir." },
   { id: "l2_poke_05", level: 2, context: "poke", title: "Kanepe önde", body: "{loser}, {metric} tarafında kıpırtı yok. {winner} soruyor: kanepeyle mi çelınc yapıyorsun, benimle mi?", metrics: ["auto_steps"] },
   { id: "l2_poke_06", level: 2, context: "poke", title: "Bir hareket gör", body: "{winner} {winnerScore} ile geziyor, sen {loserScore} ile oturuyorsun. Kalk biraz.", metrics: ["auto_steps"] },
   { id: "l2_poke_07", level: 2, context: "poke", title: "Belli oldu", body: "Kanka sen bugün zokayı yiyeceksin, yine belli oldu. {winner} {winnerScore}, sen {loserScore} {unit}." },
   { id: "l2_poke_08", level: 2, context: "poke", title: "Kalk bi su iç", body: "{winner} {diff} {unit} önde. Kalk bi su iç bence, ondan sonra da kıpırda biraz." },
+  { id: "l2_poke_st_01", level: 2, context: "poke", title: "Ekrana yapıştın", body: "{winner} günde {winnerScore} {unit}, sen {loserScore}. Bırak şu telefonu lan.", metrics: ["manual_lower_is_better"] },
+  { id: "l2_poke_day_01", level: 2, context: "poke", title: "Takvim yalan söylemez", body: "{winner} {winnerScore} {unit} tutturdu, sen {loserScore}. Günler sayılıyor lan, toparlan.", metrics: DAY_COUNT },
   { id: "l2_streak_01", level: 2, context: "streak", title: "Yine koydu", body: "{winner} üst üste kazanıyor. {winnerScore} - {loserScore}. Alışıyorsun galiba {loser}." },
   { id: "l2_streak_02", level: 2, context: "streak", title: "Seri devam", body: "{winner} bir daha koydu. {loser} her seferinde yiyor, sofra hiç kalkmıyor lan." },
   { id: "l2_revenge_01", level: 2, context: "revenge", title: "Rövanşı aldı", body: "{winner} geçen sefer yemişti, bu sefer koydu: {winnerScore} - {loserScore}. Hesap kapandı {loser}." },
@@ -89,6 +103,7 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l3_win_06", level: 3, context: "win", title: "Paytak paytak", body: "{winnerScore} - {loserScore}. {winner} yürüdü, sen paytak paytak dolaştın.", metrics: ["auto_steps"] },
   { id: "l3_win_07", level: 3, context: "win", title: "Kıvran biraz", body: "{winner} sana {diff} {unit} fark attı. Yut bakalım {loser} 🍆" },
   { id: "l3_win_08", level: 3, context: "win", title: "Yastık ister misin?", body: "{winner} {winnerScore} {unit} yaptı, sen {loserScore} ile altta kaldın. Rahat mısın {loser}?" },
+  { id: "l3_win_st_01", level: 3, context: "win", title: "Ekran sana sapladı 🍆", body: "{winner} günde {winnerScore} {unit} ile kazandı, sen günde {loserScore} {unit} ekrana gömüldün. Yedin {loser} 🍆", metrics: ["manual_lower_is_better"] },
   { id: "l3_winbig_01", level: 3, context: "win_big", title: "Dibine kadar", body: "{winner} {winnerScore}, sen {loserScore}. {diff} {unit} fark lan. Yedin {loser}, dibine kadar." },
   { id: "l3_winbig_02", level: 3, context: "win_big", title: "Tren geçti üstünden", body: "{winner} {challenge} çelıncında {diff} {unit} fark attı. Sen katılmadın, ezildin." },
   { id: "l3_winbig_03", level: 3, context: "win_big", title: "Sen ne yaptın lan?", body: "{winnerScore} karşısında {loserScore}. {winner} {metric} çelıncında koştururken sen telefonu buzdolabına mı koydun?", metrics: ["auto_steps"] },
@@ -101,12 +116,16 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l3_tie_02", level: 3, context: "tie", title: "{winner} kafa tuttu", body: "{winnerScore} - {loserScore}, bu sefer ikimiz de koyamadık {loser}. Rövanşta sapır sapır sana koyacağım 🍆" },
   { id: "l3_poke_01", level: 3, context: "poke", title: "Kalk yürü lan!", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore}. Koltuğa yapıştın, akşama yersin.", metrics: ["auto_steps"] },
   { id: "l3_poke_02", level: 3, context: "poke", title: "Dürtüldün {loser}", body: "{winner} seni dürttü. {diff} {unit} geride yatıyorsun. Gece bildirim gelir 🍆" },
-  { id: "l3_poke_03", level: 3, context: "poke", title: "Donmuşsun", body: "{loser}, {loserScore} {unit} ile donup kalmışsın. {winner} çoktan gitti." },
+  { id: "l3_poke_03", level: 3, context: "poke", title: "Donmuşsun", body: "{loser}, {loserScore} {unit} ile donup kalmışsın. {winner} çoktan gitti.", metrics: ADDITIVE },
   { id: "l3_poke_04", level: 3, context: "poke", title: "Kanepe sana koydu", body: "{winner} {winnerScore} ile geziyor, sen {loserScore} ile yatıyorsun. Sırada {winner} var.", metrics: ["auto_steps"] },
   { id: "l3_poke_05", level: 3, context: "poke", title: "Arayı kapat", body: "{diff} {unit} geridesin. {winner} şimdiden bildirimi yazıyor, kalk da silsin." },
-  { id: "l3_poke_06", level: 3, context: "poke", title: "Son şans", body: "{metric} çelıncında sabahtan beri {loserScore} yaptın {loser}. {winner} diyor ki kıpırda, son şans 🍆" },
+  { id: "l3_poke_06", level: 3, context: "poke", title: "Kıpırda lan", body: "{metric} çelıncında {loserScore} {unit} ile kalmışsın {loser}. {winner} {diff} {unit} önde, bu gidişle yersin 🍆", metrics: ADDITIVE },
   { id: "l3_poke_07", level: 3, context: "poke", title: "Eşek gibi anırırım", body: "Sen bugün {winnerScore} {unit} at, eşek gibi anırmazsam adam değilim {loser}.", metrics: ["auto_steps"] },
   { id: "l3_poke_08", level: 3, context: "poke", title: "Zokayı yiyeceksin", body: "Kanka sen bugün zokayı yiyeceksin, yine belli oldu 🍆 {diff} {unit} geridesin." },
+  { id: "l3_poke_st_01", level: 3, context: "poke", title: "Telefon sana koyuyor 🍆", body: "Günde {loserScore} {unit} ekran ne lan {loser}? {winner} günde {winnerScore} {unit} ile hayatını yaşıyor, sen hâlâ kaydırıyorsun 🍆", metrics: ["manual_lower_is_better"] },
+  { id: "l3_poke_st_02", level: 3, context: "poke", title: "Parmakların nasır tuttu", body: "{winner} ekrana günde senden {diff} {unit} az bakıyor. Kaydırmayı bırak {loser}, yoksa sapır sapır yersin 🍆", metrics: ["manual_lower_is_better"] },
+  { id: "l3_poke_day_01", level: 3, context: "poke", title: "Günleri diziyor", body: "{diff} {unit} geridesin {loser}. {winner} günleri bir bir diziyor, sen bahane diziyorsun 🍆", metrics: DAY_COUNT },
+  { id: "l3_poke_day_02", level: 3, context: "poke", title: "Bu gidiş gidiş değil", body: "{winner} {winnerScore} {unit} tutturdu, sen {loserScore}. Son gün sapır sapır yersin {loser} 🍆", metrics: DAY_COUNT },
   { id: "l3_streak_01", level: 3, context: "streak", title: "Yine sapladı 🍆", body: "{winner} üst üste kazandı: {winnerScore} - {loserScore}. {loser} yine yedi." },
   { id: "l3_streak_02", level: 3, context: "streak", title: "Gelenek oldu", body: "{winner} bir daha koydu. {loser} kaçıncı olduğunu unuttu bile." },
   { id: "l3_revenge_01", level: 3, context: "revenge", title: "Rövanşta sapladı", body: "{winner} geçen sefer yemişti. Bu sefer {diff} {unit} ile geri koydu {loser}." },

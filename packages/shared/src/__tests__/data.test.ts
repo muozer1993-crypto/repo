@@ -4,6 +4,7 @@ import {
   BADGE_FAMILIES,
   BADGES,
   CHALLENGE_TYPES,
+  METRIC_TYPES,
   MICROCOPY,
   MICROCOPY_KEYS,
   TAGLINE,
@@ -28,7 +29,7 @@ import {
   requireChallengeType,
 } from '../catalog';
 import { containsBanned } from '../banned';
-import { pickTaunt, renderTaunt, resolveTauntForRecipient, tauntsFor } from '../taunts';
+import { pickTaunt, renderTaunt, resolveTauntForRecipient, tauntsAtLevel, tauntsFor } from '../taunts';
 import type { BadgeStats, TauntContext, VulgarityLevel } from '../types';
 
 const CONTEXTS: TauntContext[] = ['win', 'win_big', 'win_close', 'tie', 'poke', 'streak', 'revenge', 'reply'];
@@ -273,6 +274,30 @@ describe('taunts fit the çelınc they land on', () => {
         for (const level of [1, 2, 3] as VulgarityLevel[]) {
           expect(tauntsFor(context, level, metric).length, `${metric}/${context}/${level}`).toBeGreaterThan(0);
         }
+      }
+    }
+  });
+
+  it('never says "sabahtan beri": a score is the whole çelınc, not today', () => {
+    // on day 4 of a step çelınc it is four days of steps, on a check-in it is
+    // days, on screen time a daily average
+    for (const template of TAUNTS) {
+      expect(`${template.title} ${template.body}`, template.id).not.toMatch(/sabahtan/i);
+    }
+  });
+
+  it('never tells a screen-time player to add more', () => {
+    for (const context of CONTEXTS) {
+      for (const template of tauntsFor(context, 3, 'manual_lower_is_better')) {
+        expect(`${template.title} ${template.body}`, template.id).not.toMatch(/\bekle/i);
+      }
+    }
+  });
+
+  it('leaves the sender at least five pokes to choose from on every çelınc, at every level', () => {
+    for (const metric of METRIC_TYPES) {
+      for (const level of [1, 2, 3] as VulgarityLevel[]) {
+        expect(tauntsAtLevel('poke', level, metric).length, `${metric}/${level}`).toBeGreaterThanOrEqual(5);
       }
     }
   });

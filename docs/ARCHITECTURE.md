@@ -337,7 +337,9 @@ kaydından **önce** yapılır: kapatıp aynı öğleden sonra yeniden açan o g
 
 Ekran süresinde henüz hiçbir gün girmemiş olan da dürtülmez: onun "farkı" girilmeyen günün
 1440 dakikalık cezasıdır, kimsenin öne geçtiği yok. Bu kontrol de kayıttan önce yapılır; aynı gün
-bir değer girip gerçekten geride kalan o günün dürtmesini alır.
+bir değer girip gerçekten geride kalan o günün dürtmesini alır. Kankanın elle dürtmesi de aynı
+kurala uyar (`pokeTargetList`): "Ali 180 dk, sen 1.440" onun hiç yazmadığı bir sayıyı okurdu.
+Çelınc ekranındaki "Laf sok" kartı o kankayı göstermez, rota da 403 `not_ahead` döner.
 
 Kapanış cümlesi metriğe göre değişir: "kalk da iki dolaş" odak çelıncında saçmadır, orada
 "telefonu bırak da bir seans yap" der.
