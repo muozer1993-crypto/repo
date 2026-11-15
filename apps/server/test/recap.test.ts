@@ -200,6 +200,23 @@ describe('weekly recap', () => {
     expect(hard.body).toContain('hepsine koydun 🍆');
   });
 
+  it('does not tell a king who also lost that he koydu to all of them', async () => {
+    const { app, ali, veli, can } = await gang();
+    app.db.prepare('UPDATE users SET vulgarity_max = 3 WHERE id = ?').run(ali.me.id);
+    // one win each for Ali and Veli; Ali walked further, so the crown is his
+    seedFinished(app, { players: [ali.me.id, can.me.id], winnerId: ali.me.id, finalizedAt: '2026-01-06T10:00:00.000Z' });
+    seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: veli.me.id, finalizedAt: '2026-01-08T10:00:00.000Z' });
+    setSteps(app, ali.me.id, '2026-01-07', 12_000);
+    setSteps(app, veli.me.id, '2026-01-07', 6_000);
+
+    sendWeeklyRecaps(app.db, app.now());
+
+    const [forAli] = recapsOf(ali.me.id);
+    expect(forAli.body).toContain('Bu hafta 1 kere koydun, 1 kere yedin 🍆');
+    expect(forAli.body).toContain('👑 Haftanın kralı sensin, 1 kere koydun 🍆');
+    expect(forAli.body).not.toContain('hepsine koydun');
+  });
+
   it('is sent once a week, even when the scheduler keeps running', async () => {
     const { app, ali, veli } = await gang();
     seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: ali.me.id, finalizedAt: '2026-01-09T10:00:00.000Z' });

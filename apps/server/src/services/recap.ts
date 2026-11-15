@@ -276,7 +276,13 @@ function kingLine(recap: WeeklyRecap, readerId: string, level: VulgarityLevel, w
 
   if (mine && others.length === 0) {
     if (level === 1) return `👑 Haftanın kralı sensin (${wins}).`;
-    if (level === 3) return '👑 Haftanın kralı sensin, hepsine koydun 🍆';
+    if (level === 3) {
+      // the crown goes by wins, then steps: a king who also yedi this week did
+      // not koy to all of them, and the line right above says so
+      return recap.losses === 0 && recap.ties === 0
+        ? '👑 Haftanın kralı sensin, hepsine koydun 🍆'
+        : `👑 Haftanın kralı sensin, ${recap.kingWins} kere koydun 🍆`;
+    }
     return '👑 Haftanın kralı sensin. Kankalar sana çalışsın.';
   }
   if (mine) return `👑 Tahtı ${joinNames(others)} ile paylaşıyorsun (${wins}).`;

@@ -286,6 +286,13 @@ export interface BadgeDef {
   key: string;
   nameTr: string;
   emoji: string;
+  /**
+   * What a "Nazik" (level 1) reader sees instead, where `nameTr` / `emoji` are
+   * level-3 words (the koyuş ladder). Left out, every level reads the same.
+   * Read both through `badgeTitle`.
+   */
+  namePoliteTr?: string;
+  emojiPolite?: string;
   descriptionTr: string;
   /** Machine rule, e.g. `wins>=3` (see SPEC 1.5). */
   rule: string;

@@ -663,6 +663,9 @@ Docker'da önce sunucuyu durdur, yedeği öyle yükle: `docker compose stop`, so
 
 Herkes **kendi** tavan seviyesini seçer ve o seviye korunur. Sen 3'te olsan bile, 1'i seçmiş
 arkadaşına giden bildirim 1. seviyeye yumuşatılır. Bunu sunucu zorlar, uygulama değil.
+Rozetler de buna uyar: "Nazik" seçen ilk galibiyetinde "🍆 Çırak Saplamacı" değil "🏆 İlk Zafer"
+görür, kankasının profilindeki rozetleri de kendi seviyesinde okur. Yeni hesabın ilk avatarı da
+sadece "Ağır Abi" seçene 🍆 olur, diğerlerine sakin bir yüz düşer; profilden istediğin zaman değişir.
 
 | Seviye | Kimin için | Örnek |
 |---|---|---|
@@ -699,7 +702,7 @@ iste-geri çek-iste biriyle bütün gün telefonunu öttürebilirdi.
 
 * **Otomatik adım** — telefonun adım sayacı, elle giriş yok.
 * **Odak dakikası** — uygulama içi sayaç; uygulamadan çıkarsan seans yanar. Geri tuşu seansı yakmaz, önce "bitirelim mi?" diye sorar. Çelınc bittikten sonra sunucu odak dakikası almadığı için seans, çelıncın kalan süresine sığacak kadar kısaltılır: son gece 23:30'da 45 dakika seçersen seans 29 dakika sürer ve bitince yazılır, kaybolmaz.
-* **Saatli check-in** — belirlenen saatten önce "GELDİM" demen gerekir, saati sunucu doğrular. Her türün bir de açılış saati var (uyanma 04:00, yatma 19:00, yatak 05:00); ondan önce basılan check-in sayılmaz, yoksa gece ikideki "yattım" erken yatma sayılırdı. Bu yüzden check-in saati açılış saatinden sonra, en geç 23:59 olmalı: Erken Yatma Sözü'nde 00:00 seçilirse hiçbir gece sayılmaz, çelınc 0-0 biterdi. Sihirbaz böyle bir saati kabul etmiyor; eskiden böyle açılmış bir çelınc türün kendi saatiyle (yatma için 23:00) sayılır.
+* **Saatli check-in** — belirlenen saatten önce "GELDİM" demen gerekir, saati sunucu doğrular. Her türün bir de açılış saati var (uyanma 04:00, yatma 19:00, yatak 05:00); ondan önce basılan check-in sayılmaz, yoksa gece ikideki "yattım" erken yatma sayılırdı. Bu yüzden check-in saati açılış saatinden sonra, en geç 23:59 olmalı: Erken Yatma Sözü'nde 00:00 seçilirse hiçbir gece sayılmaz, çelınc 0-0 biterdi. Sihirbaz böyle bir saati kabul etmiyor; eskiden böyle açılmış bir çelınc türün kendi saatiyle (yatma için 23:00) sayılır. Profildeki erken kalkma rozetleri (🐓 Horoz ve üstü) sadece sabah check-in'lerini sayar, yani Erken Kalkan Koyar ile Yatak Toplama Sabahı'nı; Erken Yatma Sözü'nün geceleri oraya sayılmaz.
 * **Sayı girişi** — bardak, sayfa, km, tekrar. Çelıncı açan isterse fotoğraf kanıtı zorunlu olur; fotoğraf sadece bu tür girişlerde vardır.
 * **Az olan kazanır** — ekran süresi gibi; günlük ortalama yarışır, girmediğin gün en kötü değerden (1440 dk) sayılır. Bugün ortalamaya ancak gün bitince girer, Android'in öğlen gönderdiği yarım gün kimseyi öne geçirmez; yalnız ilk gün hiçbir şey girmeyen 1440 dk görünür. Yarışa sonradan çağrılan ("Kanka ekle"), çağrıldığı günün bir gün öncesinden itibaren sayılır; ondan önceki günler için ceza yemez. Baştan çağrılıp daveti bekleten ise beklediği günlerin cezasını öder. İleri bir saate kurulan çelınc, kuranın yanına biri "Varım" diyene kadar başlamaz; o güne kadar kimse yazamadığı için kimse o günlerden ceza yemez.
 * **Günlük evet/hayır** — sigara içmedim, şeker yemedim. Gün sayısı yarışır. Her türün kendi sorusu ve düğmeleri var: Dumansız Günler "Günün dumansız geçti mi?" diye sorar, sen "İçmedim ✅" ya da "İçtim ❌" dersin. Yanlış bastıysan diğerine dokunman yeter; dün için de, cevapladıktan sonra bile.

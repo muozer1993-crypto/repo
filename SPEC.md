@@ -158,6 +158,15 @@ Badges are LADDERS, not a flat wall: each `BadgeDef` carries a `family` and a 1-
 and `badgeLadder(stats)` returns every earned rung plus exactly one locked rung per family —
 the rungs above that stay hidden until they are reached.
 Rule grammar: `<statKey><op><number>` with op in `>=`, `>`, `==`, `<=`; multiple rules joined by `&&`.
+The koyuş ladder is named in level-3 words ("Çırak Saplamacı" 🍆 … "Saplama Mühendisi"), so those rungs also carry
+`namePoliteTr` / `emojiPolite` ("İlk Zafer" 🏆, "Kazanmaya Alıştın", "Grubun Ustası", "Çelınc Profesörü").
+`badgeTitle(badge, level)` → `{ name, emoji }`: at level 1 the polite pair where there is one, else `nameTr` / `emoji`.
+The `badge` notification is named at the recipient's level ("🏆 Yeni rozet: İlk Zafer"), the profile and a friend's
+profile at the reader's; the key, and so every stored `badges` row, is the same at every level.
+`checkinsStreakMax` is the longest run of consecutive day keys with an on-time check-in (`value` > 0, not `rejected`)
+in a MORNING check-in type: `MORNING_CHECKIN_TYPE_KEYS` (catalog.ts) = the `checkin_deadline` types whose
+`checkinWindowStart` is before 12:00 (erken_kus, yatak_toplama), by type and not by the çelınc's deadline. An erken_yat
+night is not "zamanında kalktın". A badge already stored is never taken back when a rule changes.
 
 ### 1.6 Zod schemas (`schemas.ts`) — the API contract
 
@@ -334,7 +343,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | Method & path | Notes |
 |---|---|
 | GET /health | `{ ok: true, version, time }` |
-| POST /auth/register | 409 `username_taken`. Returns `{ token, me }` |
+| POST /auth/register | 409 `username_taken`. Returns `{ token, me }`. The new account's avatar is 🍆 only when `vulgarityMax` is 3; otherwise one of 😎 🔥 👑 🐐 🦅 🚀 🎯 💪 (the profile picker's set), picked from the id (`seedFrom`) |
 | POST /auth/login | 401 `bad_credentials` |
 | POST /auth/refresh | authenticated, no body. Returns `{ token }` with a fresh 90 days at the same `ver`. An expired token, or one from before a password change, gets the usual 401: renewal keeps a live session alive, it never revives a dead one. The app calls it about once a week |
 | POST /auth/prove | no auth. `ProveBody { claims, nonce }`: `claims` is a token's own `header.payload` (not secret), `nonce` 16–128 base64url chars. Returns `{ origin, proof }`: `origin` = `publicOrigin` (PUBLIC_URL when set, else the request's address), `proof` = base64url HMAC-SHA256(key = HMAC-SHA256(jwtSecret, claims), i.e. that token's signature, message = `proveMessage(nonce, origin)`). The app checks it before its token goes to a new address (services/serverMove.ts): only a holder of the secret can answer, and an answer relayed from the real server names the real address. The signature itself is never sent either way |
@@ -349,7 +358,7 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | GET /me/inbox?before=<iso>&limit=30 | newest first |
 | POST /me/inbox/read | `{ ids }` or `{ all: true }` |
 | (scheduler) reminders | daily reminder only to users with no non-rejected entry today in any active challenge; nudges only to `accepted` participants with `nudges_enabled` (checked before the `nudges_sent` claim, so switching it back on the same day still gets that day's nudge), and on `manual_lower_is_better` only to somebody who has reported a day (`days > 0`): with nothing reported the gap is the missing-day penalty, not a lead; at most one nudge per person per local day across all their çelınclar: of the çelınclar due in that pass it names the one with the biggest gap ÷ the larger of the two scores (data `{ challengeId, fromUserId, dayKey }` of that one) and counts the rest in the body ("Başka 2 çelıncta da gerideysin." / "2 çelıncta daha gerideysin." / "Başka 2 çelıncta da yiyorsun 🍆"; a single other reads "Başka bir…" / "Bir çelıncta daha…"), claims every one of them, and sends nothing more that day once the person has any `nudges_sent` row for it |
-| (scheduler) recaps | weekly `recap` to users with `recap_enabled` (switched off → no row, no `recaps_sent` claim) from Sunday 20:00 until Monday 12:00 in the reader's timezone, once per week (`recaps_sent`): wins/losses/ties of çelınclar finalized since the previous recap (that recap's `sent_at` when it is ≤ 9 days back — covers a Monday make-up and a DST night — otherwise the last 7 days), Monday–Sunday steps, the king of the week among the reader and their friends (most wins, then steps; exact ties share) and the clear step leader. A Monday make-up says "geçen hafta" / "bu hafta rövanş". Nothing to tell → no row |
+| (scheduler) recaps | weekly `recap` to users with `recap_enabled` (switched off → no row, no `recaps_sent` claim) from Sunday 20:00 until Monday 12:00 in the reader's timezone, once per week (`recaps_sent`): wins/losses/ties of çelınclar finalized since the previous recap (that recap's `sent_at` when it is ≤ 9 days back — covers a Monday make-up and a DST night — otherwise the last 7 days), Monday–Sunday steps, the king of the week among the reader and their friends (most wins, then steps; exact ties share; level 3 tells a king "hepsine koydun" only with no loss and no tie that week, else "N kere koydun") and the clear step leader. A Monday make-up says "geçen hafta" / "bu hafta rövanş". Nothing to tell → no row |
 | GET /me/inbox/unread | `{ count, latestId }` |
 | GET /users/search?q= | prefix match on username or display_name (Turkish and plain casing), and the query folded like a username against the username ("Çağ" finds cagri); excludes self, blocked; max 20 |
 | GET /users/blocked | `PublicUser[]`: the people I blocked, newest block first (Ayarlar → Engellediklerin). Only blocks I placed, never the ones placed on me; deleted accounts left out |
@@ -643,7 +652,7 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             pages of 30 (useInfiniteQuery on qk.inbox): reaching the end, or "Daha eskileri göster", loads the next
                             older page with `before` = the last row's createdAt + 1 ms (rows sharing that millisecond come again and
                             are shown once); a failed older page keeps the list, says "Eskiler gelmedi" and only the button retries
-(app)/(tabs)/profile.tsx    me: avatar emoji picker, stats grid (Koydum / Yedin / Berabere / Kankalar), badges, leaderboard preview, settings link, logout
+(app)/(tabs)/profile.tsx    me: avatar emoji picker, stats grid (Koydum / Yedin / Berabere / Kankalar), badges (named by `badgeTitle` at my level), leaderboard preview, settings link, logout
 (app)/challenge/new.tsx     4-step wizard: 1) tip seç (grouped by category, each shows emoji + name + desc at my level)
                             2) ayarlar (title, start now / tomorrow, duration days 1/3/7/14/30 or custom, deadline time for checkin, proof toggle, reward, penalty;
                             a deadline at or before the type's window start is refused on the spot with the schema's message, and an
@@ -762,7 +771,7 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             says YEDİN there too); `with=<userId>` keeps the ones we both played
                             (both `accepted`) until "Herkesle"; `show=<chip>` opens on that chip (the rövanş badge → Yediklerim);
                             tap → results (finished) or the çelınc (cancelled); pull-to-refresh
-(app)/user/[id].tsx         public profile + head-to-head record vs me (finished çelınclar we both played, both `accepted`:
+(app)/user/[id].tsx         public profile (badges named by `badgeTitle` at MY level, not theirs) + head-to-head record vs me (finished çelınclar we both played, both `accepted`:
                             one who declined or left sits at rank 0 and is no round; tap → history `with` them) + "Çelınc aç" shortcut; not friends yet →
                             "Kanka isteği gönder", "Kanka isteğini kabul et" for an incoming one, "İsteği geri çek"
                             (confirm) for my own; "Diğer seçenekler": copy username, remove friend, report, block

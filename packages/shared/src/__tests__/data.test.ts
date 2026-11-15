@@ -15,11 +15,13 @@ import {
   badgeLevel,
   badgeStatKey,
   badgeTarget,
+  badgeTitle,
   evaluateBadges,
   t,
 } from '../copy';
 import {
   CATEGORY_LABELS_TR,
+  MORNING_CHECKIN_TYPE_KEYS,
   deadlineFitsWindow,
   effectiveDeadline,
   getChallengeType,
@@ -113,6 +115,11 @@ describe('challenge catalog', () => {
     const erkenKus = requireChallengeType('erken_kus');
     expect(effectiveDeadline(erkenKus, '06:30')).toBe('06:30');
     expect(effectiveDeadline(erkenKus, '03:59')).toBe('07:00');
+  });
+
+  it('counts only the morning check-ins as getting up', () => {
+    // the "erken kalkma" ladder reads these; an Erken Yatma Sözü night is not a morning
+    expect([...MORNING_CHECKIN_TYPE_KEYS].sort()).toEqual(['erken_kus', 'yatak_toplama']);
   });
 
   it('gives every yes/no type its own question and answers, and the rules name those buttons', () => {
@@ -408,6 +415,20 @@ describe('copy and badges', () => {
     expect(rung).toBeDefined();
     expect({ current: rung?.current, target: rung?.target }).toEqual({ current: 3, target: 5 });
     expect(rung?.progress).toBeCloseTo(0.6);
+  });
+
+  it('never hands a "Nazik" reader a level-3 badge name', () => {
+    for (const badge of BADGES) {
+      expect({ key: badge.key, ...badgeTitle(badge, 1) }).toEqual({
+        key: badge.key,
+        name: expect.not.stringMatching(/apla|koy|🍆/iu) as unknown as string,
+        emoji: expect.not.stringMatching(/🍆/u) as unknown as string,
+      });
+    }
+    expect(badgeTitle(BADGES.find((badge) => badge.key === 'koyus_1')!, 1)).toEqual({ name: 'İlk Zafer', emoji: '🏆' });
+    // the other levels keep the name people screenshot; the key never changes
+    expect(badgeTitle(BADGES.find((badge) => badge.key === 'koyus_1')!, 2)).toEqual({ name: 'Çırak Saplamacı', emoji: '🍆' });
+    expect(badgeTitle(BADGES.find((badge) => badge.key === 'adim_1')!, 1)).toEqual({ name: 'Yola Çıktın', emoji: '🥾' });
   });
 
   it('reports how high each ladder has been climbed', () => {

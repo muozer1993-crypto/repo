@@ -13,6 +13,7 @@ import path from 'node:path';
 import { newId, newInviteCode, nowIso, type Database, type EntryRow, type UserRow } from '../db/index.js';
 import { cancelIfAbandoned, getChallengeRow, stillOpen } from './challenges.js';
 import { announceDisputeClocks } from './entries.js';
+import { seedFrom } from './taunts.js';
 
 /** How many times we retry a random invite code before giving up (collision odds are ~0). */
 const INVITE_CODE_ATTEMPTS = 20;
@@ -41,17 +42,30 @@ export interface CreateUserInput {
   vulgarityMax?: VulgarityLevel;
 }
 
+/**
+ * The face a new account starts with, until its owner picks one on the profile.
+ * 🍆 is the app's mascot, but it is also what every friend sees next to the
+ * name: only somebody who chose "Ağır Abi" starts with it. Everybody else gets
+ * one of the picker's tamer faces, chosen from the id so it never changes.
+ */
+const DEFAULT_AVATARS = ['😎', '🔥', '👑', '🐐', '🦅', '🚀', '🎯', '💪'] as const;
+
+function defaultAvatar(id: string, level: VulgarityLevel): string {
+  return level === 3 ? '🍆' : DEFAULT_AVATARS[seedFrom(id) % DEFAULT_AVATARS.length];
+}
+
 /** Inserts a fresh user with a unique invite code and returns the stored row. */
 export function createUser(db: Database, input: CreateUserInput, now: Date = new Date()): UserRow {
   const id = newId();
   const createdAt = nowIso(now);
+  const level = input.vulgarityMax ?? 2;
   const row: UserRow = {
     id,
     username: input.username,
     display_name: input.displayName,
     password_hash: input.passwordHash,
-    avatar_emoji: '🍆',
-    vulgarity_max: input.vulgarityMax ?? 2,
+    avatar_emoji: defaultAvatar(id, level),
+    vulgarity_max: level,
     timezone: input.timezone,
     invite_code: uniqueInviteCode(db),
     push_token: null,

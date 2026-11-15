@@ -359,7 +359,9 @@ pazartesi sabahki laf atışmasını pazar akşamı başlatan kısım.
 * Pazartesi sabahı giden telafi özeti yeni haftada okunur, o yüzden "bu hafta" yerine "geçen
   hafta", "haftaya rövanş" yerine "bu hafta rövanş" der.
 * Kral önce galibiyete, eşitse haftalık adıma bakar; ikisi de birebir eşitse taht paylaşılır.
-  En çok yürüyen ise sadece tek başına öndeyse söylenir.
+  En çok yürüyen ise sadece tek başına öndeyse söylenir. Kral o hafta yediyse ya da berabere
+  kaldıysa 3. seviye ona "hepsine koydun" demez, "N kere koydun" der: bir üst satır "1 kere
+  yedin" derken kral satırı tersini söylemesin.
 * Anlatacak bir şey yoksa (biten çelınc yok, adım yok, süren çelınc yok, kankalardan kimse bir şey
   yapmamış) satır hiç yazılmaz.
 
@@ -395,6 +397,20 @@ artı bir üstünü çizer; daha yukarısı sen oraya gelene kadar hiç görünm
 Sebebi basit: yirmi iki gri kare, yeni bir kullanıcıya "yapmadığın yirmi iki şey" listesi gösterir.
 Bir sonraki basamak ise bu akşam ne yapacağını söyler. `badgeLadder(stats)` bu listeyi üretir,
 `badgeLevel(family, earned)` de o merdivende kaçıncı basamakta olduğunu verir.
+
+Rozetin adı da seviyeye uyar. Koyuş merdiveni 3. seviyenin diliyle adlanmış ("Çırak Saplamacı" 🍆 …
+"Saplama Mühendisi"); "Nazik" seçen biri bunu telefonunu ailesi gördüğü için seçmiştir, ilk
+galibiyetinde kilit ekranına patlıcan düşmemeli. O yüzden bu basamakların bir de kibar adı var
+(`namePoliteTr`, `emojiPolite`: "İlk Zafer" 🏆, "Kazanmaya Alıştın", "Grubun Ustası", "Çelınc
+Profesörü") ve adı her yerde `badgeTitle(badge, seviye)` verir: bildirimde alanın, profilde
+okuyanın seviyesi. Anahtar (`koyus_1`) hiç değişmez; `badges` tablosundaki satırlar olduğu gibi kalır.
+
+Erken kalkma merdiveni (`checkinsStreakMax`) sadece **sabah** check-in'lerini sayar: açılış saati
+öğleden önce olan türler, yani Erken Kalkan Koyar ve Yatak Toplama Sabahı
+(`MORNING_CHECKIN_TYPE_KEYS`). Erken Yatma Sözü de bir check-in ama yedi gece "7 gün üst üste
+zamanında kalktın" demek değil; geceler sabahların arasını da birleştirmesin. Ayrım çelıncın
+saatine göre değil türe göre: bir Erken Kalkan çelıncının saati öğleden sonraya kurulabilir. Daha
+önce gece check-in'leriyle verilmiş bir Horoz geri alınmaz; rozet verildiyse kalır.
 
 ## Expo Go ve bildirimler
 

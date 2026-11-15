@@ -91,6 +91,8 @@ const mockServer = { url: 'http://localhost:4000' };
 const mockSetServerUrl = jest.fn(async (url: string) => {
   mockServer.url = url;
 });
+/** the reader's level, as useLevel answers it; 2 unless a test reads as somebody else */
+const mockLevel: { value: 1 | 2 | 3 } = { value: 2 };
 
 jest.mock('@/store/auth', () => ({
   useAuth: (selector: (state: unknown) => unknown) =>
@@ -110,7 +112,7 @@ jest.mock('@/store/auth', () => ({
       onboarding: false,
       setOnboarding: jest.fn(),
     }),
-  useLevel: () => 2,
+  useLevel: () => mockLevel.value,
   deviceTimezone: () => 'Europe/Istanbul',
 }));
 
@@ -268,6 +270,7 @@ const NETWORK_ERROR = new ApiError('network', 'Sunucuya ulaşamadım.', 0);
 
 beforeEach(() => {
   mockServer.url = 'http://localhost:4000';
+  mockLevel.value = 2;
   mockDeviceHealth.state = null;
   mockNotifPermission.status = 'granted';
   delete searchParams.id;
@@ -4427,5 +4430,43 @@ describe('the pull-to-refresh spinner', () => {
     await act(async () => answer([]));
     await settle();
     expect(spinner().refreshing).toBe(false);
+  });
+});
+
+describe('badge names at the reader\'s level', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  it('a "Nazik" reader chases "İlk Zafer" on their own ladder, not "Çırak Saplamacı"', async () => {
+    mockLevel.value = 1;
+    const ProfileScreen = require('@/app/(app)/(tabs)/profile').default;
+    const polite = renderScreen(<ProfileScreen />);
+    await settle();
+    // no win yet: koyus_1 is the rung on show
+    expect(rendered(polite)).toContain('İlk Zafer');
+    expect(rendered(polite)).not.toContain('Saplamacı');
+
+    mockLevel.value = 2;
+    const casual = renderScreen(<ProfileScreen />);
+    await settle();
+    expect(rendered(casual)).toContain('Çırak Saplamacı');
+  });
+
+  it('names a friend\'s badges at my level, not theirs', async () => {
+    mockLevel.value = 1;
+    searchParams.id = ALI.id;
+    api.userProfile = jest.fn(async () => ({
+      ...ALI,
+      stats: { wins: 1, losses: 0, challengesPlayed: 1 },
+      badges: ['koyus_1'],
+    }));
+    api.friends = jest.fn(async () => ({ friends: [ALI], incoming: [], outgoing: [] }));
+    const UserScreen = require('@/app/(app)/user/[id]').default;
+    const tree = renderScreen(<UserScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('İlk Zafer');
+    expect(text).toContain('🏆');
+    expect(text).not.toContain('Saplamacı');
   });
 });

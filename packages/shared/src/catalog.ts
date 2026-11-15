@@ -475,6 +475,20 @@ export function effectiveDeadline(type: ChallengeType, stored: string | null): s
     : (type.defaultDeadlineTime ?? '23:59');
 }
 
+/**
+ * The check-in types answered in the morning (their window opens before noon):
+ * erken_kus and yatak_toplama. Only these climb the "erken kalkma" badge ladder
+ * ("7 gün üst üste zamanında kalktın"): seven Erken Yatma Sözü nights say
+ * nothing about getting up. Picked by type, not by deadline, because an
+ * erken_kus çelınc may set its hour past noon and is still about the morning.
+ */
+export const MORNING_CHECKIN_TYPE_KEYS: readonly string[] = CHALLENGE_TYPES.filter(
+  (type) =>
+    type.metricType === 'checkin_deadline' &&
+    type.checkinWindowStart !== undefined &&
+    hhmmToMinutes(type.checkinWindowStart) < 12 * 60
+).map((type) => type.key);
+
 /** Turkish labels for the catalog categories, in display order. */
 export const CATEGORY_LABELS_TR: Record<string, string> = {
   hareket: 'Hareket',

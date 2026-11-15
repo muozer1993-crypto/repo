@@ -8,6 +8,7 @@ import {
   badgeLadder,
   badgeStatKey,
   badgeTarget,
+  badgeTitle,
   type BadgeDef,
   type BadgeFamily,
   type BadgeRung,
@@ -112,7 +113,7 @@ const BADGE_HOWTO: Record<
     href: { pathname: '/(app)/challenge/new', params: { type: 'odak_seansi' } },
   },
   erken: {
-    how: 'Üst üste kaç gün zamanında check-in yaptığına bakar. Bir erken kalkma çelıncı aç.',
+    how: 'Üst üste kaç sabah zamanında check-in yaptığına bakar: Erken Kalkan Koyar ya da Yatak Toplama Sabahı. Erken Yatma Sözü\'nün geceleri buraya sayılmaz.',
     cta: 'Erken kalkma çelıncı aç',
     href: { pathname: '/(app)/challenge/new', params: { type: 'erken_kus' } },
   },
@@ -137,6 +138,7 @@ const BADGE_HOWTO: Record<
  */
 function BadgeTile({ rung, onPress }: { rung: BadgeRung; onPress: (rung: BadgeRung) => void }) {
   const { badge, earned } = rung;
+  const title = badgeTitle(badge, useLevel());
   return (
     <Pressable
       accessibilityRole="button"
@@ -146,14 +148,14 @@ function BadgeTile({ rung, onPress }: { rung: BadgeRung; onPress: (rung: BadgeRu
         earned ? styles.badgeOn : styles.badgeOff,
         pressed && styles.badgePressed,
       ]}>
-      <Text style={[styles.badgeEmoji, !earned && styles.dim]}>{badge.emoji}</Text>
+      <Text style={[styles.badgeEmoji, !earned && styles.dim]}>{title.emoji}</Text>
       <Text
         variant="tiny"
         bold
         center
         numberOfLines={2}
         color={earned ? Colors.yellow : Colors.textFaint}>
-        {badge.nameTr}
+        {title.name}
       </Text>
       {earned ? (
         <Text variant="micro" center muted numberOfLines={3}>
@@ -212,6 +214,7 @@ export default function ProfileScreen() {
   const earned = new Set<string>([...(me.badges ?? []), ...evaluateBadges(stats)]);
   const earnedCount = BADGES.filter((badge) => earned.has(badge.key)).length;
   const ladder = badgeLadder(stats, [...earned]);
+  const openTitle = openRung ? badgeTitle(openRung.badge, level) : null;
   const friendCount = friends.data?.friends.length ?? 0;
 
   const saveField = (
@@ -485,7 +488,7 @@ export default function ProfileScreen() {
       <Sheet
         visible={!!openRung}
         onClose={() => setOpenRung(null)}
-        title={openRung ? `${openRung.badge.emoji} ${openRung.badge.nameTr}` : ''}
+        title={openTitle ? `${openTitle.emoji} ${openTitle.name}` : ''}
         scroll={false}>
         {openRung ? (
           <View style={styles.rungSheet}>

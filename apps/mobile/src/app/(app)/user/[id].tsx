@@ -1,4 +1,4 @@
-import { LIMITS, getBadge } from '@koydum/shared';
+import { LIMITS, badgeTitle, getBadge } from '@koydum/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -22,7 +22,7 @@ import { useApi } from '@/hooks/useApi';
 import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
-import { useAuth } from '@/store/auth';
+import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
 import { playedTogether } from '@/utils/history';
@@ -38,6 +38,9 @@ export default function UserProfileScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
   const myId = useAuth((s) => s.me?.id ?? null);
+  // the reader's level names the badges, not the owner's: a "Nazik" reader
+  // looking at a level-3 friend still gets "İlk Zafer", not "Çırak Saplamacı"
+  const level = useLevel();
   const api = useApi();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -285,7 +288,10 @@ export default function UserProfileScreen() {
   }
 
   const user = profile.data;
-  const badges = user.badges.map((key) => getBadge(key)).filter((badge) => !!badge);
+  const badges = user.badges
+    .map((key) => getBadge(key))
+    .filter((badge) => !!badge)
+    .map((badge) => ({ key: badge.key, ...badgeTitle(badge, level) }));
 
   return (
     <Screen scroll onRefresh={pull.onRefresh} refreshing={pull.refreshing} contentStyle={styles.content}>
@@ -381,7 +387,7 @@ export default function UserProfileScreen() {
         ) : (
           <View style={styles.badges}>
             {badges.map((badge) => (
-              <Chip key={badge.key} label={badge.nameTr} icon={badge.emoji} color={Colors.yellow} />
+              <Chip key={badge.key} label={badge.name} icon={badge.emoji} color={Colors.yellow} />
             ))}
           </View>
         )}

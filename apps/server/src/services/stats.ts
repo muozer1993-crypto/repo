@@ -7,6 +7,8 @@
  */
 import {
   DEFAULT_TIMEZONE,
+  MORNING_CHECKIN_TYPE_KEYS,
+  badgeTitle,
   diffDayKeys,
   evaluateBadges,
   getBadge,
@@ -15,6 +17,7 @@ import {
   type UserStats,
 } from '@koydum/shared';
 import { countOf, nowIso, type BadgeRow, type Database, type UserRow } from '../db/index.js';
+import { asVulgarityLevel } from '../serialize.js';
 import { notify } from './notifications.js';
 
 /**
@@ -102,14 +105,22 @@ export function computeUserStats(db: Database, userId: string, now: Date = new D
     userId,
   );
 
+  // The "erken kalkma" ladder ("… zamanında kalktın") counts mornings only: an
+  // Erken Yatma Sözü night is a check-in too, but seven of them do not make
+  // somebody who sleeps till noon a Horoz, and nights must not stitch a run of
+  // mornings together. A rung already earned on nights stays (badges are never
+  // taken back).
+  const morningTypes = MORNING_CHECKIN_TYPE_KEYS.map(() => '?').join(', ');
   const checkinDays = (
     db
       .prepare(
-        `SELECT DISTINCT day_key FROM entries
-          WHERE user_id = ? AND source = 'checkin' AND value > 0 AND status <> 'rejected'
-          ORDER BY day_key ASC`,
+        `SELECT DISTINCT e.day_key FROM entries e
+           JOIN challenges c ON c.id = e.challenge_id
+          WHERE e.user_id = ? AND e.source = 'checkin' AND e.value > 0 AND e.status <> 'rejected'
+            AND c.type_key IN (${morningTypes})
+          ORDER BY e.day_key ASC`,
       )
-      .all(userId) as { day_key: string }[]
+      .all(userId, ...MORNING_CHECKIN_TYPE_KEYS) as { day_key: string }[]
   ).map((row) => row.day_key);
 
   // A `users.timezone` this runtime does not know (an ICU downgrade, an image
@@ -177,12 +188,18 @@ export function awardBadges(db: Database, userId: string, now: Date = new Date()
   });
   run(fresh);
 
+  // named at the recipient's level: this title is what the lock screen shows
+  const user = db.prepare('SELECT vulgarity_max FROM users WHERE id = ?').get(userId) as
+    | Pick<UserRow, 'vulgarity_max'>
+    | undefined;
+  const level = asVulgarityLevel(user?.vulgarity_max ?? 2);
   for (const key of stored) {
     const badge = getBadge(key);
+    const named = badge ? badgeTitle(badge, level) : null;
     notify(db, {
       userId,
       type: 'badge',
-      title: badge ? `${badge.emoji} Yeni rozet: ${badge.nameTr}` : '🏅 Yeni rozet',
+      title: named ? `${named.emoji} Yeni rozet: ${named.name}` : '🏅 Yeni rozet',
       body: badge?.descriptionTr ?? 'Yeni bir rozet kazandın.',
       data: { badgeKey: key },
       createdAt: earnedAt,

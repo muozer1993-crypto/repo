@@ -19,10 +19,11 @@ import {
   type Challenge,
   type ChallengeDetail,
   type ChallengeResults,
+  type Me,
 } from '@koydum/shared';
 import { loadConfig } from '../src/config.js';
 import { runSchedulerOnce, sendNudges, sendReminders } from '../src/services/challenges.js';
-import { computeUserStats } from '../src/services/stats.js';
+import { computeUserStats, getBadges } from '../src/services/stats.js';
 import { sendTaunt } from '../src/services/taunts.js';
 import type { ChallengeRow, UserRow } from '../src/db/index.js';
 import { JPEG_WITH_GPS, authed, befriend, makeApp, multipart, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
@@ -790,6 +791,107 @@ describe('device readings versus typed declarations', () => {
     await call({ method: 'POST', url: '/me/screen-time', payload: { days: [{ dayKey: today(harness), minutes: 240 }] } });
     const row = harness.db.prepare('SELECT value, source FROM entries WHERE challenge_id = ? AND user_id = ?').get(challengeId, ali.me.id) as { value: number; source: string };
     expect(row).toEqual({ value: 240, source: 'usage_stats' });
+  });
+});
+
+describe('badges and faces a "Nazik" phone shows', () => {
+  /** A one-day su_bardak çelınc `winner` wins over `loser`, finished by the scheduler. */
+  async function win(h: TestApp, winner: RegisteredUser, loser: RegisteredUser): Promise<void> {
+    const created = await authed(h.app, winner.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'su_bardak', startsAt: iso(h), endsAt: iso(h, DAY_MS), participantIds: [loser.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    expect((await authed(h.app, loser.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    await authed(h.app, winner.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: today(h), value: 4, source: 'manual', clientTime: iso(h) },
+    });
+    h.advance(DAY_MS + 2 * 60_000);
+    await h.app.inject({ method: 'POST', url: '/dev/advance' });
+    expect(h.db.prepare('SELECT winner_id FROM challenges WHERE id = ?').get(challengeId)).toEqual({ winner_id: winner.me.id });
+  }
+
+  function badgeTitles(h: TestApp, userId: string): string[] {
+    return (
+      h.db.prepare("SELECT title FROM notifications WHERE user_id = ? AND type = 'badge' ORDER BY created_at").all(userId) as {
+        title: string;
+      }[]
+    ).map((row) => row.title);
+  }
+
+  /** "Geldim" once a day for `days` days from the clock's current instant, every one on time. */
+  async function checkInDaily(h: TestApp, user: RegisteredUser, challengeId: string, days: number): Promise<void> {
+    for (let day = 0; day < days; day++) {
+      if (day > 0) h.advance(DAY_MS);
+      const checkin = await authed(h.app, user.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/entries`,
+        payload: { dayKey: today(h), value: 1, source: 'checkin', clientTime: iso(h) },
+      });
+      expect(checkin.statusCode).toBe(201);
+      expect(checkin.json<{ entry: { value: number } }>().entry.value).toBe(1);
+    }
+  }
+
+  it('names the first win at the winner\'s level: no 🍆 Saplamacı on a "Nazik" lock screen', async () => {
+    harness = await makeApp({ now: NOW });
+    const ayse = await registerUser(harness.app, 'ayse', { displayName: 'Ayşe', vulgarityMax: 1 });
+    const mert = await registerUser(harness.app, 'mert', { displayName: 'Mert', vulgarityMax: 3 });
+    befriend(harness.app, ayse.me.id, mert.me.id);
+
+    await win(harness, ayse, mert);
+    await win(harness, mert, ayse);
+
+    const forAyse = badgeTitles(harness, ayse.me.id);
+    expect(forAyse).toContain('🏆 Yeni rozet: İlk Zafer');
+    expect(forAyse.join('\n')).not.toMatch(/🍆|apla/u);
+    expect(badgeTitles(harness, mert.me.id)).toContain('🍆 Yeni rozet: Çırak Saplamacı');
+    // only the words differ: both own the same stored badge
+    for (const user of [ayse, mert]) {
+      expect(harness.db.prepare("SELECT 1 FROM badges WHERE user_id = ? AND badge_key = 'koyus_1'").get(user.me.id)).toBeTruthy();
+    }
+  });
+
+  it('starts only an "Ağır Abi" with the 🍆 face', async () => {
+    harness = await makeApp({ now: NOW });
+    const avatarOf = async (username: string, vulgarityMax?: 1 | 2 | 3) => {
+      const response = await harness!.app.inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username, password: 'sifre123', displayName: username, timezone: DEFAULT_TIMEZONE, vulgarityMax },
+      });
+      expect(response.statusCode).toBe(201);
+      return response.json<{ me: Me }>().me.avatarEmoji;
+    };
+
+    for (const username of ['nazik_a', 'nazik_b', 'nazik_c']) expect(await avatarOf(username, 1)).not.toBe('🍆');
+    expect(await avatarOf('delikanli', 2)).not.toBe('🍆');
+    expect(await avatarOf('varsayilan')).not.toBe('🍆');
+    expect(await avatarOf('agir_abi', 3)).toBe('🍆');
+  });
+
+  it('seven on-time Erken Yatma nights are not seven mornings', async () => {
+    harness = await makeApp({ now: '2026-01-05T18:00:00.000Z' }); // 21:00 Istanbul
+    const { ali, challengeId } = await livePair(harness, 'erken_yat', { deadlineTime: '23:00' }, 8);
+    await checkInDaily(harness, ali, challengeId, 7);
+
+    // every check-in already asks for badges; the seventh is where a Horoz used to land
+    expect(computeUserStats(harness.db, ali.me.id, harness.now()).checkinsStreakMax).toBe(0);
+    expect(getBadges(harness.db, ali.me.id)).not.toContain('erken_1');
+    expect(badgeTitles(harness, ali.me.id).join('\n')).not.toContain('Horoz');
+  });
+
+  it('seven on-time Erken Kalkan mornings make a Horoz', async () => {
+    harness = await makeApp({ now: '2026-01-05T03:00:00.000Z' }); // 06:00 Istanbul
+    const { ali, challengeId } = await livePair(harness, 'erken_kus', { deadlineTime: '07:00' }, 8);
+    await checkInDaily(harness, ali, challengeId, 7);
+
+    expect(computeUserStats(harness.db, ali.me.id, harness.now()).checkinsStreakMax).toBe(7);
+    expect(getBadges(harness.db, ali.me.id)).toContain('erken_1');
+    expect(badgeTitles(harness, ali.me.id)).toContain('🐓 Yeni rozet: Horoz');
   });
 });
 

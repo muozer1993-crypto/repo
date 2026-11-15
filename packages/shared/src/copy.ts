@@ -69,11 +69,12 @@ export function t(key: MicrocopyKey, level: VulgarityLevel): string {
  * `badgeLadder`.
  */
 export const BADGES: readonly BadgeDef[] = [
-  // koyuş — the whole point of the app
-  { key: "koyus_1", family: "koyus", tier: 1, nameTr: "Çırak Saplamacı", emoji: "🍆", descriptionTr: "İlk çelıncını kazandın.", rule: "wins>=1" },
-  { key: "koyus_2", family: "koyus", tier: 2, nameTr: "Saplamacı", emoji: "🔥", descriptionTr: "5 çelınc kazandın.", rule: "wins>=5" },
-  { key: "koyus_3", family: "koyus", tier: 3, nameTr: "Usta Saplamacı", emoji: "👑", descriptionTr: "20 çelınc kazandın. Grupta sözün geçiyor.", rule: "wins>=20" },
-  { key: "koyus_4", family: "koyus", tier: 4, nameTr: "Saplama Mühendisi", emoji: "🎓", descriptionTr: "50 çelınc kazandın. Bu iş artık meslek.", rule: "wins>=50" },
+  // koyuş — the whole point of the app, named in level-3 words; a "Nazik" reader
+  // gets the polite name (and no 🍆) through `badgeTitle`
+  { key: "koyus_1", family: "koyus", tier: 1, nameTr: "Çırak Saplamacı", emoji: "🍆", namePoliteTr: "İlk Zafer", emojiPolite: "🏆", descriptionTr: "İlk çelıncını kazandın.", rule: "wins>=1" },
+  { key: "koyus_2", family: "koyus", tier: 2, nameTr: "Saplamacı", emoji: "🔥", namePoliteTr: "Kazanmaya Alıştın", descriptionTr: "5 çelınc kazandın.", rule: "wins>=5" },
+  { key: "koyus_3", family: "koyus", tier: 3, nameTr: "Usta Saplamacı", emoji: "👑", namePoliteTr: "Grubun Ustası", descriptionTr: "20 çelınc kazandın. Grupta sözün geçiyor.", rule: "wins>=20" },
+  { key: "koyus_4", family: "koyus", tier: 4, nameTr: "Saplama Mühendisi", emoji: "🎓", namePoliteTr: "Çelınc Profesörü", descriptionTr: "50 çelınc kazandın. Bu iş artık meslek.", rule: "wins>=50" },
 
   // yiyiş — losing is content too
   { key: "yiyis_1", family: "yiyis", tier: 1, nameTr: "Ağzının Tadını Aldın", emoji: "🍽️", descriptionTr: "İlk çelıncını kaybettin.", rule: "losses>=1" },
@@ -215,4 +216,15 @@ export function badgeLevel(family: BadgeDef['family'], earnedKeys: readonly stri
 
 export function getBadge(key: string): BadgeDef | undefined {
   return BADGES.find((badge) => badge.key === key);
+}
+
+/**
+ * The name and emoji a reader at `level` sees. The reader decides, like
+ * everywhere else: somebody who picked "Nazik" because their family sees the
+ * phone gets "🏆 İlk Zafer" on the lock screen, not "🍆 Çırak Saplamacı". Only
+ * the words change; the key (what `badges` stores) is the same at every level.
+ */
+export function badgeTitle(badge: BadgeDef, level: VulgarityLevel): { name: string; emoji: string } {
+  if (level === 1) return { name: badge.namePoliteTr ?? badge.nameTr, emoji: badge.emojiPolite ?? badge.emoji };
+  return { name: badge.nameTr, emoji: badge.emoji };
 }
