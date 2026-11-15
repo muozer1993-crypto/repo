@@ -86,6 +86,7 @@ export interface ChallengeType {
   maxPerEntry: number;        // anti-abuse cap for a single manual value
   maxPerDay: number;          // cap for the daily sum
   missingDayPenalty?: number; // lower-is-better only: value assumed for unreported days
+  askTr?: string; yesTr?: string; noTr?: string; // daily_boolean only: the question and the two answers (no ✅/❌); yesTr = value 1
 }
 ```
 Metric semantics:
@@ -94,7 +95,7 @@ Metric semantics:
 | auto_steps | 1 (upsert) | steps | sum of days |
 | focus_minutes | many | minutes of a completed focus session | sum |
 | checkin_deadline | 1 | 1 if check-in happened before `deadlineTime` local, else 0 | count of 1s |
-| daily_boolean | 1 (upsert) | 1 = did it / 0 = failed | count of 1s |
+| daily_boolean | 1 (upsert) | 1 = the day that counts (clean day of a don't-do-it type, done day of the others) / 0 = failed | count of 1s |
 | manual_count | many | number (glasses, pages, km...) | sum |
 | manual_lower_is_better | 1 (upsert) | number (e.g. screen hours) | sum + missingDays × missingDayPenalty; lowest wins |
 
@@ -780,7 +781,10 @@ davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), r
   started counting that day and a later, higher phone count still wins.
 - focus_minutes: "Odak seansı başlat" → focus/[id]; today's total.
 - checkin_deadline: big "GELDİM" button visible only today; shows deadline; after tap → success or late copy.
-- daily_boolean: two buttons "Yaptım ✅ / Yapmadım ❌" for today (and yesterday if missing).
+- daily_boolean: the type's `askTr` ("Günün dumansız geçti mi?") above two buttons `yesTr ✅` / `noTr ❌` ("İçmedim ✅ / İçtim ❌";
+  "Yaptım / Yapmadım" only for a type without its own), for today and, while inside the window, yesterday: labelled
+  "Dün (boş kalmış)" while empty, "Dün" with its answer chip once answered, and still tappable so a wrong tap is put right
+  (the server upserts the day). Toast after a 0, at the reader's level, says the other button changes it.
 - manual_count: "+ Giriş" → entry modal; quick-add chips.
 - manual_lower_is_better: for `deviceMetric: 'screen_time'` on Android with usage access → today's minutes from the phone + "Senkronla" (POST /me/screen-time), no manual button; permission missing → "Kullanım erişimi ver" (opens system usage-access page, re-checked on AppState active) + a ghost manual fallback; iPhone / Expo Go / other → "Bugünkü değeri gir" → entry modal (proof photo emphasized), and a day the phone already reported shows as locked (server 409 `device_locked`).
 

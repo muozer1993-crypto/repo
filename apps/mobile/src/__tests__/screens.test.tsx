@@ -1539,8 +1539,106 @@ describe('a check-in', () => {
   });
 });
 
+describe('a yes/no day', () => {
+  // ME.timezone is unusable, so the screens fall back to the device zone
+  const today = () => todayKey('Europe/Istanbul');
+
+  function smokeFree(myEntries: Entry[] = []) {
+    const detail = challengeDetail();
+    return {
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        typeKey: 'sigara_yok',
+        metricType: 'daily_boolean' as const,
+        unit: 'gün',
+        title: 'Dumansız Günler',
+      },
+      myEntries,
+    };
+  }
+
+  function mark(dayKey: string, value: 0 | 1): Entry {
+    return {
+      id: `e-${dayKey}`,
+      challengeId: 'c-1',
+      userId: 'me-1',
+      dayKey,
+      value,
+      source: 'manual',
+      note: null,
+      proofUrl: null,
+      status: 'ok',
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  /** Every button with this title, today's row first. */
+  function buttons(tree: ReactTestRenderer, title: string) {
+    return tree.root.findAll((node) => node.props.title === title && typeof node.props.onPress === 'function');
+  }
+
+  it('asks whether the day went smoke-free and answers "İçmedim" / "İçtim", never "Yapmadım"', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => smokeFree());
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Günün dumansız geçti mi?');
+    expect(text).toContain('İÇMEDİM ✅');
+    expect(text).toContain('İÇTİM ❌');
+    expect(text).not.toContain('YAPMADIM');
+    expect(text).not.toContain('YAPTIM');
+    expect(text).toContain('DÜN (BOŞ KALMIŞ)');
+  });
+
+  it('counts "İçmedim" as the clean day: it sends a 1', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => smokeFree());
+    api.addEntry = jest.fn(async () => ({ entry: mark(today(), 1), standings: [] }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    await act(async () => {
+      await buttons(tree, 'İçmedim ✅')[0]!.props.onPress();
+    });
+    await settle();
+
+    expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ dayKey: today(), value: 1, source: 'manual' }));
+    expect(rendered(tree)).toContain('Gün senin lehine yazıldı.');
+  });
+
+  it('keeps yesterday on screen once answered, with its answer, so a wrong tap can be put right', async () => {
+    searchParams.id = 'c-1';
+    const yesterday = addDays(today(), -1);
+    api.challenge = jest.fn(async () => smokeFree([mark(yesterday, 0)]));
+    api.addEntry = jest.fn(async () => ({ entry: mark(yesterday, 1), standings: [] }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('DÜN');
+    expect(text).not.toContain('BOŞ KALMIŞ');
+    // yesterday's chip, and its "İçtim" lit up while today's is not
+    expect(tree.root.findAll((node) => node.props.label === 'İÇTİM' && node.props.filled === true)).toHaveLength(1);
+    const smoked = buttons(tree, 'İçtim ❌');
+    expect(smoked.map((button) => button.props.variant)).toEqual(['secondary', 'danger']);
+
+    await act(async () => {
+      await buttons(tree, 'İçmedim ✅')[1]!.props.onPress();
+    });
+    await settle();
+
+    expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ dayKey: yesterday, value: 1 }));
+  });
+});
+
 describe('an itiraz on the feed', () => {
-  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const ALI ={ id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
 
   /** Mustafa (the reader) and Ali, one entry each; `disputedBy` disputes the other one's entry. */
   function withDispute(disputedBy: 'me' | 'ali') {

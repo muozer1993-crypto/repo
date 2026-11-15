@@ -90,7 +90,7 @@ import {
 } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
 import { stillJoinable } from '@/utils/joinWindow';
-import { dativeTr } from '@/utils/turkish';
+import { dativeTr, upperTr } from '@/utils/turkish';
 import { resolveServerUrl } from '@/utils/url';
 
 /* ------------------------------------------------------------------ utils */
@@ -1189,7 +1189,7 @@ function CheckinAction({ id, detail, level, today, tz }: ActionProps) {
 
 /* daily_boolean ---------------------------------------------------------- */
 
-function BooleanAction({ id, detail, today, yesterday, dayKeys }: ActionProps) {
+function BooleanAction({ id, detail, type, level, today, yesterday, dayKeys }: ActionProps) {
   const addEntry = useAddEntry(id);
   const toast = useToast();
   const [busyDay, setBusyDay] = useState<string | null>(null);
@@ -1198,6 +1198,10 @@ function BooleanAction({ id, detail, today, yesterday, dayKeys }: ActionProps) {
   const todayEntry = entryFor(today);
   const yesterdayEntry = entryFor(yesterday);
   const yesterdayInside = dayKeys.includes(yesterday);
+  // A shared "Yaptım / Yapmadım" read backwards in the don't-do-it types: no
+  // cigarette, "Yapmadım", a clean day lost. Each type names its own answers.
+  const yes = type.yesTr ?? 'Yaptım';
+  const no = type.noTr ?? 'Yapmadım';
 
   const send = async (dayKey: string, value: 0 | 1) => {
     setBusyDay(dayKey);
@@ -1217,11 +1221,26 @@ function BooleanAction({ id, detail, today, yesterday, dayKeys }: ActionProps) {
         });
         return;
       }
-      toast({
-        title: value === 1 ? 'Yaptın' : 'Yapmadın',
-        body: value === 1 ? 'Gün senin lehine yazıldı.' : 'Yarın telafi edersin.',
-        kind: value === 1 ? 'success' : 'info',
-      });
+      // "yaptın" / "yapmadın" would be backwards again in most types, so the
+      // toast speaks of the day; after a 0 it says the other button still works
+      toast(
+        value === 1
+          ? {
+              title: byLevel(level, 'Kaydedildi', 'Tamamdır', 'Gün cebinde 🍆'),
+              body: byLevel(level, 'Gün hanene yazıldı.', 'Gün senin lehine yazıldı.', 'Bir gün daha hanene yazıldı.'),
+              kind: 'success',
+            }
+          : {
+              title: byLevel(level, 'Kaydedildi', 'Gün yandı', 'Gün gitti lan'),
+              body: byLevel(
+                level,
+                'Gün sayılmayacak. Yanlış bastıysan diğer düğmeyle değiştirebilirsin.',
+                'Yanlış bastıysan diğerine dokun, değiştirebilirsin.',
+                'Yanlış bastıysan diğerine dokun, düzelir.'
+              ),
+              kind: 'info',
+            }
+      );
     } catch (error) {
       toast({ title: 'Kaydedilemedi', body: errorText(error, 'Giriş gitmedi.'), kind: 'danger' });
     } finally {
@@ -1231,17 +1250,28 @@ function BooleanAction({ id, detail, today, yesterday, dayKeys }: ActionProps) {
 
   return (
     <View style={styles.actionBody}>
+      {type.askTr ? (
+        <Text variant="small" muted>
+          {type.askTr}
+        </Text>
+      ) : null}
       <BooleanRow
         label="Bugün"
+        yes={yes}
+        no={no}
         value={todayEntry?.value}
         busy={busyDay === today}
         onYes={() => void send(today, 1)}
         onNo={() => void send(today, 0)}
       />
-      {yesterdayInside && !yesterdayEntry ? (
+      {/* still there once answered: the server keeps one row per day and takes
+          yesterday's again, so a wrong tap last night can be put right */}
+      {yesterdayInside ? (
         <BooleanRow
-          label="Dün (boş kalmış)"
-          value={undefined}
+          label={yesterdayEntry ? 'Dün' : 'Dün (boş kalmış)'}
+          yes={yes}
+          no={no}
+          value={yesterdayEntry?.value}
           busy={busyDay === yesterday}
           onYes={() => void send(yesterday, 1)}
           onNo={() => void send(yesterday, 0)}
@@ -1253,12 +1283,17 @@ function BooleanAction({ id, detail, today, yesterday, dayKeys }: ActionProps) {
 
 function BooleanRow({
   label,
+  yes,
+  no,
   value,
   busy,
   onYes,
   onNo,
 }: {
   label: string;
+  /** the type's two answers, without their ✅ / ❌ */
+  yes: string;
+  no: string;
   value: number | undefined;
   busy: boolean;
   onYes: () => void;
@@ -1271,7 +1306,7 @@ function BooleanRow({
         <Text variant="label">{label}</Text>
         {done ? (
           <Chip
-            label={value === 1 ? 'YAPTIM' : 'YAPMADIM'}
+            label={upperTr(value === 1 ? yes : no)}
             color={value === 1 ? Colors.success : Colors.danger}
             size="sm"
             filled
@@ -1280,7 +1315,7 @@ function BooleanRow({
       </View>
       <View style={styles.row}>
         <Button
-          title="Yaptım ✅"
+          title={`${yes} ✅`}
           size="md"
           style={styles.grow}
           variant={value === 1 ? 'success' : 'primary'}
@@ -1288,7 +1323,7 @@ function BooleanRow({
           onPress={onYes}
         />
         <Button
-          title="Yapmadım ❌"
+          title={`${no} ❌`}
           size="md"
           style={styles.grow}
           variant={value === 0 ? 'danger' : 'secondary'}

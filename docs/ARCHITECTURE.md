@@ -190,7 +190,9 @@ kapanırken sonuç `challenge_participants.final_score` alanına yazılır.
 
 Altı metrik türü vardır ve hepsi aynı arayüze oturur: `auto_steps`, `focus_minutes`,
 `checkin_deadline`, `daily_boolean`, `manual_count`, `manual_lower_is_better`. Yeni bir çelınc
-türü eklemek katalogda bir satır demektir — sunucu ve uygulama kodu değişmez.
+türü eklemek katalogda bir satır demektir — sunucu ve uygulama kodu değişmez. Evet/hayır
+türünde soruyu ve iki düğmenin adını da (`askTr`, `yesTr`, `noTr`) katalog verir; `yesTr` her
+zaman sayılan gündür, "İçmedim" gibi.
 
 İki istisna bilinsin. `manual_lower_is_better` (ekran süresi) toplam değil **günlük ortalama**
 ile yarışır: girilmeyen gün en kötü değerden sayılır, toplam pencere gün sayısına bölünür. Böylece

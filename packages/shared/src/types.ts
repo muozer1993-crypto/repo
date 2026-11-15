@@ -160,6 +160,16 @@ export interface ChallengeType {
    * the number is always entered by hand.
    */
   deviceMetric?: DeviceMetric;
+  /**
+   * `daily_boolean` only: the question above the two buttons and what each
+   * button says, without its ✅/❌. Value 1 (`yesTr`) is the day that counts: the
+   * clean day of an abstinence type, the done day of the others. A shared
+   * "Yaptım / Yapmadım" read backwards in "Dumansız Günler": somebody who did not
+   * smoke pressed "Yapmadım" and lost a day they never broke.
+   */
+  askTr?: string;
+  yesTr?: string;
+  noTr?: string;
 }
 
 /** The phone readings the server knows how to fan out into challenges. */

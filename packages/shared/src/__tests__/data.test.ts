@@ -115,6 +115,28 @@ describe('challenge catalog', () => {
     expect(effectiveDeadline(erkenKus, '03:59')).toBe('07:00');
   });
 
+  it('gives every yes/no type its own question and answers, and the rules name those buttons', () => {
+    // a shared "Yaptım / Yapmadım" read backwards in "Dumansız Günler": no
+    // cigarette, "Yapmadım", a clean day thrown away
+    const booleans = CHALLENGE_TYPES.filter((type) => type.metricType === 'daily_boolean');
+    expect(booleans.length).toBeGreaterThan(0);
+    for (const type of booleans) {
+      expect(type.askTr, type.key).toMatch(/\?$/);
+      expect(type.yesTr, type.key).toBeTruthy();
+      expect(type.noTr, type.key).toBeTruthy();
+      // the screen adds the ✅ / ❌ itself
+      expect(`${type.yesTr}${type.noTr}`, type.key).not.toMatch(/[✅❌]/u);
+      expect(type.howMeasuredTr, type.key).toContain(`'${type.yesTr}'`);
+      expect(type.howMeasuredTr, type.key).toContain(`'${type.noTr}'`);
+    }
+    for (const type of CHALLENGE_TYPES) {
+      if (type.yesTr === 'Yaptım') continue;
+      for (const text of [type.descriptionTr, type.descriptionPoliteTr, type.howMeasuredTr]) {
+        expect(text, type.key).not.toMatch(/'Yap(tı|madı)m'/);
+      }
+    }
+  });
+
   it('looks types up by key', () => {
     const first = CHALLENGE_TYPES[0];
     expect(getChallengeType(first.key)).toEqual(first);
