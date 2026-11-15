@@ -78,6 +78,27 @@ async function liveChallenge(
   return { ali, veli, challengeId };
 }
 
+/** `names[0]` creates a steps çelınc with the rest, all friends of theirs and all in. */
+async function group(h: TestApp, names: string[]): Promise<{ players: RegisteredUser[]; challengeId: string }> {
+  const players: RegisteredUser[] = [];
+  for (const name of names) {
+    players.push(await registerUser(h.app, name, { displayName: name.charAt(0).toUpperCase() + name.slice(1) }));
+  }
+  const [creator, ...friends] = players as [RegisteredUser, ...RegisteredUser[]];
+  for (const friend of friends) befriend(h.app, creator.me.id, friend.me.id);
+  const created = await authed(h.app, creator.token)({
+    method: 'POST',
+    url: '/challenges',
+    payload: { typeKey: 'adim_yarisi', startsAt: iso(h), endsAt: iso(h, 3 * DAY_MS), participantIds: friends.map((f) => f.me.id) },
+  });
+  expect(created.statusCode).toBe(201);
+  const challengeId = created.json<Challenge>().id;
+  for (const friend of friends) {
+    expect((await authed(h.app, friend.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+  }
+  return { players, challengeId };
+}
+
 function post(h: TestApp, user: RegisteredUser, challengeId: string, payload: Record<string, unknown>) {
   return authed(h.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/entries`, payload });
 }
@@ -798,6 +819,8 @@ describe('POST /challenges/:id/entries/:entryId/dispute', () => {
     });
     const answerBy = disputed.json<{ answerBy: string | null }>().answerBy;
     expect(answerBy).toBe(iso(harness, LIMITS.DISPUTE_ANSWER_MS));
+    // one vote is the majority here, so nobody else is called to it
+    expect(listByType(harness.db, cem.me.id, 'dispute')).toHaveLength(0);
 
     // Ali adds Eda; with 4 in, a new itiraz would need 2, but this one already started
     harness.advance(60_000);
@@ -833,6 +856,97 @@ describe('POST /challenges/:id/entries/:entryId/dispute', () => {
     const feed = challengeFeed(harness.db, challengeId, 1);
     expect(feed.map((item) => item.id)).toContain(olderId);
     expect(feed).toHaveLength(2);
+  });
+
+  it('calls the other players of a big çelınc to the first itiraz, once, and the feed counts the votes', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId } = await group(harness, ['ali', 'veli', 'ayse', 'mert', 'cem', 'eda', 'can', 'naz', 'ece', 'efe']);
+    const [ali, veli, ayse, mert, ...rest] = players as [RegisteredUser, RegisteredUser, RegisteredUser, RegisteredUser, ...RegisteredUser[]];
+    harness.db.prepare('UPDATE users SET vulgarity_max = 1 WHERE id = ?').run(ayse.me.id);
+    harness.db.prepare('UPDATE users SET vulgarity_max = 3 WHERE id = ?').run(mert.me.id);
+    const created = await post(harness, ali, challengeId, { dayKey: today(harness), value: 60000, source: 'manual', clientTime: iso(harness) });
+    const entryId = created.json<{ entry: Entry }>().entry.id;
+    const url = `/challenges/${challengeId}/entries/${entryId}/dispute`;
+    const calls = (user: RegisteredUser) =>
+      listByType(harness!.db, user.me.id, 'dispute').filter((row) => (JSON.parse(row.data) as { kind?: string }).kind === 'call');
+
+    // 10 in: a majority of the other nine is 5, and one itiraz starts nothing
+    const first = await authed(harness.app, veli.token)({ method: 'POST', url, payload: { reason: 'altmış bin mi' } });
+    expect(first.statusCode).toBe(201);
+    expect(first.json<{ answerBy: string | null }>().answerBy).toBeNull();
+
+    // the eight others hear of it; the owner and the disputer have their own copy or none
+    for (const other of [ayse, mert, ...rest]) expect(calls(other)).toHaveLength(1);
+    expect(calls(ali)).toHaveLength(0);
+    expect(listByType(harness.db, ali.me.id, 'dispute')).toHaveLength(1);
+    expect(listByType(harness.db, veli.me.id, 'dispute')).toHaveLength(0);
+    const [call] = calls(rest[0]!);
+    expect(JSON.parse(call!.data)).toEqual({ challengeId, entryId, kind: 'call' });
+    expect(call?.title).toBe('İtiraz var, sen de bak');
+    expect(call?.body).toContain('Veli, "');
+    expect(call?.body).toContain('Ali · ');
+    expect(call?.body).toContain(' · 60.000 adım. Yalan diyenler 5 kişiyi bulursa 12 saat içinde kanıt lazım');
+    expect(calls(ayse)[0]?.title).toBe('Bir girişe itiraz var');
+    expect(calls(ayse)[0]?.body).toContain('İtiraz edenler 5 kişiyi bulursa sahibinin 12 saat içinde kanıt eklemesi gerekir');
+    expect(calls(mert)[0]?.title).toBe('Biri sallıyor olabilir 🍆');
+
+    const feedRow = async () =>
+      (await authed(harness!.app, mert.token)({ method: 'GET', url: `/challenges/${challengeId}` }))
+        .json<ChallengeDetail>()
+        .feed.find((item) => item.id === entryId);
+    expect(await feedRow()).toMatchObject({ status: 'disputed', answerBy: null, disputeVotes: { open: 1, needed: 5 } });
+
+    // a second itiraz rings nobody again
+    await authed(harness.app, ayse.token)({ method: 'POST', url, payload: { reason: 'bence de' } });
+    expect(await feedRow()).toMatchObject({ disputeVotes: { open: 2, needed: 5 } });
+    // both taken back and the entry is clean, but a third friend's itiraz is not a first one
+    await authed(harness.app, veli.token)({ method: 'DELETE', url });
+    await authed(harness.app, ayse.token)({ method: 'DELETE', url });
+    expect(await feedRow()).toMatchObject({ status: 'ok', disputeVotes: null });
+    const refiled = await authed(harness.app, veli.token)({ method: 'POST', url, payload: { reason: 'yine de' } });
+    expect(refiled.statusCode).toBe(409);
+    expect((await authed(harness.app, mert.token)({ method: 'POST', url, payload: { reason: 'ben de' } })).statusCode).toBe(201);
+    for (const other of [ayse, ...rest]) expect(calls(other)).toHaveLength(1);
+    expect(calls(veli)).toHaveLength(0);
+    expect(calls(mert)).toHaveLength(1);
+
+    // five make the majority: the clock starts and the count gives way to it
+    for (const friend of rest.slice(0, 4)) {
+      await authed(harness.app, friend.token)({ method: 'POST', url, payload: { reason: 'olmaz' } });
+    }
+    expect(await feedRow()).toMatchObject({ answerBy: iso(harness, LIMITS.DISPUTE_ANSWER_MS), disputeVotes: null });
+  });
+
+  it('calls nobody across a block, and nobody to an entry of somebody who left', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId } = await group(harness, ['ali', 'veli', 'ayse', 'mert', 'cem']);
+    const [ali, veli, ayse, mert, cem] = players as [RegisteredUser, RegisteredUser, RegisteredUser, RegisteredUser, RegisteredUser];
+    const day = today(harness);
+    const alis = (await post(harness, ali, challengeId, { dayKey: day, value: 40000, source: 'manual', clientTime: iso(harness) })).json<{ entry: Entry }>().entry.id;
+    const cems = (await post(harness, cem, challengeId, { dayKey: day, value: 45000, source: 'manual', clientTime: iso(harness) })).json<{ entry: Entry }>().entry.id;
+
+    // Ayşe blocked the disputer, the owner blocked Mert; only Cem is called
+    expect((await authed(harness.app, ayse.token)({ method: 'POST', url: `/users/${veli.me.id}/block` })).statusCode).toBeLessThan(300);
+    expect((await authed(harness.app, ali.token)({ method: 'POST', url: `/users/${mert.me.id}/block` })).statusCode).toBeLessThan(300);
+    const disputed = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${alis}/dispute`,
+      payload: { reason: 'kırk bin mi' },
+    });
+    expect(disputed.statusCode).toBe(201);
+    expect(listByType(harness.db, ayse.me.id, 'dispute')).toHaveLength(0);
+    expect(listByType(harness.db, mert.me.id, 'dispute')).toHaveLength(0);
+    expect(listByType(harness.db, cem.me.id, 'dispute')).toHaveLength(1);
+
+    // Cem walks out: his rows count for nothing, so nobody is called to them
+    expect((await authed(harness.app, cem.token)({ method: 'POST', url: `/challenges/${challengeId}/leave` })).statusCode).toBe(200);
+    const left = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${cems}/dispute`,
+      payload: { reason: 'o da yalan' },
+    });
+    expect(left.statusCode).toBe(201);
+    expect(listByType(harness.db, ali.me.id, 'dispute').filter((row) => row.data.includes('"call"'))).toHaveLength(0);
   });
 
   it('needs an existing entry, a reason and membership', async () => {
@@ -985,14 +1099,17 @@ describe('POST /challenges/:id/entries/:entryId/proof', () => {
     const statuses = harness.db.prepare('SELECT status FROM disputes WHERE entry_id = ?').all(entryId) as { status: string }[];
     expect(statuses.map((row) => row.status)).toEqual(['dismissed', 'dismissed']);
 
+    // Veli's itiraz called Ayşe and Mert to it; the photo is news to the disputers only
+    const news = (user: RegisteredUser) =>
+      listByType(harness!.db, user.me.id, 'dispute').filter((row) => (JSON.parse(row.data) as { kind?: string }).kind !== 'call');
     for (const disputer of [veli, ayse]) {
-      const told = listByType(harness.db, disputer.me.id, 'dispute');
+      const told = news(disputer);
       expect(told, disputer.me.username).toHaveLength(1);
       expect(JSON.parse(told[0]!.data)).toEqual({ challengeId, entryId, kind: 'proof' });
     }
-    expect(listByType(harness.db, veli.me.id, 'dispute')[0]?.body).toContain('Ali kanıt ekledi, bir bak.');
-    expect(listByType(harness.db, ayse.me.id, 'dispute')[0]?.body).toContain('fotoğraf ekledi');
-    expect(listByType(harness.db, mert.me.id, 'dispute')).toHaveLength(0);
+    expect(news(veli)[0]?.body).toContain('Ali kanıt ekledi, bir bak.');
+    expect(news(ayse)[0]?.body).toContain('fotoğraf ekledi');
+    expect(news(mert)).toHaveLength(0);
 
     // the same itiraz is not filed twice; the clock never runs out on it
     const again = await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'foto da sahte' } });

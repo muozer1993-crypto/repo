@@ -188,6 +188,12 @@ describe('API contract as the mobile client consumes it', () => {
     expect(isChallenge(detail.challenge)).toBe(true);
     expect(Array.isArray(detail.myEntries)).toBe(true);
     expect(Array.isArray(detail.feed)).toBe(true);
+    // "İtiraz 1/5" on a disputed row below the majority, null on every other one
+    expect(detail.feed.length).toBeGreaterThan(0);
+    for (const item of detail.feed as { disputeVotes?: unknown }[]) {
+      const votes = item.disputeVotes as { open?: unknown; needed?: unknown } | null;
+      expect(votes === null || (typeof votes?.open === 'number' && typeof votes.needed === 'number')).toBe(true);
+    }
     expect(Array.isArray(detail.disputes)).toBe(true);
     expect(Array.isArray(detail.taunts)).toBe(true);
     expect(Array.isArray(detail.canTaunt)).toBe(true);

@@ -16,18 +16,21 @@ import {
   DisputeBodySchema,
   EntryBodySchema,
   EntryProofBodySchema,
+  scoreLabel,
   type Dispute,
   type Entry,
   type ParticipantView,
 } from '@koydum/shared';
 import { badRequest, forbidden, notFound, parseBody } from '../errors.js';
-import { nowIso, type ChallengeRow, type EntryRow, type UserRow } from '../db/index.js';
-import { computeStandings, disputesOpenUntil } from '../services/challenges.js';
+import { countOf, nowIso, type ChallengeRow, type EntryRow, type UserRow } from '../db/index.js';
+import { acceptedParticipants, computeStandings, disputesOpenUntil, typeForChallenge } from '../services/challenges.js';
 import { notify } from '../services/notifications.js';
 import { awardBadges } from '../services/stats.js';
 import {
+  disputeCallCopy,
   disputeCopy,
   disputeProofCopy,
+  getParticipant,
   getUserRow,
   levelOf,
   requireAcceptedMembership,
@@ -86,6 +89,37 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
         title: copy.title,
         body: copy.body,
         data: { challengeId: challenge.id, entryId: entry.id, kind: 'proof' },
+        createdAt: iso,
+      });
+    }
+  }
+
+  /**
+   * "Veli bir girişe itiraz etti, sen de bak" to every other player, on the
+   * first itiraz an entry ever gets while one vote is not a majority (four
+   * players and up). Only the owner used to hear of it, so in a ten-player
+   * kitap çelınc the four more itirazlar it takes never came and the typed
+   * 600 pages counted, and won. Once per entry: after a withdrawal, or a
+   * photo, another friend's itiraz does not ring everybody again (a number
+   * changed since is a new one, `forgetDismissedDisputes`). The owner and the
+   * disputer have their own copy; a block with either of them keeps a player
+   * out.
+   */
+  function callTheOthers(by: UserRow, owner: UserRow, challenge: ChallengeRow, entry: EntryRow, needed: number, now: Date): void {
+    const iso = nowIso(now);
+    const value = scoreLabel(typeForChallenge(challenge), Number(entry.value));
+    for (const participant of acceptedParticipants(db, challenge.id)) {
+      if (participant.user_id === by.id || participant.user_id === owner.id) continue;
+      if (isBlockedBetween(db, participant.user_id, by.id) || isBlockedBetween(db, participant.user_id, owner.id)) continue;
+      const player = getUserRow(db, participant.user_id);
+      if (!player || player.deleted_at !== null) continue;
+      const copy = disputeCallCopy(levelOf(player), by.display_name, owner.display_name, challenge.title, entry.day_key, value, needed);
+      notify(db, {
+        userId: player.id,
+        type: 'dispute',
+        title: copy.title,
+        body: copy.body,
+        data: { challengeId: challenge.id, entryId: entry.id, kind: 'call' },
         createdAt: iso,
       });
     }
@@ -215,6 +249,15 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
           data: { challengeId: challenge.id, entryId: entry.id, disputeId: outcome.dispute.id, answerBy: outcome.answerBy },
           createdAt: nowIso(now),
         });
+      }
+
+      // Below a majority one itiraz changes nothing unless the others hear of
+      // it, so the first one an entry ever gets calls them (`callTheOthers`).
+      // An entry of somebody who left counts for nothing: nobody is called.
+      const firstEver = countOf(db, 'SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ?', entry.id) === 1;
+      const ownerIn = getParticipant(db, challenge.id, owner.id)?.status === 'accepted';
+      if (outcome.answerBy === null && outcome.threshold >= 2 && firstEver && ownerIn) {
+        callTheOthers(me.row, owner, challenge, entry, outcome.threshold, now);
       }
 
       void reply.code(201);

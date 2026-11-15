@@ -1569,8 +1569,14 @@ const ANSWER_HOURS = Math.round(LIMITS.DISPUTE_ANSWER_MS / 3_600_000);
 function disputeStatusText(item: FeedItem, isMine: boolean, active: boolean, now: number): string {
   if (!active) return 'İtiraz çoğunluğu bulamadı, giriş sayıldı.';
   const answerBy = item.answerBy ? Date.parse(item.answerBy) : Number.NaN;
-  // below the majority there is no clock yet (and an older server sends none)
-  if (!Number.isFinite(answerBy)) return 'İtiraz var ama henüz çoğunluk değil.';
+  // below the majority there is no clock yet, only the count (an older server sends neither)
+  if (!Number.isFinite(answerBy)) {
+    const votes = item.disputeVotes;
+    if (votes && votes.needed > votes.open) {
+      return `İtiraz ${votes.open}/${votes.needed}. ${votes.needed - votes.open} kişi daha itiraz ederse ${ANSWER_HOURS} saatlik kanıt süresi başlar.`;
+    }
+    return 'İtiraz var ama henüz çoğunluk değil.';
+  }
   const left = answerBy - now;
   if (left <= 0) return 'Kanıt gelmedi, birazdan yanar.';
   return isMine
@@ -1672,8 +1678,17 @@ function Feed({
       return;
     }
     try {
-      await dispute.mutateAsync({ entryId: target.id, reason: text });
-      toast({ title: 'İtiraz gitti', body: 'Kankalar bakacak.', kind: 'info' });
+      const { answerBy } = await dispute.mutateAsync({ entryId: target.id, reason: text });
+      // At the majority the owner's clock runs (maybe since an earlier itiraz);
+      // below it the server calls the other players to it. An older server
+      // sends no `answerBy` at all.
+      const left = answerBy ? Date.parse(answerBy) - Date.now() : Number.NaN;
+      let body = 'Kankalar bakacak.';
+      if (left > 0) body = `${formatRemaining(left)} içinde kanıt gelmezse giriş yanar.`;
+      else if (answerBy === null) {
+        body = `Diğerlerine de haber gitti. Çoğunluk itiraz ederse sahibinin ${ANSWER_HOURS} saati başlar.`;
+      }
+      toast({ title: 'İtiraz gitti', body, kind: 'info' });
       setTarget(null);
       setReason('');
       setError(null);

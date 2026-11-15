@@ -393,10 +393,16 @@ export class ApiClient {
     return this.request<{ ok: true }>('DELETE', `/challenges/${challengeId}/entries/${entryId}`);
   }
 
+  /**
+   * `answerBy` is set once the itirazlar are a majority (the owner's clock
+   * started) and null below it, when the server calls the other players to it.
+   */
   disputeEntry(challengeId: string, entryId: string, reason: string) {
-    return this.request<{ ok: true }>('POST', `/challenges/${challengeId}/entries/${entryId}/dispute`, {
-      body: { reason },
-    });
+    return this.request<{ entry: Entry; answerBy?: string | null; standings: ParticipantView[] }>(
+      'POST',
+      `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      { body: { reason } }
+    );
   }
 
   /** Takes the caller's own open itiraz back; the entry is clean again once nobody else disputes it. */

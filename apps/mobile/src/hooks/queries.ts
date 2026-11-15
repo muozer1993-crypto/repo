@@ -368,7 +368,7 @@ export function useDeleteEntry(id: string) {
 export function useDispute(id: string) {
   const api = useApi();
   const invalidate = useInvalidator();
-  return useMutation<unknown, Error, { entryId: string; reason: string }>({
+  return useMutation<Awaited<ReturnType<typeof api.disputeEntry>>, Error, { entryId: string; reason: string }>({
     mutationFn: ({ entryId, reason }) => api.disputeEntry(id, entryId, reason),
     onSuccess: () => invalidate.challenge(id),
   });

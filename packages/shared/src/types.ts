@@ -419,6 +419,13 @@ export interface FeedItem {
    * unless its owner adds a photo first. Older servers leave it out.
    */
   answerBy?: string | null;
+  /**
+   * Set while the entry is disputed but one itiraz is not a majority yet
+   * (four players and up): `open` itirazlar of players still in, `needed`
+   * the majority that starts the owner's clock. The feed shows "İtiraz 1/5".
+   * Older servers leave it out.
+   */
+  disputeVotes?: { open: number; needed: number } | null;
 }
 
 export interface Dispute {

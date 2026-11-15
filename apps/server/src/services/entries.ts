@@ -432,7 +432,7 @@ export function disputeThreshold(acceptedParticipants: number): number {
  * who left scores nothing, so nothing waits on it, and an itiraz of somebody
  * who left is not a friend's vote any more.
  */
-function disputedEntries(
+export function disputedEntries(
   db: Database,
   challengeId: string,
   entryId?: string,

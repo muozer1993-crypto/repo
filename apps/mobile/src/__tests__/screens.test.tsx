@@ -1595,6 +1595,46 @@ describe('an itiraz on the feed', () => {
     await settle();
     expect(rendered(tree)).toContain('İtiraz var ama henüz çoğunluk değil.');
   });
+
+  it('counts the itirazlar below the majority when the server sends them', async () => {
+    searchParams.id = 'c-1';
+    const detail = withDispute('ali');
+    detail.feed[0] = { ...detail.feed[0]!, answerBy: null as unknown as string, disputeVotes: { open: 1, needed: 5 } } as typeof detail.feed[0];
+    api.challenge = jest.fn(async () => detail);
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    const text = rendered(tree);
+    expect(text).toContain('İtiraz 1/5. 4 kişi daha itiraz ederse 12 saatlik kanıt süresi başlar.');
+    expect(text).not.toContain('henüz çoğunluk değil');
+  });
+
+  it('tells the disputer the others heard of it when one itiraz is not a majority', async () => {
+    searchParams.id = 'c-1';
+    const detail = withDispute('me');
+    detail.feed[0] = { ...detail.feed[0]!, status: 'ok' as 'disputed', answerBy: null as unknown as string };
+    detail.disputes = [];
+    api.challenge = jest.fn(async () => detail);
+    api.disputeEntry = jest.fn(async () => ({ entry: {}, answerBy: null, standings: [] }));
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    act(() => {
+      findWith(tree, 'label', 'Yalan Bu', 'onPress').props.onPress();
+    });
+    typeInto(tree, 'Neden yalan?', 'yirmi beş bin mi');
+    await act(async () => {
+      await findWith(tree, 'title', 'İtirazı gönder', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(api.disputeEntry).toHaveBeenCalledWith('c-1', 'e-1', 'yirmi beş bin mi');
+    const text = rendered(tree);
+    expect(text).toContain('Diğerlerine de haber gitti. Çoğunluk itiraz ederse sahibinin 12 saati başlar.');
+    expect(text).not.toContain('Kankalar bakacak.');
+  });
 });
 
 describe('a loser still waiting for the winner to talk', () => {

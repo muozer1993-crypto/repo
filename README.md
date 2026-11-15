@@ -704,7 +704,9 @@ iste-geri çek-iste biriyle bütün gün telefonunu öttürebilirdi.
 görünür. İtiraz tek başına girişi silmez: diğer oyuncuların çoğunluğu itiraz edince girişin sahibinin
 **12 saati** olur. O sürede "Kanıt ekle" deyip fotoğraf koyarsa itiraz kapanır, giriş sayılmaya devam
 eder ve itiraz edenlere haber gider; koymazsa giriş düşer, bunu da hem girişin sahibi hem itiraz
-edenler bildirimle öğrenir. "Kanıt ekle" 1.1 sürümüyle geldi; 1.0'daki
+edenler bildirimle öğrenir. Dört ve daha fazla kişilik bir çelıncta tek itiraz çoğunluk etmediği
+için, bir girişe ilk itiraz gelince diğer oyuncular da bildirim alır; akışta da "İtiraz 1/5" gibi
+kaç itiraz olduğu görünür. "Kanıt ekle" 1.1 sürümüyle geldi; 1.0'daki
 kanka o günü giriş ekranından fotoğrafıyla yeniden gönderince de itiraz kapanır (adım ve ekran
 süresi gibi günde tek sayı yazılan türlerde; diğerlerinde önce güncellemesi gerekir, bildirim de
 bunu söyler). 12 saat, çoğunluk oluştuğu anda başlar: biri çelınctan ayrılıp çoğunluk küçülünce de

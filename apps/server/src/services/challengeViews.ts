@@ -24,7 +24,7 @@ import { countOf, type ChallengeRow, type Database, type DisputeRow, type EntryR
 import { badRequest, forbidden, notFound } from '../errors.js';
 import { asVulgarityLevel, toChallenge, toDispute, toEntry, toFeedItem, toTaunt } from '../serialize.js';
 import { computeStandings, disputesOpenUntil, getChallengeRow } from './challenges.js';
-import { disputeDeadlines } from './entries.js';
+import { disputeDeadlines, disputeThreshold, disputedEntries } from './entries.js';
 
 /** How many recent entries the detail feed carries (SPEC 2.2). */
 export const FEED_LIMIT = 40;
@@ -113,6 +113,12 @@ export function myEntries(db: Database, challengeId: string, userId: string): En
  * The most recent entries, plus every one still under dispute however old: the
  * feed is where its owner answers with a photo and where everybody reads why,
  * so a busy week of focus sessions must not push it out of reach.
+ *
+ * A disputed row not on the clock yet carries its count ("İtiraz 1/5"): in a
+ * big group a lone itiraz is far from a majority, and "henüz çoğunluk değil"
+ * did not say how far. Counted like the clock counts it (`disputedEntries`),
+ * so a row of somebody who left, or with no itiraz of a player still in,
+ * gets none.
  */
 export function challengeFeed(db: Database, challengeId: string, limit = FEED_LIMIT): FeedItem[] {
   const rows = db
@@ -126,9 +132,17 @@ export function challengeFeed(db: Database, challengeId: string, limit = FEED_LI
     )
     .all(challengeId, challengeId, limit) as (EntryRow & { display_name: string })[];
   const deadlines = disputeDeadlines(db, challengeId);
+  const needed = disputeThreshold(acceptedCount(db, challengeId));
+  const open = new Map(disputedEntries(db, challengeId).map((row) => [row.id, row.open_count]));
   return rows.map((row) => {
     const answerBy = deadlines.get(row.id);
-    return toFeedItem(row, row.display_name, answerBy === undefined ? null : new Date(answerBy).toISOString());
+    const votes = open.get(row.id) ?? 0;
+    return toFeedItem(
+      row,
+      row.display_name,
+      answerBy === undefined ? null : new Date(answerBy).toISOString(),
+      answerBy === undefined && votes > 0 && votes < needed ? { open: votes, needed } : null,
+    );
   });
 }
 
@@ -344,8 +358,8 @@ export function leftCopy(level: VulgarityLevel, who: string, title: string): Cop
 const ANSWER_HOURS = `${Math.round(LIMITS.DISPUTE_ANSWER_MS / 3_600_000)} saat`;
 
 /**
- * "21 Ekim Salı", not "2026-10-21 tarihli". Always followed by "günkü" or
- * "için" in the copy below, never by a case suffix of its own.
+ * "21 Ekim Salı", not "2026-10-21 tarihli". Always followed by "günkü",
+ * "için" or a "·" in the copy below, never by a case suffix of its own.
  */
 const dayWord = (dayKey: string): string => formatDayKeyTr(dayKey, { withWeekday: true });
 
@@ -386,6 +400,42 @@ export function disputeCopy(level: VulgarityLevel, by: string, title: string, da
     body: onTheClock
       ? `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine yalan dedi. ${ANSWER_HOURS} içinde fotoğraf ekle, yoksa bu giriş yanar. ${proofWhere(level)}`
       : `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine yalan dedi. Kanıtını göster.`,
+  };
+}
+
+/**
+ * To the other players, on the first itiraz an entry gets when one vote is
+ * not a majority (four players and up): a majority nobody hears about never
+ * forms, and the disputed number keeps counting. `value` comes from
+ * `scoreLabel` ("600 sayfa"), `needed` is the majority with the disputer in
+ * it. Neither name takes a suffix (see `acceptedCopy`), so the entry is
+ * written the way the feed shows it: "Ali · 21 Ekim Salı · 600 sayfa".
+ */
+export function disputeCallCopy(
+  level: VulgarityLevel,
+  by: string,
+  owner: string,
+  title: string,
+  dayKey: string,
+  value: string,
+  needed: number,
+): CopyText {
+  const entry = `${owner} · ${dayWord(dayKey)} · ${value}`;
+  if (level === 1) {
+    return {
+      title: 'Bir girişe itiraz var',
+      body: `${by}, "${title}" çelıncında bir girişe itiraz etti: ${entry}. İtiraz edenler ${needed} kişiyi bulursa sahibinin ${ANSWER_HOURS} içinde kanıt eklemesi gerekir, eklemezse giriş sayılmaz. Sen de bir göz atabilirsin.`,
+    };
+  }
+  if (level === 3) {
+    return {
+      title: 'Biri sallıyor olabilir 🍆',
+      body: `${by}, "${title}" çelıncında bir girişe palavra dedi: ${entry}. Palavra diyenler ${needed} kişiyi bulursa ${ANSWER_HOURS} içinde kanıtı koyacak, koyamazsa çöpe gider. Sen de bak 🍆`,
+    };
+  }
+  return {
+    title: 'İtiraz var, sen de bak',
+    body: `${by}, "${title}" çelıncında bir girişe yalan dedi: ${entry}. Yalan diyenler ${needed} kişiyi bulursa ${ANSWER_HOURS} içinde kanıt lazım, yoksa giriş yanar. Sen ne diyorsun?`,
   };
 }
 

@@ -171,10 +171,16 @@ export function toEntry(row: EntryRow): Entry {
 
 /**
  * Feed rows carry the author's display name so the app does not have to join,
- * and the answer deadline of a majority itiraz (`disputeDeadlines`) so it does
- * not have to know the threshold rule.
+ * and the answer deadline of a majority itiraz (`disputeDeadlines`), or below
+ * one how many itirazlar there are of how many it takes, so it does not have
+ * to know the threshold rule.
  */
-export function toFeedItem(row: EntryRow, displayName: string, answerBy: string | null = null): FeedItem {
+export function toFeedItem(
+  row: EntryRow,
+  displayName: string,
+  answerBy: string | null = null,
+  disputeVotes: FeedItem['disputeVotes'] = null,
+): FeedItem {
   return {
     id: row.id,
     userId: row.user_id,
@@ -186,6 +192,7 @@ export function toFeedItem(row: EntryRow, displayName: string, answerBy: string 
     createdAt: row.created_at,
     proofUrl: row.proof_url,
     answerBy,
+    disputeVotes,
   };
 }
 

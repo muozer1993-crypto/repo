@@ -138,7 +138,14 @@ itirazlar `dismissed` olur. Eklemezse zamanlayıcının `resolveDisputes` adım�
 alır: sahibine `entry_rejected`, itiraz edenlere `dispute` (`kind: 'upheld'`); fotoğrafla kapanan
 itirazda olduğu gibi, işi başlatan da nasıl bittiğini duyar (sahibiyle arasında engel olan ya da
 hesabını silen hariç). Bildirimler günü "21 Ekim Salı" diye yazar (paylaşılan `formatDayKeyTr`), "2026-10-21
-tarihli" diye değil; ay adları Hermes'e güvenmeden tablodan gelir. Süre çoğunluğun
+tarihli" diye değil; ay adları Hermes'e güvenmeden tablodan gelir. Dört kişiden itibaren
+tek itiraz çoğunluk etmez. Eskiden onu yalnız girişin sahibi duyuyordu, on kişilik bir kitap
+çelıncında gereken beş itiraz hiç toplanmıyor, yazılan 600 sayfa sayılıp kazanıyordu. Artık bir
+girişe ilk itiraz gelince diğer oyuncular da kendi seviyelerinde `dispute` alır (`kind: 'call'`):
+sahibi ve itiraz eden kendi bildirimini zaten alıyor, ikisinden biriyle arasında engel olan ya da
+hesabını silen hiç almaz. Bu, girişin `disputes`'taki ilk satırında bir kere olur; geri çekilen bir
+itirazın ardından başka bir kankanın açtığı itiraz herkesi yeniden rahatsız etmez. Akış da
+çoğunluğa kaç itiraz kaldığını gösterir (`FeedItem.disputeVotes`, "İtiraz 1/5"). Süre çoğunluğun
 oluştuğu andan başlar, ilk itirazdan değil, ve girişin üstüne yazılır (`entries.answer_by`,
 `syncDisputeClocks`). Her geçişte oyuncu sayısından yeniden hesaplanınca biri ayrılıp çoğunluk
 küçüldüğünde eski bir itirazın süresi saatler önce dolmuş sayılıyor, giriş haber verilmeden

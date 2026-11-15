@@ -565,9 +565,12 @@ describe('scheduler: an itiraz nobody answers', () => {
     harness.advance(LIMITS.DISPUTE_ANSWER_MS);
     expect(tick(harness)).toMatchObject({ disputes: 1 });
     expect(entryStatus(harness, entryId)).toBe('rejected');
-    expect(listByType(harness.db, veli.me.id, 'dispute')).toHaveLength(1);
-    expect(listByType(harness.db, ayse.me.id, 'dispute')).toHaveLength(0);
-    expect(listByType(harness.db, mert.me.id, 'dispute')).toHaveLength(0);
+    // Veli's itiraz called the other two to it before; this is about the verdict
+    const upheld = (user: RegisteredUser) =>
+      listByType(harness!.db, user.me.id, 'dispute').filter((row) => (JSON.parse(row.data) as { kind?: string }).kind === 'upheld');
+    expect(upheld(veli)).toHaveLength(1);
+    expect(upheld(ayse)).toHaveLength(0);
+    expect(upheld(mert)).toHaveLength(0);
   });
 
   it('still needs two of the four rivals in a five-player çelınc', async () => {
