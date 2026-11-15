@@ -1698,7 +1698,7 @@ describe('an itiraz on the feed', () => {
     detail.feed[0] = { ...detail.feed[0]!, status: 'ok' as 'disputed', answerBy: null as unknown as string };
     detail.disputes = [];
     api.challenge = jest.fn(async () => detail);
-    api.disputeEntry = jest.fn(async () => ({ entry: {}, answerBy: null, standings: [] }));
+    api.disputeEntry = jest.fn(async () => ({ entry: {}, answerBy: null, othersCalled: 3, standings: [] }));
 
     const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
     const tree = renderScreen(<ChallengeScreen />);
@@ -1714,8 +1714,33 @@ describe('an itiraz on the feed', () => {
 
     expect(api.disputeEntry).toHaveBeenCalledWith('c-1', 'e-1', 'yirmi beş bin mi');
     const text = rendered(tree);
-    expect(text).toContain('Diğerlerine de haber gitti. Çoğunluk itiraz ederse sahibinin 12 saati başlar.');
+    expect(text).toContain('3 kankaya haber gitti. Çoğunluk itiraz ederse sahibinin 12 saati başlar.');
     expect(text).not.toContain('Kankalar bakacak.');
+  });
+
+  it('does not claim anybody heard of it when the server called nobody', async () => {
+    searchParams.id = 'c-1';
+    const detail = withDispute('me');
+    detail.feed[0] = { ...detail.feed[0]!, status: 'ok' as 'disputed', answerBy: null as unknown as string };
+    detail.disputes = [];
+    api.challenge = jest.fn(async () => detail);
+    api.disputeEntry = jest.fn(async () => ({ entry: {}, answerBy: null, othersCalled: 0, standings: [] }));
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    act(() => {
+      findWith(tree, 'label', 'Yalan Bu', 'onPress').props.onPress();
+    });
+    typeInto(tree, 'Neden yalan?', 'yirmi beş bin mi');
+    await act(async () => {
+      await findWith(tree, 'title', 'İtirazı gönder', 'onPress').props.onPress();
+    });
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Çoğunluk itiraz ederse sahibinin 12 saati başlar.');
+    expect(text).not.toContain('haber gitti');
   });
 
   /** A detail whose feed stops at two rows with older ones on the server, Ali's and mine taking turns. */

@@ -68,6 +68,11 @@ export interface DisputeResponse {
    * instant unless its owner adds a photo first (`resolveDisputes`).
    */
   answerBy: string | null;
+  /**
+   * How many other players this itiraz called to the entry (`callTheOthers`):
+   * 0 when nobody was, e.g. a second itiraz, a small group or a player who left.
+   */
+  othersCalled: number;
   standings: ParticipantView[];
 }
 
@@ -105,8 +110,9 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
    * disputer have their own copy; a block with either of them keeps a player
    * out.
    */
-  function callTheOthers(by: UserRow, owner: UserRow, challenge: ChallengeRow, entry: EntryRow, needed: number, now: Date): void {
+  function callTheOthers(by: UserRow, owner: UserRow, challenge: ChallengeRow, entry: EntryRow, needed: number, now: Date): number {
     const iso = nowIso(now);
+    let called = 0;
     const value = scoreLabel(typeForChallenge(challenge), Number(entry.value));
     for (const participant of acceptedParticipants(db, challenge.id)) {
       if (participant.user_id === by.id || participant.user_id === owner.id) continue;
@@ -122,7 +128,9 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
         data: { challengeId: challenge.id, entryId: entry.id, kind: 'call' },
         createdAt: iso,
       });
+      called += 1;
     }
+    return called;
   }
 
   // -------------------------------------------------------------------------
@@ -256,15 +264,17 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       // An entry of somebody who left counts for nothing: nobody is called.
       const firstEver = countOf(db, 'SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ?', entry.id) === 1;
       const ownerIn = getParticipant(db, challenge.id, owner.id)?.status === 'accepted';
-      if (outcome.answerBy === null && outcome.threshold >= 2 && firstEver && ownerIn) {
-        callTheOthers(me.row, owner, challenge, entry, outcome.threshold, now);
-      }
+      const othersCalled =
+        outcome.answerBy === null && outcome.threshold >= 2 && firstEver && ownerIn
+          ? callTheOthers(me.row, owner, challenge, entry, outcome.threshold, now)
+          : 0;
 
       void reply.code(201);
       return {
         dispute: toDispute(outcome.dispute),
         entry: toEntry(outcome.entry),
         answerBy: outcome.answerBy,
+        othersCalled,
         standings: computeStandings(db, challenge, now),
       };
     },

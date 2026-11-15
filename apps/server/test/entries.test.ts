@@ -757,8 +757,10 @@ describe('POST /challenges/:id/entries/:entryId/dispute', () => {
       payload: { reason: 'olmaz böyle bir şey' },
     });
     expect(first.statusCode).toBe(201);
-    const afterFirst = first.json<{ answerBy: string | null; entry: Entry; standings: ParticipantView[] }>();
+    const afterFirst = first.json<{ answerBy: string | null; othersCalled: number; entry: Entry; standings: ParticipantView[] }>();
     expect(afterFirst.answerBy).toBeNull();
+    // Ayşe and Mert, the players who are neither the owner nor the disputer, are called
+    expect(afterFirst.othersCalled).toBe(2);
     expect(afterFirst.entry.status).toBe('disputed');
     // A pending dispute must not zero the rival out yet (SPEC 1.3).
     expect(afterFirst.standings.find((p) => p.user.id === ali.me.id)?.score).toBe(55000);
@@ -780,7 +782,9 @@ describe('POST /challenges/:id/entries/:entryId/dispute', () => {
       payload: { reason: 'ben de görmedim' },
     });
     expect(second.statusCode).toBe(201);
-    const afterSecond = second.json<{ answerBy: string | null; entry: Entry; standings: ParticipantView[] }>();
+    const afterSecond = second.json<{ answerBy: string | null; othersCalled: number; entry: Entry; standings: ParticipantView[] }>();
+    // the second itiraz starts the clock and calls nobody
+    expect(afterSecond.othersCalled).toBe(0);
     // the full window runs from the second itiraz, not from the first one three hours ago
     expect(afterSecond.answerBy).toBe(iso(harness, LIMITS.DISPUTE_ANSWER_MS));
     expect(afterSecond.entry.status).toBe('disputed');

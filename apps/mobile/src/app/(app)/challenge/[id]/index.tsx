@@ -1717,16 +1717,18 @@ function Feed({
       return;
     }
     try {
-      const { answerBy } = await dispute.mutateAsync({ entryId: target.id, reason: text });
+      const { answerBy, othersCalled } = await dispute.mutateAsync({ entryId: target.id, reason: text });
       // At the majority the owner's clock runs (maybe since an earlier itiraz);
-      // below it the server calls the other players to it. An older server
-      // sends no `answerBy` at all.
+      // below it the first itiraz calls the other players to it, and the server
+      // says how many it reached. An older server sends neither count nor, at
+      // first, `answerBy`.
       const left = answerBy ? Date.parse(answerBy) - Date.now() : Number.NaN;
+      const majority = `Çoğunluk itiraz ederse sahibinin ${ANSWER_HOURS} saati başlar.`;
       let body = 'Kankalar bakacak.';
       if (left > 0) body = `${formatRemaining(left)} içinde kanıt gelmezse giriş yanar.`;
-      else if (answerBy === null) {
-        body = `Diğerlerine de haber gitti. Çoğunluk itiraz ederse sahibinin ${ANSWER_HOURS} saati başlar.`;
-      }
+      else if (answerBy === null && othersCalled === undefined) body = `Diğerlerine de haber gitti. ${majority}`;
+      else if (answerBy === null && (othersCalled ?? 0) > 0) body = `${othersCalled} kankaya haber gitti. ${majority}`;
+      else if (answerBy === null) body = majority;
       toast({ title: 'İtiraz gitti', body, kind: 'info' });
       setTarget(null);
       setReason('');

@@ -404,7 +404,13 @@ export class ApiClient {
    * started) and null below it, when the server calls the other players to it.
    */
   disputeEntry(challengeId: string, entryId: string, reason: string) {
-    return this.request<{ entry: Entry; answerBy?: string | null; standings: ParticipantView[] }>(
+    return this.request<{
+      entry: Entry;
+      answerBy?: string | null;
+      /** how many other players were called to it; missing from older servers */
+      othersCalled?: number;
+      standings: ParticipantView[];
+    }>(
       'POST',
       `/challenges/${challengeId}/entries/${entryId}/dispute`,
       { body: { reason } }
