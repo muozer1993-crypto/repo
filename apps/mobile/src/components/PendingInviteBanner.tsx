@@ -1,6 +1,8 @@
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 
+import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
 import { readPendingInvite } from '@/services/invite';
@@ -10,7 +12,10 @@ import { Colors, Spacing } from '@/theme';
 /**
  * On the login and register screens: "Ali seni çağırdı", when the reader
  * arrived through an invite link. The request itself is sent after sign-in by
- * the notification bridge; this only says it will be.
+ * the notification bridge; this only says it will be. A new account is a
+ * friend at once (the server accepts an invite code from an account in its
+ * first week), so on login the banner points a newcomer to register: making
+ * up a username there only ever ended in "şifre yanlış".
  */
 export function PendingInviteBanner({ action }: { action: 'register' | 'login' }) {
   const makeClient = useAuth((s) => s.client);
@@ -47,8 +52,19 @@ export function PendingInviteBanner({ action }: { action: 'register' | 'login' }
         {name ? `${name} seni çağırdı 🍆` : 'Davetle geldin 🍆'}
       </Text>
       <Text variant="tiny" muted style={styles.body}>
-        {action === 'register' ? 'Kayıt olunca' : 'Giriş yapınca'} kanka isteğin kendiliğinden gider.
+        {action === 'register'
+          ? 'Kayıt olunca kanka olursunuz.'
+          : 'Hesabın yoksa önce kayıt ol, kanka olursunuz. Varsa giriş yap, istek kendiliğinden gider.'}
       </Text>
+      {action === 'login' ? (
+        <Button
+          title="Hesabım yok, kayıt ol"
+          size="sm"
+          fullWidth
+          style={styles.register}
+          onPress={() => router.replace('/(auth)/register')}
+        />
+      ) : null}
     </Card>
   );
 }
@@ -56,4 +72,5 @@ export function PendingInviteBanner({ action }: { action: 'register' | 'login' }
 const styles = StyleSheet.create({
   card: { marginBottom: Spacing.sm },
   body: { marginTop: 2 },
+  register: { marginTop: Spacing.sm },
 });

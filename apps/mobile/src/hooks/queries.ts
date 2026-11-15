@@ -521,11 +521,16 @@ export function useRematch(id: string) {
   });
 }
 
+/** What the server answered a friend action; a request says whether it is a friendship already. */
+type FriendActionResult = Awaited<
+  ReturnType<ApiClient['requestFriend' | 'acceptFriend' | 'declineFriend' | 'removeFriend' | 'withdrawFriendRequest']>
+>;
+
 export function useFriendAction() {
   const api = useApi();
   const invalidate = useInvalidator();
   return useMutation<
-    unknown,
+    FriendActionResult,
     Error,
     | { kind: 'request'; username?: string; inviteCode?: string }
     | { kind: 'accept' | 'decline'; friendshipId: string }

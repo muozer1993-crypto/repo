@@ -7,6 +7,13 @@
  * printed on the profile screen. When the target has already asked us, the request
  * auto-accepts instead of creating a mirrored row — two people tapping "ekle" at the
  * same time end up friends rather than staring at two pending requests.
+ *
+ * A request by invite code from an account at most a week old is accepted on the
+ * spot. The code is the inviter's own, shared by them with the people they want in,
+ * and somebody who had just signed up through the link used to sit on "Önce bir
+ * kanka ekle" until the inviter opened the app and tapped "Kabul" — often hours on a
+ * phone without push. An older account (a removed friend who kept the code) still
+ * asks. Wrong codes are counted per account: a guessed code is now a friendship.
  */
 import type { FastifyInstance } from 'fastify';
 import {
@@ -42,6 +49,13 @@ function acceptedCopy(level: VulgarityLevel, name: string): { title: string; bod
   return { title: '🔥 Kanka oldunuz', body: `${name} kanka isteğini kabul etti. Aç bir çelınc, koy bakalım.` };
 }
 
+/** To the code's owner: somebody came in through their invite and is a friend already. */
+function joinedByCodeCopy(level: VulgarityLevel, name: string): { title: string; body: string } {
+  if (level === 1) return { title: 'Davetin kabul gördü', body: `${name} davetinle katıldı, artık arkadaşsınız.` };
+  if (level === 3) return { title: '🍆 Yeni kurban', body: `${name} davetine kandı, kurban hazır. Kime koyacağını biliyorsun.` };
+  return { title: '🔥 Yeni kanka', body: `${name} davetinle geldi, artık kankasınız. Aç bir çelınc, koy bakalım.` };
+}
+
 function levelOf(user: UserRow): VulgarityLevel {
   return asVulgarityLevel(user.vulgarity_max);
 }
@@ -58,10 +72,23 @@ function levelOf(user: UserRow): VulgarityLevel {
  */
 export const FRIEND_REQUESTS_PER_PAIR = { max: 3, windowMs: 24 * 60 * 60 * 1000 };
 
+/**
+ * How young an account must be for its request by invite code to be accepted at
+ * once: the same week the phone keeps a parked invite (apps/mobile/src/services/invite.ts).
+ */
+export const INVITE_AUTO_ACCEPT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Wrong invite codes one account may send. A friend copying a code off a
+ * screenshot needs a few tries; hitting one of the 32^6 by guessing needs millions.
+ */
+export const INVITE_CODE_MISSES_PER_USER = { max: 20, windowMs: 60 * 60 * 1000 };
+
 export default async function friendRoutes(app: FastifyInstance): Promise<void> {
   const { db } = app;
   const auth = { preHandler: app.authenticate };
   const requestsPerPair = new AttemptLimiter(FRIEND_REQUESTS_PER_PAIR.max, FRIEND_REQUESTS_PER_PAIR.windowMs);
+  const codeMisses = new AttemptLimiter(INVITE_CODE_MISSES_PER_USER.max, INVITE_CODE_MISSES_PER_USER.windowMs);
 
   app.get('/friends', auth, async (request) => {
     const me = requireUser(request);
@@ -78,9 +105,20 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
     const body = parseBody(FriendRequestBodySchema, request.body);
     const now = app.now();
     const at = nowIso(now);
+    const byCode = body.inviteCode !== undefined;
+
+    // Over the budget even a right code waits: otherwise the guess that hits
+    // would still go through.
+    if (byCode) {
+      const waitMs = codeMisses.retryAfterMs(me.id, now);
+      if (waitMs > 0) throw tooMany('too_many_requests', `Çok fazla yanlış kod denedin. ${retryAfterText(waitMs)}`);
+    }
 
     const target = resolveTarget(db, body);
-    if (!target) throw notFound('user_not_found', 'Böyle bir kanka bulamadım.');
+    if (!target) {
+      if (byCode) codeMisses.record(me.id, now);
+      throw notFound('user_not_found', 'Böyle bir kanka bulamadım.');
+    }
     if (target.id === me.id) throw badRequest('cannot_friend_self', 'Kendine kanka isteği gönderemezsin.');
 
     const existing = friendshipBetween(db, me.id, target.id);
@@ -91,8 +129,36 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
     if (existing?.status === 'accepted') {
       throw conflict('already_friends', 'Zaten kankasınız.');
     }
+
+    // The inviter's yes was given when they shared the code; see the file header.
+    const viaCode = byCode && now.getTime() - Date.parse(me.row.created_at) <= INVITE_AUTO_ACCEPT_MAX_AGE_MS;
+    const tellJoined = (friendshipId: string): void => {
+      const copy = joinedByCodeCopy(levelOf(target), me.row.display_name);
+      notify(db, {
+        userId: target.id,
+        type: 'friend_accepted',
+        title: copy.title,
+        body: copy.body,
+        data: { userId: me.id, friendshipId, via: 'invite' },
+        createdAt: at,
+      });
+    };
+
     if (existing?.status === 'pending' && existing.requester_id === me.id) {
-      throw conflict('already_requested', 'İsteğini zaten gönderdin, cevabı bekle.');
+      if (!viaCode) throw conflict('already_requested', 'İsteğini zaten gönderdin, cevabı bekle.');
+      // Asked by username first, then came through the link: the waiting request
+      // becomes the friendship, and its unread push goes like a withdrawn one's,
+      // so nobody taps "Kabul" on a request that is no longer there.
+      db.transaction(() => {
+        db.prepare("UPDATE friendships SET status = 'accepted', updated_at = ? WHERE id = ?").run(at, existing.id);
+        db.prepare(
+          `DELETE FROM notifications
+            WHERE user_id = ? AND type = 'friend_request' AND read_at IS NULL
+              AND json_extract(data, '$.friendshipId') = ?`,
+        ).run(target.id, existing.id);
+        tellJoined(existing.id);
+      })();
+      return { status: 'accepted' as const, friendshipId: existing.id, user: toPublicUser(target) };
     }
 
     // They asked first → accept instead of piling up a second pending row.
@@ -120,8 +186,13 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
     const friendshipId = newId();
     db.prepare(
       `INSERT INTO friendships (id, requester_id, addressee_id, status, created_at, updated_at)
-       VALUES (?, ?, ?, 'pending', ?, ?)`,
-    ).run(friendshipId, me.id, target.id, at, at);
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(friendshipId, me.id, target.id, viaCode ? 'accepted' : 'pending', at, at);
+
+    if (viaCode) {
+      tellJoined(friendshipId);
+      return { status: 'accepted' as const, friendshipId, user: toPublicUser(target) };
+    }
 
     const copy = requestCopy(levelOf(target), me.row.display_name);
     notify(db, {

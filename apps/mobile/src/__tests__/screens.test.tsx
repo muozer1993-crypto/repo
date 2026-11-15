@@ -9,7 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider } from '@/components/Toast';
 import { ApiClient, ApiError } from '@/lib/api';
-import { clearPendingInvite, readPendingInvite } from '@/services/invite';
+import { clearPendingInvite, readPendingInvite, savePendingInvite } from '@/services/invite';
 
 /**
  * Every list screen has to survive the three states the server actually
@@ -3107,6 +3107,37 @@ describe('invite link on the friends tab', () => {
     expect(text).not.toContain('başka hiçbir telefonda açılmaz');
     expect(text).not.toContain('aynı Wi-Fi');
   });
+
+  it('says whether a typed code made us kankas at once or only sent a request', async () => {
+    api.health = jest.fn(async () => ({ ok: true, version: '1', time: '', app: null, publicUrl: null }));
+    api.requestFriend = jest.fn(async () => ({ status: 'accepted', friendshipId: 'f-1' }));
+    const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
+    const tree = renderScreen(<FriendsScreen />);
+    await settle();
+
+    const addByCode = async (code: string) => {
+      typeInto(tree, 'Kanka ara', code);
+      // past the search box's debounce, so nobody is found and "Kod ile ekle" shows
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      });
+      await settle();
+      press(tree, 'Kod ile ekle');
+      await settle();
+    };
+
+    // an account in its first week: the server accepts the inviter's code on the spot
+    await addByCode('ABC234');
+    expect(api.requestFriend).toHaveBeenLastCalledWith({ username: undefined, inviteCode: 'ABC234' });
+    expect(rendered(tree)).toContain('Kanka oldunuz');
+    expect(rendered(tree)).not.toContain('İstek gönderildi.');
+
+    // an older one still asks
+    api.requestFriend = jest.fn(async () => ({ status: 'pending', friendshipId: 'f-2' }));
+    await addByCode('XYZ789');
+    expect(api.requestFriend).toHaveBeenCalledWith({ username: undefined, inviteCode: 'XYZ789' });
+    expect(rendered(tree)).toContain('İstek gönderildi.');
+  });
 });
 
 describe('login screen', () => {
@@ -3221,6 +3252,57 @@ describe('auth screens before a server is chosen', () => {
     expect(health).toHaveBeenCalledTimes(1);
     expect(mockSetServerUrl).toHaveBeenCalledWith('https://abc.trycloudflare.com');
     expect(await readPendingInvite()).toMatchObject({ code: 'AB12CD', server: 'https://abc.trycloudflare.com' });
+  });
+
+  it('sends a pasted invite from login on to register, and a bare address nowhere', async () => {
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.replace!.mockClear();
+    health = jest.spyOn(ApiClient.prototype, 'health').mockResolvedValue({
+      ok: true,
+      version: '1.1.0',
+      time: '',
+      app: null,
+      publicUrl: null,
+    } as never);
+    const LoginScreen = SCREENS[0]!.load();
+
+    // somebody new: the login form would only ever say the password is wrong
+    const invited = renderScreen(<LoginScreen />);
+    paste(invited, 'Gel lan, KOYDUM’da kapışalım: https://abc.trycloudflare.com/davet/AB12CD');
+    press(invited, 'Bağlan');
+    await settle();
+    expect(router.replace).toHaveBeenCalledWith('/(auth)/register');
+
+    // just the address: could be anybody, so login stays
+    router.replace!.mockClear();
+    mockServer.url = 'http://localhost:4000';
+    await clearPendingInvite();
+    const bare = renderScreen(<LoginScreen />);
+    paste(bare, 'https://abc.trycloudflare.com');
+    press(bare, 'Bağlan');
+    await settle();
+    expect(mockSetServerUrl).toHaveBeenLastCalledWith('https://abc.trycloudflare.com');
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('offers register to whoever reaches login with an invite parked', async () => {
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.replace!.mockClear();
+    mockServer.url = 'http://192.168.1.20:4000';
+    await savePendingInvite('AB12CD', mockServer.url);
+    const LoginScreen = SCREENS[0]!.load();
+    const tree = renderScreen(<LoginScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('Hesabın yoksa önce kayıt ol, kanka olursunuz.');
+    press(tree, 'Hesabım yok, kayıt ol');
+    expect(router.replace).toHaveBeenCalledWith('/(auth)/register');
+
+    // register itself only says what happens next
+    const RegisterScreen = SCREENS[1]!.load();
+    const register = renderScreen(<RegisterScreen />);
+    await settle();
+    expect(rendered(register)).toContain('Kayıt olunca kanka olursunuz.');
+    expect(rendered(register)).not.toContain('Hesabım yok, kayıt ol');
   });
 
   it('keeps the fallback and says why when the pasted server does not answer', async () => {

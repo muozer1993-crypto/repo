@@ -274,7 +274,7 @@ export default function InviteScreen() {
             <OutcomeText outcome={outcome} fallbackName={name} />
           ) : (
             <Text variant="small">
-              {name ? `${name} ile kanka olmak için isteği gönder.` : 'Kanka olmak için isteği gönder.'} Kabul edince çelınc açabilirsiniz.
+              {name ? `${name} ile kanka olmak için isteği gönder.` : 'Kanka olmak için isteği gönder.'}
             </Text>
           )}
           <View style={styles.buttons}>
@@ -297,7 +297,7 @@ export default function InviteScreen() {
       ) : (
         <Card>
           <Text variant="small">
-            Hesabın yoksa kayıt ol, varsa giriş yap. Kanka isteğin kendiliğinden gider.
+            Hesabın yoksa kayıt ol, kanka olursunuz. Varsa giriş yap, kanka isteğin kendiliğinden gider.
           </Text>
           {adopt && linkServer ? (
             <Text variant="tiny" faint style={styles.gap}>

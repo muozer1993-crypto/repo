@@ -107,9 +107,14 @@ export default function FriendsScreen() {
     action.mutate(
       { kind: 'request', inviteCode: code },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           setTerm('');
-          toast({ title: 'Kod tuttu', body: 'İstek gönderildi.', kind: 'success' });
+          // an account in its first week is a friend at once: the code was the owner's own invite
+          if ('status' in result && result.status === 'accepted') {
+            toast({ title: 'Kanka oldunuz', body: 'Kod tuttu, artık listende. Aç bir çelınc.', kind: 'success' });
+          } else {
+            toast({ title: 'Kod tuttu', body: 'İstek gönderildi.', kind: 'success' });
+          }
         },
         onError: fail,
         onSettled: () => setBusyKey(null),
@@ -402,7 +407,7 @@ export default function FriendsScreen() {
           {me?.inviteCode ?? '········'}
         </Text>
         <Text variant="tiny" muted style={styles.codeHint}>
-          Paylaş’a bas, giden bağlantıya dokunan kankan uygulamayı açar ya da indirir, istek kendiliğinden gelir. Kodu elle yazmak da olur.
+          Paylaş’a bas, giden bağlantıya dokunan kankan uygulamayı açar ya da indirir, kayıt olunca kanka olursunuz. Kodu elle yazmak da olur.
         </Text>
         {linkIsLoopback ? (
           <Text variant="tiny" faint style={styles.codeHint}>

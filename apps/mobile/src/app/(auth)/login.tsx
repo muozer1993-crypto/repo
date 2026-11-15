@@ -91,7 +91,16 @@ export default function LoginScreen() {
         </Text>
       </View>
 
-      {chooseFirst ? <ChooseServerCard /> : null}
+      {chooseFirst ? (
+        <ChooseServerCard
+          // A pasted invite on a phone that never chose a server is nearly always
+          // somebody new: the form below would only answer "şifre yanlış". A
+          // reinstall finds "Giriş yap" under the register form.
+          onChosen={(code) => {
+            if (code) router.replace('/(auth)/register');
+          }}
+        />
+      ) : null}
 
       {sessionNote ? (
         <Card edgeColor={Colors.yellow}>

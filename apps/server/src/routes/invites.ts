@@ -161,7 +161,7 @@ function renderPage(input: PageInput): string {
         <li>Uygulama telefonunda yoksa önce indirip kur. Android "bilinmeyen kaynak" diye sorarsa bir kere izin ver.</li>
         <li>Bu sayfaya geri dön, <b>KOYDUM'da aç</b>'a dokun.
         ${copy}</li>
-        <li>Kayıt ol. Kanka isteğin kendiliğinden gider.</li>
+        <li>Kayıt ol, kanka olursunuz.</li>
       </ol>`
     : `<ol class="steps">
         <li>Uygulamayı indirip kur. Android "bilinmeyen kaynak" diye sorarsa bir kere izin ver.</li>

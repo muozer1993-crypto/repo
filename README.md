@@ -159,7 +159,7 @@ Birkaç saniye sonra ekranda şuna benzer bir satır çıkar:
 ```
 
 Bundan sonra uygulamada **Kankalar → Paylaş** bu adresle bağlantı gönderir. Başka şehirdeki
-kankan bağlantıya dokunur, uygulama o adrese bağlanır, kanka isteğini gönderir. Senin telefonun
+kankan bağlantıya dokunur, uygulama o adrese bağlanır, kayıt olunca kanka olursunuz. Senin telefonun
 evdeki Wi-Fi'da kalabilir; aynı sunucudur.
 
 Bilinmesi gerekenler:
@@ -248,7 +248,8 @@ yeterli.
 `preview` profili bilerek **uygulama içi sunucu adresi ekranını açık bırakır** — arkadaşın
 uygulamayı açtığında adresi kendisi yazabilir. Henüz sunucu seçilmemişse giriş ve kayıt ekranları
 en üstte **Önce sunucuyu seç** der ve sunucu seçilene kadar giriş düğmesine basılamaz; arkadaşın
-senin attığın davet mesajını olduğu gibi yapıştırır, sunucu da davet kodu da oradan okunur.
+senin attığın davet mesajını olduğu gibi yapıştırır, sunucu da davet kodu da oradan okunur; giriş
+ekranında yapıştırdıysa uygulama kendiliğinden kayıt ekranına geçer.
 `production` profili adresi derlemeye gömer ve o ekranı gizler; onu kullanacaksan
 `apps/mobile/eas.json` içindeki `EXPO_PUBLIC_KOYDUM_API_URL` değerini **önce kendi adresinle
 değiştir**, yoksa açılmayan bir sunucuya bakan bir uygulama çıkar.
@@ -338,13 +339,21 @@ Arkadaşın bağlantıya dokununca sunucunun kendi sayfası açılır:
 * uygulama yoksa aynı sayfadan APK indirilir,
 * kurulum bitince Android'in kendi **Aç** düğmesine basan arkadaşın uygulamayı bağlantısız açar;
   sayfadaki **Bağlantıyı kopyala** bunun için var. Uygulama giriş ekranında **Önce sunucuyu seç**
-  der, arkadaşın kopyaladığı bağlantıyı (ya da WhatsApp mesajının tamamını) oraya yapıştırır.
+  der, arkadaşın kopyaladığı bağlantıyı (ya da WhatsApp mesajının tamamını) oraya yapıştırır;
+  yapıştırınca uygulama kayıt ekranına geçer (hesabı olan altındaki **Giriş yap**'a basar).
   Bu kart 1.1.0 ile gelir; ondan önceki APK'da arkadaşın giriş ekranının
   altındaki **Sunucu: localhost:4000 · değiştir**'e basıp sadece adresi yazar (baştaki `https://`
   dahil, sondaki `/davet/…` kısmı olmadan; eski sürüm `https://` yazılmayan adresi `http://` sanar).
   Sayfa bunu kendisi ayarlar: `apk:yayinla` ile yayınlanan APK 1.1.0'dan eskiyse ya da sürümü
   bilinmiyorsa kopyalanacak kutuda bağlantı değil sadece adres durur ve bu yol yazar,
-* kayıt olunca kanka isteği kendiliğinden gider.
+* kayıt olunca kanka olursunuz; senin **Kabul**'e basman gerekmez, yeni kankan hemen bir çelınc
+  açabilir, sen de onu süren çelıncına çağırabilirsin.
+
+Davet bağlantısı senin "evet"inin yerine geçer: onunla gelen yeni hesap (bir haftadan genç)
+sorulmadan kankan olur. Daha eski bir hesap (arkadaşlıktan çıkardığın ama kodunu saklayan biri
+gibi) bağlantıya dokunursa sadece istek gider, sen kabul edersin. Bağlantı WhatsApp gruplarında
+elden ele geçer: tanımadığın biri gelirse profilinden engelle. Kodu tahmin etmeye kalkan da saatte
+20 yanlış denemeden sonra bekletilir.
 
 APK'yı sunucuya koymak için expo.dev'den indirdiğin dosyayı bir kere yayınla:
 
@@ -372,7 +381,8 @@ APK'yla kuranlar yenisini üstüne kurar, hesapları kalır. Play dahili testind
 kurulmaz (imza farklı); onlar Play'den günceller.
 
 Giriş yapmış biri bağlantıya dokunursa uygulama önce kimin çağırdığını gösterir, istek ancak
-**Kanka isteği gönder**'e basınca gider. Uygulamayı yeni kurmuş biri için sunucu adresi
+**Kanka isteği gönder**'e basınca gider; hesabı bir haftadan gençse o dokunuşla kanka olursunuz.
+Uygulamayı yeni kurmuş biri için sunucu adresi
 bağlantıdan alınır; başka bir adrese bağlı olan birine ise geçmeden önce sorulur. Aynı sunucunun
 yeni adresiyse (tünel yeniden açıldıysa) **Yeni adrese geç (çıkış yok)** çıkar ve oturum
 yerinde kalır; gerçekten başka bir sunucuysa çıkış yapıp orada giriş yapmak gerekir.
@@ -507,7 +517,7 @@ edilecek kanka kalmadıysa düğme sönük durur.
 (seviyene göre "Sonucu paylaş" ya da "Gruba at, herkes görsün" yazar). Dokununca telefonun paylaş
 menüsü açılır, grubu seçersin. Giden mesajda kürsü yazı olarak durur (`🥇 Ali · 15.000 adım`),
 altında senin seviyende bir cümle ve senin davet bağlantın olur: uygulaması olmayan dokunup kurar,
-kanka isteği de sana kendiliğinden gelir. Sunucu `npm run server` ile sadece evde açıksa bağlantı
+kayıt olunca da kankan olur. Sunucu `npm run server` ile sadece evde açıksa bağlantı
 mesaja girmez, o adres zaten sadece aynı Wi-Fi'da açılır; `npm run internet` açıkken girer.
 Mesajda sonuç ekranında görünenden fazlası yok: yarışanların adı ve skoru. Bilgisayardaki
 tarayıcıda paylaş menüsü yerine mesaj panoya kopyalanır.
@@ -798,8 +808,9 @@ ekran süresi) kabul ettiği anda kendiliğinden dolar; **Eksik günü yaz** sad
 günler için (bkz. [Adım sayımı nasıl çalışıyor](#adım-sayımı-nasıl-çalışıyor)). Böylece "beni de
 ekle" diyen için ikinci bir çelınc açıp grubu bölmen gerekmez.
 
-* Sadece çelıncı açan ekler. Yeni gelen önce kankan olmalı: davet bağlantından geldiyse
-  arkadaşlık isteği **Kankalar** sekmesine düşer, kabul etmen yeter.
+* Sadece çelıncı açan ekler. Yeni gelen önce kankan olmalı: senin davet bağlantınla kaydolduysa
+  zaten kankandır, hemen eklersin. Kullanıcı adıyla istek attıysa **Kankalar** sekmesinde kabul
+  etmen yeter.
 * Daveti reddeden kankayı yeniden çağırabilirsin, ona yeni bir bildirim gider. Oynayıp ayrılan
   geri dönemez.
 * Son bir saatte kimse eklenmez (kısa çelınclarda sürenin son dörtte birinde); o sırada daveti
@@ -945,9 +956,10 @@ cd apps/mobile && npx expo export --platform web   # tarayıcıda hızlı deneme
 **Giriş ekranında "Önce sunucuyu seç" yazıyor.**
 Uygulama hangi sunucuya bağlanacağını bilmiyor: APK davet bağlantısıyla değil, yükleyicideki
 **Aç**'la ya da ana ekrandan açılmış. Davet mesajını olduğu gibi kopyalayıp karta yapıştır ya da
-davet sayfasındaki **Bağlantıyı kopyala** ile kopyalayıp yapıştır. "Bu adrese ulaşamadım" derse
-sunucu kapalıdır ya da tünel yeniden açılıp adres değişmiştir; sunucuyu açan kişi yeni bağlantıyı
-göndersin.
+davet sayfasındaki **Bağlantıyı kopyala** ile kopyalayıp yapıştır. Bağlantı davet koduyla geldiyse
+uygulama kayıt ekranına geçer; hesabın zaten varsa en alttaki **Giriş yap**'a bas. "Bu adrese
+ulaşamadım" derse sunucu kapalıdır ya da tünel yeniden açılıp adres değişmiştir; sunucuyu açan
+kişi yeni bağlantıyı göndersin.
 
 **"Sunucuya ulaşamadım" diyor.**
 Telefon ile bilgisayar aynı Wi-Fi'da mı? Bilgisayarın güvenlik duvarı 4000 portunu kapatıyor

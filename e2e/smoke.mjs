@@ -500,7 +500,8 @@ async function main() {
     await expectText(page, ["Mustafa seni KOYDUM'a çağırıyor"], 'invite page on the server');
     await page.screenshot({ path: join(SHOT_DIR, '07-invite-page.png'), fullPage: true });
 
-    // 8. a new player taps the link inside the app, sees who invites, and sends the request
+    // 8. a new player taps the link inside the app, sees who invites, and with one tap is
+    // Mustafa's kanka: an account in its first week needs nobody's "Kabul" for an invite code
     const can = new Api(API_URL);
     const registered = await can.call('POST', '/auth/register', {
       username: 'can',
@@ -517,17 +518,21 @@ async function main() {
     await expectText(page, ['Mustafa seni çağırıyor'], 'invite screen inside the app');
     // nothing goes out before the tap: a link can come from anywhere
     const before = await story.mustafa.api.call('GET', '/friends');
-    if ((before.incoming ?? []).some((row) => row.user?.username === 'can')) {
+    const seen = [...(before.incoming ?? []).map((row) => row.user), ...(before.friends ?? [])];
+    if (seen.some((user) => user?.username === 'can')) {
       fail('the invite screen sent a friend request before anyone tapped');
     }
     await submitForm(page);
-    await expectText(page, ['İstek gitti'], 'invite request sent on tap');
+    await expectText(page, ['Artık kankasınız'], 'invite accepted on tap');
     await page.screenshot({ path: join(SHOT_DIR, '08-invite-app.png'), fullPage: true });
     const mustafaFriends = await story.mustafa.api.call('GET', '/friends');
-    if (!(mustafaFriends.incoming ?? []).some((row) => row.user?.username === 'can')) {
-      fail(`the invite link did not deliver Can's request: ${JSON.stringify(mustafaFriends.incoming)}`);
+    if (!(mustafaFriends.friends ?? []).some((user) => user?.username === 'can')) {
+      fail(`the invite link did not make Can a kanka: ${JSON.stringify(mustafaFriends)}`);
     }
-    log('invite link: page rendered, request delivered');
+    if ((mustafaFriends.incoming ?? []).some((row) => row.user?.username === 'can')) {
+      fail('Can is a kanka and still waits under "Gelen istekler"');
+    }
+    log('invite link: page rendered, new player is a kanka on the tap');
 
     // 9. Sunday evening: the weekly recap lands in the inbox as a card. Last on
     // purpose — this scheduler pass also runs every other step at that moment.

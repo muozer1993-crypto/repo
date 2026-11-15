@@ -799,7 +799,7 @@ describe('friends', () => {
     expect(inbox[0]?.type).toBe('friend_accepted');
   });
 
-  it('finds the target by invite code', async () => {
+  it('makes a new account that came by invite code a friend at once', async () => {
     const h = await boot();
     const asker = await registerUser(h.app, 'mustafa');
     const target = await registerUser(h.app, 'kemal');
@@ -809,8 +809,137 @@ describe('friends', () => {
       url: '/friends/request',
       payload: { inviteCode: target.me.inviteCode.toLowerCase() },
     });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ status: string; friendshipId: string; user: { id: string } }>();
+    expect(body.status).toBe('accepted');
+    expect(body.user.id).toBe(target.me.id);
+
+    for (const [who, other] of [
+      [asker, target],
+      [target, asker],
+    ] as const) {
+      const view = (await authed(h.app, who.token)({ method: 'GET', url: '/friends' })).json<FriendsView>();
+      expect(view.friends.map((u) => u.id)).toEqual([other.me.id]);
+      expect(view.incoming).toHaveLength(0);
+      expect(view.outgoing).toHaveLength(0);
+    }
+
+    // the inviter hears that somebody joined, not that somebody is waiting
+    const inbox = (await authed(h.app, target.token)({ method: 'GET', url: '/me/inbox' })).json<Notification[]>();
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]).toMatchObject({
+      type: 'friend_accepted',
+      title: '🔥 Yeni kanka',
+      data: { userId: asker.me.id, friendshipId: body.friendshipId, via: 'invite' },
+    });
+    expect(inbox[0]?.body).toContain('mustafa davetinle geldi');
+  });
+
+  it('still only sends a request by invite code from an account older than a week', async () => {
+    const h = await boot();
+    const asker = await registerUser(h.app, 'mustafa');
+    const target = await registerUser(h.app, 'kemal');
+    const call = authed(h.app, asker.token);
+    h.advance(8 * 24 * 60 * 60 * 1000);
+
+    const response = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: target.me.inviteCode } });
     expect(response.statusCode).toBe(201);
-    expect(response.json<{ user: { id: string } }>().user.id).toBe(target.me.id);
+    expect(response.json<{ status: string }>().status).toBe('pending');
+    const view = (await authed(h.app, target.token)({ method: 'GET', url: '/friends' })).json<FriendsView>();
+    expect(view.friends).toHaveLength(0);
+    expect(view.incoming.map((r) => r.user.id)).toEqual([asker.me.id]);
+
+    // and asking again by code is the ordinary "already asked"
+    const again = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: target.me.inviteCode } });
+    expect(again.statusCode).toBe(409);
+    expect(again.json<{ error: { code: string } }>().error.code).toBe('already_requested');
+  });
+
+  it('turns my own waiting request into the friendship when I come by the invite code', async () => {
+    const h = await boot();
+    const asker = await registerUser(h.app, 'mustafa');
+    const target = await registerUser(h.app, 'kemal', { vulgarityMax: 1 });
+    const call = authed(h.app, asker.token);
+    const unreadRequests = () =>
+      h.db
+        .prepare("SELECT * FROM notifications WHERE user_id = ? AND type = 'friend_request' AND read_at IS NULL")
+        .all(target.me.id);
+
+    const asked = await call({ method: 'POST', url: '/friends/request', payload: { username: 'kemal' } });
+    expect(asked.statusCode).toBe(201);
+    expect(unreadRequests()).toHaveLength(1);
+
+    const joined = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: target.me.inviteCode } });
+    expect(joined.statusCode).toBe(200);
+    expect(joined.json()).toMatchObject({
+      status: 'accepted',
+      friendshipId: asked.json<{ friendshipId: string }>().friendshipId,
+    });
+    const rows = h.db.prepare('SELECT status FROM friendships').all() as { status: string }[];
+    expect(rows).toEqual([{ status: 'accepted' }]);
+    // no "Kabul" left to tap on a request that is a friendship already
+    expect(unreadRequests()).toHaveLength(0);
+    const inbox = (await authed(h.app, target.token)({ method: 'GET', url: '/me/inbox' })).json<Notification[]>();
+    expect(inbox.map((n) => n.type)).toEqual(['friend_accepted']);
+    expect(inbox[0]).toMatchObject({ title: 'Davetin kabul gördü', data: { via: 'invite' } });
+  });
+
+  it('counts wrong invite codes, and once over the budget a right one waits too', async () => {
+    const h = await boot();
+    const asker = await registerUser(h.app, 'mustafa');
+    const target = await registerUser(h.app, 'kemal');
+    await registerUser(h.app, 'zeynep');
+    const call = authed(h.app, asker.token);
+
+    // a 0 or 1 is never in a real code, so none of these can hit by luck
+    for (let i = 0; i < 20; i += 1) {
+      const miss = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: `ZZZ0${10 + i}` } });
+      expect(miss.statusCode).toBe(404);
+    }
+    const blocked = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: target.me.inviteCode } });
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.json<{ error: { code: string; message: string } }>().error).toMatchObject({ code: 'too_many_requests' });
+    expect(blocked.json<{ error: { message: string } }>().error.message).toContain('Çok fazla yanlış kod denedin');
+    expect(h.db.prepare('SELECT * FROM friendships').all()).toHaveLength(0);
+
+    // a request by username is not a guess, and somebody else is not held up
+    expect((await call({ method: 'POST', url: '/friends/request', payload: { username: 'zeynep' } })).statusCode).toBe(201);
+    const other = await registerUser(h.app, 'ali');
+    const fine = await authed(h.app, other.token)({
+      method: 'POST',
+      url: '/friends/request',
+      payload: { inviteCode: target.me.inviteCode },
+    });
+    expect(fine.statusCode).toBe(200);
+
+    h.advance(60 * 60 * 1000);
+    const later = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: target.me.inviteCode } });
+    expect(later.statusCode).toBe(200);
+    expect(later.json<{ status: string }>().status).toBe('accepted');
+  });
+
+  it('never lets an invite code past a block, either way', async () => {
+    const h = await boot();
+    const asker = await registerUser(h.app, 'mustafa');
+    const target = await registerUser(h.app, 'kemal');
+    const call = authed(h.app, asker.token);
+
+    await authed(h.app, target.token)({ method: 'POST', url: `/users/${asker.me.id}/block` });
+    const theirs = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: target.me.inviteCode } });
+    expect(theirs.statusCode).toBe(403);
+    expect(theirs.json<{ error: { code: string } }>().error.code).toBe('blocked');
+
+    await authed(h.app, target.token)({ method: 'POST', url: `/users/${asker.me.id}/unblock` });
+    await call({ method: 'POST', url: `/users/${target.me.id}/block` });
+    const mine = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: target.me.inviteCode } });
+    expect(mine.statusCode).toBe(403);
+    expect(mine.json<{ error: { code: string } }>().error.code).toBe('blocked');
+
+    const rows = h.db.prepare('SELECT status FROM friendships').all() as { status: string }[];
+    expect(rows).toEqual([{ status: 'blocked' }]);
+    expect(
+      h.db.prepare("SELECT * FROM notifications WHERE user_id = ? AND type = 'friend_accepted'").all(target.me.id),
+    ).toHaveLength(0);
   });
 
   it('auto-accepts when the target already asked', async () => {

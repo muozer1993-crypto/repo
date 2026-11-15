@@ -172,6 +172,8 @@ describe('invite screen, signed in', () => {
     const tree = render(<Screen />);
     await settle();
     expect(text(tree)).toContain('Ali seni çağırıyor');
+    // a new account is a kanka on the tap: nothing promises a wait for "Kabul"
+    expect(text(tree)).not.toContain('Kabul edince');
     expect(mockRequestFriend).not.toHaveBeenCalled();
 
     pressButton(tree, 'Kanka isteği gönder');
@@ -271,6 +273,7 @@ describe('invite screen, fresh install', () => {
     const tree = render(<Screen />);
     await settle();
     expect(text(tree)).not.toContain('başka bir sunucudan');
+    expect(text(tree)).toContain('Hesabın yoksa kayıt ol, kanka olursunuz.');
 
     pressButton(tree, 'Kayıt ol');
     await settle();

@@ -29,8 +29,11 @@ export function needsServerChoice(serverUrl: string): boolean {
  * holds. Takes the invite message as it arrived; the server is adopted once it
  * answers /health, and an invite code inside is parked so the banner below
  * names the inviter and the request goes out right after sign-up.
+ *
+ * `onChosen` hears about it once the address is set, with the code the paste
+ * carried (null for a bare address): login sends an invite on to register.
  */
-export function ChooseServerCard() {
+export function ChooseServerCard({ onChosen }: { onChosen?: (code: string | null) => void }) {
   const setServerUrl = useAuth((s) => s.setServerUrl);
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +67,7 @@ export function ChooseServerCard() {
     if (code) await savePendingInvite(code, server);
     await setServerUrl(server);
     setBusy(false);
+    onChosen?.(code);
   };
 
   return (

@@ -818,6 +818,27 @@ göndermek TerminateProcess demektir, ne veritabanı kapanır ne yarım kalan i�
 kapanırken zamanlayıcının o anki turunu bekler (en çok 10 saniye): yarıda kesilen bir push
 gönderimi satıra `pushed_at` yazamaz ve bir sonraki açılışta aynı KOYDUM ikinci kez gider.
 
+## Davetle gelen kanka
+
+Kankalar → Paylaş'ın gönderdiği bağlantı davet edenin kendi kodunu taşır. Eskiden bağlantıyla
+kaydolan yeni oyuncu bir kanka isteği gönderiyordu ve davet eden uygulamayı açıp **Kabul**'e basana
+kadar bekliyordu: ana sayfası "Önce bir kanka ekle", sihirbazın Kankalar adımı "Kanka yok" diyordu,
+davet eden de onu süren çelıncına çağıramıyordu (`requireFriend`). Push'u olmayan bir telefonda bu
+15 dakikalık arka plan kontrolüne, çoğu zaman sabaha kalıyordu; yeni gelen de orada bırakıyordu.
+
+Artık kodla gelen istek, gönderen hesap en çok bir haftalıksa (`INVITE_AUTO_ACCEPT_MAX_AGE_MS`,
+telefonun bekleyen daveti tuttuğu hafta) hemen `accepted` olur ve davet edene `friend_accepted`
+gider (`via: 'invite'`). Kodu paylaşan onu kime istediyse ona verdi, "evet" o an verilmiş sayılır.
+Hafta sınırı, arkadaşlıktan çıkarılıp kodu saklayan eski bir hesabın sorulmadan geri gelmesini
+engeller: o hâlâ istek gönderir. Engel iki yönde de 403 kalır. Kod altı karakter, 32 harflik bir
+alfabeden; doğru bir tahmin artık bir arkadaşlık demek. Bu yüzden bir hesabın kimseyi bulamayan
+kodları saatte 20 ile sınırlı (`INVITE_CODE_MISSES_PER_USER`, süreç içi `AttemptLimiter`), sınırı
+aşan doğru kodla gelse de bekler.
+
+Uygulamada giriş ekranındaki "Önce sunucuyu seç"e yapıştırılan davet bağlantısı kayıt ekranına
+geçirir: sunucu seçmemiş bir telefon yeni birinin telefonudur, giriş formu ona ancak "şifre yanlış"
+derdi. Hesabı olan, kayıt formunun altındaki **Giriş yap**'a basar.
+
 ## Neden SQLite
 
 Bu uygulamanın kullanıcısı bir arkadaş grubudur, on binlerce kişi değil. Tek dosyalık bir
