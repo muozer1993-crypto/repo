@@ -856,14 +856,27 @@ tazeler, çevrimdışı kuyruğu gönderir; oturum, gelen kutusu imleci ve push 
 Bağlantı herkesten gelebileceği için kendiliğinden geçiş yok.
 
 Adres ancak tünel yenilenince değiştiği için `npm run internet` (`scripts/internet.mjs`) tüneli
-elinde tutar. Sunucu çökerse aynı `PUBLIC_URL` ile yeniden açar (1, 5, 15 saniye sonra; on
-dakikada beşinci çöküşte bırakır). cloudflared kapanırsa (çoğu zaman ev interneti gitmiştir)
+elinde tutar. Sunucu çökerse aynı `PUBLIC_URL` ile yeniden açar (1, 5, 15 saniye sonra). On
+dakikada beşinci çöküşte eskiden bırakıp tüneli de kapatıyordu; sebep çoğu zaman bir dakikada
+düzelen bir şeydi (portu tutan unutulmuş bir `npm run server`, `git pull`'dan sonra eksik kalan
+bir paket) ama adres herkes için gitmiş oluyordu. Artık beş dakika bekleyip yeniden dener
+(`y` + Enter beklemeden açar); tünel ve adres yerinde kalır. cloudflared kapanırsa (çoğu zaman ev interneti gitmiştir)
 sunucuya dokunmaz, evdeki Wi-Fi ve zamanlayıcı çalışmaya devam eder; tüneli 5 saniyeden bir
 dakikaya uzayan aralıklarla yeniden dener, yeni adres gelince sunucuyu onunla yeniden başlatır.
 Sunucuyu durdurmak için sinyal değil IPC mesajı gönderir: Windows'ta bir alt sürece sinyal
 göndermek TerminateProcess demektir, ne veritabanı kapanır ne yarım kalan iş biter. Sunucu da
 kapanırken zamanlayıcının o anki turunu bekler (en çok 10 saniye): yarıda kesilen bir push
 gönderimi satıra `pushed_at` yazamaz ve bir sonraki açılışta aynı KOYDUM ikinci kez gider.
+
+Güncelleme de aynı sebeple pencereyi kapatmadan olur. Betik stdin'i satır satır okur:
+`y` + Enter sunucuyu aynı tünelin arkasında yeni kodla yeniden açar, `dur` + Enter onu durdurup
+bekletir (Windows'ta çalışan sunucunun açık tuttuğu `better_sqlite3.node`'u `npm install`
+değiştiremez). readline `terminal: false` ile, çıktısız kurulur: stdin ham moda geçmez, Ctrl+C
+hâlâ SIGINT olarak gelir. Yeni kod açılamazsa İngilizce bir yığın izi yerine ne yapılacağı
+Türkçe yazsın diye sunucunun girişi (`src/index.ts`) asıl açılışı (`src/main.ts`) `import()`
+ile yükler: statik bir import'ta eksik bir paket bizim kodumuz hiç çalışmadan patlıyordu.
+Eksik bir pakette ve başka bir Node.js için derlenmiş better-sqlite3'te sunucu 3 koduyla çıkar;
+betik bunu çöküş saymaz, saniyeler içinde aynı duvara çarpacak denemelere girmeden bekler.
 
 ## Davetle gelen kanka
 

@@ -266,14 +266,16 @@ statements and SQL migrations applied at boot (`migrations/001_init.sql` ... emb
 strings in `src/db/migrations.ts` — no filesystem reads for migrations so it works from any cwd).
 
 ```
-src/index.ts            boot: loadDotEnv() + buildApp() + scrubUploadDir() (old proof photos, before listen, see 2.6)
+src/index.ts            entry: imports main.ts dynamically and reports a failed start (startupErrorMessage, see 2.6), so
+                        a package missing after a pull gets the Turkish line too
+src/main.ts             boot: loadDotEnv() + buildApp() + scrubUploadDir() (old proof photos, before listen, see 2.6)
                         + listen(PORT, HOST 0.0.0.0) + start scheduler (after listen) + startKeepAwake(); clean
                         shutdown (see 2.6)
 src/keepAwake.ts        Windows only: a hidden PowerShell that keeps the PC from idle sleep while the server runs (see 2.6)
 src/log.ts              ownerLogStream(): pino lines → one Turkish line each for the owner's console (see Logging);
                         wantsReadableLogs(): stdout is a TTY and LOG_FORMAT is not `json`
 src/env.ts              loadDotEnv(): apps/server/.env into process.env, never over a variable already set; entry
-                        points only (index.ts, cli/yonet.ts; scripts/env.mjs for the .mjs scripts), not loadConfig
+                        points only (main.ts, cli/yonet.ts; scripts/env.mjs for the .mjs scripts), not loadConfig
 src/app.ts              buildApp(opts): registers plugins, routes, error handler; exported for tests
 src/config.ts           env: PORT=4000, HOST=0.0.0.0, DATA_DIR=./data, UPLOAD_DIR=<DATA_DIR>/uploads (so one
                         volume holds the database and the photos), JWT_SECRET (auto-generated & persisted to
@@ -542,7 +544,7 @@ inbox read/unread, account deletion, uploads (multipart), badges awarded.
 
 Daily backup (`services/backup.ts`, run from the scheduler tick): `db.backup()` into `<DATA_DIR>/backups/koydum-YYYY-MM-DD.db` (Istanbul date) once per day, written aside and renamed, last 7 kept; skipped for `:memory:`. `BACKUP_DIR` (env / `.env`, trimmed; ignored for an in-memory config) names a second folder, typically OneDrive: once today's local copy exists, every local backup the folder lacks is copied there (aside and renamed, created if missing) and it is trimmed to 7 the same way. The copy runs detached from the pass, so a hanging cloud or network folder never holds up the lifecycle; a failure logs a `warn` and is retried after an hour (`BACKUP_COPY_RETRY_MS`), never touching the local backup. `stop()` waits for a copy in flight like it waits for a pass.
 
-Old proof photos (`src/index.ts`, every start, before `listen`, since a served photo is cached for a year): `scrubUploadDir(UPLOAD_DIR)` runs the strip of `POST /uploads` over every `*.jpg`/`*.jpeg`/`*.png`/`*.webp` in the folder, for the photos stored before uploads were stripped. A file is rewritten only when stripping changes it, written to `<name>.<pid>.tmp` (flushed) and renamed over it. A file that does not sniff as an image or does not strip is left byte for byte; a failed read, write or rename leaves the photo as it was and removes only the temp file; nothing is ever deleted. A JPEG is first read up to 64 KB: when that head holds the first scan and nothing to drop, the rest is not read, so a start costs little once the folder is clean. A missing folder is nothing to do. Any count above zero is one line (`warn` when some failed, retried at the next start); a failure of the whole pass is one `warn` and never stops the start.
+Old proof photos (`src/main.ts`, every start, before `listen`, since a served photo is cached for a year): `scrubUploadDir(UPLOAD_DIR)` runs the strip of `POST /uploads` over every `*.jpg`/`*.jpeg`/`*.png`/`*.webp` in the folder, for the photos stored before uploads were stripped. A file is rewritten only when stripping changes it, written to `<name>.<pid>.tmp` (flushed) and renamed over it. A file that does not sniff as an image or does not strip is left byte for byte; a failed read, write or rename leaves the photo as it was and removes only the temp file; nothing is ever deleted. A JPEG is first read up to 64 KB: when that head holds the first scan and nothing to drop, the rest is not read, so a start costs little once the folder is clean. A missing folder is nothing to do. Any count above zero is one line (`warn` when some failed, retried at the next start); a failure of the whole pass is one `warn` and never stops the start.
 
 Unused proof photos (`services/photos.ts`, from the scheduler tick after the backup, on the first pass of each Istanbul day: at every start and when the day turns): the app uploads a photo when it is picked, before the entry exists, so a photo picked and then swapped, an entry's photo replaced by a new post of the day (2.3), a typed day friends threw out that a phone reading took back (`proof_url` cleared; one the phone simply replaces keeps it) and a deleted entry all leave a file no entry shows. `sweepOrphanPhotos(db, UPLOAD_DIR, now)` deletes each file whose name is one `POST /uploads` gives (`<uuid>.jpg|png|webp`, lowercase; a `.tmp`, any other name and anything but a plain file are never touched), whose mtime is more than `UNUSED_PHOTO_GRACE_MS` (7 days) before `now`, and that no `entries.proof_url` points at, read with the same `…/uploads/<name>` rule as `DELETE /me` (relative or with a server address in front). The week is for a phone that uploaded a photo and parked its entry (the offline queue keeps the uploaded path) and for an itiraz answer, uploaded before it is posted. A file that cannot be deleted (locked on Windows) or is already gone is skipped and tried again the next day; a missing folder is nothing to do. Skipped for a `:memory:` database, which knows nothing of an earlier run's uploads. Deleting any is one `info` line with the count and MB; a failed sweep is one `warn` and waits for the next day.
 
@@ -556,15 +558,21 @@ server's pid is gone, so it also ends after a hard kill. No display flag: the sc
 still sleeps (README). Shutdown kills it; a spawn error or an exit nobody asked for logs one `warn` and is never
 fatal. Other platforms: nothing.
 
-Shutdown (`src/index.ts`): SIGINT, SIGTERM, SIGHUP (a closed console window, Windows too), SIGBREAK on Windows, an
+Shutdown (`src/main.ts`): SIGINT, SIGTERM, SIGHUP (a closed console window, Windows too), SIGBREAK on Windows, an
 IPC message `{ type: 'shutdown' }` and a lost IPC channel all run the same path: stop the keep-awake helper, await
 the scheduler stop, `app.close()`, `db.close()`, exit 0 (forced after 12 s). An unhandled rejection or uncaught exception is logged as fatal and takes the
-same path with exit code 1. A busy port (EADDRINUSE) prints one Turkish line (`src/listenError.ts`) and exits 1 without
-a stack; the scheduler starts only after `listen` succeeds.
+same path with exit code 1. The scheduler starts only after `listen` succeeds.
+
+A failed start (`src/index.ts`, which imports `main.ts` with `import()` so that a failure while loading it is caught
+too) prints one Turkish line without a stack where `startupErrorMessage` (`src/listenError.ts`) knows the cause: a busy
+port (EADDRINUSE) exits 1; a missing package (ERR_MODULE_NOT_FOUND / MODULE_NOT_FOUND naming a bare package or a file
+under node_modules: "npm install") and a native module built for another Node.js (ERR_DLOPEN_FAILED or
+NODE_MODULE_VERSION: "npm rebuild better-sqlite3") exit 3, "fixed only by the owner". Anything else, a missing file of
+the server's own included, prints `KOYDUM sunucusu başlatılamadı:` and the error with its stack and exits 1.
 
 Logging: no per-request lines (`LogController({ disableRequestLogging: true })`); an `onResponse` hook writes one `warn`
 for a status ≥ 500 or a response slower than 2 s: method, path without the query string, status, ms.
-In a console (stdout is a TTY, `LOG_FORMAT` is not `json`) `src/index.ts` passes `logStream: ownerLogStream()` and every
+In a console (stdout is a TTY, `LOG_FORMAT` is not `json`) `src/main.ts` passes `logStream: ownerLogStream()` and every
 pino line becomes `HH:mm:ss <glyph> <Turkish text>`: Istanbul time, `•` up to info, `!` warn, `✗` error and fatal; a
 `── YYYY-MM-DD ──` line before the first entry of each Istanbul day. The server's own messages have Turkish renderings
 (startup with port and the explicit PUBLIC_URL, Fastify's "Server listening at", scheduler pass counts, push sent/failed,
@@ -576,10 +584,17 @@ is written unchanged. Anything else (pipe, file, Docker, tests) keeps pino's JSO
 
 `npm run internet` (`scripts/internet.mjs`) supervises: the server runs as `node --import tsx src/index.ts` (one process,
 IPC channel). Stop = IPC shutdown, SIGKILL after 15 s. A server exit that was not asked for is restarted with the same
-PUBLIC_URL after 1 / 5 / 15 s; the 5th crash within 10 min ends the script with exit code 1. A cloudflared that exits
-after printing its address leaves the server running (LAN and scheduler still work) and is restarted with a 5 s → 60 s
-backoff, forever; a new address restarts the server with it and prints the banner again. `.env` is read first
-(`scripts/env.mjs`), so PORT from the file reaches the tunnel too.
+PUBLIC_URL after 1 / 5 / 15 s; the 5th crash within 10 min pauses the server for `KOYDUM_CRASH_PAUSE_MS` (5 min), with
+the tunnel and its address kept, then starts it again with a fresh crash count. Exit code 3 is not a crash: it pauses
+at once, without the 1 / 5 / 15 s retries. The script reads stdin as lines (readline, `terminal: false`, so stdin never
+goes raw and Ctrl+C stays SIGINT; a closed stdin means no commands), trimmed and Turkish-lowercased: `y` or `yeniden`
+restarts a running server (same PUBLIC_URL, so new code behind the same address) or starts a paused, held or waiting
+one at once, and clears the crash count; `dur` stops the server and holds it, no restart of any kind, until `y` (on
+Windows npm install cannot replace better-sqlite3's .node while a server has it open); anything else prints the two
+commands. A cloudflared that exits after printing its address leaves the server running (LAN and scheduler still work)
+and is restarted with a 5 s → 60 s backoff, forever; a new address restarts the server with it and prints the banner
+again. `.env` is read first (`scripts/env.mjs`), so PORT from the file reaches the tunnel too; the values it set are
+passed to every server start, so a changed value needs the script restarted (a new address), not `y`.
 
 `.env.example`, `Dockerfile` (node:22-alpine, `npm ci --workspaces`, `CMD npm start -w apps/server`), `docker-compose.yml`
 (volume for data+uploads), `README` section on deploying (Railway/Fly/any VPS) and on LAN usage (`HOST=0.0.0.0`,

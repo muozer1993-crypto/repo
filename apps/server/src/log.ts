@@ -4,7 +4,7 @@
  *
  * The owner is the only one who reads this window, and reads it when a friend says
  * "bildirim gelmedi": what the server did, and when, has to be readable at a glance.
- * index.ts turns it on only for a console (`wantsReadableLogs`); Docker, a file the
+ * main.ts turns it on only for a console (`wantsReadableLogs`); Docker, a file the
  * output was redirected to, the tests and LOG_FORMAT=json keep the JSON lines a log
  * collector or jq reads. Written by hand because pino-pretty would be one more
  * dependency for what fits on this page.
@@ -142,7 +142,7 @@ function duration(minutes: number): string {
 }
 
 /**
- * The start's pass over the old proof photos (index.ts); a pass that changed
+ * The start's pass over the old proof photos (main.ts); a pass that changed
  * nothing is not logged. A photo counts as cleaned when any of its EXIF went,
  * and most carry only the phone and the date: the line must not tell the owner
  * that every one of them gave a home away.

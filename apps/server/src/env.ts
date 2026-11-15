@@ -1,7 +1,7 @@
 /**
  * `apps/server/.env` — the settings file the README tells the owner to create.
  *
- * Read by the entry points only (index.ts, cli/yonet.ts), never by loadConfig or
+ * Read by the entry points only (main.ts, cli/yonet.ts), never by loadConfig or
  * buildApp, so a test run stays hermetic whatever sits in the owner's folder.
  * scripts/env.mjs is the same parser for the plain-Node scripts; keep the two alike.
  *

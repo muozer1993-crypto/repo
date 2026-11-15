@@ -10,13 +10,17 @@
  *
  * Needs `cloudflared` on the PATH (Windows: winget install --id Cloudflare.cloudflared).
  * A new tunnel means a new address and a new link for everyone, so this script
- * keeps the one it has: a crashed server is restarted behind the same tunnel, and
- * the server keeps serving the home Wi-Fi while a dropped tunnel is reopened.
+ * keeps the one it has: a crashed server is restarted behind the same tunnel (a
+ * server that keeps crashing is retried every few minutes, never given up on), the
+ * server keeps serving the home Wi-Fi while a dropped tunnel is reopened, and the
+ * owner updates the code without closing the window: `y` + Enter starts the
+ * server again from the new code, `dur` + Enter stops it for an `npm install`.
  * Ctrl+C stops both.
  */
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import readline from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadDotEnv } from './env.mjs';
 
@@ -38,21 +42,35 @@ const TSX = pathToFileURL(require.resolve('tsx')).href;
 
 /** Waits before restarting a crashed server: the 1st, the 2nd, and every later crash. */
 const RESTART_DELAYS_MS = [1_000, 5_000, 15_000];
-/** This many crashes inside the window is a bug restarting will not fix. */
+/** This many crashes inside the window is a bug restarting will not fix soon. */
 const CRASH_LIMIT = 5;
 const CRASH_WINDOW_MS = 10 * 60_000;
+/**
+ * After that, or after a start that cannot work until the owner acts, the server
+ * waits this long between tries; the tunnel and its address stay. The variable is
+ * for the tests.
+ */
+const PAUSE_MS = Number.parseInt(process.env.KOYDUM_CRASH_PAUSE_MS ?? '300000', 10) || 300_000;
+/**
+ * The server's exit code for "an npm install or npm rebuild away from working"
+ * (NEEDS_OWNER_EXIT_CODE in src/listenError.ts, which a .mjs cannot import). It
+ * printed what to do; a retry within seconds would fail the same way.
+ */
+const NEEDS_OWNER_EXIT_CODE = 3;
 /** Reopening a dropped tunnel backs off from 5 s to a minute and never gives up: the internet comes back. */
 const TUNNEL_RETRY_FIRST_MS = 5_000;
 const TUNNEL_RETRY_MAX_MS = 60_000;
 /** The server waits up to 10 s for a push flush in flight (services/scheduler.ts); killed only after that. */
 const SHUTDOWN_GRACE_MS = 15_000;
 
-let server = null; // null between a crash and its restart
+let server = null; // null between a crash and its restart, and while paused or held
 let tunnel = null; // the cloudflared whose address is in use
 let publicUrl = null;
 let stopping = false;
+let restartTimer = null; // the restart after a crash or a pause; y + Enter starts the server sooner
+let held = false; // `dur` + Enter: no server until y + Enter, so npm install can replace its files
 const tunnels = new Set(); // every cloudflared started, including attempts still waiting for an address
-const replaced = new WeakSet(); // servers stopped on purpose for a new address: not a crash
+const replaced = new WeakSet(); // servers stopped on purpose (a new address, y, dur): not a crash
 const timers = new Set();
 const crashes = [];
 
@@ -62,6 +80,7 @@ function later(ms, fn) {
     fn();
   }, ms);
   timers.add(timer);
+  return timer;
 }
 
 function kill(child, signal) {
@@ -222,6 +241,11 @@ function startServer() {
   child.on('exit', (code, signal) => {
     if (server === child) server = null;
     if (stopping || replaced.has(child)) return;
+    // it printed what to do (npm install, npm rebuild); a start in a second would fail the same way
+    if (code === NEEDS_OWNER_EXIT_CODE) {
+      pause();
+      return;
+    }
     serverCrashed(code !== null ? `kod ${code}` : signal);
   });
 }
@@ -231,25 +255,90 @@ function serverCrashed(how) {
   crashes.push(now);
   while (now - crashes[0] > CRASH_WINDOW_MS) crashes.shift();
   if (crashes.length >= CRASH_LIMIT) {
-    console.error(`\n✗ Sunucu 10 dakikada ${CRASH_LIMIT} kere düştü, bırakıyorum. Sebebi yukarıdaki hatada yazıyor.`);
-    stopAll(1);
+    // Not stopAll: closing the tunnel costs everyone the address, and what usually
+    // causes this (a forgotten window on the port, a package missing after a pull)
+    // is fixed in a minute.
+    console.error(`\n✗ Sunucu 10 dakikada ${CRASH_LIMIT} kere düştü, sebebi yukarıdaki hatada.`);
+    console.error(`  Tüneli açık tutuyorum, adres aynı: ${publicUrl}`);
+    console.error(
+      `  ${Math.max(1, Math.round(PAUSE_MS / 60_000))} dakikada bir yeniden deneyeceğim; düzelttiysen burada y yazıp Enter'a bas.`,
+    );
+    pause();
     return;
   }
   const delay = RESTART_DELAYS_MS[Math.min(crashes.length, RESTART_DELAYS_MS.length) - 1];
   console.error(`\n✗ Sunucu düştü (${how}), yeniden açıyorum. Adres aynı, kimseye yeni bağlantı atma.`);
-  later(delay, startServer);
+  restartTimer = later(delay, startServer);
 }
 
-/** The server reads PUBLIC_URL once at start; a new address needs a new process. */
+/** No server for a while, the tunnel kept: the next try starts a fresh count of crashes. */
+function pause() {
+  crashes.length = 0;
+  restartTimer = later(PAUSE_MS, startServer);
+}
+
+/** Drops a restart that is waiting: y + Enter starts the server now, `dur` + Enter not at all. */
+function cancelRestart() {
+  if (restartTimer === null) return;
+  clearTimeout(restartTimer);
+  timers.delete(restartTimer);
+  restartTimer = null;
+}
+
+const HELD = "• Sunucu durdu, tünel açık, adres aynı. npm install bitince burada y yazıp Enter'a bas.";
+
+/**
+ * The server reads PUBLIC_URL and its code once at start; a new address or new code
+ * needs a new process. After `dur` + Enter the old one goes and none follows.
+ */
 function restartServer() {
   const old = server;
   // between a crash and its restart, or already on its way out: the next start reads the new address
   if (!old || replaced.has(old)) return;
   replaced.add(old);
   old.once('exit', () => {
-    if (!stopping) startServer();
+    if (stopping) return;
+    // `held` as it is now, not when this began: y + Enter while it was closing undoes `dur`
+    if (held) console.log(HELD);
+    else startServer();
   });
   askToStop(old);
+}
+
+/**
+ * A line the owner typed into this window. `y` after a git pull + npm install
+ * starts the server from the new code behind the same tunnel, so nobody needs a
+ * new link; `dur` stops it for an npm install that must replace a file the running
+ * server holds open (better-sqlite3's .node, on Windows).
+ */
+function onCommand(line) {
+  if (stopping) return;
+  // Turkish keyboard or not, caps lock or not: YENİDEN, YENIDEN and yeniden are the same word
+  const command = line.trim().toLocaleLowerCase('tr').replaceAll('ı', 'i');
+  if (command === '') return;
+  if (command === 'y' || command === 'yeniden') {
+    cancelRestart();
+    crashes.length = 0;
+    held = false;
+    if (server) {
+      console.log(`• Sunucu yeni kodla yeniden açılıyor, adres aynı: ${publicUrl}`);
+      restartServer();
+    } else {
+      startServer();
+    }
+  } else if (command === 'dur') {
+    held = true;
+    if (server) {
+      console.log('• Sunucu kapanıyor, tünel açık kalıyor...');
+      restartServer();
+    } else {
+      cancelRestart();
+      console.log(HELD);
+    }
+  } else {
+    console.log("  Burada y yazıp Enter'a basarsan sunucu yeni kodla açılır, dur yazarsan durur (npm install için).");
+    console.log('  İkisinde de tünel ve adres kalır. Kapatmak için Ctrl+C.');
+  }
 }
 
 function printBanner(changed = false) {
@@ -265,6 +354,8 @@ ${first}
   • Kendi telefonun evdeki Wi-Fi'da kalabilir, aynı sunucudur.
   • Bu pencere açık kaldıkça çalışır. Ctrl+C ile kapanır. Sunucu
     düşerse yeniden açılır, adres aynı kalır.
+  • Kodu güncelledin mi (git pull, npm install)? Burada y yazıp
+    Enter'a bas: sunucu yeni kodla açılır, adres değişmez.
   • Adres, pencereyi kapatıp açınca ya da internet kopup tünel
     yeniden kurulunca değişir; yenisi burada yazar. Paylaş'la
     gönderince kankan dokunup "Yeni adrese geç"e basar, çıkış
@@ -289,6 +380,10 @@ async function main() {
   publicUrl = first.url;
   startServer();
   printBanner();
+  // Lines, with no output and terminal: false, so stdin never goes raw and Ctrl+C
+  // still reaches this process as SIGINT. A stdin that ends (the tests' 'ignore')
+  // just means no commands.
+  readline.createInterface({ input: process.stdin, terminal: false }).on('line', onCommand);
 }
 
 main();

@@ -1,0 +1,116 @@
+/**
+ * Boot: .env → config → database → app → the old proof photos' clean-up → listen →
+ * scheduler (and, on Windows, the helper that keeps the PC awake), plus a clean
+ * shutdown.
+ * Started by index.ts, which reports a failed start (this module not loading
+ * included); under `npm run internet` the script supervises the process and talks
+ * to it over IPC.
+ */
+import path from 'node:path';
+import type { FastifyInstance } from 'fastify';
+import { buildApp } from './app.js';
+import { loadConfig } from './config.js';
+import { openDb } from './db/index.js';
+import { loadDotEnv } from './env.js';
+import { startKeepAwake } from './keepAwake.js';
+import { ownerLogStream, wantsReadableLogs } from './log.js';
+import { scrubUploadDir } from './services/images.js';
+import { startScheduler } from './services/scheduler.js';
+
+/**
+ * A close that hangs (a request that never ends) must still end the process, or
+ * npm run internet would wait on a server that no longer serves. Above the
+ * scheduler's own 10 s wait, below the script's 15 s kill.
+ */
+const SHUTDOWN_DEADLINE_MS = 12_000;
+
+/**
+ * Photos uploaded before the server stripped them still carry the phone's GPS
+ * (services/images.ts). Before listen: once a photo is served with a year's cache,
+ * the copy a phone or a proxy keeps is the one it got first. A failure is a line
+ * in the window, never a reason not to start; the next start tries again.
+ */
+async function scrubOldPhotos(app: FastifyInstance, uploadDir: string): Promise<void> {
+  try {
+    const { cleaned, failed } = await scrubUploadDir(path.resolve(uploadDir));
+    if (failed > 0) app.log.warn({ cleaned, failed }, 'proof photos scrubbed');
+    else if (cleaned > 0) app.log.info({ cleaned }, 'proof photos scrubbed');
+  } catch (err) {
+    app.log.warn({ err }, 'proof photo scrub failed');
+  }
+}
+
+export async function main(): Promise<void> {
+  // before anything reads process.env: the README's apps/server/.env is where PORT lives
+  loadDotEnv();
+  const config = loadConfig();
+  const db = openDb(config.dbPath);
+  // Turkish lines with the time in the owner's window, JSON for everything else
+  const { app } = await buildApp({ config, db, logStream: wantsReadableLogs() ? ownerLogStream() : undefined });
+
+  let stopScheduler: (() => Promise<void>) | null = null;
+  let stopKeepAwake: (() => void) | null = null;
+  let shuttingDown = false;
+  const shutdown = (reason: string, code = 0): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    app.log.info({ reason }, 'shutting down');
+    stopKeepAwake?.();
+    setTimeout(() => process.exit(code), SHUTDOWN_DEADLINE_MS).unref();
+    void (async () => {
+      // an in-flight push flush marks its rows before the database closes, so a
+      // restart does not send the same KOYDUM twice
+      await stopScheduler?.();
+      await app.close().catch((err: unknown) => app.log.error({ err }, 'close failed'));
+      try {
+        db.close();
+      } catch {
+        // already closed
+      }
+      process.exit(code);
+    })();
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  // closing the console window: SIGHUP on Windows as on Linux
+  process.on('SIGHUP', () => shutdown('SIGHUP'));
+  if (process.platform === 'win32') process.on('SIGBREAK', () => shutdown('SIGBREAK'));
+  // npm run internet asks over IPC because on Windows a "signal" to a child is
+  // TerminateProcess: no database close, no waiting for the push flush
+  process.on('message', (message: unknown) => {
+    if ((message as { type?: unknown } | null)?.type === 'shutdown') shutdown('supervisor');
+  });
+  // the script itself was killed (Task Manager): nobody is left to stop this
+  // process, and it would sit on the port the next `npm run internet` needs
+  process.on('disconnect', () => shutdown('supervisor gone'));
+  // exit non-zero so npm run internet brings up a fresh process behind the same address
+  process.on('unhandledRejection', (err: unknown) => {
+    app.log.fatal({ err }, 'unhandled rejection');
+    shutdown('unhandledRejection', 1);
+  });
+  process.on('uncaughtException', (err: Error) => {
+    app.log.fatal({ err }, 'uncaught exception');
+    shutdown('uncaughtException', 1);
+  });
+
+  await scrubOldPhotos(app, config.uploadDir);
+  if (shuttingDown) return;
+  await app.listen({ port: config.port, host: config.host });
+  // only once the port is ours: a second window that cannot listen must not run a
+  // pass (notifications, pushes, the backup) against the same database first
+  if (shuttingDown) return;
+  stopScheduler = startScheduler(app, db, config);
+  // Windows only: a sleeping PC is a server nobody can reach (src/keepAwake.ts)
+  stopKeepAwake = startKeepAwake(app.log);
+  app.log.info(
+    {
+      port: config.port,
+      host: config.host,
+      // the default http://localhost:<port> is no address to give anybody
+      publicUrl: config.publicUrlExplicit ? config.publicUrl : undefined,
+      db: config.dbPath,
+    },
+    'KOYDUM sunucusu ayakta',
+  );
+}

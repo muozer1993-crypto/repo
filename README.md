@@ -187,8 +187,13 @@ Bilinmesi gerekenler:
   gitmediğini söyler). Elle sayı ve odak çelınclarında bilgisayarın uyumaması şart.
 * **Sunucu çökerse pencere onu kendisi yeniden açar.** "Sunucu düştü, yeniden açıyorum" yazar,
   birkaç saniye sonra sunucu geri gelir. Tünel yerinde kaldığı için adres de aynıdır, kimseye
-  yeni bağlantı atmana gerek yok. On dakikada beş kere çökerse bırakır ve kapanır; sebebi hemen
-  üstündeki hatada yazar.
+  yeni bağlantı atmana gerek yok. On dakikada beş kere çökerse de tüneli kapatmaz, adres yine
+  aynı kalır: sebebi hemen üstündeki hatada yazar, pencere beş dakikada bir yeniden dener.
+  Sebebi düzelttiysen (portu tutan öteki pencereyi kapattın, `npm install` yaptın) bekleme:
+  pencerede `y` yazıp Enter'a bas.
+* **Kodu güncellerken pencereyi kapatma.** `git pull` ve `npm install`'dan sonra bu pencerede `y`
+  yazıp Enter'a bas: sunucu yeni kodla açılır, adres değişmez. Ayrıntısı
+  [Sunucuyu güncellemek](#sunucuyu-güncellemek) bölümünde.
 * **İnternet giderse tünel kopar, sunucu kapanmaz.** Pencerede "Tünel koptu (internet gitmiş
   olabilir), tekrar deniyorum" yazar. Evdeki Wi-Fi'dan bağlananlar oynamaya devam eder; pencere
   internet gelene kadar tüneli yeniden dener (en seyrek dakikada bir). Tünel geri gelince adres
@@ -297,7 +302,8 @@ böylece eski kurulumlar kendilerinde olmayan native kodu varsayan bir güncelle
 Ekran süresi modülü tam olarak böyle bir değişiklikti: 1.1.0 sürümü yeni bir APK ister, `eas update`
 ile 1.0.0 kurulumlarına gitmez.
 
-Depoyu çekip (`git pull`) sunucuyu yeniden açtığında `apps/mobile` da değiştiyse `eas update`'i
+Depoyu çekip (`git pull`) sunucuyu yeni kodla açtığında
+([Sunucuyu güncellemek](#sunucuyu-güncellemek)) `apps/mobile` da değiştiyse `eas update`'i
 aynı gün yayınla. Sunucu eski uygulamayla da çalışır, ama bazı düzeltmeler telefonda olur:
 oturumu kapanan telefonun arka planda da çıkış yapması gibi. 1.1.0 kurulumları bunları ancak bu
 güncellemeyle alır.
@@ -657,6 +663,43 @@ Docker'da çalıştırıyorsan komutun başına `docker compose exec koydum` ekl
 `docker compose exec koydum npm run yonet -- sifre ali`. VPS'te sunucuyu `DATA_DIR` ile
 açtıysan komuta da aynısını ver: `DATA_DIR=/var/lib/koydum npm run yonet -- sifre ali`.
 
+### Sunucuyu güncellemek
+
+Depoya yeni bir şey geldiğinde `npm run internet` penceresini kapatma: pencere kapanınca tünel
+de gider, açınca adres değişir ve herkese yeni bağlantı atman gerekir. Pencere açık kalsın:
+
+1. İkinci bir PowerShell penceresi aç, depo klasöründe:
+
+   ```powershell
+   cd C:\Users\ArisK\koydum
+   git pull
+   npm install
+   ```
+
+2. `npm run internet` penceresine geç, `y` yazıp Enter'a bas. "Sunucu yeni kodla yeniden
+   açılıyor, adres aynı" yazar, birkaç saniye sonra sunucu yeni kodla geri gelir. Kimseye
+   bağlantı atmana gerek yok, kankaların bir şey yapmaz.
+
+`npm install` `EPERM` ya da `EBUSY` diye hata verirse açık sunucunun kullandığı bir dosyayı
+değiştiremiyordur (Windows'ta veritabanı modülü olur). `npm run internet` penceresinde `dur`
+yazıp Enter'a bas, "Sunucu durdu" yazınca `npm install`'ı tekrar çalıştır, bitince yine o
+pencerede `y` ve Enter. Sunucu dururken tünel açık kalır; o bir iki dakikada kankaların
+uygulamada "Sunucu şu an kapalı ya da uyuyor" görür, girdikleri sayılar telefonda bekler.
+
+Sunucu yeni kodla açılamazsa pencere ne yapacağını yazar: "Bir paket eksik" diyorsa
+`npm install`'ı, "better-sqlite3 bu Node.js sürümüyle açılmıyor" diyorsa (Node.js'i
+güncellediysen olur) kök klasörde `npm rebuild better-sqlite3`'ü çalıştır, sonra `y` ve Enter.
+Bu arada da tünel kapanmaz, pencere beş dakikada bir kendisi de dener.
+
+İki durumda `y` yetmez, pencereyi Ctrl+C ile kapatıp `npm run internet`'i yeniden açman gerekir
+(adres değişir, Paylaş'la yenisini gönder): `git pull`'un listesinde `apps/server/scripts/`
+geçiyorsa (`npm run internet`'in kendisi değişmiş) ya da `apps/server/.env`'de bir değeri
+değiştirdiysen.
+
+`npm run server` ile çalıştırıyorsan (hep aynı Wi-Fi) adres zaten değişmez: Ctrl+C, `git pull`,
+`npm install`, `npm run server`. `apps/mobile` da değiştiyse
+[EAS Update](#1b-güncellemeleri-apk-indirmeden-almak-eas-update) bölümüne de bak.
+
 ### Yedekler
 
 Hesaplar, kankalıklar, çelınclar, atılan bütün KOYDUM'lar tek bir dosyada:
@@ -1014,8 +1057,9 @@ eder.
 **"4000 portu dolu" diyor.**
 Başka bir pencerede KOYDUM sunucusu hâlâ açık: çoğu zaman unutulmuş bir `npm run server`.
 O pencereye geçip Ctrl+C'ye bas ya da kapat, sonra tekrar dene. `npm run internet` bu arada
-sunucuyu birkaç kere kendisi yeniden dener, diğer pencereyi hemen kapatırsan kendiliğinden
-toparlar. İki sunucuyu bilerek yan yana açıyorsan ikincisine başka bir port ver:
+sunucuyu birkaç kere kendisi yeniden dener, sonra beş dakikada bir; tüneli kapatmaz, adres aynı
+kalır. Öteki pencereyi kapattıktan sonra beklemek istemezsen `npm run internet` penceresinde `y`
+yazıp Enter'a bas. İki sunucuyu bilerek yan yana açıyorsan ikincisine başka bir port ver:
 `$env:PORT=4001; npm run server`.
 
 **Android'de bildirim gelmiyor.**
@@ -1070,8 +1114,9 @@ aşağı indikçe eski bildirimler yüklenir.
 
 **Kanka "Kullanıcı adı ya da şifre yanlış" diyor, ama şifresi doğru.**
 Adını büyük İ ile yazıyorsa ("İsmail") ve sunucu eskiyse budur: eski sunucu büyük İ'yi kimseyle
-eşleştiremiyordu. Depoyu güncelle (`git pull`), sunucuyu kapatıp aç; kankanın uygulamayı
-güncellemesi gerekmez, aynı yazışla girer. O zamana kadar adını küçük harfle yazsın. Kullanıcı
+eşleştiremiyordu. Depoyu güncelle, sunucuyu yeni kodla aç
+([Sunucuyu güncellemek](#sunucuyu-güncellemek)); kankanın uygulamayı güncellemesi gerekmez,
+aynı yazışla girer. O zamana kadar adını küçük harfle yazsın. Kullanıcı
 adının tam yazımını `npm run yonet -- kullanicilar` gösterir.
 
 **Kanka şifresini unuttu, giremiyor.**
@@ -1151,7 +1196,7 @@ cd apps/mobile && npx jest
 node e2e/smoke.mjs    # gerçek sunucu + tarayıcı, uçtan uca (playwright-core ister)
 ```
 
-Windows'ta `npm test`, `npm run internet`'in üç testini atlar (`skipped` yazar, hata değildir):
+Windows'ta `npm test`, `npm run internet`'in altı testini atlar (`skipped` yazar, hata değildir):
 o testlerdeki sahte cloudflared, Windows'un çalıştıramadığı bir Linux betiği.
 
 `e2e/smoke.mjs` geçici bir veritabanıyla sunucuyu ayağa kaldırır, iki kullanıcı kaydeder,
