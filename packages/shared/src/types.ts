@@ -315,7 +315,7 @@ export interface BadgeStats {
   disputesWon: number;
   challengesPlayed: number;
   pokesSent: number;
-  /** Finished challenges won that were a rematch of an earlier one (SPEC 1.5, `revenge_master`). */
+  /** Finished rematches won after losing the original, a tie finished behind included (SPEC 1.5, the `rovans_*` ladder). */
   revengeWins: number;
 }
 export type BadgeStatKey = keyof BadgeStats;

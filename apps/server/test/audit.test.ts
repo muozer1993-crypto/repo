@@ -4,8 +4,9 @@
  * a proof-required yes/no çelınc nobody could mark, a "yattım" at 02:00 counting
  * as an early night, nudges to people who never joined, reminders telling a
  * player who logged that their score is zero, disputes after the whistle, a
- * blocked pair reaching each other, a rematch winner "avenging" a win (and the
- * picker never hearing of a real rövanş or a third win in a row), a rematch
+ * blocked pair reaching each other, a rematch winner "avenging" a win, a rival
+ * they had beaten or a friend who never played the first one (and the picker
+ * never hearing of a real rövanş or a third win in a row), a rematch
  * silently dropping a group rival, a partial step count shaving a typed
  * declaration, a step day friends threw out staying at zero after the phone
  * counted it, and a proxy header nobody set.
@@ -23,7 +24,7 @@ import {
 } from '@koydum/shared';
 import { loadConfig } from '../src/config.js';
 import { runSchedulerOnce, sendNudges, sendReminders } from '../src/services/challenges.js';
-import { computeUserStats, getBadges } from '../src/services/stats.js';
+import { awardBadges, computeUserStats, getBadges } from '../src/services/stats.js';
 import { sendTaunt } from '../src/services/taunts.js';
 import type { ChallengeRow, UserRow } from '../src/db/index.js';
 import { JPEG_WITH_GPS, authed, befriend, makeApp, multipart, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
@@ -418,6 +419,134 @@ describe('rematch taunts', () => {
     // still clamped to what Veli allows
     expect(template?.level).toBe(1);
     expect(taunt.body).toContain('Ali');
+  });
+
+  /**
+   * A finished su_bardak çelınc opened by `opener` (the rematch of `rematchOf`
+   * when given) where each player drinks their `glasses`. `newcomers` are brought
+   * into the rematch with "Kanka ekle" before it starts.
+   */
+  async function finishedGroup(
+    h: TestApp,
+    opener: RegisteredUser,
+    glasses: [RegisteredUser, number][],
+    rematchOf?: string,
+    newcomers: RegisteredUser[] = [],
+  ): Promise<string> {
+    const others = glasses.map(([player]) => player).filter((player) => player.me.id !== opener.me.id);
+    const created = rematchOf
+      ? await authed(h.app, opener.token)({ method: 'POST', url: `/challenges/${rematchOf}/rematch` })
+      : await authed(h.app, opener.token)({
+          method: 'POST',
+          url: '/challenges',
+          payload: { typeKey: 'su_bardak', startsAt: iso(h), endsAt: iso(h, DAY_MS), participantIds: others.map((p) => p.me.id) },
+        });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    if (newcomers.length > 0) {
+      const invited = await authed(h.app, opener.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/invite`,
+        payload: { userIds: newcomers.map((p) => p.me.id) },
+      });
+      expect(invited.statusCode).toBe(200);
+    }
+    for (const player of others) {
+      expect((await authed(h.app, player.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    }
+    if (rematchOf) {
+      h.advance(10 * 60_000);
+      await h.app.inject({ method: 'POST', url: '/dev/advance' });
+    }
+    for (const [player, value] of glasses) {
+      if (value === 0) continue;
+      const drink = await authed(h.app, player.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/entries`,
+        payload: { dayKey: today(h), value, source: 'manual', clientTime: iso(h) },
+      });
+      expect(drink.statusCode).toBe(201);
+    }
+    h.advance(DAY_MS + 2 * 60_000);
+    await h.app.inject({ method: 'POST', url: '/dev/advance' });
+    const detail = await authed(h.app, opener.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+    expect(detail.json<ChallengeDetail>().challenge.status).toBe('finished');
+    return challengeId;
+  }
+
+  it('pays back only the rivals who finished ahead of the winner last time', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali', vulgarityMax: 3 });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli', vulgarityMax: 3 });
+    const can = await registerUser(harness.app, 'can', { displayName: 'Can', vulgarityMax: 3 });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, can.me.id);
+    befriend(harness.app, veli.me.id, can.me.id);
+
+    // Ali 1st, Veli 2nd, Can 3rd; Veli takes the rematch
+    const first = await finishedGroup(harness, ali, [[ali, 4], [veli, 2], [can, 0]]);
+    const rematch = await finishedGroup(harness, veli, [[veli, 4], [ali, 2], [can, 1]], first);
+    const contexts = (await contextsOf(harness, veli, rematch)).tauntContexts ?? {};
+    expect(contexts[ali.me.id]).toBe('revenge');
+    // Veli finished ahead of Can last time too: nothing to pay back
+    expect(contexts[can.me.id]).toBeDefined();
+    expect(contexts[can.me.id]).not.toBe('revenge');
+  });
+
+  it('gives a friend brought into the rematch nothing to avenge', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali', vulgarityMax: 3 });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli', vulgarityMax: 3 });
+    const deniz = await registerUser(harness.app, 'deniz', { displayName: 'Deniz', vulgarityMax: 3 });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, deniz.me.id);
+
+    const first = await finishedWin(harness, ali, veli);
+    // Deniz never played the first one, and wins the rematch Ali brought him into
+    const rematch = await finishedGroup(harness, ali, [[ali, 2], [veli, 1], [deniz, 4]], first, [deniz]);
+    const results = await contextsOf(harness, deniz, rematch);
+    expect(Object.keys(results.tauntContexts ?? {}).sort()).toEqual([ali.me.id, veli.me.id].sort());
+    expect(Object.values(results.tauntContexts ?? {})).not.toContain('revenge');
+    expect(results.tauntTemplatesForWinner?.every((tpl) => tpl.context !== 'revenge')).toBe(true);
+    expect(computeUserStats(harness.db, deniz.me.id).revengeWins).toBe(0);
+  });
+
+  it('counts a rematch toward Faiziyle Aldı only when its winner lost the first one', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+
+    // Ali wins the first one and three rematches in a row: he paid nothing back
+    let last = await finishedWin(harness, ali, veli);
+    for (let round = 0; round < 3; round++) last = await finishedWin(harness, ali, veli, last);
+    expect(computeUserStats(harness.db, ali.me.id).revengeWins).toBe(0);
+    expect(getBadges(harness.db, ali.me.id)).not.toContain('rovans_1');
+
+    // a rung stored on the older count (every rematch won) is never taken back
+    harness.db
+      .prepare('INSERT INTO badges (user_id, badge_key, earned_at) VALUES (?, ?, ?)')
+      .run(ali.me.id, 'rovans_1', iso(harness));
+    awardBadges(harness.db, ali.me.id, harness.now());
+    expect(getBadges(harness.db, ali.me.id)).toContain('rovans_1');
+  });
+
+  it('gives Faiziyle Aldı to the one who took back three he lost', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+
+    // back and forth, each one the rematch of the last: Ali, Veli, Ali, Veli, Ali, Veli
+    let last = await finishedWin(harness, ali, veli);
+    for (let round = 0; round < 3; round++) {
+      last = await finishedWin(harness, veli, ali, last);
+      if (round < 2) last = await finishedWin(harness, ali, veli, last);
+    }
+    expect(computeUserStats(harness.db, veli.me.id).revengeWins).toBe(3);
+    expect(getBadges(harness.db, veli.me.id)).toContain('rovans_1');
+    // Ali's two came back after losing too
+    expect(computeUserStats(harness.db, ali.me.id).revengeWins).toBe(2);
   });
 });
 

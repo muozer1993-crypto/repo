@@ -424,7 +424,12 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
 
       for (const user of invitees) {
         insertParticipant.run(rematchId, user.id, 'invited', createdAt, null, null);
-        const copy = rematchCopy(levelOf(user), me.row.display_name, challenge.title);
+        // Every invitee played the original (`rematchLineUp`). Behind a shared
+        // first place is a loss, as in the Karne; a NULL rank predates final_rank
+        // and counts as the tie it always was.
+        const rank = getParticipant(db, challenge.id, user.id)?.final_rank ?? 1;
+        const role = challenge.winner_id === user.id ? 'won' : challenge.is_tie && rank === 1 ? 'tie' : 'lost';
+        const copy = rematchCopy(levelOf(user), me.row.display_name, challenge.title, role);
         notify(db, {
           userId: user.id,
           type: 'rematch',

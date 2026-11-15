@@ -1800,6 +1800,57 @@ describe('POST /challenges/:id/rematch', () => {
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('challenge_not_finished');
   });
+
+  /** Ali and Veli both at `level`, a finished steps çelınc: Ali 12.430, Veli `veliSteps`. */
+  async function finishedAt(h: TestApp, level: 1 | 2 | 3, veliSteps: number) {
+    const ali = await registerUser(h.app, 'ali', { displayName: 'Ali', vulgarityMax: level });
+    const veli = await registerUser(h.app, 'veli', { displayName: 'Veli', vulgarityMax: level });
+    befriend(h.app, ali.me.id, veli.me.id);
+    const challengeId = (await createChallenge(h, ali, { participantIds: [veli.me.id] })).json<Challenge>().id;
+    await authed(h.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    const day = today(h);
+    await postEntry(h, ali, challengeId, { dayKey: day, value: 12430, source: 'pedometer', clientTime: iso(h) });
+    await postEntry(h, veli, challengeId, { dayKey: day, value: veliSteps, source: 'pedometer', clientTime: iso(h) });
+    expect((await h.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` })).statusCode).toBe(200);
+    return { ali, veli, challengeId };
+  }
+
+  const rematchBody = (h: TestApp, userId: string): string => listByType(h.db, userId, 'rematch')[0]?.body ?? '';
+
+  it('asks only the one who lost the original whether they will lose again', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await finishedAt(harness, 3, 900);
+
+    // Veli lost and wants it back: Ali won, so he hears Veli came back for more
+    const byVeli = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(byVeli.statusCode).toBe(201);
+    expect(rematchBody(harness, ali.me.id)).toContain('Geçen sefer yedi, doymamış');
+    expect(rematchBody(harness, ali.me.id)).not.toContain('Yine mi yiyeceksin');
+
+    // Ali turns it down and opens his own: to Veli the line is true
+    await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${byVeli.json<Challenge>().id}/decline` });
+    const byAli = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(byAli.statusCode).toBe(201);
+    expect(rematchBody(harness, veli.me.id)).toContain('Yine mi yiyeceksin');
+  });
+
+  it('tells a "Normal" winner to come and win it again', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await finishedAt(harness, 2, 900);
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(rematchBody(harness, ali.me.id)).toContain('Kabul et de bir daha koy.');
+  });
+
+  it('tells a co-leader of a tie that this time somebody loses', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await finishedAt(harness, 3, 12430);
+    const detail = (await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>();
+    expect(detail.challenge.isTie).toBe(true);
+
+    await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(rematchBody(harness, veli.me.id)).toContain('Bu sefer biri yiyecek');
+    expect(rematchBody(harness, veli.me.id)).not.toContain('Yine mi yiyeceksin');
+  });
 });
 
 describe('GET /challenges/:id/results', () => {

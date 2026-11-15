@@ -50,9 +50,18 @@ export function computeUserStats(db: Database, userId: string, now: Date = new D
 
   const wins = countOf(db, "SELECT COUNT(*) AS n FROM challenges WHERE status = 'finished' AND winner_id = ?", userId);
 
+  // "Yediğini geri veriyorsun": a rematch counts only when its winner lost the
+  // original (by `losses`' rule below). Winning the rematch of a win again, or one
+  // joined later without playing the original, avenges nothing. A rung already
+  // stored on the older count stays (badges are never taken back).
   const revengeWins = countOf(
     db,
-    "SELECT COUNT(*) AS n FROM challenges WHERE status = 'finished' AND winner_id = ? AND rematch_of_id IS NOT NULL",
+    `SELECT COUNT(*) AS n FROM challenges c
+       JOIN challenges o ON o.id = c.rematch_of_id AND o.status = 'finished'
+       JOIN challenge_participants op ON op.challenge_id = o.id AND op.user_id = c.winner_id AND op.status = 'accepted'
+      WHERE c.status = 'finished' AND c.is_tie = 0 AND c.winner_id = ?
+        AND ((o.is_tie = 0 AND o.winner_id IS NOT NULL AND o.winner_id <> c.winner_id)
+          OR (o.is_tie = 1 AND COALESCE(op.final_rank, 1) > 1))`,
     userId,
   );
 

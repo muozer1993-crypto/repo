@@ -626,8 +626,25 @@ export function disputeUpheldCopy(level: VulgarityLevel, owner: string, title: s
   };
 }
 
-export function rematchCopy(level: VulgarityLevel, by: string, title: string): CopyText {
+/**
+ * How the invitee came out of the original: `won` it outright, shared first
+ * place in a `tie`, or `lost` (behind a shared first place too, as in the
+ * Karne). The rematch goes to the whole old line-up, winner included.
+ */
+export type RematchRole = 'won' | 'lost' | 'tie';
+
+/**
+ * To each invitee of a rematch. "Yine mi yiyeceksin" is only true for somebody
+ * who lost the original: when the loser opens it, the winner hears that the
+ * opener is back for more instead.
+ */
+export function rematchCopy(level: VulgarityLevel, by: string, title: string, role: RematchRole): CopyText {
   if (level === 1) return { title: '🔁 Rövanş daveti', body: `${by}, "${title}" için rövanş istiyor. Kabul edersen baştan başlıyorsunuz.` };
-  if (level === 3) return { title: '🔁 RÖVANŞ 🍆', body: `${by} "${title}" için rövanş açtı. Yine mi yiyeceksin bakalım.` };
+  if (level === 3) {
+    if (role === 'won') return { title: '🔁 RÖVANŞ 🍆', body: `${by} "${title}" için rövanş açtı. Geçen sefer yedi, doymamış 🍆 Bir daha koy.` };
+    if (role === 'tie') return { title: '🔁 RÖVANŞ 🍆', body: `${by} "${title}" için rövanş açtı. Bu sefer biri yiyecek 🍆` };
+    return { title: '🔁 RÖVANŞ 🍆', body: `${by} "${title}" için rövanş açtı. Yine mi yiyeceksin bakalım.` };
+  }
+  if (role === 'won') return { title: '🔁 Rövanş var', body: `${by}, "${title}" için rövanş istiyor. Kabul et de bir daha koy.` };
   return { title: '🔁 Rövanş var', body: `${by}, "${title}" için rövanş istiyor. Kabul et de görelim.` };
 }

@@ -74,21 +74,19 @@ export function tauntVars(
 const STREAK_TAUNT_MIN = 3;
 
 /**
- * `win_big` / `win_close` / `win`, or `revenge` when this is a rematch AND the
- * winner is the one who lost the original — a repeat winner has nothing to avenge.
+ * `win_big` / `win_close` / `win`, or `revenge` when the winner got this loser
+ * back for the original (`avengedAgainst`) — a repeat winner has nothing to avenge.
  * Otherwise `streak` once the winner has taken `STREAK_TAUNT_MIN` in a row off
  * this loser: a third straight win is a better story than its margin.
  */
 export function tauntContextFor(
   type: ChallengeType,
-  challenge: ChallengeRow,
   winnerScore: number,
   loserScore: number,
-  originalWinnerId?: string | null,
-  winnerId?: string,
+  revenge = false,
   streak = 0,
 ): TauntContext {
-  if (challenge.rematch_of_id && originalWinnerId && winnerId && originalWinnerId !== winnerId) return 'revenge';
+  if (revenge) return 'revenge';
   if (streak >= STREAK_TAUNT_MIN) return 'streak';
   return tauntContextForMargin(winMargin(type, winnerScore, loserScore));
 }
@@ -123,13 +121,31 @@ export function winStreakAgainst(db: Database, challenge: ChallengeRow, winnerId
   return streak;
 }
 
-/** The winner of the çelınc this one is a rematch of, when there was one. */
-function originalWinnerOf(db: Database, challenge: ChallengeRow): string | null {
-  if (!challenge.rematch_of_id) return null;
-  const row = db.prepare('SELECT winner_id FROM challenges WHERE id = ?').get(challenge.rematch_of_id) as
-    | { winner_id: string | null }
+/**
+ * Whether `winnerId` winning this rematch pays `loserId` back: both played the
+ * original (accepted) and the loser finished AHEAD of the winner there. Every
+ * revenge line says "geçen sefer yemişti … hesap kapandı", so it has to be true
+ * of this pair: not of a friend brought in later, nor of a group rival the
+ * winner already beat last time, nor of one who shared their place.
+ *
+ * A row from before `final_rank` was written falls back to the original's result:
+ * revenge only on its outright winner.
+ */
+function avengedAgainst(db: Database, challenge: ChallengeRow, winnerId: string, loserId: string): boolean {
+  if (!challenge.rematch_of_id) return false;
+  const row = db
+    .prepare(
+      `SELECT o.winner_id, o.is_tie, w.final_rank AS w_rank, l.final_rank AS l_rank FROM challenges o
+         JOIN challenge_participants w ON w.challenge_id = o.id AND w.user_id = @winnerId AND w.status = 'accepted'
+         JOIN challenge_participants l ON l.challenge_id = o.id AND l.user_id = @loserId AND l.status = 'accepted'
+        WHERE o.id = @originalId AND o.status = 'finished'`,
+    )
+    .get({ winnerId, loserId, originalId: challenge.rematch_of_id }) as
+    | { winner_id: string | null; is_tie: number; w_rank: number | null; l_rank: number | null }
     | undefined;
-  return row?.winner_id ?? null;
+  if (!row) return false;
+  if (row.w_rank !== null && row.l_rank !== null) return row.l_rank < row.w_rank;
+  return !row.is_tie && row.winner_id === loserId;
 }
 
 /** The context of the taunt `winnerId` sends `loserId`: revenge, then a streak, then the margin. */
@@ -143,11 +159,9 @@ function contextAgainst(
 ): TauntContext {
   return tauntContextFor(
     type,
-    challenge,
     scoreOf(standings, winnerId),
     scoreOf(standings, loserId),
-    originalWinnerOf(db, challenge),
-    winnerId,
+    avengedAgainst(db, challenge, winnerId, loserId),
     winStreakAgainst(db, challenge, winnerId, loserId),
   );
 }

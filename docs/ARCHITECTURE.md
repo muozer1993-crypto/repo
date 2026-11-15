@@ -229,12 +229,15 @@ böylece bir bardak suyu iki kez saymaz.
 5. Bildirim satırı yazılır (inbox), sonra push kuyruğuna girer.
 
 Hangi laf havuzundan seçileceği her kaybeden için ayrı belirlenir (`tauntContextFor`). Rövanşı
-ilk çelıncı kaybeden aldıysa `revenge`. Aynı kankayı üst üste üçüncü kez yendiysen `streak`: arada
-bir beraberlik, bir kayıp ya da başkasının kazandığı ortak bir çelınc seriyi bozar ve sayım bu
-çelınctan geriye yapılır (`winStreakAgainst`). Geç atılan bir laf, sonradan gelen galibiyetleri
-de saymaz. İkisi de değilse farka bakılır: `win_big`, `win` ya da `win_close`. Sonuç ekranı bu
-kelimeyi kazanana her kaybeden için `tauntContexts` ile verir. Seçici RÖVANŞ ve SERİ laflarını
-ancak böyle gösterebilir, çünkü telefon yalnızca skorları bilir.
+alan, ilk çelıncta bu kaybedenin gerisinde kaldıysa `revenge` (`avengedAgainst`): ikisi de ilkini
+oynamış olmalı. Rövanş lafı "geçen sefer yemişti, hesap kapandı" der; rövanşa sonradan eklenen bir
+kankaya, grup çelıncında geçen sefer de yendiğin birine ya da seninle berabere kalana söylenirse
+yalan olur. Aynı kankayı üst üste üçüncü kez yendiysen `streak`: arada bir beraberlik, bir kayıp ya
+da başkasının kazandığı ortak bir çelınc seriyi bozar ve sayım bu çelınctan geriye yapılır
+(`winStreakAgainst`). Geç atılan bir laf, sonradan gelen galibiyetleri de saymaz. İkisi de değilse
+farka bakılır: `win_big`, `win` ya da `win_close`. Sonuç ekranı bu kelimeyi kazanana her kaybeden
+için `tauntContexts` ile verir. Seçici RÖVANŞ ve SERİ laflarını ancak böyle gösterebilir, çünkü
+telefon yalnızca skorları bilir.
 
 Laf tek yönlü kalmaz. Kazanan konuştuktan sonra kaybeden **bir kere** cevap verebilir: yalnızca
 kazanana ve yalnızca kazananın lafı ona ulaştıktan sonra. Cevap için ayrı bir tablo yok; `taunts`
@@ -413,6 +416,12 @@ Erken kalkma merdiveni (`checkinsStreakMax`) sadece **sabah** check-in'lerini sa
 zamanında kalktın" demek değil; geceler sabahların arasını da birleştirmesin. Ayrım çelıncın
 saatine göre değil türe göre: bir Erken Kalkan çelıncının saati öğleden sonraya kurulabilir. Daha
 önce gece check-in'leriyle verilmiş bir Horoz geri alınmaz; rozet verildiyse kalır.
+
+Rövanş merdiveni (`revengeWins`, "Yediğini geri veriyorsun") yalnızca **ilkini kaybettiğin**
+çelıncın kazandığın rövanşlarını sayar: ilkini başkası kazandıysa ya da berabere bitip sen
+arkada kaldıysan (Karne'deki yenilgi kuralı). Kazandığın bir çelıncın rövanşını yine kazanmak
+ya da ilkini oynamadan eklendiğin bir rövanşı almak ödeşmek sayılmaz. Eskiden her kazanılan
+rövanş sayılıyordu; o sayımla verilmiş bir Faiziyle Aldı da yerinde kalır.
 
 ## Expo Go ve bildirimler
 

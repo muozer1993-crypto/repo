@@ -473,9 +473,14 @@ de yedin"), profildeki Karne'de **Yedim**'e yazılır, ceza da ondadır.
 Telefonlar sonucu hâlâ bekliyorsa (bitişten sonraki bir saat, itiraz)
 kimse konuşamaz, sonuç yazılınca açılır.
 
-**Rövanş ve seri lafları:** rövanşı ilk çelıncı kaybeden kazanırsa laf seçicide **RÖVANŞ**
-lafları çıkar. Aynı kankayı üst üste üçüncü kez yenersen **SERİ** lafları çıkar; arada bir
-beraberlik ya da kayıp seriyi bozar. Rövanş sadece hâlâ kankan olanları çağırır, grup çelıncında
+**Rövanş ve seri lafları:** rövanşı kazandığında laf seçicide, ilk çelıncta seni geçmiş her
+kankan için **RÖVANŞ** lafları çıkar. Geçen sefer de yendiğin, seninle berabere kalan ya da rövanşa
+sonradan eklenen kankaya normal laflar gider. Profildeki rövanş rozetleri (🔁 Faiziyle Aldı ve üstü)
+de sadece ilkini kaybettiğin çelıncların rövanşlarını sayar; kazandığın bir çelıncın rövanşını yine
+kazanmak rövanş sayılmaz, önceden verilmiş rozet ise kalır. Rövanş daveti de kime gittiğine bakar:
+"Ağır Abi" seviyesinde "Yine mi yiyeceksin bakalım" sadece ilkini kaybedene gider, kazanana "Geçen
+sefer yedi, doymamış 🍆 Bir daha koy." yazar. Aynı kankayı üst üste üçüncü kez yenersen **SERİ**
+lafları çıkar; arada bir beraberlik ya da kayıp seriyi bozar. Rövanş sadece hâlâ kankan olanları çağırır, grup çelıncında
 başkası üzerinden tanıştığın biri gelmez. Sonuç ekranı bunu rövanş düğmesinin altında söyler;
 final tablosunda adına dokunup profilinden ekleyebilirsin. Rövanş eskisi kaç gün sürdüyse o kadar
 gün sürer ve açanın saatiyle gece yarısı biter; reddedilen bir rövanş iptal olur ama yenisini
