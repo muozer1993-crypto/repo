@@ -238,6 +238,30 @@ describe('POST /challenges', () => {
     expect(late.json<Challenge>().status).toBe('active');
   });
 
+  it('takes a "Hemen" that lands a moment in the server\'s future as now, not as a start that waits for a "Varım"', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+    const veli = await registerUser(harness.app, 'veli');
+    befriend(harness.app, ali.me.id, veli.me.id);
+
+    // the app's guess of this server's clock is right only to half a round trip
+    const ahead = await createChallenge(harness, ali, { participantIds: [veli.me.id], startsAt: iso(harness, 1_500) });
+    expect(ahead.statusCode).toBe(201);
+    expect(ahead.json<Challenge>()).toMatchObject({ status: 'active', startsAt: iso(harness) });
+    // its creator plays at once, before any friend says yes
+    const entry = await postEntry(harness, ali, ahead.json<Challenge>().id, {
+      dayKey: today(harness),
+      value: 1200,
+      source: 'manual',
+      clientTime: iso(harness),
+    });
+    expect(entry.statusCode).toBe(201);
+
+    // a start that is really later still waits for it
+    const later = await createChallenge(harness, ali, { participantIds: [veli.me.id], startsAt: iso(harness, 2 * 60 * 1000) });
+    expect(later.json<Challenge>().status).toBe('pending');
+  });
+
   it('requires deadlineTime for a check-in challenge', async () => {
     harness = await makeApp({ now: NOW });
     const ali = await registerUser(harness.app, 'ali');

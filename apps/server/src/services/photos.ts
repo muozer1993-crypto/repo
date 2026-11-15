@@ -4,8 +4,9 @@
  *
  * A photo goes up the moment a friend picks it, before the entry it is for
  * exists. Picked again, or the screen left without "Kaydet": the first one was
- * never anybody's proof. A new photo for the same day, a phone's reading over a
- * typed day, a deleted entry: the address leaves the entry and the file stays.
+ * never anybody's proof. A new photo for the same day, a phone's reading taking
+ * back a typed day friends threw out, a deleted entry: the address leaves the
+ * entry and the file stays.
  * At 1.5-2.5 MB each, a few çelınclar with photos fill the owner's laptop with
  * files nobody can open and nobody knows are there. A deleted account's photos
  * go with the account (services/accounts.ts); this takes everything else.

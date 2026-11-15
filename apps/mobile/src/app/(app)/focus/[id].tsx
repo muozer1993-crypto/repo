@@ -36,7 +36,7 @@ import { useTimezone } from '@/hooks/useTimezone';
 import { USE_NATIVE_DRIVER, useAnimatedValue } from '@/utils/animation';
 import { useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
-import { safeTodayKey } from '@/utils/datetime';
+import { safeDayKey, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { formatClock, formatMinutes } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
@@ -316,6 +316,9 @@ export default function FocusScreen() {
   const tooLate = minutesLeft < LIMITS.FOCUS_MIN_MINUTES;
   const capped = dayLeft < LIMITS.FOCUS_MIN_MINUTES;
   const blocked = detail.challenge.status !== 'active' || detail.me?.status !== 'accepted' || tooLate || capped;
+  // on the çelınc's last day "Yarın devam" would promise a day it does not have
+  const lastDay = safeDayKey(detail.challenge.endsAt, tz);
+  const goesOn = lastDay === null || lastDay > safeTodayKey(tz, new Date(now));
 
   /* ------------------------------------------------------------- picker */
 
@@ -341,9 +344,10 @@ export default function FocusScreen() {
             value={preset}
             onChange={setPreset}
           />
+          {/* when the çelınc's end cuts the session shorter still, the card below says so */}
           {capped ? null : (
             <Text variant="small" muted style={styles.hint}>
-              {dayLeft < preset
+              {dayLeft < preset && dayLeft <= minutesLeft
                 ? `Bugün ${dayLeft} dk hakkın kaldı, seans ${dayLeft} dk sürer.`
                 : `Bugün ${dayLeft} dk hakkın kaldı.`}
             </Text>
@@ -365,7 +369,7 @@ export default function FocusScreen() {
                     ? 'Çelıncın süresi doldu, seans skora yazılmaz.'
                     : tooLate
                       ? 'Çelıncın bitmesine bir dakika bile yok, seans skora yazılmaz.'
-                      : `Bugünlük ${type.maxPerDay} dk doldu. Yarın devam.`}
+                      : `Bugünlük ${type.maxPerDay} dk doldu.${goesOn ? ' Yarın devam.' : ''}`}
             </Text>
           </Card>
         ) : minutesLeft < FOCUS_PRESETS[FOCUS_PRESETS.length - 1] ? (

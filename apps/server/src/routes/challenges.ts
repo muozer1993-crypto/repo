@@ -65,6 +65,15 @@ interface IdParams {
 }
 
 /**
+ * A start this little ahead of the server's clock is "Hemen". The app sends
+ * this server's now as it last measured it (utils/serverClock), right only to
+ * within half a /health round trip: a probe that waited for the phone's radio
+ * to wake up puts it a moment ahead. Taken as a future start, it sat `pending`
+ * until a friend said "Varım", its creator unable to write a thing.
+ */
+const START_AHEAD_SLACK_MS = 60_000;
+
+/**
  * Ordering (SPEC 2.2): active first by soonest deadline, then pending by start time,
  * then finished newest-first. Cancelled ones trail the list.
  */
@@ -272,7 +281,10 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
 
     for (const participantId of body.participantIds) requireFriend(db, me.id, participantId);
 
-    const startsAt = new Date(body.startsAt).toISOString();
+    const startMs = Date.parse(body.startsAt);
+    const startsAt = (
+      startMs > now.getTime() && startMs - now.getTime() <= START_AHEAD_SLACK_MS ? now : new Date(startMs)
+    ).toISOString();
     const endsAt = new Date(body.endsAt).toISOString();
     const createdAt = nowIso(now);
     // Live immediately when the start time has already passed (SPEC 2.2); a future

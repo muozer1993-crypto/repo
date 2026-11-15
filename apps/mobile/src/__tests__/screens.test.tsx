@@ -4201,6 +4201,37 @@ describe('effort that would not count', () => {
     expect(findWith(tree, 'title', 'Başlat', 'onPress').props.disabled).toBe(true);
   });
 
+  it('promises no tomorrow at the cap on the last day', async () => {
+    const { endOfDayInTz } = require('@/utils/datetime') as typeof import('@/utils/datetime');
+    const lastNight = endOfDayInTz(todayKey('Europe/Istanbul'), 'Europe/Istanbul');
+    if (!lastNight) throw new Error('günün sonu hesaplanamadı');
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => ({
+      ...focusEndingIn(lastNight.getTime() - Date.now()),
+      myEntries: focusedToday(180, 180),
+    }));
+    const FocusScreen = require('@/app/(app)/focus/[id]').default;
+    const tree = renderScreen(<FocusScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Bugünlük 360 dk doldu.');
+    expect(rendered(tree)).not.toContain('Yarın devam');
+  });
+
+  it("leaves the session's length to the end card when the çelınc ends before the day's cap", async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => ({ ...focusEndingIn(20 * 60_000), myEntries: focusedToday(180, 150) }));
+    const FocusScreen = require('@/app/(app)/focus/[id]').default;
+    const tree = renderScreen(<FocusScreen />);
+    await settle();
+    pickPreset(tree, 45);
+
+    // 30 left of the 360, but the çelınc has 19 minutes: the session runs 19
+    expect(rendered(tree)).toContain('Bugün 30 dk hakkın kaldı.');
+    expect(rendered(tree)).not.toContain('seans 30 dk sürer');
+    expect(rendered(tree)).toMatch(/seans en fazla\s+19\s*dk\s+sayılır/);
+  });
+
   it("says the check-in deadline has to fall in the type's window", async () => {
     const NewChallengeScreen = require('@/app/(app)/challenge/new').default;
     const tree = renderScreen(<NewChallengeScreen />);

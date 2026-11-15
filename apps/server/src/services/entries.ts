@@ -387,11 +387,17 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
       );
       const left = type.maxPerDay - used;
       if (left < LIMITS.FOCUS_MIN_MINUTES) {
+        const cap = unitLabel(type, type.maxPerDay);
+        // on the çelınc's last day there is no tomorrow to promise
+        const lastDay = window[window.length - 1];
+        const goesOn = lastDay !== undefined && compareDayKeys(body.dayKey, lastDay) < 0;
         throw badRequest(
           'daily_cap',
-          body.dayKey === todayKey(tz, now)
-            ? `Bugünlük odak tavanı doldu (${unitLabel(type, type.maxPerDay)}). Yarın devam.`
-            : `O günün odak tavanı zaten dolmuştu (${unitLabel(type, type.maxPerDay)}).`,
+          body.dayKey !== todayKey(tz, now)
+            ? `O günün odak tavanı zaten dolmuştu (${cap}).`
+            : goesOn
+              ? `Bugünlük odak tavanı doldu (${cap}). Yarın devam.`
+              : `Bugünlük odak tavanı doldu (${cap}).`,
         );
       }
       return { entry: insertEntry(db, input, Math.min(body.value, left), false, sessionId), created: true };

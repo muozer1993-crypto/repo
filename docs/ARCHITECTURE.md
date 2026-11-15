@@ -56,14 +56,17 @@ Uygulama da sunucunun saatine bakar. Her `/health` cevabı o saati (`time`) taş
 isteğin gidiş-dönüşünün ortasında okunmuş sayar ve aradaki farkı tutar (`utils/serverClock.ts`;
 5 saniye ve üstü süren bir cevap bir şey söylemez, sayılmaz). Sihirbazın "Hemen"i ve "yarın
 09:00"ı bu farkla, yani sunucunun saatiyle kurulur: sunucu beş dakikadan eski bir başlangıcı
-reddettiği için 20 dakika geri kalan bir telefon eskiden hiç "Hemen" çelınc açamazdı. Bu
-düzeltmeden önceki uygulamalar telefonun saatini gönderir; onlar artık genel "Gönderdiğin bilgiler
-geçersiz." yerine `start_in_past` hatasının nedenini söyleyen mesajını görür. Fark 3 dakikayı
-geçince ana sayfada ve Ayarlar'da hangi saatin ne kadar ileri ya da geri olduğunu söyleyen bir
-kart çıkar. Yanlış olan çoğu zaman bilgisayardır: Linux'la yan yana kurulu bir Windows, Linux'tan
-sonra donanım saatini yerel saat sanıp 3 saat geri başlar ve eşitlenene kadar öyle kalır. O
-arada check-in'ler yanlış saate göre değerlendirilir, çelınclar saatlerce kayık biter; kart
-bilgisayarın saatini nasıl eşitleyeceğini anlatır.
+reddettiği için 20 dakika geri kalan bir telefon eskiden hiç "Hemen" çelınc açamazdı. Bu tahmin
+gidiş-dönüşün yarısı kadar şaşabilir: sunucunun saatini bir an ileri tahmin eden "Hemen" ileri
+tarihli sayılıp bir kanka "Varım" diyene kadar `pending` beklemesin diye sunucu bir dakikadan az
+ilerideki başlangıcı "şimdi" sayar ve öyle kaydeder. Bu düzeltmeden önceki uygulamalar telefonun
+saatini gönderir; onlar artık genel "Gönderdiğin bilgiler geçersiz." yerine `start_in_past`
+hatasının nedenini söyleyen mesajını görür. Fark 3 dakikayı geçince ana sayfada ve Ayarlar'da hangi
+saatin ne kadar ileri ya da geri olduğunu söyleyen bir kart çıkar. Yanlış olan çoğu zaman
+bilgisayardır: Linux'la yan yana kurulu bir Windows, Linux'tan sonra donanım saatini yerel saat
+sanıp 3 saat geri başlar ve eşitlenene kadar öyle kalır. O arada check-in'ler yanlış saate göre
+değerlendirilir, çelınclar saatlerce kayık biter; kart bilgisayarın saatini nasıl eşitleyeceğini
+anlatır.
 
 ## Çelıncın ömrü
 
@@ -252,7 +255,7 @@ bir `sessionId` taşır ve aynı kimlikle gelen ikinci istek yeni bir satır de�
 yeni bir kimlik üretir; zaman aşımına uğrayıp çevrimdışı kuyruğundan tekrar gönderilen istek
 böylece bir bardak suyu iki kez saymaz.
 
-Odak günü katalogun dediği gibi 360 dakikada kesilir (`maxPerDay`, itirazla düşen seanslar
+Odak günü kataloğun dediği gibi 360 dakikada kesilir (`maxPerDay`, itirazla düşen seanslar
 sayılmaz). Kalanı aşan seans reddedilmez, kalana kırpılarak yazılır: eski APK seansın tamamını
 gönderir, reddetmek sığan kısmı da çöpe atardı. Tekrar gönderilen bir seans bu hesaba hiç gelmez,
 `sessionId` kontrolü önce çalışır. Bir dakika bile kalmadıysa 400 `daily_cap`. Odak ekranı da
@@ -932,17 +935,18 @@ ayrı bir 401 mesajı alır ("Bu hesap kapatıldı…"): ona "tekrar giriş yap"
 
 Hesap silinmeden de diskte sahipsiz fotoğraf birikir. Uygulama fotoğrafı seçildiği an yükler, giriş
 daha yokken: kanka vazgeçip başkasını seçerse, günü yeni bir fotoğrafla yeniden gönderirse,
-telefonun sayısı elle yazılan günün yerine geçerse (`proof_url` boşalır) ya da girişi silerse dosya
-kalır. Her biri 1,5-2,5 MB; fotoğraflı birkaç spor çelıncı, sunucuyu açanın dizüstünde kimsenin
-bilmediği yüzlerce MB bırakıyordu, `scrubUploadDir` de her açılışta hepsine bakıyordu. Şimdi
-zamanlayıcı her günün ilk turunda (açılıştaki de sayılır) `sweepOrphanPhotos`'u çalıştırır
-(`services/photos.ts`). O, adı sunucunun verdiği türden (`<uuid>.jpg|png|webp`), hiçbir girişin
-göstermediği (aynı `…/uploads/<ad>` kuralıyla, göreli ya da başında sunucu adresiyle) ve 7 günden
-eski dosyaları siler. Bir hafta, telefonda sıraya girmiş bir giriş için: kuyruk fotoğrafı yükleyip
-dönen adresi saklar, giriş günler sonra gidebilir; bir itirazın cevabı da gönderilmeden önce yüklenir.
-Kilitli bir dosya (Windows'ta açık bir fotoğraf görüntüleyici) atlanır, ertesi gün yine denenir.
-Bellekteki bir veritabanında tur hiç çalışmaz: önceki açılışların yüklediklerinden habersizdir,
-klasördeki her dosya ona sahipsiz görünür.
+itirazla yanan elle yazılmış bir günü telefonun sayısı geri alırsa (`proof_url` boşalır; telefonun
+sadece üstüne yazdığı gün fotoğrafını tutar) ya da girişi silerse dosya kalır. Her biri 1,5-2,5
+MB; fotoğraflı birkaç spor çelıncı, sunucuyu açanın dizüstünde kimsenin bilmediği yüzlerce MB
+bırakıyordu, `scrubUploadDir` de her açılışta hepsine bakıyordu. Şimdi zamanlayıcı her günün ilk
+turunda (açılıştaki de sayılır) `sweepOrphanPhotos`'u çalıştırır (`services/photos.ts`). O, adı
+sunucunun verdiği türden (`<uuid>.jpg|png|webp`), hiçbir girişin göstermediği (aynı `…/uploads/<ad>`
+kuralıyla, göreli ya da başında sunucu adresiyle) ve 7 günden eski dosyaları siler. Bir hafta,
+telefonda sıraya girmiş bir giriş için: kuyruk fotoğrafı yükleyip dönen adresi saklar, giriş günler
+sonra gidebilir; bir itirazın cevabı da gönderilmeden önce yüklenir. Kilitli bir dosya (Windows'ta
+açık bir fotoğraf görüntüleyici) atlanır, ertesi gün yine denenir. Bellekteki bir veritabanında tur
+hiç çalışmaz: önceki açılışların yüklediklerinden habersizdir, klasördeki her dosya ona sahipsiz
+görünür.
 
 Bilgisayarı uyanık tutmak da onun işi olurdu, ama akla gelmez: dizüstü 15-30 dakika boşta kalınca
 uyur ve uyuyan sunucuya kimse bağlanamaz. Bu yüzden sunucu Windows'ta açılırken gizli bir

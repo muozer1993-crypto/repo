@@ -419,6 +419,19 @@ describe('focus_minutes entries', () => {
     expect((await focusSession(harness, ali, challengeId, 45)).statusCode).toBe(201);
   });
 
+  it('promises no tomorrow at the cap on the çelınc\'s last day', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await liveChallenge(harness, 'odak_seansi');
+    // the morning of the last day; the çelınc ends at noon
+    harness.advance(3 * DAY_MS - 2 * 60 * 60 * 1000);
+
+    await focusSession(harness, ali, challengeId, 180);
+    await focusSession(harness, ali, challengeId, 180);
+    const third = await focusSession(harness, ali, challengeId, 30);
+    expect(errorCode(third)).toBe('daily_cap');
+    expect((third.json() as { error: { message: string } }).error.message).toBe('Bugünlük odak tavanı doldu (360 dk).');
+  });
+
   it('cuts a session that runs past the cap down to what is left of the day', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await liveChallenge(harness, 'odak_seansi');
