@@ -63,7 +63,7 @@ export class ApiError extends Error {
 export interface ApiClientOptions {
   baseUrl: string;
   token?: string | null;
-  /** milliseconds; a phone on a bad connection should fail fast */
+  /** milliseconds; a phone on a bad connection should fail fast (photo uploads: UPLOAD_TIMEOUT_MS) */
   timeoutMs?: number;
   /**
    * called whenever the server rejects our token, so the app can log out; the
@@ -73,6 +73,16 @@ export interface ApiClientOptions {
 }
 
 type Query = Record<string, string | number | boolean | null | undefined>;
+
+/**
+ * How long a proof photo may take to go up. The pickers send the camera's full
+ * resolution at quality 0.6, 1.5-3 MB, and a phone on home ADSL (about 1 Mbit
+ * up) or weak 4G needs 15-25 s for that: with the 15 s every other call gets, a
+ * photo on a working connection timed out and was parked as if there were no
+ * signal. The server puts no limit of its own on a request (Fastify's
+ * requestTimeout is off), so this is the only clock on the upload.
+ */
+export const UPLOAD_TIMEOUT_MS = 120_000;
 
 /** `app` is the Android build the server offers, when the operator published one. */
 export interface HealthResponse {
@@ -128,10 +138,10 @@ export class ApiClient {
   async request<T>(
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     path: string,
-    options: { body?: unknown; query?: Query; formData?: FormData } = {}
+    options: { body?: unknown; query?: Query; formData?: FormData; timeoutMs?: number } = {}
   ): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? this.timeoutMs);
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
     if (options.body !== undefined) headers['Content-Type'] = 'application/json';
@@ -518,7 +528,7 @@ export class ApiClient {
     const type = name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
     // React Native's FormData accepts this shape; the DOM types do not know it
     form.append('file', { uri, name, type } as unknown as Blob, name);
-    return this.request<{ url: string }>('POST', '/uploads', { formData: form });
+    return this.request<{ url: string }>('POST', '/uploads', { formData: form, timeoutMs: UPLOAD_TIMEOUT_MS });
   }
 }
 

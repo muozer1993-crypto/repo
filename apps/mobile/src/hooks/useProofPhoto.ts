@@ -1,15 +1,17 @@
+import { LIMITS } from '@koydum/shared';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import { Platform } from 'react-native';
 
 import { useToast } from '@/components/Toast';
 import { useApi } from '@/hooks/useApi';
-import { ApiError, type ApiClient } from '@/lib/api';
+import { ApiError, UPLOAD_TIMEOUT_MS, type ApiClient } from '@/lib/api';
 import { errorText } from '@/utils/errors';
 
 /**
  * Native FormData takes the `{ uri, name, type }` shape `api.uploadPhoto` builds;
  * a browser needs a real Blob, so the web path fetches the picked object URL first.
+ * Both get the upload's long timeout, not the 15 s of a JSON call.
  */
 async function uploadProof(api: ApiClient, asset: ImagePicker.ImagePickerAsset): Promise<string> {
   const guessed = asset.fileName?.trim();
@@ -19,11 +21,25 @@ async function uploadProof(api: ApiClient, asset: ImagePicker.ImagePickerAsset):
     const blob = await response.blob();
     const form = new FormData();
     form.append('file', blob, name);
-    const result = await api.request<{ url: string }>('POST', '/uploads', { formData: form });
+    const result = await api.request<{ url: string }>('POST', '/uploads', {
+      formData: form,
+      timeoutMs: UPLOAD_TIMEOUT_MS,
+    });
     return result.url;
   }
   const result = await api.uploadPhoto(asset.uri, name);
   return result.url;
+}
+
+/**
+ * A photo the server would turn away for its size (413 `file_too_large`), caught
+ * before it spends up to two minutes going up. Only where `fileSize` is the file
+ * that is sent: on Android expo-image-picker reports the original's size, from
+ * before its own quality 0.6 pass, so a 7 MB camera original that goes up as
+ * 2 MB would be refused for nothing. There the server's 413 says it instead.
+ */
+function overUploadLimit(asset: ImagePicker.ImagePickerAsset): boolean {
+  return Platform.OS !== 'android' && typeof asset.fileSize === 'number' && asset.fileSize > LIMITS.UPLOAD_MAX_BYTES;
 }
 
 export interface PickedProof {
@@ -38,7 +54,8 @@ export interface PickedProof {
  * one to a new entry, the feed's "Kanıt ekle" answers an itiraz with one.
  *
  * `pick` resolves to the uploaded path, or null when the user backed out, a
- * permission was refused or the upload failed (a toast has already said why).
+ * permission was refused, the photo is over the upload limit or the upload
+ * failed (a toast has already said why).
  *
  * With `keepOffline` (the entry modal, on a phone) a photo that could not go up
  * for lack of a connection comes back as `localUri` instead: the entry is
@@ -75,6 +92,14 @@ export function useProofPhoto(options: { keepOffline?: boolean } = {}) {
       if (result.canceled) return null;
       asset = result.assets[0];
       if (!asset) return null;
+      if (overUploadLimit(asset)) {
+        toast({
+          title: 'Fotoğraf çok büyük',
+          body: "Bu fotoğraf 5 MB'tan büyük, sunucu almaz. Kamerayla yeniden çek ya da fotoğrafın ekran görüntüsünü alıp onu seç.",
+          kind: 'danger',
+        });
+        return null;
+      }
 
       setUploading(true);
       return { url: await uploadProof(api, asset), localUri: null };

@@ -248,6 +248,84 @@ describe('an entry parked with a photo still on the phone', () => {
   });
 });
 
+describe('a photo too slow for the connection', () => {
+  const PHOTO = 'file:///data/user/0/com.koydum.app/cache/ImagePicker/abc.jpeg';
+  // two minutes went by without an answer (lib/api.ts UPLOAD_TIMEOUT_MS)
+  const TIMEOUT = () => new ApiError('timeout', 'Sunucu cevap vermedi. Bağlantını kontrol et.', 0);
+  const REQUIRED = () => new ApiError('proof_required', 'Bu çelıncta kanıt fotoğrafı zorunlu.', 400);
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  it('lets the entries behind it go while the server answers', async () => {
+    await enqueueEntry('cA', body('2026-09-08', 5), 'a', PHOTO);
+    await enqueueEntry('cB', body('2026-09-08', 7), 'b');
+    const uploadPhoto = jest.fn().mockRejectedValue(TIMEOUT());
+    const health = jest.fn().mockResolvedValue({ ok: true });
+    const addEntry = jest.fn().mockResolvedValue({});
+    const result = await flushQueue(fakeClient(addEntry, { uploadPhoto, health }));
+
+    // one try per flush: a second would hold everything up two more minutes
+    expect(uploadPhoto).toHaveBeenCalledTimes(1);
+    expect(addEntry).toHaveBeenCalledTimes(1);
+    expect(addEntry).toHaveBeenCalledWith('cB', body('2026-09-08', 7));
+    expect(result).toEqual({ sent: 1, dropped: 0, remaining: 1 });
+    const [item] = await readQueue();
+    expect(item).toMatchObject({ id: 'a', proofLocalUri: PHOTO, photoSlowTries: 1, attempts: 1 });
+    expect(item?.failedReason).toBeUndefined();
+  });
+
+  it('sends the entry without it on the third slow flush, and says why when that is refused', async () => {
+    await enqueueEntry('cA', body('2026-09-08', 5), 'a', PHOTO);
+    const uploadPhoto = jest.fn().mockRejectedValue(TIMEOUT());
+    const health = jest.fn().mockResolvedValue({ ok: true });
+    const addEntry = jest.fn().mockRejectedValue(REQUIRED());
+    const client = fakeClient(addEntry, { uploadPhoto, health });
+
+    await flushQueue(client);
+    await flushQueue(client);
+    expect(addEntry).not.toHaveBeenCalled();
+    expect((await readQueue())[0]?.photoSlowTries).toBe(2);
+
+    const third = await flushQueue(client);
+    expect(uploadPhoto).toHaveBeenCalledTimes(3);
+    expect(addEntry).toHaveBeenCalledTimes(1);
+    expect(addEntry).toHaveBeenCalledWith('cA', body('2026-09-08', 5));
+    expect(third).toEqual({ sent: 0, dropped: 1, remaining: 0 });
+    const [item] = await readQueue();
+    expect(item?.proofLocalUri).toBeUndefined();
+    expect(item?.failedReason).toBe('Kanıt fotoğrafı gitmedi, bağlantı çok yavaştı. Bu çelıncta kanıt fotoğrafı zorunlu.');
+  });
+
+  it('counts the entry without it where the photo is optional', async () => {
+    await enqueueEntry('cA', body('2026-09-08', 5), 'a', PHOTO);
+    const uploadPhoto = jest.fn().mockRejectedValue(TIMEOUT());
+    const health = jest.fn().mockResolvedValue({ ok: true });
+    const addEntry = jest.fn().mockResolvedValue({});
+    const client = fakeClient(addEntry, { uploadPhoto, health });
+
+    for (let run = 0; run < 3; run += 1) await flushQueue(client);
+    expect(addEntry).toHaveBeenCalledWith('cA', body('2026-09-08', 5));
+    expect(await readQueue()).toEqual([]);
+  });
+
+  it('still stops the flush when the server does not answer either', async () => {
+    await enqueueEntry('cA', body('2026-09-08', 5), 'a', PHOTO);
+    await enqueueEntry('cB', body('2026-09-08', 7), 'b');
+    const uploadPhoto = jest.fn().mockRejectedValue(TIMEOUT());
+    const health = jest.fn().mockRejectedValue(new ApiError('network', 'Sunucuya ulaşamadım.', 0));
+    const addEntry = jest.fn();
+    const result = await flushQueue(fakeClient(addEntry, { uploadPhoto, health }));
+
+    expect(addEntry).not.toHaveBeenCalled();
+    expect(result).toEqual({ sent: 0, dropped: 0, remaining: 2 });
+    const [item] = await readQueue();
+    expect(item?.proofLocalUri).toBe(PHOTO);
+    expect(item?.photoSlowTries).toBeUndefined();
+  });
+});
+
 describe('two accounts on one phone', () => {
   const PHOTO = 'file:///data/user/0/com.koydum.app/cache/ImagePicker/ali.jpeg';
 

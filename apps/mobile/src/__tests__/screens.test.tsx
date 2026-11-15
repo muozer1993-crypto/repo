@@ -174,12 +174,16 @@ jest.mock('@/services/deviceHealth', () => ({
 }));
 
 /** The photo the picker hands back, from the camera or the gallery alike (its cache file on a phone). */
-const mockPickedPhoto = { uri: 'file:///data/user/0/com.koydum.app/cache/ImagePicker/kanit-1.jpeg' };
+const mockPickedPhoto: { uri: string; fileSize?: number } = {
+  uri: 'file:///data/user/0/com.koydum.app/cache/ImagePicker/kanit-1.jpeg',
+};
 
 jest.mock('expo-image-picker', () => {
   const picked = async () => ({
     canceled: false,
-    assets: [{ uri: mockPickedPhoto.uri, fileName: 'kanit-1.jpeg', width: 1200, height: 900 }],
+    assets: [
+      { uri: mockPickedPhoto.uri, fileName: 'kanit-1.jpeg', width: 1200, height: 900, fileSize: mockPickedPhoto.fileSize },
+    ],
   });
   return {
     requestCameraPermissionsAsync: async () => ({ granted: true }),
@@ -1526,6 +1530,62 @@ describe('a proof photo with no connection', () => {
     expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ value: 5, proofUrl: '/uploads/p1.jpg' }));
     expect(JSON.stringify((api.addEntry as jest.Mock).mock.calls[0])).not.toContain('file://');
     expect(await readQueue()).toEqual([]);
+  });
+});
+
+describe('a proof photo over the upload limit', () => {
+  const { Platform } = require('react-native') as typeof import('react-native');
+  let os: { restore: () => void } | null = null;
+
+  /** A run with an optional photo. */
+  function runDetail() {
+    const detail = challengeDetail();
+    return {
+      ...detail,
+      challenge: { ...detail.challenge, typeKey: 'kosu_km', metricType: 'manual_count' as const, unit: 'km', title: 'Koşu haftası' },
+    };
+  }
+
+  async function pickFromGallery(): Promise<ReactTestRenderer> {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => runDetail());
+    api.uploadPhoto = jest.fn(async () => ({ url: '/uploads/p1.jpg' }));
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+    await act(async () => {
+      await findWith(tree, 'title', 'Galeri', 'onPress').props.onPress();
+    });
+    await settle();
+    return tree;
+  }
+
+  beforeEach(() => {
+    mockPickedPhoto.fileSize = LIMITS.UPLOAD_MAX_BYTES + 1;
+  });
+
+  afterEach(() => {
+    mockPickedPhoto.fileSize = undefined;
+    os?.restore();
+    os = null;
+  });
+
+  it('is turned away before a long upload the server would refuse anyway', async () => {
+    const tree = await pickFromGallery();
+
+    expect(api.uploadPhoto).not.toHaveBeenCalled();
+    const text = rendered(tree);
+    expect(text).toContain('Fotoğraf çok büyük');
+    expect(text).toContain("Bu fotoğraf 5 MB'tan büyük, sunucu almaz.");
+    expect(text).not.toContain('Fotoğraf telefonda');
+  });
+
+  it("goes up on Android, where the picker reports the original's size from before it shrank the photo", async () => {
+    os = jest.replaceProperty(Platform, 'OS', 'android');
+    const tree = await pickFromGallery();
+
+    expect(api.uploadPhoto).toHaveBeenCalledWith(mockPickedPhoto.uri, 'kanit-1.jpeg');
+    expect(rendered(tree)).not.toContain('Fotoğraf çok büyük');
   });
 });
 

@@ -1,4 +1,4 @@
-import { ApiClient, ApiError } from '@/lib/api';
+import { ApiClient, ApiError, UPLOAD_TIMEOUT_MS } from '@/lib/api';
 
 const BASE = 'http://127.0.0.1:4000';
 
@@ -124,6 +124,77 @@ describe('ApiClient', () => {
     );
     const client = new ApiClient({ baseUrl: BASE, timeoutMs: 20 });
     await expect(client.me()).rejects.toMatchObject({ code: 'timeout' });
+  });
+});
+
+describe('how long a call may take', () => {
+  // React Native's FormData takes the `{ uri, name, type }` file uploadPhoto
+  // builds; Node's throws on it. The reply is what matters here.
+  class NativeFormData {
+    readonly parts: unknown[] = [];
+    append(...part: unknown[]) {
+      this.parts.push(part);
+    }
+  }
+  const realFormData = global.FormData;
+
+  beforeEach(() => {
+    // only the timers: a Response body is still read on real microtasks
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate', 'clearImmediate'] });
+    (global as unknown as { FormData: unknown }).FormData = NativeFormData;
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    (global as unknown as { FormData: unknown }).FormData = realFormData;
+  });
+
+  /** A server that answers only when told to; an abort fails the fetch as React Native does. */
+  function slowServer() {
+    let reply: (response: Response) => void = () => {};
+    const spy = mockFetch(
+      (_url, init) =>
+        new Promise<Response>((resolve, reject) => {
+          reply = resolve;
+          init.signal?.addEventListener('abort', () => {
+            const error = new Error('aborted');
+            error.name = 'AbortError';
+            reject(error);
+          });
+        })
+    );
+    const signal = () => (spy.mock.calls[0][1] as RequestInit).signal;
+    return { signal, reply: (response: Response) => reply(response) };
+  }
+
+  it('gives a proof photo time to go up over a slow line', async () => {
+    const server = slowServer();
+    const upload = new ApiClient({ baseUrl: BASE, token: 'abc' })
+      .uploadPhoto('file:///cache/abc.jpeg', 'abc.jpeg')
+      .catch((error: unknown) => error);
+
+    // a 2 MB photo at about 1 Mbit up: past the 15 s of a JSON call
+    jest.advanceTimersByTime(20_000);
+    expect(server.signal()?.aborted).toBe(false);
+
+    server.reply(json({ url: '/uploads/p1.jpg' }));
+    await expect(upload).resolves.toEqual({ url: '/uploads/p1.jpg' });
+  });
+
+  it('still gives up on an upload that never answers', async () => {
+    const server = slowServer();
+    const upload = new ApiClient({ baseUrl: BASE, token: 'abc' }).uploadPhoto('file:///cache/abc.jpeg', 'abc.jpeg');
+    jest.advanceTimersByTime(UPLOAD_TIMEOUT_MS);
+    expect(server.signal()?.aborted).toBe(true);
+    await expect(upload).rejects.toMatchObject({ code: 'timeout', status: 0 });
+  });
+
+  it('keeps a JSON call at 15 s', async () => {
+    const server = slowServer();
+    const me = new ApiClient({ baseUrl: BASE, token: 'abc' }).me();
+    jest.advanceTimersByTime(15_000);
+    expect(server.signal()?.aborted).toBe(true);
+    await expect(me).rejects.toMatchObject({ code: 'timeout', status: 0 });
   });
 });
 

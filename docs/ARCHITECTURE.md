@@ -518,6 +518,21 @@ telefonda başka bir hesap açılınca kuyruk onun girişlerini gönderir, önce
 fotoğrafına dokunmaz: yoksa Ali'nin günü ve fotoğrafı Veli'nin anahtarıyla, Veli'nin girişi olarak
 giderdi. Ali geri girince onunkiler gider.
 
+Yavaş bağlantı, bağlantısızlıkla karışmamalı. Eskiden fotoğraf da her istek gibi 15 saniyede
+kesiliyordu. Kameradan 0,6 kaliteyle gelen 1,5-3 MB'lık bir fotoğraf, evdeki ADSL'in 1 Mbit
+civarındaki yüklemesinde ya da zayıf 4G'de 15-25 saniye sürer: telefon internetteyken fotoğraf
+zaman aşımına uğruyor, çekmiyormuş gibi kuyruğa giriyordu. Kuyrukta da zaman aşımı "bağlantı yok"
+sayıldığı için kuyruk her turda orada duruyor, arkasındaki başka çelıncların girişleri hiç
+gitmiyor, iki gün sonra "süre bitti" diye düşüyordu. Şimdi fotoğraf yüklemesinin iki dakikası var
+(`UPLOAD_TIMEOUT_MS`; sunucu bir isteğe kendi süre sınırı koymaz). O da yetmezse kuyruk `/health`'e
+sorar: cevap yoksa bağlantı yoktur ve tur durur; cevap varsa bağlantı bu fotoğrafa yetmiyordur,
+giriş fotoğrafıyla bekler ama arkasındakiler gider (`photoSlowTries`). Üçüncü yavaş turda fotoğraf
+bırakılır, giriş onsuz gider; fotoğraf zorunluysa kullanıcı "Kanıt fotoğrafı gitmedi, bağlantı çok
+yavaştı." diye duyar. 5 MB'tan büyük bir fotoğraf iPhone'da ve tarayıcıda yüklenmeye hiç başlamaz,
+"Fotoğraf çok büyük" denir. Android'de fotoğraf seçicinin bildirdiği boyut, kendi sıkıştırmasından
+önceki asıl dosyanınkidir: 7 MB görünen bir kamera fotoğrafı sıkıştırılıp 2 MB gider. Orada kararı
+sunucunun 413'ü verir.
+
 Ekranlar da bağlantı gidince ellerindekini bırakmaz. TanStack Query başarısız bir arka plan
 yenilemesinden sonra `isError` der ama son veriyi tutar; çelınc ekranı, giriş ekranı ve odak
 seansı bu durumda son bilinen hali göstermeye devam eder (ilk ikisi bunu küçük bir satırla söyler).

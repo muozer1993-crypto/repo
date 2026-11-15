@@ -46,6 +46,12 @@ export interface PendingEntry {
    * was. Items parked before this field existed are named from the cache.
    */
   challengeTitle?: string;
+  /**
+   * Flushes whose photo upload ran out of time while the server answered a
+   * small question: the connection works but is too slow for the photo. At
+   * `SLOW_PHOTO_TRIES` the entry goes without it.
+   */
+  photoSlowTries?: number;
   queuedAt: string;
   attempts: number;
   /** set once the server refused it for good, so we stop retrying */
@@ -54,6 +60,13 @@ export interface PendingEntry {
 
 const MAX_QUEUE = 50;
 const MAX_ATTEMPTS = 8;
+/**
+ * A photo goes with a typed entry, which the server takes only
+ * `LIMITS.MANUAL_BACKFILL_DAYS` back. Three flushes are a few foregrounds or
+ * background runs: long enough for the connection to pick up, short of the
+ * entry running out of days while it waits for its photo.
+ */
+const SLOW_PHOTO_TRIES = 3;
 
 /** Who is logged in on this phone, from storage: the background task has no store. */
 async function currentOwnerId(): Promise<string | null> {
@@ -132,11 +145,14 @@ export function uploadLocalPhoto(client: ApiClient, uri: string): Promise<{ url:
 }
 
 const PHOTO_GONE = 'Kanıt fotoğrafı telefonda bulunamadı.';
+const PHOTO_TOO_SLOW = 'Kanıt fotoğrafı gitmedi, bağlantı çok yavaştı.';
 
 type PhotoOutcome =
   | { kind: 'sent'; url: string }
   /** no connection: stop the flush, keep everything */
   | { kind: 'offline' }
+  /** the upload ran out of time but the server answers: this photo is too heavy for the connection, the rest may go */
+  | { kind: 'slow' }
   /** the server is struggling or rate-limiting: count an attempt */
   | { kind: 'later' }
   /** it will never go up; `reason` is told to the user if the entry is refused without it */
@@ -160,7 +176,18 @@ async function sendQueuedPhoto(client: ApiClient, uri: string): Promise<PhotoOut
       if (error.status === 400 || error.status === 413) return { kind: 'lost', reason: error.message };
       if (error.status === 401) return { kind: 'signedOut' };
       if (error.status >= 400) return { kind: 'refused', reason: error.message };
-      if (error.code === 'timeout') return { kind: 'offline' };
+      if (error.code === 'timeout') {
+        // Two minutes without an answer (lib/api.ts UPLOAD_TIMEOUT_MS). If a
+        // small question gets one, the connection is up and only too slow for
+        // the photo: calling that offline stopped every entry behind it, flush
+        // after flush, until the days ran out. Not tried again in this flush.
+        try {
+          await client.health();
+        } catch {
+          return { kind: 'offline' };
+        }
+        return { kind: 'slow' };
+      }
       // React Native fails a form whose file it cannot read exactly like a
       // request with no signal (status 0). If the server answers a small
       // question, the connection is fine and the file is what is missing: the
@@ -193,10 +220,12 @@ export interface FlushResult {
  * the user can be told. A network error stops the flush and leaves the rest.
  *
  * An entry parked with a photo still on the phone uploads it first. A photo
- * that can never go up (the file is gone, the server refused it) is dropped
- * from the entry, which then goes on its own: an optional photo costs nothing
- * more, and a çelınc that requires one refuses the entry, whose reason then
- * says what happened to the photo.
+ * that can never go up (the file is gone, the server refused it, or it ran out
+ * of time on a working connection `SLOW_PHOTO_TRIES` flushes running) is
+ * dropped from the entry, which then goes on its own: an optional photo costs
+ * nothing more, and a çelınc that requires one refuses the entry, whose reason
+ * then says what happened to the photo. A photo still getting its tries does
+ * not hold up the entries behind it.
  *
  * The flush is fired and forgotten from three places (every successful entry
  * write, mount, and every foreground), so it has to be re-entrant-safe:
@@ -257,6 +286,17 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
       if (photo.kind === 'later') {
         retryLater(item);
         continue;
+      }
+      if (photo.kind === 'slow') {
+        const photoSlowTries = (item.photoSlowTries ?? 0) + 1;
+        if (photoSlowTries < SLOW_PHOTO_TRIES) {
+          // not offline: the entries behind this one carry no photo, or a lighter one
+          touched.set(item.id, { ...item, attempts: item.attempts + 1, photoSlowTries });
+          continue;
+        }
+        // too slow once too often: dropped below like a photo that is gone, so
+        // the entry still counts where a photo is optional and says why where not
+        photoLost = PHOTO_TOO_SLOW;
       }
       if (photo.kind === 'signedOut') {
         signedOut = true;
