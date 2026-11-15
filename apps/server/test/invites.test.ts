@@ -160,6 +160,58 @@ describe('GET /davet/:code', () => {
     expect(unknown.body).toContain('value="https://abc.trycloudflare.com"');
     expect(unknown.body).toContain('Adresi kopyala');
   });
+
+  it('helps past the download and install warnings without a script of its own', async () => {
+    const appDir = tempAppDir();
+    publish(appDir, '1.1.0');
+    harness = await appWith(appDir);
+    const ali = await registerUser(harness.app, 'ali');
+    const page = await harness.app.inject({
+      method: 'GET',
+      url: `/davet/${ali.me.inviteCode}`,
+      headers: { host: 'x.test', 'user-agent': 'Mozilla/5.0 (Linux; Android 14)' },
+    });
+    expect(page.body).toContain('<summary>Kurulmuyor mu?</summary>');
+    expect(page.body).toContain('<b>Yine de indir</b>');
+    expect(page.body).toContain('<b>Yine de yükle</b>');
+    expect(page.body).toContain('Uygulama yüklenmedi');
+
+    // a <details> needs no code: the policy is the one it was, the copy script's hash alone
+    const scripts = [...page.body.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+    expect(scripts).toHaveLength(1);
+    const hash = createHash('sha256').update(scripts[0]!).digest('base64');
+    expect(page.headers['content-security-policy']).toBe(
+      `default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; script-src 'sha256-${hash}'`,
+    );
+
+    // whoever came without an inviter installs the same APK
+    const bare = await harness.app.inject({ method: 'GET', url: '/indir', headers: { host: 'x.test' } });
+    expect(bare.body).toContain('Kurulmuyor mu?');
+  });
+
+  it("goes on in the inviter's register under their name", async () => {
+    harness = await appWith(tempAppDir());
+    const leadOf = async (inviteCode: string): Promise<string> => {
+      const page = await harness!.app.inject({ method: 'GET', url: `/davet/${inviteCode}`, headers: { host: 'x.test' } });
+      return /<h1>[\s\S]*?<\/h1>\s*<p>([^<]*)<\/p>/.exec(page.body)?.[1] ?? '';
+    };
+
+    const nazik = await registerUser(harness.app, 'nazik', { vulgarityMax: 1 });
+    const polite = await leadOf(nazik.me.inviteCode);
+    expect(polite).toContain('kazanan belli olur, kaybeden rövanş ister.');
+    expect(polite).not.toMatch(/koy|yer\b|🍆/);
+
+    // level 2 is everybody's default, and the app's own: "koydu, yedik"
+    const orta = await registerUser(harness.app, 'orta');
+    expect(await leadOf(orta.me.inviteCode)).toContain('kazanan koyar, kaybeden yer.');
+
+    const kaba = await registerUser(harness.app, 'kaba', { vulgarityMax: 3 });
+    expect(await leadOf(kaba.me.inviteCode)).toContain('kazanan saplar, kaybeden yer 🍆');
+
+    // without an inviter the page has nobody's register but the app's
+    const bare = await harness.app.inject({ method: 'GET', url: '/indir', headers: { host: 'x.test' } });
+    expect(bare.body).toContain('Arkadaşlar arası çelınc uygulaması. Kazanan koyar, kaybeden yer.');
+  });
 });
 
 describe('the review round', () => {

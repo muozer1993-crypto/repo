@@ -26,6 +26,7 @@ import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
 import { byLevel } from '@/utils/levelCopy';
+import { inviteShareText } from '@/utils/shareText';
 
 const MONO = Platform.select({ ios: 'Courier', android: 'monospace', default: 'monospace' });
 
@@ -171,11 +172,9 @@ export default function FriendsScreen() {
 
   const shareCode = async () => {
     if (!me?.inviteCode) return;
-    // The link opens a page on our server: it opens the app (or offers the APK)
-    // and sends the friend request by itself. The bare code stays as a fallback.
-    const message = inviteLink
-      ? `KOYDUM'da kanka olalım ${level === 1 ? '🤝' : '🍆'} Bağlantıya dokun, uygulama açılsın: ${inviteLink}\nAçılmazsa davet kodum: ${me.inviteCode} (@${me.username})`
-      : `KOYDUM'da beni kanka olarak ekle. Davet kodum: ${me.inviteCode} (@${me.username}). Uygulama sende yoksa benden iste, APK'yı yollarım.`;
+    // The link opens a page on our server: it opens the app (or offers the APK),
+    // and signing up through it makes us kankas. The bare code stays as a fallback.
+    const message = inviteShareText(level, inviteLink, me.inviteCode, me.username);
     if (Platform.OS === 'web') {
       // react-native-web's Share is not reliable in every browser; copying always works
       await copyCode();

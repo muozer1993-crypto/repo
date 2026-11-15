@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { UserRow } from '../db/index.js';
 import { notFound, tooMany } from '../errors.js';
+import { asVulgarityLevel } from '../serialize.js';
 import { apkPath, currentRelease, type AppRelease } from '../services/appRelease.js';
 import { publicOrigin } from '../services/origin.js';
 import { AttemptLimiter } from '../services/throttle.js';
@@ -79,7 +80,7 @@ function formatSize(bytes: number | null): string {
 interface PageInput {
   origin: string;
   code: string | null;
-  inviter: Pick<UserRow, 'display_name' | 'avatar_emoji' | 'username'> | null;
+  inviter: Pick<UserRow, 'display_name' | 'avatar_emoji' | 'username' | 'vulgarity_max'> | null;
   release: AppRelease | null;
   android: boolean;
   unknownCode: boolean;
@@ -114,6 +115,36 @@ function pastesInviteLink(version: string | null | undefined): boolean {
   return true;
 }
 
+/**
+ * The line under a named inviter. The link is the inviter's own message, so
+ * the page goes on in their register, as the text they shared did
+ * (inviteShareText in the app): a "Nazik" inviter's friends are not met with
+ * "kaybeden yer". The reader has no account yet, so no level of their own.
+ */
+function inviterLead(vulgarityMax: number): string {
+  const opener = 'Kanka olun, çelınc açın. Kim daha çok yürüdü, kim telefonu bıraktı, kim erken kalktı:';
+  const level = asVulgarityLevel(vulgarityMax);
+  if (level === 1) return `${opener} kazanan belli olur, kaybeden rövanş ister.`;
+  if (level === 3) return `${opener} kazanan saplar, kaybeden yer 🍆`;
+  return `${opener} kazanan koyar, kaybeden yer.`;
+}
+
+/**
+ * What stops a friend between the download and the app: the warnings at which
+ * somebody who has never installed an APK thinks "virüs mü bu" and gives up,
+ * and the inviter cannot see their screen to help. Plain <details>, no script:
+ * the CSP keeps the copy button's hash as the only code that may run.
+ */
+const INSTALL_HELP = `<details class="help">
+        <summary>Kurulmuyor mu?</summary>
+        <ul>
+          <li>Chrome "dosya zararlı olabilir" derse <b>Yine de indir</b>'e bas, her APK'da bunu der.</li>
+          <li>Play Protect taramak isterse tarat, bir dakika sürer. "Engellendi" ya da "tanımıyor" derse <b>Ayrıntılar</b>'ı aç, <b>Yine de yükle</b>'ye bas.</li>
+          <li>Telefon Xiaomi, Redmi ya da POCO'ysa kendi güvenlik taramasını yapar: bitmesini bekle, uyarı çıkarsa yine de kurmayı seç.</li>
+          <li>"Uygulama yüklenmedi" derse çoğu zaman telefonda başka yerden kurulmuş eski bir KOYDUM vardır: onu kaldırıp tekrar kur. Hesabın sunucuda durur, kullanıcı adın ve şifrenle girersin.</li>
+        </ul>
+      </details>`;
+
 function renderPage(input: PageInput): string {
   const name = input.inviter ? input.inviter.display_name : null;
   const title = input.unknownCode
@@ -123,8 +154,8 @@ function renderPage(input: PageInput): string {
       : "KOYDUM'u indir";
   const lead = input.unknownCode
     ? 'Kod yanlış yazılmış ya da hesap silinmiş olabilir. Uygulamayı yine de indirip arkadaşını kullanıcı adıyla ekleyebilirsin.'
-    : name
-      ? 'Kanka olun, çelınc açın. Kim daha çok yürüdü, kim telefonu bıraktı, kim erken kalktı: kazanan koyar, kaybeden yer.'
+    : name && input.inviter
+      ? inviterLead(input.inviter.vulgarity_max)
       : 'Arkadaşlar arası çelınc uygulaması. Kazanan koyar, kaybeden yer.';
   const code = input.code ? input.code.toUpperCase() : null;
   const host = input.origin.replace(/^https?:\/\//, '');
@@ -223,6 +254,10 @@ function renderPage(input: PageInput): string {
     border-radius: 10px; padding: 10px 12px; font: inherit; }
   .copy button { align-self: flex-start; background: #2A2A33; color: #F5F5F7; border: 0;
     border-radius: 10px; padding: 10px 14px; font: inherit; font-weight: 800; }
+  .help { background: #16161D; border-radius: 14px; padding: 14px 16px; color: #C9C9D1; font-size: 14px; }
+  .help summary { cursor: pointer; font-weight: 800; color: #F5F5F7; font-size: 16px; }
+  .help ul { margin: 10px 0 0; padding-left: 18px; }
+  .help li + li { margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -234,6 +269,7 @@ function renderPage(input: PageInput): string {
   ${open}
   ${download}
   ${steps}
+  ${INSTALL_HELP}
   ${manual}
   <p class="note">iPhone sürümü şimdilik yok, KOYDUM'u Android telefona kurabilirsin.</p>
 </main>

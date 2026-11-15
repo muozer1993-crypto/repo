@@ -61,6 +61,31 @@ export function resultShareText(input: ResultShareInput): string {
   return lines.join('\n');
 }
 
+/**
+ * The message Kankalar → Paylaş sends: my invite link, with the code and my
+ * username for when the link does not open. Like the results text it is my own
+ * message, so it speaks at my level (the davet page it opens goes on in the
+ * same register); whoever gets it has no account yet, so no level to respect.
+ */
+export function inviteShareText(level: VulgarityLevel, link: string | null, code: string, username: string): string {
+  if (!link) {
+    const opener = byLevel(
+      level,
+      "KOYDUM'da yarışalım mı? 🤝 Beni ekle.",
+      "KOYDUM'da beni kanka olarak ekle.",
+      "KOYDUM'da beni kanka olarak ekle, bakalım kim kime saplıyor 🍆"
+    );
+    return `${opener} Davet kodum: ${code} (@${username}). Uygulama sende yoksa benden iste, APK'yı yollarım.`;
+  }
+  const opener = byLevel(
+    level,
+    "KOYDUM'da yarışalım mı? 🤝",
+    "KOYDUM'da kanka olalım 🍆",
+    "KOYDUM'da kanka olalım, bakalım kim kime saplıyor 🍆"
+  );
+  return `${opener} Bağlantıya dokun, uygulama açılsın: ${link}\nAçılmazsa davet kodum: ${code} (@${username})`;
+}
+
 function placeOf(rank: number): string {
   const medal = rank >= 1 ? MEDALS[rank - 1] : undefined;
   return medal ?? `${rank}.`;

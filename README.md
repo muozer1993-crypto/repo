@@ -243,7 +243,17 @@ eas build --profile preview --platform android
 Derleme Expo'nun sunucularında yapılır (ücretsiz kuyrukta 10-30 dakika sürebilir). Bitince bir
 indirme bağlantısı verir: `.apk` dosyasını indir, WhatsApp'tan, Drive'dan, nereden istersen
 gönder. Arkadaşın kurarken Android "bilinmeyen kaynak" uyarısı verir, bir kere izin vermesi
-yeterli.
+yeterli. Asıl vazgeçiren ondan sonraki uyarılar: arkadaşına "virüs mü bu" dedirtirler. Davet
+sayfasındaki **Kurulmuyor mu?**'ya dokununca arkadaşın da şunları okur:
+
+* Chrome "dosya zararlı olabilir" derse **Yine de indir**'e basar; her APK'da bunu der.
+* Play Protect taramak isterse taratır, bir dakika sürer. "Engellendi" ya da "tanımıyor" derse
+  **Ayrıntılar**'ı açıp **Yine de yükle**'ye basar.
+* Telefon Xiaomi, Redmi ya da POCO'ysa kendi güvenlik taramasını yapar: bitmesini bekler, uyarı
+  çıkarsa yine de kurmayı seçer.
+* "Uygulama yüklenmedi" derse telefonda çoğu zaman başka yerden (Play dahili testinden ya da başka
+  bir derlemeden) kurulmuş eski bir KOYDUM vardır: onu kaldırıp tekrar kurar. Hesabı sunucuda
+  durur, kullanıcı adı ve şifresiyle girer.
 
 `preview` profili bilerek **uygulama içi sunucu adresi ekranını açık bırakır** — arkadaşın
 uygulamayı açtığında adresi kendisi yazabilir. Henüz sunucu seçilmemişse giriş ve kayıt ekranları
@@ -332,11 +342,17 @@ kısmını ona göre genişletiriz.)
 ### 1d. Davet bağlantısı ve APK'yı sunucudan dağıtmak
 
 Kankalar sekmesindeki **Paylaş** artık bir bağlantı gönderir: `http://<sunucu>/davet/ABC123`.
+Mesaj senin mesajın olduğu için senin seviyende yazılır: "Nazik"te "KOYDUM'da yarışalım mı? 🤝",
+"Delikanlı"da "KOYDUM'da kanka olalım 🍆", "Ağır Abi"de bir de "bakalım kim kime saplıyor".
 Arkadaşın bağlantıya dokununca sunucunun kendi sayfası açılır:
 
-* "Mustafa seni KOYDUM'a çağırıyor" yazar (WhatsApp önizlemesinde de görünür),
+* "Mustafa seni KOYDUM'a çağırıyor" yazar (WhatsApp önizlemesinde de görünür); altındaki cümle de
+  senin seviyende konuşur ("Nazik"te "kazanan belli olur, kaybeden rövanş ister", "Delikanlı"da
+  "kazanan koyar, kaybeden yer", "Ağır Abi"de "kazanan saplar, kaybeden yer 🍆"),
 * **KOYDUM'da aç** uygulamayı açar ve sunucu adresini uygulamaya kendisi verir; arkadaşın IP yazmaz,
-* uygulama yoksa aynı sayfadan APK indirilir,
+* uygulama yoksa aynı sayfadan APK indirilir; Chrome, Play Protect ya da Xiaomi uyarı verirse
+  sayfadaki **Kurulmuyor mu?** neye basılacağını söyler (yukarıdaki [1. bölümdeki](#1-apk) dört
+  madde),
 * kurulum bitince Android'in kendi **Aç** düğmesine basan arkadaşın uygulamayı bağlantısız açar;
   sayfadaki **Bağlantıyı kopyala** bunun için var. Uygulama giriş ekranında **Önce sunucuyu seç**
   der, arkadaşın kopyaladığı bağlantıyı (ya da WhatsApp mesajının tamamını) oraya yapıştırır;

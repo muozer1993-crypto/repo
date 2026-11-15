@@ -1,4 +1,4 @@
-import { resultShareText, type ResultShareInput } from '@/utils/shareText';
+import { inviteShareText, resultShareText, type ResultShareInput } from '@/utils/shareText';
 
 const TUNNEL = 'https://tatli-koydum.trycloudflare.com/davet/KOY123';
 
@@ -108,5 +108,35 @@ describe('resultShareText', () => {
 
   it('leaves the dates out rather than writing empty brackets', () => {
     expect(resultShareText(input({ range: '' })).split('\n')[0]).toBe('🚶 Haftalık Adım bitti');
+  });
+});
+
+describe('inviteShareText', () => {
+  const LINK = 'https://abc.trycloudflare.com/davet/ABC234';
+
+  it('keeps the current message at level 2, the default', () => {
+    expect(inviteShareText(2, LINK, 'ABC234', 'mustafa')).toBe(
+      `KOYDUM'da kanka olalım 🍆 Bağlantıya dokun, uygulama açılsın: ${LINK}\nAçılmazsa davet kodum: ABC234 (@mustafa)`
+    );
+  });
+
+  it('speaks at the sender’s level', () => {
+    // the app's name aside (a code with no "KOY" in it), a "Nazik" sender's friends read nothing crude
+    for (const link of [LINK, null]) {
+      const nazik = inviteShareText(1, link, 'ABC234', 'mustafa').replace(/KOYDUM/g, '');
+      expect(nazik).toContain('yarışalım mı?');
+      expect(nazik).not.toMatch(/koy|sapl|🍆/i);
+    }
+    expect(inviteShareText(3, LINK, 'ABC234', 'mustafa')).toContain('bakalım kim kime saplıyor 🍆');
+    expect(inviteShareText(3, null, 'ABC234', 'mustafa')).toContain('bakalım kim kime saplıyor 🍆');
+  });
+
+  it('carries the code and the username at every level, for when the link does not open', () => {
+    for (const level of [1, 2, 3] as const) {
+      const text = inviteShareText(level, LINK, 'ABC234', 'mustafa');
+      expect(text).toContain(LINK);
+      expect(text.split('\n')[1]).toBe('Açılmazsa davet kodum: ABC234 (@mustafa)');
+      expect(inviteShareText(level, null, 'ABC234', 'mustafa')).toContain('Davet kodum: ABC234 (@mustafa)');
+    }
   });
 });
