@@ -177,7 +177,9 @@ durduğunu kendisi söyleyemez (sonunda eski bir itirazlı satır durabilir), o 
 `feedCursor`'ı verir. Uygulama ise sayfaları o imleçten değil en yeniden başlatır (ilk sayfa 80
 satır), ayrıntının 40'ını tekrar indirmek pahasına: ayrıntı kendi başına 45 saniyede bir yenilenir
 ve her yeni giriş en eskisini 40'ın dışına iter. Eski bir imleçten başlayan sayfalar o satırı bir
-daha göstermezdi; en yeniden kesintisiz gelen bir dizide arada kaybolacak yer yoktur.
+daha göstermezdi; en yeniden kesintisiz gelen bir dizide arada kaybolacak yer yoktur. Ayrıntının
+imlecine kadarki satırlar ise yalnız ayrıntıdan gelir: sayfalar kendiliğinden yenilenmez, arada
+silinen bir giriş eski sayfadan geri gelip itiraz düğmesiyle 404 vermesin.
 
 ## Puanlama
 

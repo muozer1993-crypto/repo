@@ -1644,10 +1644,13 @@ function Feed({
   // reachable through "Daha eski girişler".
   const [olderOpen, setOlderOpen] = useState(false);
   const older = useChallengeFeed(challengeId, olderOpen);
-  const rows = olderOpen ? feedRows(detail.feed, older.data?.pages) : detail.feed;
+  const rows = olderOpen ? feedRows(detail.feed, older.data?.pages, detail.feedCursor) : detail.feed;
   // before the first page the server's word, after it whether a page is left
   const moreOlder = olderOpen ? !older.data || older.hasNextPage : !!detail.feedCursor;
-  const olderFailed = older.isFetchNextPageError || (older.isError && !older.data);
+  // the cache outlives the screen: a page that failed (or was still loading)
+  // on the last visit is no news until the button is pressed on this one
+  const olderFailed = olderOpen && (older.isFetchNextPageError || (older.isError && !older.data));
+  const olderLoading = olderOpen && (older.isLoading || older.isFetchingNextPage);
   const loadOlder = () => {
     if (!olderOpen) {
       setOlderOpen(true);
@@ -1845,7 +1848,7 @@ function Feed({
             variant="ghost"
             size="sm"
             icon="⏬"
-            loading={older.isLoading || older.isFetchingNextPage}
+            loading={olderLoading}
             onPress={loadOlder}
           />
         </View>

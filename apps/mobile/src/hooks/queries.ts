@@ -107,12 +107,20 @@ export function useChallengeFeed(id: string, enabled: boolean) {
 /**
  * The detail's feed with the loaded older pages merged in, newest first like
  * the server orders it. The detail's copy of a row wins: it refetches every
- * 45 s, the pages only after a write or a notification about this çelınc.
+ * 45 s, the pages only after a write or a notification about this çelınc. So
+ * does its absence down to its `cursor`, where it holds every row: a page's
+ * row up there that the detail lacks was deleted since (or is newer than the
+ * detail, and comes with its next refetch).
  */
-export function feedRows(feed: readonly FeedItem[], pages: readonly FeedPage[] | undefined): FeedItem[] {
+export function feedRows(
+  feed: readonly FeedItem[],
+  pages: readonly FeedPage[] | undefined,
+  cursor: FeedCursor | null | undefined
+): FeedItem[] {
   const seen = new Set(feed.map((item) => item.id));
   const rows = [...feed];
   for (const item of (pages ?? []).flatMap((page) => page.items)) {
+    if (!cursor || !olderThan(item, cursor)) continue;
     if (seen.has(item.id)) continue;
     seen.add(item.id);
     rows.push(item);
@@ -122,6 +130,11 @@ export function feedRows(feed: readonly FeedItem[], pages: readonly FeedPage[] |
     if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
     return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
   });
+}
+
+/** Past the cursor in the feed's (createdAt, id) order, the way the server pages. */
+function olderThan(item: FeedItem, cursor: FeedCursor): boolean {
+  return item.createdAt < cursor.before || (item.createdAt === cursor.before && item.id < cursor.beforeId);
 }
 
 export function useResults(id: string | undefined) {

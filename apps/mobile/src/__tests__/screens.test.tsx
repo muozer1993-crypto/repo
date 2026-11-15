@@ -1837,6 +1837,63 @@ describe('an itiraz on the feed', () => {
     expect(rendered(tree)).toContain('55.555 adım');
     expect(rendered(tree)).not.toContain('gelmedi');
   });
+
+  it('does not greet a reopened çelınc with the last visit\'s failed page', async () => {
+    searchParams.id = 'c-1';
+    const { detail } = withOlderEntries();
+    api.challenge = jest.fn(async () => detail);
+    api.challengeFeed = jest.fn().mockRejectedValue(NETWORK_ERROR);
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen key="first" />);
+    await settle();
+    press(tree, 'Daha eski girişler');
+    await settle();
+    expect(rendered(tree)).toContain('Eski girişler gelmedi. Bir daha dene.');
+
+    // back on the screen while the cache still holds that failure: nobody has asked yet
+    const client = clientOf(tree);
+    act(() => {
+      tree.update(
+        <SafeAreaProvider initialMetrics={SAFE_AREA}>
+          <QueryClientProvider client={client}>
+            <ToastProvider>
+              <ChallengeScreen key="again" />
+            </ToastProvider>
+          </QueryClientProvider>
+        </SafeAreaProvider>
+      );
+    });
+    await settle();
+    expect(rendered(tree)).toContain('DAHA ESKİ GİRİŞLER');
+    expect(rendered(tree)).not.toContain('gelmedi');
+  });
+
+  it('lets a row deleted since the older pages came go with the detail\'s next refresh', async () => {
+    searchParams.id = 'c-1';
+    const { detail, feed, older } = withOlderEntries();
+    let current = detail;
+    api.challenge = jest.fn(async () => current);
+    api.challengeFeed = jest.fn().mockResolvedValue({ items: [...feed, ...older], next: null });
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    press(tree, 'Daha eski girişler');
+    await settle();
+    expect(rendered(tree)).toContain('11.111 adım');
+
+    // Ali deletes his newest row; the detail refetches on its own timer and its
+    // window moves down one, while the loaded pages still hold the old copy
+    current = { ...detail, feed: [feed[1]!, older[0]!], feedCursor: { before: older[0]!.createdAt, beforeId: 'e-3' } };
+    await act(async () => {
+      await clientOf(tree).refetchQueries({ queryKey: ['challenge', 'c-1'], exact: true });
+    });
+    await settle();
+    const text = rendered(tree);
+    expect(text).not.toContain('11.111 adım');
+    expect(text.split('22.222 adım')).toHaveLength(2);
+    expect(text.split('33.333 adım')).toHaveLength(2);
+    expect(text).toContain('55.555 adım');
+  });
 });
 
 describe('a loser still waiting for the winner to talk', () => {

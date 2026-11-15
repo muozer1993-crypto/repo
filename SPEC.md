@@ -218,11 +218,12 @@ FeedItem { id, userId, displayName, dayKey, value, source, status, createdAt, up
      feedCursor: set when older entries exist than those 40: the `createdAt` and `id` of the 40th, where GET
      /challenges/:id/feed goes on (the feed's last item is no use for that, an old disputed row can sit there);
      null when the feed reaches the first entry. Older servers leave it out.
-FeedCursor { before: string; beforeId: string }
-FeedPage { items: FeedItem[], next: FeedCursor | null }   // GET /challenges/:id/feed; next null on the last page
      answerBy: set while a majority disputes the entry — the instant it is thrown out unless its owner adds a photo.
      disputeVotes: set on a `disputed` entry of an accepted player with no clock yet — `open` disputes of players
-     still accepted (at least one) and `needed` the threshold (2.2 dispute); null otherwise. Older servers leave both out.
+     still accepted (at least one, fewer than `needed`) and `needed` the threshold (2.2 dispute); null otherwise.
+     Older servers leave both out.
+FeedCursor { before: string; beforeId: string }
+FeedPage { items: FeedItem[], next: FeedCursor | null }   // GET /challenges/:id/feed; next null on the last page
 Dispute { id, entryId, byUserId, reason, status: 'open'|'upheld'|'dismissed', createdAt }
 Taunt { id, challengeId, fromUserId, toUserId, level, title, body, createdAt }
 Notification { id, type, title, body, data: Record<string, unknown>, readAt, createdAt }
@@ -669,7 +670,8 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             with `feedCursor` set a ghost "Daha eski girişler" under it loads the older ones, the same rows
                             and chips, newest first with the detail's (`useChallengeFeed`: pages from the newest, the first
                             one 80 rows, so a refetch never leaves a hole where an entry pushed a row out of the detail's 40;
-                            repeats dropped), and stays while a page is left ("Eski girişler gelmedi. Bir daha dene." when one fails)
+                            repeats dropped, and down to `feedCursor` only the detail's rows, so one deleted since a page
+                            came does not stay), and stays while a page is left ("Eski girişler gelmedi. Bir daha dene." when one fails)
                             (every open dispute's `{ad}: “{reason}”` under a disputed row, an upheld one's under a rejected
                             row; a disputed row says "İtiraz var. {kalan} içinde kanıt gelmezse yanar." from `answerBy`,
                             "İtiraz 1/5. 4 kişi daha itiraz ederse 12 saatlik kanıt süresi başlar." from `disputeVotes`,
