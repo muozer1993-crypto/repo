@@ -113,6 +113,20 @@ const SOURCE_LABEL: Record<EntrySource, string> = {
   usage_stats: 'telefon okudu',
 };
 
+/** Rows the phone writes itself (the server's `fanOutDeviceDays`). */
+const PHONE_SOURCES: ReadonlySet<EntrySource> = new Set(['pedometer', 'health_connect', 'usage_stats']);
+
+/**
+ * The time a feed row shows. A phone writes one row a day, at its first sync
+ * after midnight, and rewrites it as the day goes on, so its `createdAt` put
+ * Veli's live 12.430 at "14 saat önce"; `updatedAt` is when that number came.
+ * A typed row keeps the moment it was typed: an itiraz's turns move its
+ * `updatedAt` too. Older servers send no `updatedAt`.
+ */
+function feedTime(item: FeedItem): string {
+  return PHONE_SOURCES.has(item.source) ? (item.updatedAt ?? item.createdAt) : item.createdAt;
+}
+
 const STATUS_META: Record<string, { label: string; color: string }> = {
   pending: { label: 'BEKLİYOR', color: Colors.info },
   active: { label: 'AKTİF', color: Colors.success },
@@ -447,6 +461,7 @@ export default function ChallengeDetailScreen() {
           finished={challenge.status === 'finished'}
           closed={challenge.status === 'cancelled'}
           onPressUser={(userId) => router.push({ pathname: '/user/[id]', params: { id: userId } })}
+          freshness={challenge.status === 'active' && !settling ? { now: clock, level } : undefined}
         />
         {/* "küçük bir gayret yeter" is a lie once nothing more counts, and
             "öndesin" is one with nobody else in the race */}
@@ -2046,7 +2061,7 @@ function FeedRow({
         </View>
         <Text variant="tiny" faint numberOfLines={1}>
           {formatDayKeyFriendly(item.dayKey, today, yesterday)} · {SOURCE_ICON[item.source] ?? '•'}{' '}
-          {SOURCE_LABEL[item.source] ?? item.source} · {relativeTime(item.createdAt)}
+          {SOURCE_LABEL[item.source] ?? item.source} · {relativeTime(feedTime(item))}
         </Text>
         {rejected ? (
           <Text variant="tiny" color={Colors.danger}>

@@ -197,7 +197,12 @@ UserStats { wins, losses, ties, tauntsSent, tauntsReceived, stepsSingleDayMax, f
 Challenge { id, creatorId, typeKey, metricType, direction, unit, title, startsAt, endsAt, status, rewardText, penaltyText, deadlineTime, dailyTarget, proofRequired, createdAt, finalizedAt, winnerId, isTie, rematchOfId, acceptClosesAt?: string | null }
   -- acceptClosesAt: the ISO instant the accept and invite routes refuse from (1.3), on every çelınc the
      server returns; null only for dates it cannot read. Optional because an older server leaves it out.
-ParticipantView { user: PublicUser, status, score, days, rank, lastEntryAt, isWinner }
+ParticipantView { user: PublicUser, status, score, days, rank, lastEntryAt, isWinner, lastSyncAt?: string | null }
+  -- lastSyncAt: on an `active` çelınc of a phone-counted type (`deviceMetric`), an accepted player's newest
+     `steps_daily` / `screen_time_daily` `updated_at`: when their phone last reported, which every sync stamps
+     whether or not a number moved. Null for a player whose phone never reported (they type), for everybody
+     who is not accepted, and on every other çelınc. Not `lastEntryAt` (the time of the newest entry, which
+     the reminders read as "wrote today"). Older servers leave it out.
 ChallengeSummary { challenge: Challenge, participants: ParticipantView[], me: ParticipantView | null, unreadTaunts: number }
 ChallengeDetail extends ChallengeSummary { myEntries: Entry[], feed: FeedItem[], disputes: Dispute[], taunts: Taunt[], canTaunt: { toUserId: string; done: boolean }[], canPoke: boolean, pokeTargets: { toUserId: string; done: boolean }[], disputesCloseAt?: string | null, feedCursor?: FeedCursor | null }
   -- disputesCloseAt: until when an itiraz may be filed (`disputesOpenUntil`, 2.3), the instant the app hides its itiraz chip from; an older server leaves it out and the app uses endsAt (+ DEVICE_SETTLE_MS on a phone-counted type)
@@ -205,7 +210,10 @@ ChallengeDetail extends ChallengeSummary { myEntries: Entry[], feed: FeedItem[],
      and only for the rivals they are strictly ahead of (a tie earns nothing). `done` = still
      inside the 2h cooldown, so canPoke = pokeTargets.some(t => !t.done).
 Entry { id, challengeId, userId, dayKey, value, source, note, proofUrl, status, createdAt, late?: boolean }
-FeedItem { id, userId, displayName, dayKey, value, source, status, createdAt, proofUrl, answerBy?: string | null, disputeVotes?: { open: number; needed: number } | null }
+FeedItem { id, userId, displayName, dayKey, value, source, status, createdAt, updatedAt?: string, proofUrl, answerBy?: string | null, disputeVotes?: { open: number; needed: number } | null }
+  -- updatedAt: the entry's `updated_at`, when the row last changed. A phone's row is created at the day's first
+     sync and rewritten by later readings (steps only when they grow), so on one this is when its number came;
+     an itiraz's turns move it too. The feed's order and cursor stay on `createdAt`. Older servers leave it out.
   -- feed: the 40 most recent entries (`LIMITS.FEED_PAGE`) plus every `disputed` one, however old (it is where the owner answers).
      feedCursor: set when older entries exist than those 40: the `createdAt` and `id` of the 40th, where GET
      /challenges/:id/feed goes on (the feed's last item is no use for that, an old disputed row can sit there);
@@ -642,7 +650,11 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             Android back steps back like "Geri"; on step 1 with a type chosen it asks before closing
                             (nothing chosen → the modal closes)
 (app)/challenge/[id].tsx    detail: hero (emoji, title, status/countdown), standings (ranked bars with scores + "koyuyor/yiyor" labels;
-                            every row but mine opens that player's profile; once finished an unanswered invite is not listed),
+                            every row but mine opens that player's profile; once finished an unanswered invite is not listed;
+                            while `active` and before `endsAt`, an accepted rival whose `lastSyncAt` is 3 hours or more older
+                            than the last fetch gets a faint line under the bar, at my level: "Telefonundan 5 saattir veri
+                            gelmedi" / "Telefonu 5 saattir ses vermiyor, sayı eski olabilir" / "Telefonu 5 saattir ölü, bu sayı
+                            bayat", "2 gündür" from 48 hours on; none on my row or with a null `lastSyncAt`),
                             a "Kurallar" card (components/ChallengeRules.tsx): the type's description at my level, "📅 N gün ·
                             1 Eylül – 7 Eylül", "⏰ Her gün saat 07:00 olmadan “Geldim” demen lazım" with a deadline, "📸 Elle
                             girdiğin her sayıya kanıt fotoğrafı lazım" (only where a photo can back a number, the server's rule),
@@ -650,7 +662,9 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             and "Nasıl sayılıyor?" folding `howMeasuredTr`; somebody invited, or who said no, while the çelınc
                             still takes players gets it right above "Varım" / "Katıl" with "Nasıl sayılıyor?" open, everybody
                             else below the action area, folded,
-                            my action area per metric type (see 3.4), feed of recent entries with dispute button (only while
+                            my action area per metric type (see 3.4), feed of recent entries ("Bugün · 👟 sayaç · 10 dakika
+                            önce": a phone's row (`pedometer`, `health_connect`, `usage_stats`) is timed by `updatedAt ??
+                            createdAt`, a typed one by `createdAt`) with dispute button (only while
                             the server takes one: `active` and before `endsAt`, plus the settle hour of a phone-counted type);
                             with `feedCursor` set a ghost "Daha eski girişler" under it loads the older ones, the same rows
                             and chips, newest first with the detail's (`useChallengeFeed`: pages from the newest, the first

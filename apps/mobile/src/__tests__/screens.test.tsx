@@ -554,6 +554,88 @@ describe('standings verdict', () => {
   });
 });
 
+describe('how fresh a phone\'s count is', () => {
+  const HOUR = 3_600_000;
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const CEM = { id: 'u-3', username: 'cem', displayName: 'Cem', avatarEmoji: '🦊', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** Me, Ali and Cem in the running steps race, with when each one's phone last reported. */
+  function withSyncs(syncs: { me: string | null; ali: string | null; cem: string | null }) {
+    const detail = challengeDetail();
+    const me = { ...detail.me!, lastSyncAt: syncs.me };
+    const ali = { ...detail.me!, user: ALI, score: 4201, rank: 2, lastSyncAt: syncs.ali };
+    const cem = { ...detail.me!, user: CEM, score: 900, rank: 3, lastSyncAt: syncs.cem };
+    return { ...detail, participants: [me, ali, cem], me };
+  }
+
+  it('says under a rival that their phone went quiet hours ago, at the reader\'s level', async () => {
+    searchParams.id = 'c-1';
+    // a few minutes of slack so the whole hours do not depend on how fast the suite runs
+    const ago = (hours: number) => new Date(Date.now() - hours * HOUR - 5 * 60_000).toISOString();
+    api.challenge = jest.fn(async () => withSyncs({ me: ago(5), ali: ago(5), cem: ago(1) }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Telefonu 5 saattir ses vermiyor, sayı eski olabilir');
+    // Cem's phone spoke an hour ago, and mine is no rival's: one line, Ali's
+    expect(text.match(/ses vermiyor/g)).toHaveLength(1);
+  });
+
+  it('says nothing for somebody who types, or once the time is up', async () => {
+    searchParams.id = 'c-1';
+    const old = new Date(Date.now() - 9 * HOUR).toISOString();
+    api.challenge = jest.fn(async () => withSyncs({ me: old, ali: null, cem: null }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    let tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(rendered(tree)).not.toContain('ses vermiyor');
+
+    // settling: the last readings are coming in, the hour itself says so
+    const settling = withSyncs({ me: old, ali: old, cem: old });
+    settling.challenge.endsAt = new Date(Date.now() - 10 * 60_000).toISOString();
+    api.challenge = jest.fn(async () => settling);
+    tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('Sonuç birazdan');
+    expect(rendered(tree)).not.toContain('ses vermiyor');
+  });
+
+  it('times a phone\'s feed row by its last reading, a typed one by when it was typed', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    const row = (id: string, source: 'pedometer' | 'manual', createdHoursAgo: number, updatedMinutesAgo: number) => ({
+      id,
+      userId: ALI.id,
+      displayName: ALI.displayName,
+      dayKey: '2026-09-08',
+      value: 12430,
+      source,
+      status: 'ok' as const,
+      createdAt: new Date(Date.now() - createdHoursAgo * HOUR).toISOString(),
+      updatedAt: new Date(Date.now() - updatedMinutesAgo * 60_000).toISOString(),
+      proofUrl: null,
+    });
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      participants: [detail.me!, { ...detail.me!, user: ALI, rank: 2 }],
+      feed: [row('e-1', 'pedometer', 14, 10), row('e-2', 'manual', 6, 20)],
+    }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    // the phone's 12.430 came ten minutes ago, not just past midnight
+    expect(text).toContain('10 dakika önce');
+    expect(text).not.toContain('14 saat önce');
+    // the typed one keeps its time, whatever an itiraz did to the row since
+    expect(text).toContain('6 saat önce');
+    expect(text).not.toContain('20 dakika önce');
+  });
+});
+
 describe('a "Hemen" çelınc nobody else has joined yet', () => {
   it('waits for a rival instead of calling the lone creator "öndesin"', async () => {
     searchParams.id = 'c-1';

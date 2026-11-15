@@ -816,6 +816,13 @@ Adımlar sunucuya günlük özet olarak gider (`POST /me/steps`), ham konum veya
 asla gönderilmez. Uygulama açıldığında, ön plana geldiğinde ve arka plan görevinde
 (15 dakikada bir, platformun izin verdiği ölçüde) senkronize olur.
 
+Bir kankanın telefonu 3 saattir sunucuya hiçbir şey göndermediyse, çelınc ekranındaki sıralamada
+onun barının altında soluk bir satır çıkar ("Telefonu 5 saattir ses vermiyor, sayı eski
+olabilir"): gördüğün sayı o saatte kaldı, kanka belki yürüyor ama telefonu haber vermiyor.
+Genelde telefon uygulamayı pil için durdurmuştur (yukarıdaki **Ayarlar → Arka plan**), ya da
+kapalıdır. Elle yazan kankada bu satır çıkmaz. Akışta telefonun yazdığı satırın saati de sayının
+en son ne zaman geldiğini gösterir, günün ilk senkronunu değil.
+
 Yarışa geç katılan kankanın telefonu o günleri zaten sunucuya göndermişse (uygulama her
 senkronda son 7 günü yollar, çelınc olsun olmasın), kabul ettiği anda o günler çelınca yazılır;
 kabulün hemen ardından telefon bir kere daha senkron olur, göndermediği günler de gelir. Çelınc

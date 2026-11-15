@@ -190,6 +190,7 @@ export function toFeedItem(
     source: asEntrySource(row.source),
     status: asEntryStatus(row.status),
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
     proofUrl: row.proof_url,
     answerBy,
     disputeVotes,

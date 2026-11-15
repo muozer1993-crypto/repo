@@ -380,6 +380,15 @@ export interface ParticipantView {
   rank: number;
   lastEntryAt: string | null;
   isWinner: boolean;
+  /**
+   * When this player's phone last reported (`POST /me/steps`,
+   * `/me/screen-time`), on a running çelınc the phone counts: every sync
+   * stamps it, whether or not a number moved. The app flags a rival whose
+   * phone went quiet, so an 8-hour-old count does not read like a live one.
+   * Null for a player whose phone never reported (they type), and on every
+   * other çelınc. Older servers leave it out.
+   */
+  lastSyncAt?: string | null;
 }
 
 export interface ChallengeSummary {
@@ -413,6 +422,14 @@ export interface FeedItem {
   source: EntrySource;
   status: EntryStatus;
   createdAt: string;
+  /**
+   * When the row last changed. A phone writes one row a day, at its first sync
+   * after midnight, and rewrites it as later readings come in (steps only ever
+   * up), so on a phone's row this is how fresh the number is, where
+   * `createdAt` is just past midnight. An itiraz's turns move it too. Older
+   * servers leave it out.
+   */
+  updatedAt?: string;
   proofUrl: string | null;
   /**
    * Set while a majority disputes this entry: the moment it is thrown out

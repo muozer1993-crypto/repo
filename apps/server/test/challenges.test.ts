@@ -753,6 +753,69 @@ describe('saying yes: the days the phone already sent', () => {
   });
 });
 
+describe('how fresh a phone\'s count is', () => {
+  const HOUR = 60 * 60 * 1000;
+
+  async function syncSteps(h: TestApp, user: RegisteredUser, steps: number) {
+    const response = await authed(h.app, user.token)({
+      method: 'POST',
+      url: '/me/steps',
+      payload: { days: [{ dayKey: today(h), steps, source: 'pedometer' }] },
+    });
+    expect(response.statusCode).toBe(200);
+  }
+
+  async function detailFor(h: TestApp, user: RegisteredUser, challengeId: string) {
+    return (await authed(h.app, user.token)({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>();
+  }
+
+  it('stamps every sync on the standings, and the feed row with the last time its number moved', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await twoPlayerChallenge(harness);
+    const first = iso(harness);
+    await syncSteps(harness, veli, 4201);
+
+    // the same count two hours later: the phone spoke, the number did not move
+    harness.advance(2 * HOUR);
+    await syncSteps(harness, veli, 4201);
+    let detail = await detailFor(harness, ali, challengeId);
+    expect(detail.participants.find((p) => p.user.id === veli.me.id)?.lastSyncAt).toBe(iso(harness));
+    // Ali's phone never reported
+    expect(detail.participants.find((p) => p.user.id === ali.me.id)?.lastSyncAt).toBeNull();
+    let row = detail.feed.find((item) => item.userId === veli.me.id);
+    expect(row?.createdAt).toBe(first);
+    expect(row?.updatedAt).toBe(first);
+
+    harness.advance(HOUR);
+    await syncSteps(harness, veli, 11000);
+    detail = await detailFor(harness, ali, challengeId);
+    row = detail.feed.find((item) => item.userId === veli.me.id);
+    expect(row?.createdAt).toBe(first);
+    expect(row?.updatedAt).toBe(iso(harness));
+    expect(detail.participants.find((p) => p.user.id === veli.me.id)?.lastSyncAt).toBe(iso(harness));
+
+    // a result is not a race any more: nothing to be stale against
+    await harness.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` });
+    detail = await detailFor(harness, ali, challengeId);
+    expect(detail.participants.every((p) => p.lastSyncAt === null)).toBe(true);
+  });
+
+  it('says nothing about phones on a çelınc the phone does not count', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const created = await createChallenge(harness, ali, { typeKey: 'kitap_sayfa', participantIds: [veli.me.id] });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await syncSteps(harness, veli, 9000);
+
+    const detail = await detailFor(harness, ali, challengeId);
+    expect(detail.participants).toHaveLength(2);
+    expect(detail.participants.every((p) => p.lastSyncAt === null)).toBe(true);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Bringing a friend in later
 // ---------------------------------------------------------------------------

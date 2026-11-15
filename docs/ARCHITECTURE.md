@@ -526,6 +526,16 @@ oturuyor, uygulama da ona "Eksik günü yaz" diyordu; ezberden yazılan sayılar
 beyan satırlarına dönüşüyordu. Uygulama kabulün ardından bir kere de senkron olur
 (`services/deviceSyncNow.ts`), telefonun hiç göndermediği günler için.
 
+Bu iki tablonun `updated_at`'i her senkronda, sayı değişmese de, yenilenir; telefonun en son ne
+zaman ses verdiğini o söyler. Süren bir çelıncın sıralamasında her kabul etmiş oyuncu için bunun
+en yenisi `ParticipantView.lastSyncAt` olarak gider (`computeStandings`); uygulama 3 saattir ses
+vermeyen bir rakibin barının altına "Telefonu 5 saattir ses vermiyor, sayı eski olabilir" yazar.
+Entry'ler bunu söyleyemez: bir günün satırı o günün ilk senkronunda yazılır, adım günü ancak sayı
+artınca değişir. Akış da aynı yüzden telefon satırının saatini `FeedItem.updatedAt`'ten (sayının
+en son geldiği an) gösterir; `createdAt` gece yarısından hemen sonrasıdır. Sıra ve sayfa imleci
+yine `createdAt`'te kalır. Bitişteki telefon saati (`everyPhoneReported`) bundan bağımsızdır, son
+günün kendi satırına bakar.
+
 Android'de adımın üç kaynağı var: Health Connect (izin verildiyse), Google Play hizmetlerinin
 Recording API'si (`apps/mobile/modules/koydum-steps/`) ve uygulama açıkken sayım. Üçü yan yana
 okunur, her gün için en büyüğü alınır; hepsi ancak eksik sayar, toplamak aynı adımı iki kere

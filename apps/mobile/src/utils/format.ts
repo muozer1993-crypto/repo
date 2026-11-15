@@ -61,6 +61,26 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
 }
 
 /**
+ * Whole hours from `iso` to `now` (epoch ms), never below 0; null when `iso`
+ * cannot be read. The caller hands in `now` (the last fetch), so a screen does
+ * not read the clock during render.
+ */
+export function hoursSince(iso: string, now: number): number | null {
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then) || !Number.isFinite(now)) return null;
+  return Math.max(0, Math.floor((now - then) / 3_600_000));
+}
+
+/**
+ * How long something has been going on: "5 saattir", "3 gündür". Past two
+ * days a count of hours stops meaning anything to a reader, so it counts days.
+ */
+export function forHoursTr(hours: number): string {
+  if (hours < 48) return `${hours} saattir`;
+  return `${Math.floor(hours / 24)} gündür`;
+}
+
+/**
  * "2026-09-08" -> "8 Eylül" / "8 Eylül Salı". The table lives in the shared
  * package, so a day reads the same on screen and in the server's push copy.
  */

@@ -10,6 +10,7 @@ import { OfflineFrame } from '@/components/OfflineBanner';
 import { ProgressBar } from '@/components/ProgressBar';
 import { Screen } from '@/components/Screen';
 import { Sheet } from '@/components/Sheet';
+import { Standings } from '@/components/Standings';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { ToastProvider, useToast } from '@/components/Toast';
@@ -188,6 +189,49 @@ describe('ProgressBar', () => {
       widths.push(json?.children?.[0]?.props?.style?.width ?? '');
     }
     expect(widths).toEqual(['0%', '0%', '50%', '100%', '100%', '0%']);
+  });
+});
+
+describe('Standings: a rival whose phone went quiet', () => {
+  const NOW = Date.parse('2026-09-08T18:00:00Z');
+  const person = (id: string, name: string, rank: number, lastSyncAt: string | null) => ({
+    user: { id, username: id, displayName: name, avatarEmoji: '🔥', createdAt: '2026-09-01T00:00:00.000Z' },
+    status: 'accepted' as const,
+    score: 10000 - rank * 1000,
+    days: 2,
+    rank,
+    lastEntryAt: null,
+    isWinner: false,
+    lastSyncAt,
+  });
+  // Mustafa reads at 18:00: Ali's phone last spoke at noon, Veli's two days ago, Cem's at 16:30
+  const participants = [
+    person('me', 'Mustafa', 1, '2026-09-08T09:00:00Z'),
+    person('ali', 'Ali', 2, '2026-09-08T12:00:00Z'),
+    person('veli', 'Veli', 3, '2026-09-06T15:00:00Z'),
+    person('cem', 'Cem', 4, '2026-09-08T16:30:00Z'),
+  ];
+
+  function linesAt(freshness?: { now: number; level: 1 | 2 | 3 }): string {
+    let tree: ReactTestRenderer;
+    act(() => {
+      tree = create(<Standings participants={participants} type={undefined} meId="me" freshness={freshness} />);
+    });
+    return textIn(tree!.toJSON()).join(' ');
+  }
+
+  it('words it at every level, in hours and then in days', () => {
+    const polite = linesAt({ now: NOW, level: 1 });
+    expect(polite).toContain('Telefonundan 6 saattir veri gelmedi');
+    expect(polite).toContain('Telefonundan 2 gündür veri gelmedi');
+    const crude = linesAt({ now: NOW, level: 3 });
+    expect(crude).toContain('Telefonu 6 saattir ölü, bu sayı bayat');
+    // Cem synced 90 minutes ago; my own row never says it
+    expect(crude.match(/ölü/g)).toHaveLength(2);
+  });
+
+  it('says nothing where the çelınc is not running (home card, results)', () => {
+    expect(linesAt()).not.toMatch(/Telefon/);
   });
 });
 

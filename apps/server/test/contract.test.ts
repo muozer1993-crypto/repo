@@ -194,6 +194,14 @@ describe('API contract as the mobile client consumes it', () => {
       const votes = item.disputeVotes as { open?: unknown; needed?: unknown } | null;
       expect(votes === null || (typeof votes?.open === 'number' && typeof votes.needed === 'number')).toBe(true);
     }
+    // how fresh a phone's count is: a row's last change, and each player's last sync
+    // (both phones synced above; null is for somebody who only types)
+    for (const item of detail.feed as { updatedAt?: unknown }[]) {
+      expect(typeof item.updatedAt).toBe('string');
+    }
+    for (const participant of detail.participants as { lastSyncAt?: unknown }[]) {
+      expect(typeof participant.lastSyncAt).toBe('string');
+    }
     expect(Array.isArray(detail.disputes)).toBe(true);
     expect(Array.isArray(detail.taunts)).toBe(true);
     expect(Array.isArray(detail.canTaunt)).toBe(true);

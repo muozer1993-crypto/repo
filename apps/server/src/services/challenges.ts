@@ -333,6 +333,28 @@ function rankAccepted(
 }
 
 /**
+ * When each of these players' phone last reported, on a running çelınc the
+ * phone counts. Every sync stamps each day it sends (`routes/me.ts`), changed
+ * or not, so the newest stamp is the phone's last word, which the entries
+ * cannot tell: a day's row is written at the first sync after midnight, and
+ * a step day only moves when its number grows. Kept apart from `lastEntryAt`,
+ * which the app's reminders read as "wrote today". Somebody who only types
+ * never syncs and is left out.
+ */
+function lastPhoneSyncs(db: Database, challenge: ChallengeRow, type: ChallengeType, userIds: string[]): Map<string, string> {
+  const metric = type.deviceMetric;
+  if (!metric || challenge.status !== 'active' || userIds.length === 0) return new Map();
+  const marks = userIds.map(() => '?').join(', ');
+  const rows = db
+    .prepare(
+      `SELECT user_id, MAX(updated_at) AS at FROM ${DEVICE_DAILY_TABLE[metric]}
+        WHERE user_id IN (${marks}) GROUP BY user_id`,
+    )
+    .all(...userIds) as { user_id: string; at: string }[];
+  return new Map(rows.map((row) => [row.user_id, row.at]));
+}
+
+/**
  * Standings for one challenge.
  *
  * Accepted participants are ranked with the shared `rankParticipants`; invited /
@@ -362,6 +384,7 @@ export function computeStandings(db: Database, challenge: ChallengeRow, now: Dat
   const accepted = participants.filter((p) => p.status === 'accepted');
   const { ranking, days } = rankAccepted(db, challenge, type, accepted, users, byUser, now);
   const byUserResult = new Map(ranking.results.map((r) => [r.userId, r]));
+  const lastSyncAt = lastPhoneSyncs(db, challenge, type, accepted.map((p) => p.user_id));
 
   const finished = challenge.status === 'finished';
   const views: ParticipantView[] = [];
@@ -379,6 +402,7 @@ export function computeStandings(db: Database, challenge: ChallengeRow, now: Dat
       rank: useStored ? Number(participant.final_rank) : (computed?.rank ?? 0),
       lastEntryAt: lastEntryAt.get(participant.user_id) ?? null,
       isWinner: finished ? challenge.winner_id === participant.user_id : (computed?.isWinner ?? false),
+      lastSyncAt: lastSyncAt.get(participant.user_id) ?? null,
     });
   }
 
@@ -396,6 +420,7 @@ export function computeStandings(db: Database, challenge: ChallengeRow, now: Dat
       rank: 0,
       lastEntryAt: lastEntryAt.get(participant.user_id) ?? null,
       isWinner: false,
+      lastSyncAt: null,
     });
   }
 

@@ -1,4 +1,4 @@
-import type { ChallengeType, ParticipantView } from '@koydum/shared';
+import type { ChallengeType, ParticipantView, VulgarityLevel } from '@koydum/shared';
 import { scoreLabel } from '@koydum/shared';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
@@ -6,7 +6,8 @@ import { Avatar } from '@/components/Avatar';
 import { ProgressBar } from '@/components/ProgressBar';
 import { Text } from '@/components/Text';
 import { Colors, Radius, Spacing } from '@/theme';
-import { formatNumber } from '@/utils/format';
+import { forHoursTr, formatNumber, hoursSince } from '@/utils/format';
+import { byLevel } from '@/utils/levelCopy';
 
 export interface StandingsProps {
   participants: ParticipantView[];
@@ -26,13 +27,49 @@ export interface StandingsProps {
    * group-çelınc rival who is not a friend yet can be added from.
    */
   onPressUser?: (userId: string) => void;
+  /**
+   * Set while the çelınc runs (`active`, before `endsAt`): a rival whose phone
+   * has not reported (`lastSyncAt`) for `SILENT_PHONE_HOURS` by `now` (the
+   * last fetch) gets a faint line under the bar, at the reader's `level`.
+   * Their number is only as new as that sync, and a bar alone reads like a
+   * live count: Ali poked Mustafa all evening over a 4.201 his Xiaomi stopped
+   * sending at 15:00, and lost to the 11.000 it sent in the morning.
+   */
+  freshness?: { now: number; level: VulgarityLevel };
   style?: ViewStyle;
 }
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
+/**
+ * The app syncs in the background every quarter of an hour or so, when the
+ * phone lets it; three hours of silence is an OS that killed it, a phone that
+ * is off, or an app nobody opened, not a sync that is merely due.
+ */
+const SILENT_PHONE_HOURS = 3;
+
+function silentPhoneLine(level: VulgarityLevel, hours: number): string {
+  const since = forHoursTr(hours);
+  return byLevel(
+    level,
+    `Telefonundan ${since} veri gelmedi`,
+    `Telefonu ${since} ses vermiyor, sayı eski olabilir`,
+    `Telefonu ${since} ölü, bu sayı bayat`
+  );
+}
+
 /** Ranked bar chart of everyone's score — the heart of every challenge screen. */
-export function Standings({ participants, type, meId, limit, finished, closed, onPressUser, style }: StandingsProps) {
+export function Standings({
+  participants,
+  type,
+  meId,
+  limit,
+  finished,
+  closed,
+  onPressUser,
+  freshness,
+  style,
+}: StandingsProps) {
   // "bekliyor" is a lie once it is over, finished or called off: an invite
   // nobody answered is not on the final table
   const over = finished || closed;
@@ -67,6 +104,13 @@ export function Standings({ participants, type, meId, limit, finished, closed, o
         const leading = participant.rank === 1 && !pending;
         const fill = fillFor(participant.score);
         const barColor = leading ? Colors.yellow : isMe ? Colors.accent : Colors.surfaceHigh;
+        // only a rival's phone: mine syncs whenever the app comes to the
+        // front, and a null is somebody who types
+        const silentHours =
+          freshness && !isMe && participant.status === 'accepted' && participant.lastSyncAt
+            ? hoursSince(participant.lastSyncAt, freshness.now)
+            : null;
+        const silent = silentHours !== null && silentHours >= SILENT_PHONE_HOURS;
 
         const row = (
           <>
@@ -102,6 +146,11 @@ export function Standings({ participants, type, meId, limit, finished, closed, o
                 </Text>
               </View>
               <ProgressBar value={pending ? 0 : fill} color={barColor} height={6} />
+              {silent && freshness ? (
+                <Text variant="tiny" faint numberOfLines={1}>
+                  {silentPhoneLine(freshness.level, silentHours)}
+                </Text>
+              ) : null}
             </View>
           </>
         );

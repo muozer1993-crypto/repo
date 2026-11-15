@@ -7,6 +7,8 @@ import {
   formatWeekRange,
   formatMinutes,
   formatNumber,
+  forHoursTr,
+  hoursSince,
   relativeTime,
   withUnit,
 } from '@/utils/format';
@@ -86,6 +88,18 @@ describe('Turkish formatting', () => {
     expect(relativeTime('2026-09-08T12:10:00Z', now)).toBe('10 dakika sonra');
     expect(relativeTime('2026-09-09T12:00:00Z', now)).toBe('yarın');
     expect(relativeTime('bozuk', now)).toBe('');
+  });
+
+  it('counts how long a phone has been quiet, the way people say it', () => {
+    const now = Date.parse('2026-09-08T12:00:00Z');
+    expect(hoursSince('2026-09-08T08:59:00Z', now)).toBe(3);
+    expect(hoursSince('2026-09-08T09:01:00Z', now)).toBe(2);
+    // a phone clock ahead of the server's is not "-1 saattir"
+    expect(hoursSince('2026-09-08T12:30:00Z', now)).toBe(0);
+    expect(hoursSince('bozuk', now)).toBeNull();
+    expect(forHoursTr(5)).toBe('5 saattir');
+    expect(forHoursTr(47)).toBe('47 saattir');
+    expect(forHoursTr(50)).toBe('2 gündür');
   });
 
   it('joins a value with its unit', () => {
