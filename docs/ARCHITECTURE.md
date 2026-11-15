@@ -112,7 +112,9 @@ bekleyişte kimse eklenmez. Reddeden yeniden çağrılabilir ve yeni bir davet b
 ayrılan çağrılamaz, kabul kuralıyla aynı sebepten. Çelınctaki biriyle (kabul etmiş ya da davetli)
 arasında engel olan da çağrılamaz (`blocked_in_challenge`): sihirbazda herkes kimlerle oynayacağını
 kabul etmeden görüyordu, sonradan gelen davette kimse bir şey kabul etmedi, ve akış engelleyenin her
-sayısını, fotoğrafını engellenene gösterirdi. Ret kimin kimi engellediğini söylemez.
+sayısını, fotoğrafını engellenene gösterirdi. Ret kimin kimi engellediğini söylemez. Davetten
+sonra konan engel de kazanır: çağrılanla çelıncı açan ya da onu çağıran arasında engel varsa kabul
+edemez (403 `blocked`).
 
 Rövanş, eskisi kaç yerel gün sürdüyse o kadar gün sürer ve sihirbaz gibi açanın saat diliminde bir
 günün son milisaniyesinde biter. Önceden "şimdi + eski süre" ile düğmeye basılan saatte bitiyordu;
@@ -836,7 +838,7 @@ Artık kodla gelen istek, gönderen hesap en çok bir haftalıksa (`INVITE_AUTO_
 telefonun bekleyen daveti tuttuğu hafta) hemen `accepted` olur ve davet edene `friend_accepted`
 gider (`via: 'invite'`). Kodu paylaşan onu kime istediyse ona verdi, "evet" o an verilmiş sayılır.
 Hafta sınırı, arkadaşlıktan çıkarılıp kodu saklayan eski bir hesabın sorulmadan geri gelmesini
-engeller: o hâlâ istek gönderir. Engel iki yönde de 403 kalır. Kod altı karakter, 32 harflik bir
+engeller: o hâlâ istek gönderir. Engel iki yönde de 403 kalır. Kod altı karakter, 32 karakterlik bir
 alfabeden; doğru bir tahmin artık bir arkadaşlık demek. Bu yüzden bir hesabın kimseyi bulamayan
 kodları saatte 20 ile sınırlı (`INVITE_CODE_MISSES_PER_USER`, süreç içi `AttemptLimiter`), sınırı
 aşan doğru kodla gelse de bekler.

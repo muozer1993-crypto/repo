@@ -109,7 +109,8 @@ export function endsWithoutMe(participants: Pick<ParticipantView, 'user' | 'stat
  * screen), so a thumb that slipped does not throw it away. A declined invite
  * can be taken back from the çelınc screen, which Gelen still opens, unless
  * the no ends the çelınc (`endsWithoutMe`): then there is nothing to come back
- * to, and the question says that instead.
+ * to, and the question says that instead. The no is told to whoever called
+ * me in, who is not always the creator ("Kanka ekle" is every player's).
  */
 export function declineQuestion(level: VulgarityLevel, endsIt: boolean): { title: string; body: string } {
   const title = byLevel(level, 'Daveti reddediyor musun?', 'Pas mı geçiyorsun?', 'Tırstın mı? 🐔');
@@ -118,9 +119,9 @@ export function declineQuestion(level: VulgarityLevel, endsIt: boolean): { title
       title,
       body: byLevel(
         level,
-        'Başka rakip olmadığı için reddedersen çelınc iptal olur. Açan kişiye de haber gider.',
-        'Tek rakip sensin, reddedersen çelınc yatar. Açana da haber gider.',
-        'Tek rakip sensin, reddedersen çelınc yatar. Açan da tırstığını öğrenir 🐔'
+        'Başka rakip olmadığı için reddedersen çelınc iptal olur. Seni davet eden kişiye de haber gider.',
+        'Tek rakip sensin, reddedersen çelınc yatar. Seni çağırana da haber gider.',
+        'Tek rakip sensin, reddedersen çelınc yatar. Seni çağıran da tırstığını öğrenir 🐔'
       ),
     };
   }
@@ -128,9 +129,9 @@ export function declineQuestion(level: VulgarityLevel, endsIt: boolean): { title
     title,
     body: byLevel(
       level,
-      "Reddedersen çelınc listenden kalkar, açan kişiye de haber gider. Fikrin değişirse Gelen'deki davetten çelınca girip yine katılabilirsin.",
-      "Reddedersen listenden düşer, açana da haber gider. Fikrin değişirse Gelen'deki davetten girip yine katılırsın.",
-      "Reddedersen listenden düşer, açan da tırstığını öğrenir 🐔 Fikrin değişirse Gelen'deki davetten girip yine katılırsın."
+      "Reddedersen çelınc listenden kalkar, seni davet eden kişiye de haber gider. Fikrin değişirse Gelen'deki davetten çelınca girip yine katılabilirsin.",
+      "Reddedersen listenden düşer, seni çağırana da haber gider. Fikrin değişirse Gelen'deki davetten girip yine katılırsın.",
+      "Reddedersen listenden düşer, seni çağıran da tırstığını öğrenir 🐔 Fikrin değişirse Gelen'deki davetten girip yine katılırsın."
     ),
   };
 }

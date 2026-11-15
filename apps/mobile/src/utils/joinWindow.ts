@@ -14,7 +14,7 @@ export function joinClosesAt(challenge: Omit<JoinFields, 'status'>): number {
 }
 
 /**
- * Whether a yes, or the creator's "Kanka ekle", can still go through at `clock`:
+ * Whether a yes, or a player's "Kanka ekle", can still go through at `clock`:
  * the accept and invite routes' own checks, pending or active and before
  * `joinClosesAt` (which is never past the end, so never in the settle hour).
  * Past it a "Kabul" or "Varım" only ever earned a 400 `accept_closed`.

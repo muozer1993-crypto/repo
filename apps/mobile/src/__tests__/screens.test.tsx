@@ -4229,6 +4229,8 @@ describe('saying no to a çelınc', () => {
     const [title, body] = alert.mock.calls[0]!;
     expect(title).toBe('Pas mı geçiyorsun?');
     expect(body).toContain('çelınc yatar');
+    // the no goes to whoever called, who is not always the creator any more
+    expect(body).toContain('Seni çağırana da haber gider.');
     expect(api.declineChallenge).not.toHaveBeenCalled();
 
     await answerAlert('Vazgeç');
@@ -4251,6 +4253,7 @@ describe('saying no to a çelınc', () => {
     press(tree, 'Yokum');
     await settle();
     expect(alert.mock.calls[0]![1]).toContain("Gelen'deki davetten");
+    expect(alert.mock.calls[0]![1]).toContain('seni çağırana da haber gider');
     expect(api.declineChallenge).not.toHaveBeenCalled();
     await answerAlert('Reddet');
     expect(api.declineChallenge).toHaveBeenCalledWith('c-1');

@@ -350,7 +350,7 @@ export const CreateChallengeBodySchema = createChallengeBodySchema();
 export type CreateChallengeBody = z.infer<typeof CreateChallengeBodySchema>;
 
 /**
- * Friends the creator brings into a çelınc that already exists. Same bounds as
+ * Friends a player brings into a çelınc that already exists. Same bounds as
  * the wizard's pick; that they are friends, not already in, and still fit is
  * the server's call.
  */

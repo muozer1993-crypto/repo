@@ -1035,6 +1035,24 @@ describe('POST /challenges/:id/invite', () => {
     expect(heard(can.me.id)).toHaveLength(0);
   });
 
+  it('keeps somebody out whom the player who called them blocked since', async () => {
+    harness = await makeApp({ now: NOW });
+    const { veli, challengeId } = await twoPlayerChallenge(harness);
+    const cem = await registerUser(harness.app, 'cem');
+    befriend(harness.app, veli.me.id, cem.me.id);
+    expect((await invite(harness, veli, challengeId, [cem.me.id])).statusCode).toBe(200);
+
+    // as with a creator's own invite: the block came after it, and the block wins
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/users/${cem.me.id}/block` });
+    const accepted = await authed(harness.app, cem.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    expect(accepted.statusCode).toBe(403);
+    expect(accepted.json().error.code).toBe('blocked');
+    const row = harness.db
+      .prepare('SELECT status FROM challenge_participants WHERE challenge_id = ? AND user_id = ?')
+      .get(challengeId, cem.me.id) as { status: string };
+    expect(row.status).toBe('invited');
+  });
+
   it('does not put somebody a player blocked into that player\'s running çelınc', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await twoPlayerChallenge(harness);

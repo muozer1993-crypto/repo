@@ -65,13 +65,17 @@ export const NOTIFICATION_TYPES = [
   'nudge',
   /** Sunday evening: the week's score, "haftanın kralı" and the step count */
   'recap',
-  /** to the creator: an invitee said no ("Ali tırstı, reddetti") */
+  /**
+   * to whoever called the invitee in (the creator, unless a player used "Kanka
+   * ekle"): a no ("Ali tırstı, reddetti")
+   */
   'challenge_declined',
   /** to the players still in: somebody walked out mid-çelınc ("Ali havlu attı") */
   'challenge_left',
   /**
-   * somebody said yes ("Ali kabul etti"): to the creator before the start, to
-   * every other player once it runs. An older app shows it with the 🔔 icon.
+   * somebody said yes ("Ali kabul etti"): to the creator (and whoever called
+   * them in) before the start, to every other player once it runs. An older
+   * app shows it with the 🔔 icon.
    */
   'challenge_accepted',
 ] as const;

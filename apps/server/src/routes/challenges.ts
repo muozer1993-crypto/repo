@@ -371,8 +371,10 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     if (challenge.status !== 'pending' && challenge.status !== 'active') {
       throw badRequest('challenge_closed', 'Bu çelınc kapandı, artık katılamazsın.');
     }
-    // the invite predates the block; the block wins
+    // the invite predates the block; the block wins, the creator's and that of
+    // whoever called them in with "Kanka ekle"
     assertNotBlocked(db, me.id, challenge.creator_id);
+    if (membership.invited_by) assertNotBlocked(db, me.id, membership.invited_by);
     if (now.getTime() >= acceptClosesAt(challenge.starts_at, challenge.ends_at)) {
       throw badRequest('accept_closed', 'Çelıncın bitmesine az kaldı, artık katılamazsın.');
     }

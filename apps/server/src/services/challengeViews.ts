@@ -417,7 +417,10 @@ export function cancelledByCreatorCopy(level: VulgarityLevel, creator: string, t
   return { title: 'Çelınc iptal oldu', body: `${creator} "${title}" çelıncını iptal etti.` };
 }
 
-/** To the creator: an invitee said no. The one moment a "tırstı" is fair game. */
+/**
+ * To whoever called them in (the creator, unless a player did): an invitee
+ * said no. The one moment a "tırstı" is fair game.
+ */
 export function declinedCopy(level: VulgarityLevel, who: string, title: string): CopyText {
   if (level === 1) return { title: `${who} daveti reddetti`, body: `${who}, "${title}" çelıncına katılmayacak.` };
   if (level === 3) return { title: `${who} korktu kaçtı 🐔`, body: `"${title}" davetini görünce yok dedi. Adamlığı yetmedi 🍆` };
@@ -425,10 +428,11 @@ export function declinedCopy(level: VulgarityLevel, who: string, title: string):
 }
 
 /**
- * To the creator of a çelınc that has not started, or to the players of one
- * already running: somebody said yes. `count` is how many are in now. Nothing
- * hangs off the name: "de/da" and every case suffix follow its last vowel, and
- * a display name can be "MSN" or "🔥".
+ * To the creator (and whoever called them in) of a çelınc that has not
+ * started, or to the players of one already running: somebody said yes.
+ * `count` is how many are in now. Nothing hangs off the name: "de/da" and
+ * every case suffix follow its last vowel, and a display name can be "MSN" or
+ * "🔥".
  */
 export function acceptedCopy(level: VulgarityLevel, who: string, title: string, count: number): CopyText {
   if (level === 1) {
