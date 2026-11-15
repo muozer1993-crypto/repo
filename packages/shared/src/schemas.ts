@@ -141,6 +141,13 @@ export type LoginBody = z.infer<typeof LoginBodySchema>;
 export const ChangePasswordBodySchema = z.object({
   currentPassword: z.string().min(1, 'Mevcut şifre boş olamaz').max(LIMITS.PASSWORD_MAX),
   newPassword: PasswordSchema,
+  /**
+   * The push token this phone registered, or null when it has none. The
+   * account's push token survives the change only when it is this one: any
+   * other belongs to a phone the change signs out. Apps from before this field
+   * leave it out, and then the token stays as it was.
+   */
+  pushToken: z.string().trim().min(1).max(512).nullable().optional(),
 });
 export type ChangePasswordBody = z.infer<typeof ChangePasswordBodySchema>;
 

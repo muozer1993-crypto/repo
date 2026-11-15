@@ -220,8 +220,12 @@ export class ApiClient {
     return this.request<{ ok: true }>('DELETE', '/me');
   }
 
-  /** A wrong current password is a 400 `wrong_password`, so it never logs out. */
-  changePassword(body: { currentPassword: string; newPassword: string }) {
+  /**
+   * A wrong current password is a 400 `wrong_password`, so it never logs out.
+   * `pushToken` is the one this phone registered (null: none), so the server
+   * keeps it and drops one held by a phone the change signs out.
+   */
+  changePassword(body: { currentPassword: string; newPassword: string; pushToken?: string | null }) {
     return this.request<AuthResponse>('POST', '/me/password', { body });
   }
 

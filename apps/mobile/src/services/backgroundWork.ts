@@ -6,9 +6,9 @@ import { StorageKeys, getJson } from '@/lib/storage';
 import { guessServerUrl, serverUrlIsEditable } from '@/lib/config';
 import { deliverNewInbox } from '@/services/inboxNotifier';
 import { flushQueue } from '@/services/offlineQueue';
-import { refreshReminders } from '@/services/reminders';
+import { clearReminders, refreshReminders } from '@/services/reminders';
 import { syncScreenTimeNow } from '@/services/screenTimeSync';
-import { renewTokenIfDue } from '@/services/session';
+import { forgetStoredSession, renewTokenIfDue } from '@/services/session';
 import { syncStepsNow } from '@/services/stepSync';
 import { resolveTimezone } from '@/utils/datetime';
 
@@ -28,6 +28,12 @@ import { resolveTimezone } from '@/utils/datetime';
  * are planned again from the stored profile (the zustand store is not loaded
  * here). A phone nobody opens would otherwise keep the alarms it had the last
  * time somebody did, for a çelınc that has since been cancelled.
+ *
+ * A 401 ends the session here as it does in the app (the password changed on
+ * another phone, the owner reset it, the account was closed): nothing else
+ * would notice while the app stays swiped away, and the phone kept the dead
+ * token and rang the old account's check-in alarms for up to two weeks. The
+ * run stops there; the offline queue stays for the next sign-in.
  */
 export async function runBackgroundWork(): Promise<void> {
   const [token, storedUrl] = await Promise.all([
@@ -38,29 +44,51 @@ export async function runBackgroundWork(): Promise<void> {
 
   const baseUrl =
     serverUrlIsEditable() && typeof storedUrl === 'string' && storedUrl ? storedUrl : guessServerUrl();
-  const client = new ApiClient({ baseUrl, token, timeoutMs: 20_000 });
+  let turnedDown = false;
+  const client = new ApiClient({
+    baseUrl,
+    token,
+    timeoutMs: 20_000,
+    onUnauthorized: () => {
+      turnedDown = true;
+    },
+  });
   // a throwaway cache: nothing is mounted to read it, invalidation is a no-op
   const queryClient = new QueryClient();
+
+  /** True once the server turned the token down; the session is then gone from the phone. */
+  const sessionEnded = async (): Promise<boolean> => {
+    if (!turnedDown) return false;
+    // somebody signed in again meanwhile: that session is not this run's to end
+    if ((await getJson<string>(StorageKeys.token)) !== client.token) return true;
+    await clearReminders().catch(() => {});
+    await forgetStoredSession();
+    return true;
+  };
 
   // A phone that is only ever woken by this task still has to renew its token,
   // or steps and "KOYDUM MU?" stop the day it expires. Never throws.
   await renewTokenIfDue(client, (next) => client.withToken(next));
+  if (await sessionEnded()) return;
 
   try {
     await syncStepsNow({ client, queryClient });
   } catch {
     // the next foreground sync gets another go
   }
+  if (await sessionEnded()) return;
   try {
     await syncScreenTimeNow({ client, queryClient });
   } catch {
     // same
   }
+  if (await sessionEnded()) return;
   try {
     await flushQueue(client);
   } catch {
     // the queue keeps the entries
   }
+  if (await sessionEnded()) return;
   try {
     // the reason this task matters most: without Firebase push, this is how a
     // closed app still shows the loser "KOYDUM MU?"
@@ -68,6 +96,7 @@ export async function runBackgroundWork(): Promise<void> {
   } catch {
     // offline: the next run tries again
   }
+  if (await sessionEnded()) return;
   try {
     // the same level and zone the app would use (see useLevel / useTimezone);
     // the "Saatli çelınc uyarıları" switch is honoured inside
@@ -82,4 +111,5 @@ export async function runBackgroundWork(): Promise<void> {
   } catch {
     // the alarms already set stay; the next run tries again
   }
+  await sessionEnded();
 }

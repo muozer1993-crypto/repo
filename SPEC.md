@@ -179,7 +179,7 @@ night is not "zamanında kalktın". A badge already stored is never taken back w
 ```ts
 RegisterBody { username: /^[a-z0-9_]{3,20}$/ after foldUsername (lowercase, Turkish letters to ASCII, İ/I → i, other accents, spaces and invisible chars dropped: "Şeyma" → seyma, "İsmail" → ismail), password: min 6 max 72, displayName: 1..30, timezone: string (default 'Europe/Istanbul') }
 LoginBody { username (same fold), password }
-ChangePasswordBody { currentPassword: 1..72 (login rule), newPassword: min 6 max 72 (sign-up rule) }
+ChangePasswordBody { currentPassword: 1..72 (login rule), newPassword: min 6 max 72 (sign-up rule), pushToken?: string 1..512 | null (the push token this phone registered, see POST /me/password) }
 UpdateMeBody { displayName?, avatarEmoji? (1..4 chars), vulgarityMax? (1|2|3), timezone?, reminderHour? (0..23 | null), nudgesEnabled? (boolean), recapEnabled? (boolean) }
 PushTokenBody { token: string, platform: 'ios'|'android'|'web' }
 StepsSyncBody { days: { dayKey, steps: int 0..100000, source: 'pedometer'|'health_connect' }[] (max 14) }
@@ -216,8 +216,10 @@ Challenge { id, creatorId, typeKey, metricType, direction, unit, title, startsAt
 ParticipantView { user: PublicUser, status, score, days, rank, lastEntryAt, isWinner, lastSyncAt?: string | null }
   -- lastSyncAt: on an `active` çelınc of a phone-counted type (`deviceMetric`), an accepted player's newest
      `steps_daily` / `screen_time_daily` `updated_at`: when their phone last reported, which every sync stamps
-     whether or not a number moved. Null for a player whose phone never reported (they type), for everybody
-     who is not accepted, and on every other çelınc. Not `lastEntryAt` (the time of the newest entry, which
+     whether or not a number moved. Null for a player whose phone never reported (they type), for one who
+     typed an entry in this çelınc after it (the newest non-device entry's `updated_at` is later: an
+     iPhone after an Android, usage access taken back), for everybody who is not accepted, and on every
+     other çelınc. Not `lastEntryAt` (the time of the newest entry, which
      the reminders read as "wrote today"). Older servers leave it out.
 ChallengeSummary { challenge: Challenge, participants: ParticipantView[], me: ParticipantView | null, unreadTaunts: number }
 ChallengeDetail extends ChallengeSummary { myEntries: Entry[], feed: FeedItem[], disputes: Dispute[], taunts: Taunt[], canTaunt: { toUserId: string; done: boolean }[], canPoke: boolean, pokeTargets: { toUserId: string; done: boolean }[], disputesCloseAt?: string | null, feedCursor?: FeedCursor | null }
@@ -231,7 +233,7 @@ Entry { id, challengeId, userId, dayKey, value, source, note, proofUrl, status, 
 FeedItem { id, userId, displayName, dayKey, value, source, status, createdAt, updatedAt?: string, proofUrl, answerBy?: string | null, disputeVotes?: { open: number; needed: number } | null }
   -- updatedAt: the entry's `updated_at`, when the row last changed. A phone's row is created at the day's first
      sync and rewritten by later readings (steps only when they grow), so on one this is when its number came;
-     an itiraz's turns move it too. The feed's order and cursor stay on `createdAt`. Older servers leave it out.
+     an itiraz's turns (filed, taken back, answered, upheld) leave it alone there and move it on a typed row. The feed's order and cursor stay on `createdAt`. Older servers leave it out.
   -- feed: the 40 most recent entries (`LIMITS.FEED_PAGE`) plus every `disputed` one, however old (it is where the owner answers).
      feedCursor: set when older entries exist than those 40: the `createdAt` and `id` of the 40th, where GET
      /challenges/:id/feed goes on (the feed's last item is no use for that, an old disputed row can sit there);
@@ -344,7 +346,9 @@ taunt_followups(challenge_id TEXT, stage INTEGER, created_at TEXT, PRIMARY KEY(c
 Auth: `Authorization: Bearer <jwt>`; 401 `unauthorized`. The token's `ver` claim must equal the user's `token_version`
 (a token without one, signed before versions existed, counts as 0, where every account starts): a password change
 or an owner reset adds 1 and every older token gets the same 401 `unauthorized`, with the message "Şifren değişti, bu
-telefondaki oturum kapandı. Yeni şifreyle gir." (the app's login screen shows the 401's message). Validation errors → 400 `validation` with zod issues.
+telefondaki oturum kapandı. Yeni şifreyle gir." (the app's login screen shows the 401's message). A token of a deleted account
+gets the same code with "Bu hesap kapatıldı, bununla bir daha giriş yapılamaz. Bir yanlışlık varsa sunucuyu kuran kişiye
+sor." (no signing back in: the name is anonymised and the password gone). Validation errors → 400 `validation` with zod issues.
 Several endpoints take no request body. A JSON content type with an empty payload is parsed as `{}`
 rather than rejected, so a client that always sets `Content-Type: application/json` still works.
 
@@ -357,8 +361,8 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 | POST /auth/prove | no auth. `ProveBody { claims, nonce }`: `claims` is a token's own `header.payload` (not secret), `nonce` 16–128 base64url chars. Returns `{ origin, proof }`: `origin` = `publicOrigin` (PUBLIC_URL when set, else the request's address), `proof` = base64url HMAC-SHA256(key = HMAC-SHA256(jwtSecret, claims), i.e. that token's signature, message = `proveMessage(nonce, origin)`). The app checks it before its token goes to a new address (services/serverMove.ts): only a holder of the secret can answer, and an answer relayed from the real server names the real address. The signature itself is never sent either way |
 | GET /me | `Me` |
 | PATCH /me | partial update |
-| DELETE /me | soft delete: anonymize username → `deleted_<id8>`, clear push token, leave active challenges (each one then goes through the abandoned check of 2.4, without a `challenge_left`) — except a çelınc that is already past `ends_at` and still waiting (settle hour, dispute window): an accepted player stays in it, as the leave route refuses, so deleting the account cannot turn a lost result into a cancellation. Every entry of the user's outside such a çelınc loses `note` and `proof_url` (value and status stay, so no standing or result moves), and each photo file those entries pointed at (`…/uploads/<uuid>.<jpg\|png\|webp>`, relative or with a server address in front) is deleted from `UPLOAD_DIR` after the commit, unless an entry still points at it; a file already missing or that cannot be deleted is skipped. The owner's `yonet sil` does the same |
-| POST /me/password | `ChangePasswordBody`. Wrong current password → **400** `wrong_password` (never 401: the app logs out on any 401), new equal to current (after NFKC) → 400 `same_password`, 8 wrong ones per account in 15 min (login's per-account budget) → 429 `too_many_attempts`. Every attempt is counted before the password is checked and a right one clears the count, so a burst sent at once cannot outrun the budget (login counts the same way). Returns `{ token, me }` like login, at the new `token_version`: every other phone signed in to the account gets 401 from then on. The push token is cleared too (the phone holding it may be one of those, and its own logout can no longer clear it); the app sends it again for the new session |
+| DELETE /me | soft delete: anonymize username → `deleted_<id8>`, clear push token, leave active challenges (each one then goes through the abandoned check of 2.4, without a `challenge_left`) — except a çelınc that is already past `ends_at` and still waiting (settle hour, dispute window): an accepted player stays in it, as the leave route refuses, so deleting the account cannot turn a lost result into a cancellation. Every entry of the user's outside such a çelınc loses `note` and `proof_url` (value and status stay, so no standing or result moves), and each photo file those entries pointed at (`…/uploads/<uuid>.<jpg\|png\|webp>`, relative or with a server address in front) is deleted from `UPLOAD_DIR` after the commit, unless an entry still points at it; a file already missing or that cannot be deleted is skipped. The ones kept for a çelınc still waiting go once it is `finished` or `cancelled`: every scheduler pass (2.4) clears `note` and `proof_url` of a deleted account's entries outside such a çelınc and deletes the files the same way (`clearDeletedTraces`), which on its first pass also takes those of accounts deleted before deleting cleared them. The owner's `yonet sil` does the same |
+| POST /me/password | `ChangePasswordBody`. Wrong current password → **400** `wrong_password` (never 401: the app logs out on any 401), new equal to current (after NFKC) → 400 `same_password`, 8 wrong ones per account in 15 min (login's per-account budget) → 429 `too_many_attempts`. Every attempt is counted before the password is checked and a right one clears the count, so a burst sent at once cannot outrun the budget (login counts the same way). Returns `{ token, me }` like login, at the new `token_version`: every other phone signed in to the account gets 401 from then on. The body's optional `pushToken` is the push token the changing phone registered (null: none). The account's push token stays only when it is that one; otherwise it is cleared (the phone holding it is one of those signed out, and its own logout can no longer clear it), and the app sends its own again for the new session. Without the field (the 1.1.0 app, which sends a device token once per run, not per session) the push token stays as it is: cleared, that phone went without push and without its own notifications until a restart |
 | POST /me/push-token | store. One phone, one account: the same token is cleared from every other account that holds it (the last account to sign in on the phone owns it; logout's DELETE is best effort and may never arrive). A token new to the account (not the one it already holds) marks the account's waiting rows `push_error = 'before_token'`: they were the phone's own inbox check's to show, or history a fresh sign-in does not replay, so they stay in the inbox and are never pushed. The same token again (the app sends it on every start) changes nothing |
 | DELETE /me/push-token | clear (logout) |
 | POST /me/steps | upsert steps_daily; for every active/pending challenge with `deviceMetric: 'steps'` the user has accepted and whose day range contains dayKey → upsert entry(source). From `endsAt` on only days that were over by `endsAt` in the player's pinned zone (`dayOverByEnd`) still move: a later reading of a day the end cut in half would carry steps taken after the end. Returns `{ updated: number }` (`services/deviceSync.ts`)  Then awards any badge the new steps earned (the step ladder reads `steps_daily`), so "Yola Çıktın" arrives with the sync that crossed 7.500, not at the next finish or laf. |
@@ -617,7 +621,7 @@ components/PermissionBanner.tsx home card above BatteryBanner: shown while pushP
 components/BatteryBanner.tsx home card, once: shown when the stored push reason (`StorageKeys.pushReason`, written by NotificationBridge after every registerForPush) is 'no-fcm' and getBackgroundHealth says battery-restricted; "Kısıtlamayı kaldır" → requestBatteryExemption, "Kalsın" → `StorageKeys.dismissedBatteryCard` for good; re-checked on AppState active
 services/notifications.ts  registerForPush({ askAgain? }) → token or null (never throws; web returns null; asks for the permission when not granted, except that NotificationBridge passes `askAgain: false` and so asks only when nothing has this app run: a no on the welcome slide is not followed by the same dialog on home. startForegroundStepTracking treats the physical activity dialog the same way; taps always ask); pushPermissionStatus() → 'granted' | 'denied' | 'undetermined' | 'unknown' (never asks); setNotificationHandler; Android channel; response listener → router.push to challenge/inbox (the route keeps `notificationId` so the tap marks the row read, 3.5)
 services/notifications.ts fireLocal(title, body, data) — used when a new inbox item arrives that was not pushed (device without push). On Android it posts on the `koydum` channel (trigger `{ channelId }`); a `null` trigger would land in the library's English "Miscellaneous" fallback channel
-services/background.ts   BackgroundTask (15 min): sync steps + fetch unread inbox → fire local notifications for new items (skip on web / Expo Go gracefully). With the app swiped away the task runs headless (services/backgroundWork.ts) and does the same from the stored session (and re-plans the phone's own reminders, 3.5), renewing the token first when it is due (a phone only ever woken by the task must not lose its session at day 90). The app entry `index.ts` (package.json `main`) imports `expo-router/entry` and then this file, so the task is defined even in a headless run, where expo-router never renders `_layout`; an undefined task is unregistered by expo-task-manager.
+services/background.ts   BackgroundTask (15 min): sync steps + fetch unread inbox → fire local notifications for new items (skip on web / Expo Go gracefully). With the app swiped away the task runs headless (services/backgroundWork.ts) and does the same from the stored session (and re-plans the phone's own reminders, 3.5), renewing the token first when it is due (a phone only ever woken by the task must not lose its session at day 90). A 401 there ends the session as the app's logout does on the phone (`forgetStoredSession`: token, its stamp, me, serverId, push token, inbox cursor; and `clearReminders`) and stops the run; the offline queue stays for the next sign-in. The app entry `index.ts` (package.json `main`) imports `expo-router/entry` and then this file, so the task is defined even in a headless run, where expo-router never renders `_layout`; an undefined task is unregistered by expo-task-manager.
 services/inboxNotifier.ts deliverNewInbox(client, surface | () => surface) → { surface, items }: the one place that turns unread, un-pushed inbox items into phone notifications (or, when on screen, items for ONE in-app toast of the newest with "N bildirim daha"). The surface is resolved after the fetch. Shared by the foreground poll, the background handler and the headless task. Only rows newer than the stored lastInboxId count (one full page of 100 is fetched); delivered ids are remembered (last 100) so racing checks never show an item twice; the first check on an install replays nothing (an empty first inbox stores a sentinel so the first row that ever arrives is shown); more than 3 new items → 2 shown + one "N bildirim daha". A phone holding a registered push token only updates the badge: push delivers there, and a local copy shown before the server's next flush would ring twice. This is what makes "KOYDUM MU?" reach a closed phone on a build without Firebase (registerForPush reports reason 'no-fcm', settings says "Gecikmeli").
 services/focus.ts        focus session engine: start/stop, AppState listener → abandon when app leaves foreground > 10 s (grace), persists in-progress session to survive reload; `finishEarly` ends a live session on its whole minutes when the çelınc is about to end
 theme/                   colors, spacing, typography (dark neon), components: Screen, Button, Card, Avatar, Chip, Stat, ProgressBar, Countdown, EmptyState, Toast, TauntBubble, Confetti (reanimated, optional), Sheet
@@ -662,7 +666,7 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             pages of 30 (useInfiniteQuery on qk.inbox): reaching the end, or "Daha eskileri göster", loads the next
                             older page with `before` = the last row's createdAt + 1 ms (rows sharing that millisecond come again and
                             are shown once); a failed older page keeps the list, says "Eskiler gelmedi" and only the button retries
-(app)/(tabs)/profile.tsx    me: avatar emoji picker, stats grid (Koydum / Yedin / Berabere / Kankalar), badges (named by `badgeTitle` at my level), leaderboard preview, settings link, logout
+(app)/(tabs)/profile.tsx    me: avatar emoji picker, stats grid (Koydum 🍆 / Yedim 😵 / Berabere / Kanka / Çelınc / Rövanş; at my level 1 Galibiyet 🏆 / Yenilgi), badges (named by `badgeTitle` at my level), leaderboard preview, settings link, logout
 (app)/challenge/new.tsx     4-step wizard: 1) tip seç (grouped by category, each shows emoji + name + desc at my level)
                             2) ayarlar (title, start now / tomorrow, duration days 1/3/7/14/30 or custom, deadline time for checkin, proof toggle, reward, penalty;
                             a deadline at or before the type's window start is refused on the spot with the schema's message, and an
@@ -685,7 +689,8 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             else below the action area, folded,
                             my action area per metric type (see 3.4), feed of recent entries ("Bugün · 👟 sayaç · 10 dakika
                             önce": a phone's row (`pedometer`, `health_connect`, `usage_stats`) is timed by `updatedAt ??
-                            createdAt`, a typed one by `createdAt`) with dispute button (only while
+                            createdAt`, a typed one by `createdAt`, both read against the screen's clock, the last fetch,
+                            as the standings' quiet-phone line is) with dispute button (only while
                             the server takes one: `active` and before `endsAt`, plus the settle hour of a phone-counted type);
                             with `feedCursor` set a ghost "Daha eski girişler" under it loads the older ones, the same rows
                             and chips, newest first with the detail's (`useChallengeFeed`: pages from the newest, the first
@@ -696,8 +701,10 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             row; a disputed row says "İtiraz var. {kalan} içinde kanıt gelmezse yanar." from `answerBy`,
                             "İtiraz 1/5. 4 kişi daha itiraz ederse 12 saatlik kanıt süresi başlar." from `disputeVotes`,
                             or "henüz çoğunluk değil" without either; the "İtiraz gitti" toast says "{kalan} içinde
-                            kanıt gelmezse giriş yanar." when the response has `answerBy`, "Diğerlerine de haber gitti.
-                            Çoğunluk itiraz ederse sahibinin 12 saati başlar." when it is null; my own open dispute's chip is "Geri çek" (confirm →
+                            kanıt gelmezse giriş yanar." when the response has `answerBy`; when it is null "{n} kankaya
+                            haber gitti. Çoğunluk itiraz ederse sahibinin 12 saati başlar." with `othersCalled` > 0, and
+                            only the second sentence otherwise (0, or a server from before the call, which sends no count
+                            and called nobody but the owner); my own open dispute's chip is "Geri çek" (confirm →
                             DELETE); the owner's disputed row gets "Kanıt ekle", a sheet with the entry modal's camera /
                             gallery pick → /uploads → POST .../proof),
                             past `endsAt` but still `active` (settling, 2.4) → "Süre bitti / Sonuç birazdan" instead of the
@@ -781,7 +788,7 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             says YEDİN there too); `with=<userId>` keeps the ones we both played
                             (both `accepted`) until "Herkesle"; `show=<chip>` opens on that chip (the rövanş badge → Yediklerim);
                             tap → results (finished) or the çelınc (cancelled); pull-to-refresh
-(app)/user/[id].tsx         public profile (badges named by `badgeTitle` at MY level, not theirs) + head-to-head record vs me (finished çelınclar we both played, both `accepted`:
+(app)/user/[id].tsx         public profile (stats Koydu 🍆 / Yedi 🍽️ / Çelınc, at MY level 1 Galibiyet 🏆 / Yenilgi 😵; badges named by `badgeTitle` at MY level, not theirs) + head-to-head record vs me (finished çelınclar we both played, both `accepted`:
                             one who declined or left sits at rank 0 and is no round; tap → history `with` them) + "Çelınc aç" shortcut; not friends yet →
                             "Kanka isteği gönder", "Kanka isteğini kabul et" for an incoming one, "İsteği geri çek"
                             (confirm) for my own; "Diğer seçenekler": copy username, remove friend, report, block
@@ -809,7 +816,7 @@ davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), r
 
 ### 3.5 Notifications & polling
 
-- On login/boot: `registerForPush()`; if token → POST /me/push-token, once per session token (a password change clears it on the server and hands out a new session, so the same device token goes up again; a failed POST is retried on the next foreground). Handler shows banner+list+sound.
+- On login/boot: `registerForPush()`; if token → POST /me/push-token, once per session token (a password change hands out a new session, and when the server cleared the push token the same device token goes up again; a failed POST is retried on the next foreground). The password sheet sends the token it registered (`StorageKeys.pushToken`, null without one) as `pushToken`, so the server keeps it and drops one held by a phone the change signs out. Handler shows banner+list+sound.
 - `useUnreadCount` polls every 30 s in foreground, plus refetch on AppState active. When `latestId` changes and the new
   items have `pushedAt == null` (server includes `pushed` flag) and app is in background → `fireLocal`. In foreground → in-app Toast.
 - Tapping a notification response routes: taunt/challenge_* → `/challenge/[id]/results` or `/challenge/[id]`, friend_* → friends tab.

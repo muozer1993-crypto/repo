@@ -85,6 +85,16 @@ export function isDeviceSource(source: string): boolean {
   return (DEVICE_SOURCES as readonly string[]).includes(source);
 }
 
+/**
+ * `updated_at` for an itiraz turn, which moves the status (or adds a proof) but
+ * not the number. On a row the phone writes, `updated_at` is when its number
+ * came, and the feed shows it as how fresh that phone is: an itiraz at 21:05 on
+ * Veli's 15:00 reading put "21:05" on a phone that had been quiet for six hours.
+ * A typed row's time is when it was typed (its `created_at`), so its turns may
+ * stamp it. Binds one parameter, the turn's time.
+ */
+const ITIRAZ_UPDATED_AT = `CASE WHEN source IN (${DEVICE_SOURCES.map((source) => `'${source}'`).join(', ')}) THEN updated_at ELSE ? END`;
+
 function unitLabel(type: ChallengeType, value: number): string {
   const unit = type.unitTr.trim();
   return unit ? `${formatNumberTr(value)} ${unit}` : formatNumberTr(value);
@@ -629,7 +639,7 @@ export function recordDispute(
       ).run(dispute);
     }
     if (entry.status === 'ok') {
-      db.prepare("UPDATE entries SET status = 'disputed', updated_at = ? WHERE id = ?").run(iso, entry.id);
+      db.prepare(`UPDATE entries SET status = 'disputed', updated_at = ${ITIRAZ_UPDATED_AT} WHERE id = ?`).run(iso, entry.id);
     }
     openCount = countOf(db, "SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ? AND status = 'open'", entry.id);
     reachedThreshold = syncDisputeClocks(db, challenge.id, now, entry.id).length > 0;
@@ -666,7 +676,10 @@ export function withdrawDispute(
     db.prepare("UPDATE disputes SET status = 'dismissed' WHERE id = ?").run(dispute.id);
     const open = countOf(db, "SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ? AND status = 'open'", entry.id);
     if (open === 0 && entry.status === 'disputed') {
-      db.prepare("UPDATE entries SET status = 'ok', answer_by = NULL, updated_at = ? WHERE id = ?").run(nowIso(now), entry.id);
+      db.prepare(`UPDATE entries SET status = 'ok', answer_by = NULL, updated_at = ${ITIRAZ_UPDATED_AT} WHERE id = ?`).run(
+        nowIso(now),
+        entry.id,
+      );
     } else {
       // no longer a majority: the owner's clock stops
       syncDisputeClocks(db, entry.challenge_id, now, entry.id);
@@ -708,7 +721,7 @@ export function answerDisputeWithProof(
       }[]
     ).map((row) => row.by_user_id);
     db.prepare("UPDATE disputes SET status = 'dismissed' WHERE entry_id = ? AND status = 'open'").run(entry.id);
-    db.prepare("UPDATE entries SET proof_url = ?, status = 'ok', answer_by = NULL, updated_at = ? WHERE id = ?").run(
+    db.prepare(`UPDATE entries SET proof_url = ?, status = 'ok', answer_by = NULL, updated_at = ${ITIRAZ_UPDATED_AT} WHERE id = ?`).run(
       proofUrl,
       nowIso(now),
       entry.id,
@@ -739,7 +752,7 @@ export function upholdDisputes(db: Database, challenge: ChallengeRow, entry: Ent
       }[]
     ).map((row) => row.by_user_id);
     db.prepare("UPDATE disputes SET status = 'upheld' WHERE entry_id = ? AND status = 'open'").run(entry.id);
-    db.prepare("UPDATE entries SET status = 'rejected', updated_at = ? WHERE id = ?").run(iso, entry.id);
+    db.prepare(`UPDATE entries SET status = 'rejected', updated_at = ${ITIRAZ_UPDATED_AT} WHERE id = ?`).run(iso, entry.id);
 
     const after = restoreFromPhone(db, challenge, entry, now) ? getEntryRow(db, entry.id) : undefined;
     const phone = after ? scoreLabel(type, Number(after.value)) : null;

@@ -1,5 +1,5 @@
 import type { ApiClient } from '@/lib/api';
-import { StorageKeys, getJson, setJson } from '@/lib/storage';
+import { StorageKeys, getJson, removeItem, setJson } from '@/lib/storage';
 
 /**
  * Keeps a session alive without anybody typing their password again.
@@ -14,6 +14,25 @@ import { StorageKeys, getJson, setJson } from '@/lib/storage';
 
 /** How old the last renewal may get before the next one. */
 export const RENEW_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Removes what a session keeps on the phone: the token and its renewal stamp,
+ * the stored profile, the server id it vouched for, the push token it
+ * registered, and the inbox cursor (otherwise the next account's first poll
+ * replays this one's history as local notifications). The store's logout and
+ * the headless task after a 401 both end a session with it. The offline queue
+ * is not part of it: it waits for the next sign-in (services/offlineQueue).
+ */
+export async function forgetStoredSession(): Promise<void> {
+  await Promise.all([
+    removeItem(StorageKeys.token),
+    removeItem(StorageKeys.tokenRenewedAt),
+    removeItem(StorageKeys.me),
+    removeItem(StorageKeys.serverId),
+    removeItem(StorageKeys.pushToken),
+    removeItem(StorageKeys.lastInboxId),
+  ]);
+}
 
 /** The token on this phone was just issued (login, sign-up, password change). */
 export async function markTokenRenewed(now: Date = new Date()): Promise<void> {

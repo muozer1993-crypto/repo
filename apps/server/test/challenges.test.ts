@@ -800,6 +800,63 @@ describe('how fresh a phone\'s count is', () => {
     expect(detail.participants.every((p) => p.lastSyncAt === null)).toBe(true);
   });
 
+  it('says nothing about a phone gone quiet under a player who types now', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await twoPlayerChallenge(harness);
+    // both had a phone that synced a month ago, and neither has since
+    const monthAgo = new Date(harness.now().getTime() - 30 * 24 * HOUR).toISOString();
+    const oldDay = monthAgo.slice(0, 10);
+    for (const user of [ali, veli]) {
+      harness.db
+        .prepare("INSERT INTO steps_daily (user_id, day_key, steps, source, updated_at) VALUES (?, ?, 8000, 'pedometer', ?)")
+        .run(user.me.id, oldDay, monthAgo);
+    }
+    // Veli is on an iPhone now and types his steps
+    harness.advance(HOUR);
+    await postEntry(harness, veli, challengeId, { dayKey: today(harness), value: 6000, source: 'manual', clientTime: iso(harness) });
+
+    let detail = await detailFor(harness, ali, challengeId);
+    expect(detail.participants.find((p) => p.user.id === veli.me.id)?.lastSyncAt).toBeNull();
+    // Ali's phone is simply dead: that one is news
+    expect(detail.participants.find((p) => p.user.id === ali.me.id)?.lastSyncAt).toBe(monthAgo);
+
+    // and once Veli's phone speaks after what he typed, it is his phone's line again
+    harness.advance(HOUR);
+    await syncSteps(harness, veli, 7000);
+    detail = await detailFor(harness, ali, challengeId);
+    expect(detail.participants.find((p) => p.user.id === veli.me.id)?.lastSyncAt).toBe(iso(harness));
+  });
+
+  it('keeps a phone row at the time its number came through an itiraz and its withdrawal', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await twoPlayerChallenge(harness);
+    const synced = iso(harness);
+    await syncSteps(harness, veli, 4201);
+    const entryId = (await detailFor(harness, ali, challengeId)).feed.find((item) => item.userId === veli.me.id)!.id;
+
+    // Veli's phone went quiet; six hours on Ali questions the 4.201
+    harness.advance(6 * HOUR);
+    const disputed = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'bu sayı nereden çıktı' },
+    });
+    expect(disputed.statusCode).toBe(201);
+    let row = (await detailFor(harness, ali, challengeId)).feed.find((item) => item.id === entryId);
+    expect(row?.status).toBe('disputed');
+    expect(row?.updatedAt).toBe(synced);
+
+    harness.advance(HOUR);
+    const withdrawn = await authed(harness.app, ali.token)({
+      method: 'DELETE',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+    });
+    expect(withdrawn.statusCode).toBe(200);
+    row = (await detailFor(harness, ali, challengeId)).feed.find((item) => item.id === entryId);
+    expect(row?.status).toBe('ok');
+    expect(row?.updatedAt).toBe(synced);
+  });
+
   it('says nothing about phones on a çelınc the phone does not count', async () => {
     harness = await makeApp({ now: NOW });
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });

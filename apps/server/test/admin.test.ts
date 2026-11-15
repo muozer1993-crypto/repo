@@ -105,7 +105,13 @@ describe('deleteAccount', () => {
     expect(accountToDelete(h.db, 'Şeyma')).toEqual({ username: 'seyma', displayName: 'Şeyma' });
     expect(deleteAccount(h.db, ' @Şeyma ', h.now(), h.config.uploadDir)).toEqual({ username: 'seyma', displayName: 'Şeyma' });
 
-    expect((await me({ method: 'GET', url: '/me' })).statusCode).toBe(401);
+    const out = await me({ method: 'GET', url: '/me' });
+    expect(out.statusCode).toBe(401);
+    // the one code SPEC knows, and a message that does not send her back to the login
+    expect(out.json<{ error: { code: string; message: string } }>().error).toEqual({
+      code: 'unauthorized',
+      message: 'Bu hesap kapatıldı, bununla bir daha giriş yapılamaz. Bir yanlışlık varsa sunucuyu kuran kişiye sor.',
+    });
     expect((await login(h.app, 'seyma', DEFAULT_PASSWORD)).statusCode).toBe(401);
     const row = listUsers(h.db).find((u) => u.deletedAt !== null);
     expect(row).toMatchObject({ displayName: 'Silinen kanka', deletedAt: h.now().toISOString() });

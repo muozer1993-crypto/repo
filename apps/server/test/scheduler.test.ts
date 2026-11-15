@@ -27,7 +27,7 @@ import {
   STOP_WAIT_MS,
 } from '../src/services/scheduler.js';
 import { getBadges } from '../src/services/stats.js';
-import type { ChallengeRow, ParticipantRow } from '../src/db/index.js';
+import { newId, nowIso, type ChallengeRow, type ParticipantRow } from '../src/db/index.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
@@ -1419,6 +1419,33 @@ function heldPush(): { push: PushSender; flushing: () => boolean; release: () =>
   };
   return { push, flushing: () => started, release: () => release() };
 }
+
+describe('scheduler: what deleted accounts left', () => {
+  it('takes the notes and photos of an account deleted before deleting did, on the first pass', async () => {
+    harness = await makeApp({ now: NOW });
+    const { veli, challengeId } = await pendingChallenge(harness);
+    // a çelınc long since decided
+    harness.db.prepare("UPDATE challenges SET status = 'finished' WHERE id = ?").run(challengeId);
+    const now = nowIso(harness.now());
+    harness.db
+      .prepare(
+        `INSERT INTO entries (id, challenge_id, user_id, day_key, value, source, note, proof_url, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 9000, 'manual', 'Sahilden eve', '/uploads/00000000-0000-0000-0000-000000000000.jpg', 'ok', ?, ?)`,
+      )
+      .run(newId(), challengeId, veli.me.id, today(harness), now, now);
+    // deleted by a server from before this sweep, which left the note and photo
+    harness.db.prepare("UPDATE users SET display_name = 'Silinen kanka', deleted_at = ? WHERE id = ?").run(now, veli.me.id);
+
+    const stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush });
+    // the first pass runs right at start; stop waits for it
+    await stop();
+
+    const left = harness.db
+      .prepare('SELECT note, proof_url, value FROM entries WHERE challenge_id = ? AND user_id = ?')
+      .all(challengeId, veli.me.id);
+    expect(left).toEqual([{ note: null, proof_url: null, value: 9000 }]);
+  });
+});
 
 describe('scheduler: stop', () => {
   it('waits for the push flush in flight, so the database does not close under it', async () => {

@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { ApiClient } from '@/lib/api';
 import { ApiError } from '@/lib/api';
-import { StorageKeys, getJson, removeItem, setJson } from '@/lib/storage';
+import { StorageKeys, getItem, getJson, removeItem, setItem, setJson } from '@/lib/storage';
 import { runBackgroundWork } from '@/services/backgroundWork';
 import { RENEW_AFTER_MS, renewTokenIfDue } from '@/services/session';
 
@@ -20,9 +20,10 @@ jest.mock('@/services/offlineQueue', () => ({ flushQueue: jest.fn(async () => {}
 const mockDeliverNewInbox = jest.fn(async () => {});
 jest.mock('@/services/inboxNotifier', () => ({ deliverNewInbox: () => mockDeliverNewInbox() }));
 const mockRefreshReminders = jest.fn(async (_client: ApiClient, _level: number, _tz: string) => 0);
+const mockClearReminders = jest.fn(async () => {});
 jest.mock('@/services/reminders', () => ({
   refreshReminders: (client: ApiClient, level: number, tz: string) => mockRefreshReminders(client, level, tz),
-  clearReminders: async () => {},
+  clearReminders: () => mockClearReminders(),
 }));
 
 const NOW = new Date('2026-09-27T10:00:00.000Z');
@@ -42,6 +43,7 @@ beforeEach(async () => {
   mockSyncStepsNow.mockClear();
   mockDeliverNewInbox.mockClear();
   mockRefreshReminders.mockClear();
+  mockClearReminders.mockClear();
 });
 
 afterAll(async () => {
@@ -150,6 +152,35 @@ describe('the headless background task', () => {
 
     expect(mockRefreshReminders).not.toHaveBeenCalled();
     expect(mockDeliverNewInbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('signs the phone out on a 401 and stops, as the app would', async () => {
+    // the password changed on another phone while this one sat swiped away
+    await setJson(StorageKeys.tokenRenewedAt, new Date().toISOString());
+    await setJson(StorageKeys.me, { id: 'me-1', vulgarityMax: 2, timezone: 'Europe/Istanbul' });
+    await setItem(StorageKeys.pushToken, 'ExponentPushToken[bu-telefon]');
+    await setItem(StorageKeys.lastInboxId, 'n-9');
+    (global as unknown as { fetch: unknown }).fetch = jest.fn(async () =>
+      new Response(JSON.stringify({ error: { code: 'unauthorized', message: 'Şifren değişti, bu telefondaki oturum kapandı. Yeni şifreyle gir.' } }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    mockSyncStepsNow.mockImplementationOnce(async ({ client }) => {
+      await client.me();
+    });
+
+    await expect(runBackgroundWork()).resolves.toBeUndefined();
+
+    expect(await getJson<string>(StorageKeys.token)).toBeNull();
+    expect(await getJson<unknown>(StorageKeys.me)).toBeNull();
+    expect(await getItem(StorageKeys.pushToken)).toBeNull();
+    expect(await getItem(StorageKeys.lastInboxId)).toBeNull();
+    // the old account's check-in alarms go with it
+    expect(mockClearReminders).toHaveBeenCalledTimes(1);
+    // and nothing else is tried with a dead token
+    expect(mockDeliverNewInbox).not.toHaveBeenCalled();
+    expect(mockRefreshReminders).not.toHaveBeenCalled();
   });
 
   it('gets through the run when the reminders cannot be planned', async () => {

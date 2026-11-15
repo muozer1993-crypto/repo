@@ -50,7 +50,7 @@ import {
   type UserRow,
 } from '../db/index.js';
 import { asVulgarityLevel, toPublicUser } from '../serialize.js';
-import { disputeAwaitingAnswer, resolveDisputes } from './entries.js';
+import { disputeAwaitingAnswer, isDeviceSource, resolveDisputes } from './entries.js';
 import { isBlockedBetween } from './friends.js';
 import { notify } from './notifications.js';
 import { joinNames, sendWeeklyRecaps } from './recap.js';
@@ -339,7 +339,9 @@ function rankAccepted(
  * cannot tell: a day's row is written at the first sync after midnight, and
  * a step day only moves when its number grows. Kept apart from `lastEntryAt`,
  * which the app's reminders read as "wrote today". Somebody who only types
- * never syncs and is left out.
+ * never syncs and is left out; one whose phone once did (an Android since
+ * swapped for an iPhone, usage access taken back) is left out by
+ * `computeStandings` once they type here after the phone's last word.
  */
 function lastPhoneSyncs(db: Database, challenge: ChallengeRow, type: ChallengeType, userIds: string[]): Map<string, string> {
   const metric = type.deviceMetric;
@@ -373,18 +375,32 @@ export function computeStandings(db: Database, challenge: ChallengeRow, now: Dat
 
   const byUser = new Map<string, ScoreInput['entries']>();
   const lastEntryAt = new Map<string, string>();
+  /** the newest number each player typed here, as opposed to one their phone sent */
+  const lastTypedAt = new Map<string, string>();
   for (const entry of entries) {
     const list = byUser.get(entry.user_id) ?? [];
     list.push({ dayKey: entry.day_key, value: Number(entry.value), status: entry.status as ScoreInput['entries'][number]['status'] });
     byUser.set(entry.user_id, list);
     const previous = lastEntryAt.get(entry.user_id);
     if (!previous || entry.created_at > previous) lastEntryAt.set(entry.user_id, entry.created_at);
+    if (!isDeviceSource(entry.source)) {
+      const typed = lastTypedAt.get(entry.user_id);
+      if (!typed || entry.updated_at > typed) lastTypedAt.set(entry.user_id, entry.updated_at);
+    }
   }
 
   const accepted = participants.filter((p) => p.status === 'accepted');
   const { ranking, days } = rankAccepted(db, challenge, type, accepted, users, byUser, now);
   const byUserResult = new Map(ranking.results.map((r) => [r.userId, r]));
-  const lastSyncAt = lastPhoneSyncs(db, challenge, type, accepted.map((p) => p.user_id));
+  const syncs = lastPhoneSyncs(db, challenge, type, accepted.map((p) => p.user_id));
+  // A number typed after the phone's last word is the newest one here: the
+  // player types now, and "telefonu sustu, sayı bayat" would sit under a number
+  // they typed this morning.
+  const lastSyncAt = (userId: string): string | null => {
+    const sync = syncs.get(userId);
+    const typed = lastTypedAt.get(userId);
+    return sync !== undefined && (typed === undefined || sync > typed) ? sync : null;
+  };
 
   const finished = challenge.status === 'finished';
   const views: ParticipantView[] = [];
@@ -402,7 +418,7 @@ export function computeStandings(db: Database, challenge: ChallengeRow, now: Dat
       rank: useStored ? Number(participant.final_rank) : (computed?.rank ?? 0),
       lastEntryAt: lastEntryAt.get(participant.user_id) ?? null,
       isWinner: finished ? challenge.winner_id === participant.user_id : (computed?.isWinner ?? false),
-      lastSyncAt: lastSyncAt.get(participant.user_id) ?? null,
+      lastSyncAt: lastSyncAt(participant.user_id),
     });
   }
 

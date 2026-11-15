@@ -66,8 +66,12 @@ export function registerAuth(app: FastifyInstance, deps: AuthDeps): void {
     if (!claims) throw unauthorized('unauthorized', 'Oturumun geçersiz ya da süresi dolmuş. Tekrar giriş yap.');
 
     const row = selectUser.get(claims.sub) as UserRow | undefined;
-    if (!row || row.deleted_at !== null) {
-      throw unauthorized('unauthorized', 'Oturumun geçersiz ya da süresi dolmuş. Tekrar giriş yap.');
+    if (!row) throw unauthorized('unauthorized', 'Oturumun geçersiz ya da süresi dolmuş. Tekrar giriş yap.');
+    // Closed with "Hesabı sil" or the owner's `yonet sil`: there is no signing
+    // back in (the name is anonymised, the password gone), so the phone must
+    // not be told to try.
+    if (row.deleted_at !== null) {
+      throw unauthorized('unauthorized', 'Bu hesap kapatıldı, bununla bir daha giriş yapılamaz. Bir yanlışlık varsa sunucuyu kuran kişiye sor.');
     }
     // Signed before the last password change or owner reset: whoever still holds
     // it (a friend's phone the account was once opened on) is out. Same single

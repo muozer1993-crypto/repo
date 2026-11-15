@@ -1768,13 +1768,13 @@ function Feed({
       const { answerBy, othersCalled } = await dispute.mutateAsync({ entryId: target.id, reason: text });
       // At the majority the owner's clock runs (maybe since an earlier itiraz);
       // below it the first itiraz calls the other players to it, and the server
-      // says how many it reached. An older server sends neither count nor, at
-      // first, `answerBy`.
+      // says how many it reached. A server from before that sends no count, and
+      // it called nobody but the owner, so only a count says anybody was told.
+      // The oldest send no `answerBy` either.
       const left = answerBy ? Date.parse(answerBy) - Date.now() : Number.NaN;
       const majority = `Çoğunluk itiraz ederse sahibinin ${ANSWER_HOURS} saati başlar.`;
       let body = 'Kankalar bakacak.';
       if (left > 0) body = `${formatRemaining(left)} içinde kanıt gelmezse giriş yanar.`;
-      else if (answerBy === null && othersCalled === undefined) body = `Diğerlerine de haber gitti. ${majority}`;
       else if (answerBy === null && (othersCalled ?? 0) > 0) body = `${othersCalled} kankaya haber gitti. ${majority}`;
       else if (answerBy === null) body = majority;
       toast({ title: 'İtiraz gitti', body, kind: 'info' });
@@ -1863,6 +1863,7 @@ function Feed({
                 reasons={reasons}
                 statusText={item.status === 'disputed' ? disputeStatusText(item, isMine, active, now) : null}
                 active={active}
+                now={now}
                 canDispute={canDispute}
                 today={today}
                 yesterday={yesterday}
@@ -2005,6 +2006,7 @@ function FeedRow({
   reasons,
   statusText,
   active,
+  now,
   canDispute,
   today,
   yesterday,
@@ -2027,6 +2029,13 @@ function FeedRow({
   reasons: { id: string; name: string; reason: string }[];
   statusText: string | null;
   active: boolean;
+  /**
+   * The screen's clock (the last fetch). The row's "x dakika önce" is read
+   * against it: the compiler keeps a value computed from the item alone until
+   * the item changes, and a quiet phone's row never does, so its "5 dakika
+   * önce" stood for hours under a standings line saying the phone went quiet.
+   */
+  now: number;
   /** whether the server still takes a new itiraz (see Feed) */
   canDispute: boolean;
   today: string;
@@ -2114,7 +2123,7 @@ function FeedRow({
         </View>
         <Text variant="tiny" faint numberOfLines={1}>
           {formatDayKeyFriendly(item.dayKey, today, yesterday)} · {SOURCE_ICON[item.source] ?? '•'}{' '}
-          {SOURCE_LABEL[item.source] ?? item.source} · {relativeTime(feedTime(item))}
+          {SOURCE_LABEL[item.source] ?? item.source} · {relativeTime(feedTime(item), new Date(now))}
         </Text>
         {rejected ? (
           <Text variant="tiny" color={Colors.danger}>

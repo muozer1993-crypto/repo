@@ -17,6 +17,7 @@ import {
   type Notification,
 } from '@koydum/shared';
 import { newId, nowIso, type ChallengeRow, type EntryRow, type UserRow } from '../src/db/index.js';
+import { clearDeletedTraces } from '../src/services/accounts.js';
 import { createPushSender } from '../src/services/push.js';
 import { GPS_MARKER, JPEG_1X1, JPEG_WITH_GPS, authed, makeApp, multipart, registerUser, type TestApp } from './helpers.js';
 
@@ -508,6 +509,61 @@ describe('DELETE /me', () => {
     expect(entryRow(h, kept)).toMatchObject({ note: 'Kanıt burada', proof_url: photo.url });
     expect(entryRow(h, cleared).proof_url).toBeNull();
     expect(fs.existsSync(photo.file)).toBe(true);
+  });
+
+  it('takes that proof too once the çelınc is decided', async () => {
+    const h = await boot();
+    const user = await registerUser(h.app, 'mustafa');
+    const rival = await registerUser(h.app, 'kemal');
+    const settling = insertChallenge(h, {
+      creatorId: rival.me.id,
+      accepted: [rival.me.id, user.me.id],
+      startsAt: '2026-01-01T00:00:00.000Z',
+      endsAt: '2026-01-05T08:30:00.000Z',
+      status: 'active',
+    });
+    const photo = await uploadPhoto(h, user.token);
+    const kept = insertEntry(h, settling, user.me.id, { dayKey: '2026-01-04', value: 12_000, note: 'Kanıt burada', proofUrl: photo.url });
+    const rivalPhoto = await uploadPhoto(h, rival.token);
+    const his = insertEntry(h, settling, rival.me.id, { dayKey: '2026-01-04', value: 9_000, note: 'Kemal yürüdü', proofUrl: rivalPhoto.url });
+    expect((await authed(h.app, user.token)({ method: 'DELETE', url: '/me' })).statusCode).toBe(200);
+
+    // still being decided: the scheduler's pass leaves it
+    expect(clearDeletedTraces(h.db, h.config.uploadDir)).toBe(0);
+    expect(entryRow(h, kept).proof_url).toBe(photo.url);
+
+    h.db.prepare("UPDATE challenges SET status = 'finished' WHERE id = ?").run(settling);
+    expect(clearDeletedTraces(h.db, h.config.uploadDir)).toBe(1);
+    expect(entryRow(h, kept)).toMatchObject({ note: null, proof_url: null, value: 12_000 });
+    expect(fs.existsSync(photo.file)).toBe(false);
+    // Kemal's stays his
+    expect(entryRow(h, his)).toMatchObject({ note: 'Kemal yürüdü', proof_url: rivalPhoto.url });
+    expect(fs.existsSync(rivalPhoto.file)).toBe(true);
+    // and there is nothing left to do on the next pass
+    expect(clearDeletedTraces(h.db, h.config.uploadDir)).toBe(0);
+  });
+
+  it('takes the notes and photos of an account deleted before deleting took them', async () => {
+    const h = await boot();
+    const user = await registerUser(h.app, 'mustafa');
+    const rival = await registerUser(h.app, 'kemal');
+    const finished = insertChallenge(h, {
+      creatorId: rival.me.id,
+      accepted: [rival.me.id, user.me.id],
+      startsAt: '2025-12-01T00:00:00.000Z',
+      endsAt: '2025-12-08T00:00:00.000Z',
+      status: 'finished',
+    });
+    const photo = await uploadPhoto(h, user.token);
+    const old = insertEntry(h, finished, user.me.id, { dayKey: '2025-12-02', value: 12_000, note: 'Sahilden eve yürüdüm', proofUrl: photo.url });
+    // deleted in October by the server of the time, which left both behind
+    h.db
+      .prepare("UPDATE users SET username = 'deleted_0ld', display_name = 'Silinen kanka', password_hash = '', deleted_at = ? WHERE id = ?")
+      .run('2025-12-10T00:00:00.000Z', user.me.id);
+
+    expect(clearDeletedTraces(h.db, h.config.uploadDir)).toBe(1);
+    expect(entryRow(h, old)).toMatchObject({ note: null, proof_url: null, value: 12_000 });
+    expect(fs.existsSync(photo.file)).toBe(false);
   });
 });
 

@@ -40,6 +40,7 @@ import { useApi } from '@/hooks/useApi';
 import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { normalizeServerUrl, serverUrlIsEditable } from '@/lib/config';
+import { StorageKeys, getItem } from '@/lib/storage';
 import {
   getBackgroundHealth,
   openAppSettings,
@@ -265,7 +266,10 @@ function PasswordSheet({ visible, onClose }: { visible: boolean; onClose: () => 
 
     setBusy(true);
     try {
-      const result = await api.changePassword({ currentPassword: current, newPassword: next });
+      // the token this phone registered, so the server keeps it and drops one
+      // left on a phone the change signs out
+      const pushToken = await getItem(StorageKeys.pushToken);
+      const result = await api.changePassword({ currentPassword: current, newPassword: next, pushToken });
       await setSession(result.token, result.me);
       close();
       toast({
@@ -929,7 +933,7 @@ export default function SettingsScreen() {
           detail={byLevel(
             level,
             'Bir çelıncta geride kaldığında öğleden sonra bir kez haber veririz.',
-            'Biri sana fark atınca öğleden sonra bir kere dürteriz, çelınc başına günde bir tane.',
+            'Biri sana fark atınca öğleden sonra dürteriz: günde en fazla bir kere, en çok geride kaldığın çelınc için.',
             'Biri sana fark koyunca öğleden sonra bir kere “o ne lan” deriz 🍆'
           )}
           value={nudgesOn}

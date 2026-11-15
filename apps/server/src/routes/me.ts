@@ -174,7 +174,15 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
       throw badRequest('same_password', 'Yeni şifren eskisiyle aynı. Başka bir şey yaz.');
     }
 
-    const fresh = replacePassword(db, row.id, await hashPassword(body.newPassword));
+    // The push token stays only on the phone that made the change. The app says
+    // which token it registered (null: none), so one held by a phone this change
+    // signs out goes. An app from before that field says nothing, and its token
+    // stays as it always did: that app sends a device token once per run, not
+    // once per session, so a token cleared here would leave the phone with no
+    // push and no notification of its own until it was restarted.
+    const keepPush =
+      body.pushToken === undefined || (body.pushToken !== null && body.pushToken === row.push_token);
+    const fresh = replacePassword(db, row.id, await hashPassword(body.newPassword), { clearPush: !keepPush });
 
     const payload: AuthResponse = {
       token: signToken({ sub: fresh.id, ver: fresh.token_version }, config.jwtSecret, undefined, now),

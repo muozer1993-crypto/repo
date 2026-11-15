@@ -38,8 +38,13 @@ function login(username: string, password: string) {
   return h.app.inject({ method: 'POST', url: '/auth/login', payload: { username, password } });
 }
 
-function changePassword(token: string, currentPassword: string, newPassword: string) {
-  return authed(h.app, token)({ method: 'POST', url: '/me/password', payload: { currentPassword, newPassword } });
+function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+  extra: { pushToken?: string | null } = {},
+) {
+  return authed(h.app, token)({ method: 'POST', url: '/me/password', payload: { currentPassword, newPassword, ...extra } });
 }
 
 /** `ver` claim of one of our own tokens. */
@@ -105,7 +110,8 @@ describe('POST /me/password', () => {
     const onFriendsPhone = (await login('ali', DEFAULT_PASSWORD)).json<AuthResponse>().token;
     await authed(h.app, onFriendsPhone)({ method: 'POST', url: '/me/push-token', payload: { token: 'ExponentPushToken[kanka]', platform: 'android' } });
 
-    const body = (await changePassword(ali.token, DEFAULT_PASSWORD, 'yepyeni42')).json<AuthResponse>();
+    // changed on Ali's own phone, which has no push token of its own
+    const body = (await changePassword(ali.token, DEFAULT_PASSWORD, 'yepyeni42', { pushToken: null })).json<AuthResponse>();
 
     for (const old of [ali.token, onFriendsPhone]) {
       const response = await authed(h.app, old)({ method: 'GET', url: '/me' });
@@ -133,6 +139,42 @@ describe('POST /me/password', () => {
     // and a login with the new password works on every phone
     const back = (await login('ali', 'yepyeni42')).json<AuthResponse>().token;
     expect((await authed(h.app, back)({ method: 'GET', url: '/me' })).statusCode).toBe(200);
+  });
+
+  it('drops a push token the changing phone says is not its own, and keeps the one it says is', async () => {
+    const ali = await registerUser(h.app, 'ali');
+    const onFriendsPhone = (await login('ali', DEFAULT_PASSWORD)).json<AuthResponse>().token;
+    await authed(h.app, onFriendsPhone)({ method: 'POST', url: '/me/push-token', payload: { token: 'ExponentPushToken[kanka]', platform: 'android' } });
+
+    // Ali's phone registered another token: the friend's phone's goes with its session
+    const first = (
+      await changePassword(ali.token, DEFAULT_PASSWORD, 'yepyeni42', { pushToken: 'ExponentPushToken[ali]' })
+    ).json<AuthResponse>();
+    expect(first.me.hasPushToken).toBe(false);
+
+    // his own token, registered again and named at the next change, stays put
+    await authed(h.app, first.token)({ method: 'POST', url: '/me/push-token', payload: { token: 'ExponentPushToken[ali]', platform: 'android' } });
+    const second = (
+      await changePassword(first.token, 'yepyeni42', 'dahayeni42', { pushToken: 'ExponentPushToken[ali]' })
+    ).json<AuthResponse>();
+    expect(second.me.hasPushToken).toBe(true);
+    const stored = h.db.prepare('SELECT push_token FROM users WHERE id = ?').get(ali.me.id) as { push_token: string };
+    expect(stored.push_token).toBe('ExponentPushToken[ali]');
+  });
+
+  it('leaves the push token alone for an app that does not say whose it is', async () => {
+    // The 1.1.0 app sends its device token once per run: cleared here, its phone
+    // went without push or a notification of its own until it was restarted.
+    const ali = await registerUser(h.app, 'ali');
+    await authed(h.app, ali.token)({ method: 'POST', url: '/me/push-token', payload: { token: 'ExponentPushToken[ali]', platform: 'android' } });
+
+    const body = (await changePassword(ali.token, DEFAULT_PASSWORD, 'yepyeni42')).json<AuthResponse>();
+    expect(body.me.hasPushToken).toBe(true);
+    // the other sessions are still signed out
+    expect((await authed(h.app, ali.token)({ method: 'GET', url: '/me' })).statusCode).toBe(401);
+    // and what is written next is pushed as before, not written off as "before the token"
+    const stored = h.db.prepare('SELECT push_token FROM users WHERE id = ?').get(ali.me.id) as { push_token: string };
+    expect(stored.push_token).toBe('ExponentPushToken[ali]');
   });
 
   it('keeps a token signed before token versions working, until the password changes', async () => {

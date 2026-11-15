@@ -561,10 +561,18 @@ Bu iki tablonun `updated_at`'i her senkronda, sayı değişmese de, yenilenir; t
 zaman ses verdiğini o söyler. Süren bir çelıncın sıralamasında her kabul etmiş oyuncu için bunun
 en yenisi `ParticipantView.lastSyncAt` olarak gider (`computeStandings`); uygulama 3 saattir ses
 vermeyen bir rakibin barının altına "Telefonu 5 saattir ses vermiyor, sayı eski olabilir" yazar.
+Bu çelıncta telefonun son sözünden sonra elle bir sayı yazmış oyuncuda `lastSyncAt` boş gider: o
+artık yazıyordur (iPhone'a geçmiş, kullanım iznini kapatmış), bir ay önceki senkron onun
+bugün yazdığı sayıyı bayat göstermemeli.
 Entry'ler bunu söyleyemez: bir günün satırı o günün ilk senkronunda yazılır, adım günü ancak sayı
 artınca değişir. Akış da aynı yüzden telefon satırının saatini `FeedItem.updatedAt`'ten (sayının
-en son geldiği an) gösterir; `createdAt` gece yarısından hemen sonrasıdır. Sıra ve sayfa imleci
-yine `createdAt`'te kalır. Bitişteki telefon saati (`everyPhoneReported`) bundan bağımsızdır, son
+en son geldiği an) gösterir; `createdAt` gece yarısından hemen sonrasıdır. İtirazın adımları
+(açılması, geri çekilmesi, kanıtla cevabı, yanması) sadece durumu değiştirir, bu yüzden telefon
+satırında `updated_at`'e dokunmaz (`ITIRAZ_UPDATED_AT`, `services/entries.ts`): 15:00'te susan
+telefonun sayısı 21:05'teki itirazla "21:05" görünmemeli. Uygulama bu saati de ekranın saatine,
+yani son çekişe göre okur, sıralamadaki satırla aynı; React Compiler satırın sadece kendisinden
+hesaplanan bir değeri satır değişene kadar saklıyordu ve susan telefonun satırı hiç değişmez.
+Sıra ve sayfa imleci yine `createdAt`'te kalır. Bitişteki telefon saati (`everyPhoneReported`) bundan bağımsızdır, son
 günün kendi satırına bakar.
 
 Android'de adımın üç kaynağı var: Health Connect (izin verildiyse), Google Play hizmetlerinin
@@ -598,7 +606,11 @@ sayısını rozete yazar, telefonun kendi hatırlatmalarını da depodaki profil
 dilimiyle yeniden kurar (zustand mağazası bu çalışmada yüklenmez). "Kimse uygulamayı açmasa da
 çelınc puan toplar" sözü buna dayanır.
 Sırası gelmişse işe oturumu yenileyerek başlar (aşağıda "Oturumlar"): sadece bu görevle uyanan
-bir telefon da 90. gün dışarıda kalmaz.
+bir telefon da 90. gün dışarıda kalmaz. Sunucu token'ı reddederse (401: şifre başka telefonda
+değişti, sahibi sıfırladı, hesap kapandı) görev de uygulamanın çıkışını yapar
+(`forgetStoredSession`, `clearReminders`) ve durur. Uygulama kaydırılıp kapatılmışken bunu fark
+edecek başka bir şey yok; telefon ölü token'ı tutuyor, eski hesabın check-in alarmlarını iki hafta
+çalmaya devam ediyordu. Çevrimdışı kuyruk yerinde kalır, bir sonraki girişi bekler.
 
 Görevin tanımı bu yüzden `_layout`'tan değil, uygulamanın giriş dosyasından gelir:
 `apps/mobile/index.ts` (`package.json`'daki `main`) önce `expo-router/entry`'yi, sonra
@@ -691,9 +703,14 @@ sokabiliyor, çelıncı reddedip "tırstı" dedirtebiliyor, hesabı silebiliyord
 her kullanıcının bir `token_version`'ı var (migration 012) ve her token imzalandığı andaki sürümü
 `ver` olarak taşır; `authenticate` ikisi tutmazsa 401 `unauthorized` döner, mesajı "Şifren
 değişti, bu telefondaki oturum kapandı. Yeni şifreyle gir." Şifre değişimi de sahibin sıfırlaması
-da `replacePassword`'dan (`services/accounts.ts`) geçer: sürümü bir artırır, push token'ı da siler,
-çünkü o token dışarı atılan telefonlardan birinin olabilir ve o telefonun kendi çıkışı artık 401
-alıp onu silemez. Şifreyi değiştiren telefon cevapta yeni sürümle imzalı bir token alır;
+da `replacePassword`'dan (`services/accounts.ts`) geçer ve sürümü bir artırır. Sahibin
+sıfırlaması push token'ı da siler, çünkü o token dışarı atılan telefonlardan birinindir ve o
+telefonun kendi çıkışı artık 401 alıp onu silemez. Telefondan yapılan değişimde uygulama kendi
+kaydettiği push token'ı (`pushToken`, yoksa null) da gönderir: hesaptaki token oysa kalır, değilse
+silinir. Alanı göndermeyen 1.1.0 uygulamada token olduğu gibi kalır: o sürüm cihaz token'ını
+oturum başına değil, çalıştığı süre boyunca bir kez yollar; silinseydi telefon yeniden
+başlatılana kadar ne push alırdı ne de kendi bildirimini gösterirdi (depoda token var diye push'un
+geldiğini varsayıyor). Şifreyi değiştiren telefon cevapta yeni sürümle imzalı bir token alır;
 NotificationBridge push token'ı oturum başına bir kez gönderdiği için aynı cihaz token'ını yeni
 oturumla yeniden yollar. `ver` taşımayan eski token'lar 0 sayılır, her hesap da 0'dan başlar; yani
 güncellemenin kendisi kimseyi dışarı atmaz. `/auth/refresh` sürümü korur, açık kalan bir oturum
@@ -781,8 +798,13 @@ girişlerinde `note` ve `proof_url` boşalır; değer ve durum kalır ki biten b
 herkese söylenenle aynı kalsın. Dosyalar commit'ten sonra silinir; yalnızca adı sunucunun verdiği
 türdense (`<uuid>.jpg|png|webp`) ve başka hiçbir giriş o adresi göstermiyorsa: API kanıt olarak
 her adresi kabul eder, aynı adres başkasının girişinde de olabilir. Diskte olmayan dosya atlanır.
-Sonucu henüz çıkmamış bir çelınctaki (bitişten sonraki saat, süren itiraz) girişlere dokunulmaz,
-çünkü kullanıcı o çelıncta kalır ve bir itirazın cevabı o fotoğraf olabilir. Telefonlarda
+Sonucu henüz çıkmamış bir çelınctaki (bitişten sonraki saat, süren itiraz) girişlere o an
+dokunulmaz, çünkü kullanıcı o çelıncta kalır ve bir itirazın cevabı o fotoğraf olabilir. Onları
+zamanlayıcı alır: her turda `clearDeletedTraces` silinmiş hesapların, artık bekleyen bir çelıncta
+olmayan girişlerindeki notu ve fotoğrafı aynı kuralla siler. Kural tek yerde (`takeTraces`), hem
+"Hesabı sil" hem bu tur onu kullanır. Bu, güncellemeden önce silinmiş hesapların kalanlarını da
+ilk turda temizler; o zamanki "Hesabı sil" onlara hiç dokunmuyordu. Silinmiş hesabın token'ı
+ayrı bir 401 mesajı alır ("Bu hesap kapatıldı…"): ona "tekrar giriş yap" demek boşa umut olurdu. Telefonlarda
 önbelleğe girmiş bir kopya (fotoğraflar bir yıl önbellekte durur) sunucudan silinemez.
 
 Bilgisayarı uyanık tutmak da onun işi olurdu, ama akla gelmez: dizüstü 15-30 dakika boşta kalınca

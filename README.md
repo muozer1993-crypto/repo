@@ -281,6 +281,11 @@ böylece eski kurulumlar kendilerinde olmayan native kodu varsayan bir güncelle
 Ekran süresi modülü tam olarak böyle bir değişiklikti: 1.1.0 sürümü yeni bir APK ister, `eas update`
 ile 1.0.0 kurulumlarına gitmez.
 
+Depoyu çekip (`git pull`) sunucuyu yeniden açtığında `apps/mobile` da değiştiyse `eas update`'i
+aynı gün yayınla. Sunucu eski uygulamayla da çalışır, ama bazı düzeltmeler telefonda olur:
+oturumu kapanan telefonun arka planda da çıkış yapması gibi. 1.1.0 kurulumları bunları ancak bu
+güncellemeyle alır.
+
 ### 1c. Google Play'e gizli olarak koymak (dahili test)
 
 Play'de "gizli uygulama" diye bir şey var, adı **Internal testing**. Mağazada listelenmez,
@@ -593,7 +598,9 @@ verdiğin şifreyle kalır.
 * Şifre sıfırlamak o hesabın bütün açık oturumlarını kapatır; kanka yeni şifreyle bir daha girer.
   Ayarlar'dan kendi şifresini değiştirince de öteki telefonlardaki oturumları kapanır, değiştirdiği
   telefondaki oturumu açık kalır. Hesabı bir kankanın telefonunda açık kaldıysa şifresini
-  değiştirmesi yeter.
+  değiştirmesi yeter; bildirimler de o telefona gitmez artık, değiştirdiği telefona gelmeye devam
+  eder. (Güncellemeyi almamış 1.1.0 uygulama hangi telefonun bildirim aldığını söylemez; orada
+  bildirim, en son hangi telefon kaydolduysa onda kalır.)
 * Çok yanlış deneme yaptıysa uygulama "Çok fazla deneme yaptın" der; yazdığı süre kadar beklesin.
 
 **Şikayetler.** Uygulamada biri birini şikayet edince sunucu penceresine `YENİ ŞİKAYET` diye bir
@@ -606,7 +613,9 @@ yazarsan kapatır. Uygulamadaki **Hesabı sil** ne yapıyorsa o olur: telefonund
 düşer, o hesapla bir daha giremez, süren çelınclarından çıkar (iki kişilikse çelınc iptal olur),
 kanıt fotoğrafları ve notları silinir. Biten çelınclardaki skoru sonuçlar bozulmasın diye "Silinen
 kanka" adıyla kalır. Süresi bitip sonucu henüz çıkmamış bir çelınc (bitişten sonraki bir saat,
-süren bir itiraz) onu bırakmaz, oradaki fotoğrafı da kalır. Geri alınamaz. Bir betikten
+süren bir itiraz) onu bırakmaz; oradaki fotoğrafı ve notu sonuç çıkana kadar kalır, sonuç çıkınca
+sunucu onları da siler. Bu sürümden önce silinmiş hesapların kalan fotoğraf ve notlarını da
+güncellemeden sonraki ilk açılışta siler. Telefonu "Bu hesap kapatıldı" der. Geri alınamaz. Bir betikten
 çalıştırıyorsan soracak kimse olmadığı için sonuna `--evet` ekle:
 `npm run yonet -- sil ali --evet`. Davet bağlantısı elinde olan biri yeniden kaydolabilir;
 bağlantıyı nerelere attığına dikkat et.
@@ -736,8 +745,9 @@ sayı yazılan türlerde çelıncı açan kişi isterse zorunlu olur; evet/hayı
 fotoğraf yok.
 Sunucu her kanıt fotoğrafını kaydetmeden önce telefonun içine yazdığı konumu ve çekim bilgisini
 siler: fotoğrafı açan kanka, nerede çekildiğini göremez. Daha önce yüklenmiş fotoğrafları da bu
-sürümle ilk açılışta temizler, pencerede "12 eski kanıt fotoğrafındaki konum bilgisi silindi" gibi
-bir satır çıkar. Bunun için uygulamayı güncellemek gerekmez.
+sürümle ilk açılışta temizler, pencerede "12 eski kanıt fotoğrafının çekim bilgisi silindi (EXIF:
+telefon, tarih, varsa konum)" gibi bir satır çıkar. Sayı, içinde konum olan fotoğrafları değil, çekim
+bilgisi taşıyan bütün fotoğrafları sayar: çoğunda sadece telefon modeli ve tarih vardır. Bunun için uygulamayı güncellemek gerekmez.
 
 Çekmeyen yerde (bodrumdaki spor salonu, metro) giriş yine yapılır: telefonda sıraya girer, bağlantı
 gelince kendiliğinden gider. Kanıt fotoğrafı da öyle: yüklenemezse uygulama "Fotoğraf telefonda"
@@ -828,8 +838,10 @@ Bir kankanın telefonu 3 saattir sunucuya hiçbir şey göndermediyse, çelınc 
 onun barının altında soluk bir satır çıkar ("Telefonu 5 saattir ses vermiyor, sayı eski
 olabilir"): gördüğün sayı o saatte kaldı, kanka belki yürüyor ama telefonu haber vermiyor.
 Genelde telefon uygulamayı pil için durdurmuştur (yukarıdaki **Ayarlar → Arka plan**), ya da
-kapalıdır. Elle yazan kankada bu satır çıkmaz. Akışta telefonun yazdığı satırın saati de sayının
-en son ne zaman geldiğini gösterir, günün ilk senkronunu değil.
+kapalıdır. Elle yazan kankada bu satır çıkmaz: telefonu bir zamanlar saymış olsa da (iPhone'a
+geçmiş, izni kapatmış), telefonun son sözünden sonra elle yazdıysa artık yazan odur. Akışta
+telefonun yazdığı satırın saati de sayının en son ne zaman geldiğini gösterir, günün ilk
+senkronunu ya da o satıra yapılan itirazı değil.
 
 Yarışa geç katılan kankanın telefonu o günleri zaten sunucuya göndermişse (uygulama her
 senkronda son 7 günü yollar, çelınc olsun olmasın), kabul ettiği anda o günler çelınca yazılır;
@@ -1014,10 +1026,23 @@ sıfırladın. Şifre değişince diğer telefonlardaki oturumlar kapanır. Yeni
 
 **Uygulama "Oturumun geçersiz ya da süresi dolmuş" ya da "Oturumun düşmüş" diyor.**
 Oturum 90 gün geçerli ve uygulama onu haftada bir kendiliğinden tazeliyor; açılınca ya da arka
-plandaki 15 dakikalık kontrolde. Bu yazıyı görmek için telefonun aylarca sunucuya hiç
-ulaşmamış olması gerekir. Aynı kullanıcı adı ve şifreyle girsin, her şey yerinde. Herkes aynı
-anda görüyorsa sunucunun JWT anahtarı değişmiştir (`JWT_SECRET` değişti ya da
+plandaki 15 dakikalık kontrolde. Süresi dolduysa telefon aylarca sunucuya hiç ulaşmamıştır; aynı
+kullanıcı adı ve şifreyle girsin, her şey yerinde. Ama güncellemeyi almamış eski uygulama (1.0
+ve ilk 1.1.0) sunucunun söylediğini göstermez, her seferinde "Oturumun düşmüş" der (1.0 hiçbir şey
+demez, giriş ekranına döner):
+
+* Şifre başka bir telefondan değiştirildiyse ya da sen `npm run yonet -- sifre` ile sıfırladıysan
+  eski şifre artık tutmaz; yeni şifreyle girsin.
+* Hesap kapatıldıysa (uygulamadan **Hesabı sil** ya da senin `npm run yonet -- sil`) o hesapla bir
+  daha girilmez. `npm run yonet -- kullanicilar` listesinde adı `deleted_…` diye görünür.
+
+Herkes aynı anda görüyorsa sunucunun JWT anahtarı değişmiştir (`JWT_SECRET` değişti ya da
 `apps/server/data/secret` silindi); herkes bir kere yeniden girer, o kadar.
+
+**Uygulama "Bu hesap kapatıldı" diyor.**
+Hesap uygulamadan **Hesabı sil** ile ya da senin `npm run yonet -- sil` komutunla kapatıldı. O
+hesapla bir daha girilmez, geri de alınamaz. Kanka devam etmek istiyorsa davet bağlantısıyla yeni
+hesap açar.
 
 **Saat farkı.**
 Günler kullanıcının kendi saat dilimine göre hesaplanır. Yurt dışına çıkarsan Ayarlar

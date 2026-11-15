@@ -5,9 +5,11 @@
  * The timer is `unref()`ed so it never keeps a test process (or a CLI run) alive,
  * and no exception can escape a tick — a broken pass must not kill the server.
  */
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { Config } from '../config.js';
 import type { Database } from '../db/index.js';
+import { clearDeletedTraces } from './accounts.js';
 import { backupIfDue, copyBackupIfDue } from './backup.js';
 import { runSchedulerOnce } from './challenges.js';
 import { createPushSender, type PushSender } from './push.js';
@@ -96,6 +98,16 @@ export function startScheduler(
       }
     } catch (err) {
       app.log.error({ err }, 'scheduler pass failed');
+    }
+
+    // A deleted account's notes and photos, once the çelınc that still needed
+    // them is decided (the pass above may just have finished it). The first
+    // pass after the upgrade also takes those of accounts deleted before.
+    try {
+      const entries = clearDeletedTraces(db, path.resolve(config.uploadDir));
+      if (entries) app.log.info({ entries }, 'deleted accounts cleared');
+    } catch (err) {
+      app.log.warn({ err }, 'clearing deleted accounts failed');
     }
 
     try {

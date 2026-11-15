@@ -118,7 +118,8 @@ export async function resetPassword(db: Database, username: string): Promise<Pas
   if (row.deleted_at !== null) throw new Error(`"${row.username}" hesabını silmiş, sıfırlanacak bir şifre kalmadı.`);
 
   const password = tempPassword();
-  replacePassword(db, row.id, await hashPassword(password));
+  // whichever phone holds the push token is signed out with the rest
+  replacePassword(db, row.id, await hashPassword(password), { clearPush: true });
   return { username: row.username, displayName: row.display_name, password };
 }
 

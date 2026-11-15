@@ -5,9 +5,9 @@ import { create } from 'zustand';
 import { ApiClient } from '@/lib/api';
 import { guessServerUrl, serverUrlIsEditable, stripTrailingSlash } from '@/lib/config';
 import { queryClient } from '@/lib/query';
-import { StorageKeys, getJson, removeItem, setItem, setJson } from '@/lib/storage';
+import { StorageKeys, getJson, setItem, setJson } from '@/lib/storage';
 import { clearReminders } from '@/services/reminders';
-import { markTokenRenewed, renewTokenIfDue } from '@/services/session';
+import { forgetStoredSession, markTokenRenewed, renewTokenIfDue } from '@/services/session';
 
 interface AuthState {
   hydrated: boolean;
@@ -184,16 +184,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     // (it would schedule them again). Not awaited, a failure only means one
     // stray alarm.
     void clearReminders().catch(() => {});
-    await Promise.all([
-      removeItem(StorageKeys.token),
-      removeItem(StorageKeys.tokenRenewedAt),
-      removeItem(StorageKeys.me),
-      removeItem(StorageKeys.serverId),
-      removeItem(StorageKeys.pushToken),
-      // otherwise the next account's first poll replays its history as local
-      // notifications
-      removeItem(StorageKeys.lastInboxId),
-    ]);
+    await forgetStoredSession();
   },
 
   clearSessionEnded: () => set({ sessionEnded: false, sessionEndReason: null }),

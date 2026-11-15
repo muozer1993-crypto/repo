@@ -94,17 +94,26 @@ export function createUser(db: Database, input: CreateUserInput, now: Date = new
 /**
  * Stores a new password hash and signs out every session the account has: the
  * token version moves on, so each token signed before it is refused
- * (plugins/auth.ts). The push token goes too, because the phone it belongs to
- * may be one of those sessions, and that phone's own logout can no longer
- * clear it (it gets a 401). Shared by `POST /me/password` and the owner's reset;
- * the phone that changed it registers its push token again with the new session.
- * Returns the row as stored now.
+ * (plugins/auth.ts). Shared by `POST /me/password` and the owner's reset.
+ *
+ * With `clearPush` the push token goes too, because the phone it belongs to is
+ * one of those sessions and its own logout can no longer clear it (it gets a
+ * 401). The owner's reset always clears it; a change made on a phone clears it
+ * unless that phone says the token is its own (see the route). Returns the row
+ * as stored now.
  */
-export function replacePassword(db: Database, userId: string, passwordHash: string): UserRow {
+export function replacePassword(
+  db: Database,
+  userId: string,
+  passwordHash: string,
+  options: { clearPush: boolean },
+): UserRow {
   db.prepare(
-    `UPDATE users
-        SET password_hash = ?, token_version = token_version + 1, push_token = NULL, push_platform = NULL
-      WHERE id = ?`,
+    options.clearPush
+      ? `UPDATE users
+            SET password_hash = ?, token_version = token_version + 1, push_token = NULL, push_platform = NULL
+          WHERE id = ?`
+      : 'UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?',
   ).run(passwordHash, userId);
   return db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRow;
 }
@@ -129,7 +138,8 @@ export function anonymizedUsername(userId: string): string {
  *   1v1 into "not enough players";
  * - every entry of theirs loses its note and proof photo, in every çelınc but the ones
  *   they stay in above (an itiraz there may still be waiting on that photo). Values and
- *   statuses stay, so no standing or result moves;
+ *   statuses stay, so no standing or result moves. Those few go once their çelınc is
+ *   decided (`clearDeletedTraces`, on the scheduler's pass);
  * - with `uploadDir`, the photo files those entries pointed at are deleted from it,
  *   unless some entry still points at one (`removeUnusedPhotos`);
  * - finished/cancelled challenges, the rest of their entries, taunts and badges are
@@ -168,30 +178,19 @@ export function softDeleteUser(
       )
       .all(user.id) as { challenge_id: string; status: string }[];
     const leave = db.prepare("UPDATE challenge_participants SET status = 'left' WHERE challenge_id = ? AND user_id = ?");
-    const stayingIn = new Set<string>();
     for (const { challenge_id: challengeId, status } of open) {
       const challenge = getChallengeRow(db, challengeId);
       // over but not yet decided: the result stands with them in it
-      if (status === 'accepted' && challenge && !stillOpen(challenge, now)) {
-        stayingIn.add(challengeId);
-        continue;
-      }
+      if (status === 'accepted' && challenge && !stillOpen(challenge, now)) continue;
       leave.run(challengeId, user.id);
       // one player fewer is a smaller itiraz majority (see the leave route)
       if (!cancelIfAbandoned(db, challengeId, now)) announceDisputeClocks(db, challengeId, now);
     }
 
     // "Hesabı sil" promises the photos and notes go. The value stays, so a
-    // finished çelınc still adds up to the result everybody was told.
-    const traces = db
-      .prepare('SELECT id, challenge_id, proof_url FROM entries WHERE user_id = ? AND (proof_url IS NOT NULL OR note IS NOT NULL)')
-      .all(user.id) as Pick<EntryRow, 'id' | 'challenge_id' | 'proof_url'>[];
-    const clear = db.prepare('UPDATE entries SET proof_url = NULL, note = NULL WHERE id = ?');
-    for (const entry of traces) {
-      if (stayingIn.has(entry.challenge_id)) continue;
-      clear.run(entry.id);
-      if (entry.proof_url) photos.add(entry.proof_url);
-    }
+    // finished çelınc still adds up to the result everybody was told. The
+    // çelınclar they stayed in above are the ones `takeTraces` leaves alone.
+    for (const url of takeTraces(db, user.id).photos) photos.add(url);
 
     // Pending friend requests in either direction are meaningless now.
     db.prepare("DELETE FROM friendships WHERE status = 'pending' AND (requester_id = ? OR addressee_id = ?)").run(
@@ -204,6 +203,55 @@ export function softDeleteUser(
   if (options.uploadDir) removeUnusedPhotos(db, photos, options.uploadDir);
 
   return db.prepare('SELECT * FROM users WHERE id = ?').get(user.id) as UserRow;
+}
+
+/**
+ * Takes the note and proof photo off every entry of a deleted account (only
+ * `userId`'s when given) that nothing needs them for any more: all of them but
+ * the ones in a çelınc the account stayed in while it is decided, i.e. one
+ * still `pending`/`active` with the account `accepted` in it (softDeleteUser
+ * moves every other open participation to `left`). Runs inside the caller's
+ * transaction and returns how many entries it cleared and the photo addresses
+ * it took off, for `removeUnusedPhotos` once that commits.
+ */
+function takeTraces(db: Database, userId?: string): { cleared: number; photos: Set<string> } {
+  const traces = db
+    .prepare(
+      `SELECT e.id, e.proof_url FROM entries e
+         JOIN users u ON u.id = e.user_id
+         JOIN challenges c ON c.id = e.challenge_id
+        WHERE u.deleted_at IS NOT NULL
+          AND (@userId IS NULL OR e.user_id = @userId)
+          AND (e.proof_url IS NOT NULL OR e.note IS NOT NULL)
+          AND NOT (
+            c.status IN ('pending', 'active')
+            AND EXISTS (SELECT 1 FROM challenge_participants p
+                         WHERE p.challenge_id = e.challenge_id AND p.user_id = e.user_id AND p.status = 'accepted')
+          )`,
+    )
+    .all({ userId: userId ?? null }) as Pick<EntryRow, 'id' | 'proof_url'>[];
+  const clear = db.prepare('UPDATE entries SET proof_url = NULL, note = NULL WHERE id = ?');
+  const photos = new Set<string>();
+  for (const entry of traces) {
+    clear.run(entry.id);
+    if (entry.proof_url) photos.add(entry.proof_url);
+  }
+  return { cleared: traces.length, photos };
+}
+
+/**
+ * What `softDeleteUser` had to leave, cleared once nothing needs it: the notes
+ * and proof photos of a deleted account in a çelınc that was still being
+ * decided when the account went, after that çelınc finishes or is cancelled,
+ * and those of every account deleted before deleting cleared them at all (the
+ * first pass after the upgrade). The scheduler runs it on every pass; with
+ * nothing left to clear it is one query. Returns how many entries it cleared.
+ */
+export function clearDeletedTraces(db: Database, uploadDir?: string): number {
+  const { cleared, photos } = db.transaction(() => takeTraces(db))();
+  // after the commit, as in softDeleteUser
+  if (uploadDir) removeUnusedPhotos(db, photos, uploadDir);
+  return cleared;
 }
 
 /**

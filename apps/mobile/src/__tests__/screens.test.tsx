@@ -637,6 +637,74 @@ describe('how fresh a phone\'s count is', () => {
     expect(text).toContain('6 saat önce');
     expect(text).not.toContain('20 dakika önce');
   });
+
+  it('reads a quiet phone\'s row against the last fetch, as the standings line above it does', async () => {
+    searchParams.id = 'c-1';
+    const start = new Date('2026-09-08T11:00:00.000Z').getTime();
+    // only the clock is faked: the query and settle() still need real timers
+    jest.useFakeTimers({
+      now: start,
+      doNotFake: [
+        'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',
+        'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval',
+        'clearInterval', 'setTimeout', 'clearTimeout',
+      ],
+    });
+    try {
+      // Ali's phone sent 4.201 five minutes before the screen opened, then went quiet
+      const lastReading = new Date(start - 5 * 60_000).toISOString();
+      const detail = withSyncs({ me: null, ali: lastReading, cem: null });
+      detail.feed = [
+        {
+          id: 'e-1',
+          userId: ALI.id,
+          displayName: ALI.displayName,
+          dayKey: '2026-09-08',
+          value: 4201,
+          source: 'pedometer',
+          status: 'ok',
+          createdAt: new Date(start - 8 * HOUR).toISOString(),
+          updatedAt: lastReading,
+          proofUrl: null,
+        } as (typeof detail.feed)[number],
+      ];
+      // every fetch hands back the same rows, as the server does for a phone that went quiet
+      api.challenge = jest.fn(async () => structuredClone(detail));
+      const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+      const tree = renderScreen(<ChallengeScreen />);
+      await settle();
+      expect(rendered(tree)).toContain('5 dakika önce');
+
+      // Four hours on, nothing fetched yet: the screen still shows that moment, the
+      // row included (it used to read the wall clock while the standings did not).
+      jest.setSystemTime(start + 4 * HOUR);
+      act(() => {
+        tree.update(
+          <SafeAreaProvider initialMetrics={SAFE_AREA}>
+            <QueryClientProvider client={clientOf(tree)}>
+              <ToastProvider>
+                <ChallengeScreen />
+              </ToastProvider>
+            </QueryClientProvider>
+          </SafeAreaProvider>
+        );
+      });
+      expect(rendered(tree)).toContain('5 dakika önce');
+      expect(rendered(tree)).not.toContain('ses vermiyor');
+
+      // the next fetch moves both, though the row itself came back unchanged
+      await act(async () => {
+        await clientOf(tree).refetchQueries({ queryKey: ['challenge', 'c-1'] });
+      });
+      await settle();
+      const text = rendered(tree);
+      expect(text).toContain('Telefonu 4 saattir ses vermiyor, sayı eski olabilir');
+      expect(text).toContain('4 saat önce');
+      expect(text).not.toContain('5 dakika önce');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
 
 describe('a "Hemen" çelınc nobody else has joined yet', () => {
@@ -1834,13 +1902,17 @@ describe('an itiraz on the feed', () => {
     expect(text).not.toContain('Kankalar bakacak.');
   });
 
-  it('does not claim anybody heard of it when the server called nobody', async () => {
+  it.each([
+    ['the server called nobody', { othersCalled: 0 }],
+    // a server from before the call: it told only the owner, and sends no count
+    ['an older server sends no count', {}],
+  ])('does not claim anybody heard of it when %s', async (_case, count) => {
     searchParams.id = 'c-1';
     const detail = withDispute('me');
     detail.feed[0] = { ...detail.feed[0]!, status: 'ok' as 'disputed', answerBy: null as unknown as string };
     detail.disputes = [];
     api.challenge = jest.fn(async () => detail);
-    api.disputeEntry = jest.fn(async () => ({ entry: {}, answerBy: null, othersCalled: 0, standings: [] }));
+    api.disputeEntry = jest.fn(async () => ({ entry: {}, answerBy: null, standings: [], ...count }));
 
     const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
     const tree = renderScreen(<ChallengeScreen />);
@@ -3126,13 +3198,15 @@ describe('settings password sheet', () => {
     });
     await settle();
 
-    expect(api.changePassword).toHaveBeenCalledWith({ currentPassword: 'yanlis', newPassword: 'yepyeni42' });
+    // no push token registered on this phone: whatever the server holds is another phone's
+    expect(api.changePassword).toHaveBeenCalledWith({ currentPassword: 'yanlis', newPassword: 'yepyeni42', pushToken: null });
     expect(rendered(tree)).toContain('Mevcut şifren tutmadı.');
     expect(mockSetSession).not.toHaveBeenCalled();
   });
 
   it('stores the session the server hands back', async () => {
     api.changePassword = jest.fn(async () => ({ token: 'yeni-token', me: ME }));
+    await AsyncStorage.setItem('koydum.pushToken', 'ExponentPushToken[bu-telefon]');
     const tree = openSheet();
     await settle();
 
@@ -3146,6 +3220,13 @@ describe('settings password sheet', () => {
 
     expect(mockSetSession).toHaveBeenCalledWith('yeni-token', ME);
     expect(rendered(tree)).toContain('Tamamdır, yeni şifre işlendi');
+    // the token this phone registered goes along, so the server keeps it
+    expect(api.changePassword).toHaveBeenCalledWith({
+      currentPassword: '123456',
+      newPassword: 'yepyeni42',
+      pushToken: 'ExponentPushToken[bu-telefon]',
+    });
+    await AsyncStorage.removeItem('koydum.pushToken');
   });
 
   it('goes from field to field on "İleri"', async () => {
