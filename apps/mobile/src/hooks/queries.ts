@@ -20,7 +20,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClie
 
 import { ApiError, type ApiClient } from '@/lib/api';
 import { qk } from '@/lib/query';
-import { enqueueEntry, flushQueue, uploadLocalPhoto } from '@/services/offlineQueue';
+import { dropParked, enqueueEntry, flushQueue, uploadLocalPhoto } from '@/services/offlineQueue';
 import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/store/auth';
 
@@ -382,6 +382,8 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
       }
       try {
         const result = await api.addEntry(id, send);
+        // its own parked copy goes first, or the drain below replays it
+        await dropParked(key).catch(() => {});
         // a successful write is a good moment to drain anything parked earlier
         void flushQueue(api).catch(() => {});
         return { ...result, queued: false };

@@ -430,6 +430,20 @@ describe('a reply that is not from our server', () => {
     expect(item?.failedReason).toBeUndefined();
   });
 
+  it('has not used up its tries by morning: a night asleep is no try at all', async () => {
+    await enqueueEntry('c1', body('2026-09-08', 3), 'a');
+    const client = clientAnswering(530, '<title>Cloudflare Tunnel error</title>');
+    for (let run = 0; run < 12; run += 1) await flushQueue(client);
+
+    // awake, and one hiccup of our own: that is its first try, not its thirteenth
+    clientAnswering(500, JSON.stringify({ error: { code: 'internal', message: 'Sunucuda bir hata oldu.' } }), 'application/json');
+    await flushQueue(client);
+
+    const [item] = await readQueue();
+    expect(item?.failedReason).toBeUndefined();
+    expect(item?.attempts).toBe(1);
+  });
+
   it('still drops an entry our own server refused', async () => {
     await enqueueEntry('c1', body('2026-08-01', 3), 'a');
     const client = clientAnswering(

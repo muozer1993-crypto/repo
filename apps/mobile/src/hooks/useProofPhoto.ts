@@ -106,8 +106,12 @@ export function useProofPhoto(options: { keepOffline?: boolean } = {}) {
     } catch (err) {
       // The picker's own cache file, not a copy: the OS may clear that cache
       // before the connection comes back, and the queue drops the photo then.
-      // A browser's object URL would not outlive the page at all.
-      if (keepOffline && asset && Platform.OS !== 'web' && err instanceof ApiError && err.isNetwork) {
+      // A browser's object URL would not outlive the page at all. The tunnel's
+      // page while the owner's PC sleeps (`server_down`) or a Wi-Fi portal's
+      // (`not_koydum`) is no connection too: the queue waits them out, and
+      // without this a photo-required entry could not be saved all night.
+      const noServer = err instanceof ApiError && (err.isNetwork || err.code === 'server_down' || err.code === 'not_koydum');
+      if (keepOffline && asset && Platform.OS !== 'web' && noServer) {
         return { url: null, localUri: asset.uri };
       }
       toast({ title: 'Fotoğraf gitmedi', body: errorText(err, 'Yükleme başarısız.'), kind: 'danger' });

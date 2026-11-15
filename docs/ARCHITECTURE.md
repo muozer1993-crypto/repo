@@ -507,7 +507,8 @@ adreste KOYDUM sunucusu yok gibi"), 200'lük sayfa da durumu 0 olan bir `not_koy
 de bağlantı yokmuş gibi karşılar: giriş yerinde kalır, deneme hakkı yemez (bütün gece uyuyan bir
 bilgisayar sekiz hakkı sabaha kadar bitirirdi), oturum kapanmaz. Tek istisna zarfsız 413: VPS'in
 önündeki nginx kendi sınırını aşan fotoğrafı sunucuya varmadan geri çevirir, o da fotoğrafın
-sorunudur.
+sorunudur. Giriş ekranı da ikisini bağlantı yokluğu sayar: o arada yüklenemeyen kanıt fotoğrafı
+aşağıdaki gibi telefonda bekler, yoksa fotoğrafı zorunlu bir çelıncta bütün gece giriş yapılamazdı.
 
 Reddedilen giriş de artık sessizce gitmez. Arka plan işleyicisi uygulama ekranda değilken de kuyruğu
 boşaltıyordu; ekranda olmayan toast'ı kimse görmüyor, giriş yine de siliniyordu. Şimdi reddedilen

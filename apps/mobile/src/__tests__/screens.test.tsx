@@ -1503,6 +1503,40 @@ describe('a proof photo with no connection', () => {
     expect(rendered(tree)).toContain('Sıraya alındı');
   });
 
+  it("keeps the photo on the phone too while the owner's PC sleeps and the tunnel answers 530", async () => {
+    const asleep = new ApiError('server_down', 'Sunucu şu an kapalı ya da uyuyor.', 530);
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => runDetail());
+    api.uploadPhoto = jest.fn(async () => {
+      throw asleep;
+    });
+    api.addEntry = jest.fn(async () => {
+      throw asleep;
+    });
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    act(() => {
+      findWith(tree, 'placeholder', '0', 'onChangeText').props.onChangeText('5');
+    });
+    await act(async () => {
+      await findWith(tree, 'title', 'Galeri', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(rendered(tree)).toContain('Fotoğraf telefonda');
+    expect(rendered(tree)).not.toContain('Fotoğraf gitmedi');
+    await act(async () => {
+      await findWith(tree, 'title', 'Kaydet', 'onPress').props.onPress();
+    });
+    await settle();
+
+    const queue = await readQueue();
+    expect(queue).toHaveLength(1);
+    expect(queue[0]).toMatchObject({ challengeId: 'c-1', proofLocalUri: mockPickedPhoto.uri });
+  });
+
   it('sends the photo first when the connection is back by Kaydet', async () => {
     searchParams.id = 'c-1';
     api.challenge = jest.fn(async () => runDetail());
@@ -1685,6 +1719,39 @@ describe('a check-in', () => {
     expect(queue[0]?.body.clientTime).toBe(first?.body.clientTime);
     const calls = (api.addEntry as jest.Mock).mock.calls as [string, { clientTime: string }][];
     expect(calls.map(([, sent]) => sent.clientTime)).toEqual([first?.body.clientTime, first?.body.clientTime]);
+  });
+
+  it('takes the parked check-in out of the queue when the next tap gets through', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => checkinDetail());
+    let checkedIn = false;
+    api.addEntry = jest
+      .fn()
+      .mockRejectedValueOnce(NETWORK_ERROR)
+      .mockImplementation(async () => {
+        if (checkedIn) throw new ApiError('already_checked_in', 'Bugün zaten check-in yaptın.', 409);
+        checkedIn = true;
+        return { entry: { value: 1, late: false }, standings: [] };
+      });
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    await act(async () => {
+      await findWith(tree, 'title', 'Geldim', 'onPress').props.onPress();
+    });
+    await settle();
+    expect(await readQueue()).toHaveLength(1);
+
+    await act(async () => {
+      await findWith(tree, 'title', 'Geldim', 'onPress').props.onPress();
+    });
+    await settle();
+
+    // replayed after it, the parked copy came back "already checked in" and
+    // was told as a refused entry
+    expect(api.addEntry).toHaveBeenCalledTimes(2);
+    expect(await readQueue()).toEqual([]);
   });
 
   it('leaves the poke alone when the server turns the check-in down', async () => {

@@ -129,6 +129,17 @@ export async function removeFromQueue(id: string): Promise<void> {
   await writeQueue(queue.filter((item) => item.id !== id));
 }
 
+/**
+ * A write that just reached the server spends the copy parked under the same
+ * id (`enqueueEntry`): a second "Geldim" that got through, a day's number put
+ * right. Replayed after it, the check-in came back "Bugün zaten check-in
+ * yaptın." and was told as a refused entry, and the day got its older number.
+ */
+export async function dropParked(id: string): Promise<void> {
+  const ownerId = await currentOwnerId();
+  await removeFromQueue(ownerId ? `${ownerId}/${id}` : id);
+}
+
 /** Stores what a flush learned about one item (its uploaded photo) before going on. */
 async function replaceInQueue(next: PendingEntry): Promise<void> {
   const queue = await readQueue();
@@ -284,8 +295,8 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
     if (item.proofLocalUri && !item.body.proofUrl) {
       const photo = await sendQueuedPhoto(client, item.proofLocalUri);
       if (photo.kind === 'offline') {
+        // no try spent (MAX_ATTEMPTS is for a server that keeps failing it)
         offline = true;
-        touched.set(item.id, { ...item, attempts: item.attempts + 1 });
         continue;
       }
       if (photo.kind === 'later') {
@@ -330,10 +341,11 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
       await removeFromQueue(item.id);
       // The photo is left where the picker put it: its cache is the OS's to clear.
     } catch (error) {
-      // before the 4xx below: a 403 page from a portal never refused anything
+      // before the 4xx below: a 403 page from a portal never refused anything.
+      // No try spent either: a night of these must not leave the first real
+      // hiccup of the morning as the ninth try that gives up.
       if (error instanceof ApiError && (error.isNetwork || serverAbsent(error))) {
         offline = true;
-        touched.set(item.id, { ...item, attempts: item.attempts + 1 });
         continue;
       }
       if (error instanceof ApiError && error.status === 401) {
