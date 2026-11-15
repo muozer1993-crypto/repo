@@ -1641,7 +1641,7 @@ describe('a yes/no day', () => {
 });
 
 describe('an itiraz on the feed', () => {
-  const ALI ={ id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
 
   /** Mustafa (the reader) and Ali, one entry each; `disputedBy` disputes the other one's entry. */
   function withDispute(disputedBy: 'me' | 'ali') {
@@ -4468,5 +4468,17 @@ describe('badge names at the reader\'s level', () => {
     expect(text).toContain('İlk Zafer');
     expect(text).toContain('🏆');
     expect(text).not.toContain('Saplamacı');
+  });
+});
+
+describe('the rövanş rung on the profile', () => {
+  it('asks for a lost çelınc won back, not for any rematch won', async () => {
+    const ProfileScreen = require('@/app/(app)/(tabs)/profile').default;
+    const tree = renderScreen(<ProfileScreen />);
+    await settle();
+    // revengeWins counts only the rematch of one you lost: "3 rövanş kazan"
+    // left somebody who keeps winning rematches of his own wins at 0/3
+    expect(rendered(tree)).toContain('Kaybettiğin 3 çelıncın rövanşını al');
+    expect(rendered(tree)).not.toContain('3 rövanş kazan');
   });
 });

@@ -68,7 +68,9 @@ const RULE_TEXT: Record<string, (n: number) => string> = {
   disputesWon: (n) => `${formatNumber(n)} itiraz kazan`,
   challengesPlayed: (n) => `${formatNumber(n)} çelınca katıl`,
   pokesSent: (n) => `${formatNumber(n)} kanka dürt`,
-  revengeWins: (n) => `${formatNumber(n)} rövanş kazan`,
+  // only a rematch of one you lost counts: "3 rövanş kazan" promised the rung
+  // to somebody winning rematches of his own wins, stuck at 0/3
+  revengeWins: (n) => `Kaybettiğin ${formatNumber(n)} çelıncın rövanşını al`,
 };
 
 /** What the next rung is asking for, in Turkish. */
