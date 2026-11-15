@@ -130,6 +130,21 @@ describe('ownerLogStream', () => {
     ]);
   });
 
+  it('says how many proof photos nothing showed were deleted and how much room that made, and when it could not', () => {
+    const { stream, lines } = capture();
+    stream.write(pino({ removed: 4, mb: 7.5, msg: 'proof photos swept' }));
+    stream.write(pino({ removed: 12, mb: 24, msg: 'proof photos swept' }));
+    // a few KB rounds to 0 MB: the count is enough
+    stream.write(pino({ removed: 1, mb: 0, msg: 'proof photos swept' }));
+    stream.write(pino({ level: 40, err: { message: 'EACCES: permission denied' }, msg: 'proof photo sweep failed' }));
+    expect(lines().slice(1)).toEqual([
+      '21:03:12 • kullanılmayan 4 kanıt fotoğrafı silindi (7,5 MB)',
+      '21:03:12 • kullanılmayan 12 kanıt fotoğrafı silindi (24 MB)',
+      '21:03:12 • kullanılmayan 1 kanıt fotoğrafı silindi',
+      '21:03:12 ! kullanılmayan kanıt fotoğrafları silinemedi, yarın yine denerim: EACCES: permission denied',
+    ]);
+  });
+
   it('marks a failed request and a slow one as warnings', () => {
     const { stream, lines } = capture();
     stream.write(pino({ level: 40, reqId: 'req-7', method: 'POST', url: '/challenges', statusCode: 500, ms: 812, msg: 'request failed' }));

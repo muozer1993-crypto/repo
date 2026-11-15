@@ -31,7 +31,8 @@ const EXTENSIONS: Record<string, string> = {
 /**
  * Per-account ceiling on uploads. Nothing in the game needs more than a handful
  * of proof photos an hour; without a cap one account could fill the data volume
- * (files are never reclaimed) with a loop.
+ * with a loop (a photo no entry shows is deleted only after a week, by the
+ * scheduler's daily sweep in services/photos.ts).
  */
 export const UPLOADS_PER_USER = { max: 60, windowMs: 60 * 60 * 1000 } as const;
 

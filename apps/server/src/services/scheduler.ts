@@ -7,12 +7,14 @@
  */
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { Config } from '../config.js';
+import { DEFAULT_TIMEZONE, todayKey } from '@koydum/shared';
+import { MEMORY, type Config } from '../config.js';
 import type { Database } from '../db/index.js';
 import { clearDeletedTraces } from './accounts.js';
 import { backupIfDue, copyBackupIfDue } from './backup.js';
 import { runSchedulerOnce } from './challenges.js';
 import { readLastBeat, recordPause, writeLastBeat } from './pauses.js';
+import { sweepOrphanPhotos } from './photos.js';
 import { createPushSender, type PushSender } from './push.js';
 
 export const SCHEDULER_INTERVAL_MS = 30_000;
@@ -69,6 +71,8 @@ export function startScheduler(
   let inFlight: Promise<void> | null = null;
   let copyInFlight: Promise<void> | null = null;
   let copyRetryAt = 0;
+  // the Istanbul day the unused proof photos were last swept
+  let sweptDay: string | null = null;
   // A phone-counted çelınc that ended while this server was off waits a full
   // hour from now, not from its end, so the phones get to report before anybody
   // wins; an itiraz whose window ran out meanwhile gets the same hour for its
@@ -141,6 +145,21 @@ export function startScheduler(
       if (written) app.log.info({ file: written }, 'database backup written');
     } catch (err) {
       app.log.error({ err }, 'database backup failed');
+    }
+
+    // The first pass of each day, the start's included: the proof photos no
+    // entry shows. Never for a database in memory, which knows nothing of what
+    // an earlier run uploaded: every file in the folder would look unused.
+    const today = todayKey(DEFAULT_TIMEZONE, app.now());
+    if (today !== sweptDay && config.dbPath !== MEMORY && config.dataDir !== MEMORY) {
+      // a failed sweep waits for tomorrow, not for the next pass 30 s on
+      sweptDay = today;
+      try {
+        const { removed, bytes } = await sweepOrphanPhotos(db, path.resolve(config.uploadDir), app.now());
+        if (removed > 0) app.log.info({ removed, mb: Math.round((bytes * 10) / (1024 * 1024)) / 10 }, 'proof photos swept');
+      } catch (err) {
+        app.log.warn({ err }, 'proof photo sweep failed');
+      }
     }
 
     // The second copy runs on its own: a cloud or network folder that hangs must

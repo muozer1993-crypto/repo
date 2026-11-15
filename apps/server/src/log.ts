@@ -15,7 +15,7 @@
  *   21:03:43 • push: 4 bildirim gitti, 1 tanesi gitmedi
  *   21:05:10 ! istek patladı: POST /challenges → 500 (31 ms)
  */
-import { DEFAULT_TIMEZONE, dayKeyInTz, localTimeHHmm } from '@koydum/shared';
+import { DEFAULT_TIMEZONE, dayKeyInTz, formatNumberTr, localTimeHHmm } from '@koydum/shared';
 import type { SchedulerSummary } from './services/challenges.js';
 
 /** Where the lines go: process.stdout, or an array in the tests. */
@@ -160,6 +160,13 @@ function scrubLine(entry: Entry): string | null {
   return null;
 }
 
+/** The day's sweep of the photos no entry shows (scheduler); a few KB rounds to 0 MB, which is not worth saying. */
+function sweepLine(entry: Entry): string {
+  const mb = count(entry, 'mb');
+  const size = mb > 0 ? ` (${formatNumberTr(mb, 1)} MB)` : '';
+  return `kullanılmayan ${count(entry, 'removed')} kanıt fotoğrafı silindi${size}`;
+}
+
 /** The query string never got into the entry (app.ts); an invite code has no business here. */
 function requestLine(entry: Entry): string {
   return `${text(entry.method)} ${text(entry.url)} → ${text(entry.statusCode)} (${text(entry.ms)} ms)`;
@@ -194,6 +201,8 @@ const MESSAGES: Record<string, (entry: Entry) => string | null> = {
     `yedek BACKUP_DIR'a kopyalanamadı, bir saat sonra yine denerim (${text(e.dir)})`,
   'proof photos scrubbed': scrubLine,
   'proof photo scrub failed': () => 'eski kanıt fotoğraflarının çekim bilgisi silinemedi, bir dahaki açılışta yine denerim',
+  'proof photos swept': sweepLine,
+  'proof photo sweep failed': () => 'kullanılmayan kanıt fotoğrafları silinemedi, yarın yine denerim',
   'deleted accounts cleared': (e) => `silinen hesaplardan kalan ${count(e, 'entries')} girişin notu ve kanıt fotoğrafı silindi`,
   'clearing deleted accounts failed': () => 'silinen hesapların notları ve fotoğrafları silinemedi, bir sonraki turda yine denerim',
   'upload directory unavailable, /uploads is not served': (e) =>

@@ -258,9 +258,10 @@ export function clearDeletedTraces(db: Database, uploadDir?: string): number {
  * A proof photo's address as `POST /uploads` hands it out (`/uploads/<uuid>.<ext>`),
  * or with a server address in front, as older apps stored it. The file name is
  * the random one the server gave it, so nothing else (a `../`, a file the owner
- * keeps in the folder) can ever match.
+ * keeps in the folder) can ever match. The daily sweep (services/photos.ts)
+ * reads the entries' addresses with it too.
  */
-const UPLOADED_PHOTO = /\/uploads\/([0-9a-f-]{36}\.(?:jpg|png|webp))$/;
+export const UPLOADED_PHOTO = /\/uploads\/([0-9a-f-]{36}\.(?:jpg|png|webp))$/;
 
 /**
  * Deletes the files behind `urls` from `uploadDir`, except one that an entry

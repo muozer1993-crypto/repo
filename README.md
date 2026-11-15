@@ -704,6 +704,15 @@ oturum anahtarı (`data\secret`) yedeğe girmez; eski bilgisayardan o dosyayı k
 Docker'da önce sunucuyu durdur, yedeği öyle yükle: `docker compose stop`, sonra
 `docker compose run --rm koydum npm run yonet -- geri-yukle`, sonra `docker compose start`.
 
+**Kullanılmayan kanıt fotoğrafları.** Kanka fotoğrafı seçtiği an sunucuya gider, girişi kaydetmeden
+önce. Vazgeçip başka fotoğraf seçerse, günü yeni bir fotoğrafla yeniden gönderirse, telefonun
+saydığı sayı elle yazdığı günün yerine geçerse ya da girişi silerse eski fotoğraf hiçbir yerde
+görünmez ama `data\uploads`'ta kalır; her biri 1,5-2,5 MB. Sunucu her açılışta ve gün dönünce
+hiçbir girişin göstermediği fotoğrafları siler, pencerede "kullanılmayan 4 kanıt fotoğrafı silindi
+(7,5 MB)" gibi bir satır çıkar. Yeni yüklenen fotoğrafa 7 gün dokunmaz: fotoğraf gitmiş ama giriş
+telefonda sırada kalmış olabilir, o giriş günler sonra gelir. Klasöre senin koyduğun dosyalara da
+dokunmaz, sadece sunucunun kendi verdiği adlardaki fotoğrafları siler.
+
 ---
 
 ## Adamlık seviyeleri

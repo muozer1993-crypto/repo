@@ -9,10 +9,14 @@
  * at all), telling every participant, handing out badges, throwing out a disputed
  * entry whose owner never answered (and holding the result for one who still may),
  * giving both an hour after the owner's PC wakes from a night asleep, and
- * cancelling a pending challenge nobody joined. The last block is
- * `startScheduler`'s stop, which a clean shutdown awaits before closing the database.
+ * cancelling a pending challenge nobody joined, and sweeping the proof photos no
+ * entry shows once a day. The last block is `startScheduler`'s stop, which a
+ * clean shutdown awaits before closing the database.
  */
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TIMEZONE, LIMITS, todayKey, type Challenge } from '@koydum/shared';
 import { runSchedulerOnce } from '../src/services/challenges.js';
@@ -1508,6 +1512,79 @@ describe('scheduler: what deleted accounts left', () => {
       .prepare('SELECT note, proof_url, value FROM entries WHERE challenge_id = ? AND user_id = ?')
       .all(challengeId, veli.me.id);
     expect(left).toEqual([{ note: null, proof_url: null, value: 9000 }]);
+  });
+});
+
+describe('scheduler: proof photos no entry shows', () => {
+  /** A photo nothing points at, uploaded `days` before the harness's clock. */
+  function unusedPhoto(h: TestApp, days = 8): string {
+    const file = path.join(h.config.uploadDir, `${randomUUID()}.jpg`);
+    fs.writeFileSync(file, 'x');
+    const at = (h.now().getTime() - days * 24 * HOUR) / 1000;
+    fs.utimesSync(file, at, at);
+    return file;
+  }
+
+  it('sweeps them on the first pass of each day, the start\'s included, and not on the passes between', async () => {
+    // a database on disk: one in memory knows nothing of earlier uploads
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'koydum-sweep-'));
+    let flushes = 0;
+    const push: PushSender = {
+      flush: () => {
+        flushes += 1;
+        return Promise.resolve({ sent: 0, failed: 0 });
+      },
+    };
+    let stop: (() => Promise<void>) | null = null;
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      harness = await makeApp({ now: NOW, config: { dataDir, dbPath: path.join(dataDir, 'koydum.db') } });
+      const h = harness;
+      const info = vi.spyOn(h.app.log, 'info');
+      const sweeps = (): number => info.mock.calls.filter((call) => call[1] === 'proof photos swept').length;
+      /** One beat, and the pass it starts run to its end. */
+      const beat = async (): Promise<void> => {
+        const before = flushes;
+        await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
+        await vi.waitFor(() => expect(flushes).toBe(before + 1), { interval: 10, timeout: 5000 });
+        // the day's backup and the sweep come after the flush
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      };
+
+      const first = unusedPhoto(h);
+      stop = startScheduler(h.app, h.db, h.config, { push });
+      await vi.waitFor(() => expect(sweeps()).toBe(1), { interval: 10, timeout: 5000 });
+      expect(info).toHaveBeenCalledWith({ removed: 1, mb: 0 }, 'proof photos swept');
+      expect(fs.existsSync(first)).toBe(false);
+
+      // 18:00 the same day in Istanbul: the day's sweep is done
+      const second = unusedPhoto(h);
+      h.advance(6 * HOUR);
+      await beat();
+      expect(fs.existsSync(second)).toBe(true);
+      expect(sweeps()).toBe(1);
+
+      // 06:00 the next morning
+      h.advance(12 * HOUR);
+      await beat();
+      await vi.waitFor(() => expect(sweeps()).toBe(2), { interval: 10, timeout: 5000 });
+      expect(fs.existsSync(second)).toBe(false);
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+      await harness?.close();
+      harness = null;
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('leaves the folder alone for a database in memory, where every photo would look unused', async () => {
+    harness = await makeApp({ now: NOW });
+    const photo = unusedPhoto(harness);
+    const stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush });
+    // the first pass runs right at start; stop waits for it
+    await stop();
+    expect(fs.existsSync(photo)).toBe(true);
   });
 });
 

@@ -930,6 +930,20 @@ ilk turda temizler; o zamanki "Hesabı sil" onlara hiç dokunmuyordu. Silinmiş 
 ayrı bir 401 mesajı alır ("Bu hesap kapatıldı…"): ona "tekrar giriş yap" demek boşa umut olurdu. Telefonlarda
 önbelleğe girmiş bir kopya (fotoğraflar bir yıl önbellekte durur) sunucudan silinemez.
 
+Hesap silinmeden de diskte sahipsiz fotoğraf birikir. Uygulama fotoğrafı seçildiği an yükler, giriş
+daha yokken: kanka vazgeçip başkasını seçerse, günü yeni bir fotoğrafla yeniden gönderirse,
+telefonun sayısı elle yazılan günün yerine geçerse (`proof_url` boşalır) ya da girişi silerse dosya
+kalır. Her biri 1,5-2,5 MB; fotoğraflı birkaç spor çelıncı, sunucuyu açanın dizüstünde kimsenin
+bilmediği yüzlerce MB bırakıyordu, `scrubUploadDir` de her açılışta hepsine bakıyordu. Şimdi
+zamanlayıcı her günün ilk turunda (açılıştaki de sayılır) `sweepOrphanPhotos`'u çalıştırır
+(`services/photos.ts`). O, adı sunucunun verdiği türden (`<uuid>.jpg|png|webp`), hiçbir girişin
+göstermediği (aynı `…/uploads/<ad>` kuralıyla, göreli ya da başında sunucu adresiyle) ve 7 günden
+eski dosyaları siler. Bir hafta, telefonda sıraya girmiş bir giriş için: kuyruk fotoğrafı yükleyip
+dönen adresi saklar, giriş günler sonra gidebilir; bir itirazın cevabı da gönderilmeden önce yüklenir.
+Kilitli bir dosya (Windows'ta açık bir fotoğraf görüntüleyici) atlanır, ertesi gün yine denenir.
+Bellekteki bir veritabanında tur hiç çalışmaz: önceki açılışların yüklediklerinden habersizdir,
+klasördeki her dosya ona sahipsiz görünür.
+
 Bilgisayarı uyanık tutmak da onun işi olurdu, ama akla gelmez: dizüstü 15-30 dakika boşta kalınca
 uyur ve uyuyan sunucuya kimse bağlanamaz. Bu yüzden sunucu Windows'ta açılırken gizli bir
 PowerShell başlatır (`src/keepAwake.ts`). O, `SetThreadExecutionState` ile sistemin uyumamasını
