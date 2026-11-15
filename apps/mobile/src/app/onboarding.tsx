@@ -23,6 +23,8 @@ import { Colors, Layout, Radius, Spacing } from '@/theme';
 interface Slide {
   key: 'onboarding_1' | 'onboarding_2' | 'onboarding_3' | 'onboarding_4';
   art: string;
+  /** shown in place of `art` to a "Nazik" reader, when `art` is not for them */
+  politeArt?: string;
   titles: Record<VulgarityLevel, string>;
   /** the slide that asks for the two permissions instead of only talking */
   permissions?: true;
@@ -53,6 +55,7 @@ const SLIDES: Slide[] = [
   {
     key: 'onboarding_3',
     art: '🍆',
+    politeArt: '🏆',
     titles: {
       1: 'Kazanan mesaj gönderir',
       2: 'KOYDUM MU?',
@@ -152,7 +155,7 @@ export default function OnboardingScreen() {
           <View key={slide.key} style={[styles.slide, { width }]}>
             {/* a smaller picture on the permission slide, so its two buttons fit a small phone */}
             <View style={[styles.artWrap, slide.permissions && styles.artWrapSmall]}>
-              <Text style={[styles.art, slide.permissions && styles.artSmall]}>{slide.art}</Text>
+              <Text style={[styles.art, slide.permissions && styles.artSmall]}>{level === 1 ? (slide.politeArt ?? slide.art) : slide.art}</Text>
             </View>
             <Text variant="huge" center style={styles.title}>
               {slide.titles[level]}

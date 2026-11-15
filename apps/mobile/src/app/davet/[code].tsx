@@ -135,7 +135,9 @@ export default function InviteScreen() {
   }
 
   const name = inviter?.displayName ?? null;
-  const emoji = inviter?.avatarEmoji ?? '🍆';
+  // before the name comes back; signed out the level is the default, so only
+  // a "Nazik" reader is spared the 🍆
+  const emoji = inviter?.avatarEmoji ?? (level === 1 ? '👤' : '🍆');
 
   /**
    * Signed in: send only on a tap. A link can come from any page or app on the

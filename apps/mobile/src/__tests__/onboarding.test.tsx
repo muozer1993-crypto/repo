@@ -244,6 +244,15 @@ describe('the permission slide', () => {
     expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
   });
 
+  it('shows a "Nazik" reader the winner slide without the 🍆', () => {
+    useAuth.setState({ token: 'tok', me: { ...ME, vulgarityMax: 1 }, onboarding: true });
+    const OnboardingScreen = require('@/app/onboarding').default;
+    const tree = render(<OnboardingScreen />);
+    expect(rendered(tree)).toContain('Kazanan mesaj gönderir');
+    expect(rendered(tree)).not.toContain('🍆');
+    expect(rendered(tree)).toContain('🏆');
+  });
+
   it('"Geç" skips the talk but lands on the permissions, and only leaves from there', () => {
     const tree = renderSlides();
 

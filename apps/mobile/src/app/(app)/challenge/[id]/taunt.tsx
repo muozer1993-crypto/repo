@@ -521,7 +521,7 @@ export default function TauntPickerScreen() {
             ))}
             <Chip
               label={`HEPSİ (${available.length})`}
-              icon="🍆"
+              icon={level === 1 ? '👥' : '🍆'}
               color={Colors.yellow}
               selected={allMode}
               onPress={() => setAllMode(true)}
@@ -532,7 +532,7 @@ export default function TauntPickerScreen() {
         {chosen ? (
           <View style={[styles.targetRow, available.length > 1 && styles.gap]}>
             <Avatar
-              emoji={allMode ? '🍆' : chosen.user.avatarEmoji}
+              emoji={allMode ? (level === 1 ? '👥' : '🍆') : chosen.user.avatarEmoji}
               name={chosen.user.displayName}
               size={40}
               ring={Colors.accent}

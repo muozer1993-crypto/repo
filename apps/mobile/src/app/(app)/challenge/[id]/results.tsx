@@ -496,7 +496,7 @@ export default function ResultsScreen() {
       {/* --------------------------------------------------------- podium */}
       {ranked.length > 0 ? (
         <Card padded={false} style={styles.podiumCard}>
-          {iWon ? <Confetti /> : null}
+          {iWon ? <Confetti polite={level === 1} /> : null}
           <Podium ranked={ranked} meId={meId} scoreText={scoreText} celebrate={iWon} />
         </Card>
       ) : null}
@@ -1011,13 +1011,15 @@ function Crown({ animate }: { animate: boolean }) {
 }
 
 const CONFETTI_EMOJI = ['🎉', '🔥', '🍆', '💥', '🏆', '✨', '🎊', '👑'];
+/** The same burst for a "Nazik" winner, without the 🍆. */
+const POLITE_CONFETTI_EMOJI = ['🎉', '🔥', '⭐', '💥', '🏆', '✨', '🎊', '👑'];
 
 /** Cheap one-shot burst above the podium — Animated only, no extra dependency. */
-function Confetti() {
+function Confetti({ polite }: { polite: boolean }) {
   // `useState` rather than a ref: the compiler forbids reading a ref during
   // render, and these values only ever need to be created once.
   const [pieces] = useState(() =>
-    CONFETTI_EMOJI.map((emoji, index) => ({
+    (polite ? POLITE_CONFETTI_EMOJI : CONFETTI_EMOJI).map((emoji, index) => ({
       emoji,
       key: `${emoji}-${index}`,
       delay: index * 90,

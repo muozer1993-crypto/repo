@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
 import { useUnread } from '@/hooks/queries';
+import { useLevel } from '@/store/auth';
 import { Colors, FontWeight, Layout, Radius } from '@/theme';
 
 const ICONS: Record<string, string> = {
@@ -12,6 +13,9 @@ const ICONS: Record<string, string> = {
   inbox: '📬',
   profile: '🍆',
 };
+
+/** "Nazik" asked for no 🍆, and the tab bar is on every screen. */
+const POLITE_ICONS: Record<string, string> = { ...ICONS, profile: '👤' };
 
 const LABELS: Record<string, string> = {
   index: 'Çelınclar',
@@ -23,6 +27,7 @@ const LABELS: Record<string, string> = {
 export default function TabsLayout() {
   const unread = useUnread();
   const unreadCount = unread.data?.count ?? 0;
+  const icons = useLevel() === 1 ? POLITE_ICONS : ICONS;
   /**
    * The bar has to clear whatever the phone puts below it — the iPhone home
    * indicator, an Android gesture pill — or the system draws over the labels
@@ -47,7 +52,7 @@ export default function TabsLayout() {
         tabBarLabel: LABELS[route.name] ?? route.name,
         tabBarIcon: ({ focused }) => (
           <View style={styles.iconWrap}>
-            <Text style={[styles.icon, !focused && styles.iconDim]}>{ICONS[route.name] ?? '•'}</Text>
+            <Text style={[styles.icon, !focused && styles.iconDim]}>{icons[route.name] ?? '•'}</Text>
             {route.name === 'inbox' && unreadCount > 0 ? (
               <View style={styles.badge}>
                 <Text style={styles.badgeText} numberOfLines={1}>

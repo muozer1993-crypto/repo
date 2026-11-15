@@ -169,7 +169,7 @@ export default function FriendsScreen() {
     // The link opens a page on our server: it opens the app (or offers the APK)
     // and sends the friend request by itself. The bare code stays as a fallback.
     const message = inviteLink
-      ? `KOYDUM'da kanka olalım 🍆 Bağlantıya dokun, uygulama açılsın: ${inviteLink}\nAçılmazsa davet kodum: ${me.inviteCode} (@${me.username})`
+      ? `KOYDUM'da kanka olalım ${level === 1 ? '🤝' : '🍆'} Bağlantıya dokun, uygulama açılsın: ${inviteLink}\nAçılmazsa davet kodum: ${me.inviteCode} (@${me.username})`
       : `KOYDUM'da beni kanka olarak ekle. Davet kodum: ${me.inviteCode} (@${me.username}). Uygulama sende yoksa benden iste, APK'yı yollarım.`;
     if (Platform.OS === 'web') {
       // react-native-web's Share is not reliable in every browser; copying always works

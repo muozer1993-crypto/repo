@@ -286,6 +286,13 @@ describe('taunts fit the çelınc they land on', () => {
     }
   });
 
+  it('never calls a poke\'s çelınc lost: the one poked is behind now and can still turn it', () => {
+    // and "bugün" is wrong for a çelınc that runs a week
+    for (const template of TAUNTS.filter((candidate) => candidate.context === 'poke')) {
+      expect(`${template.title} ${template.body}`, template.id).not.toMatch(/belli oldu|bugün zoka/i);
+    }
+  });
+
   it('never tells a screen-time player to add more', () => {
     for (const context of CONTEXTS) {
       for (const template of tauntsFor(context, 3, 'manual_lower_is_better')) {
