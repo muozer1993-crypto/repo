@@ -106,7 +106,7 @@ export function unreadCount(db: Database, userId: string): UnreadCount {
  * instant would page as if it were older or newer, returning rows the client has
  * already seen — or the same page forever. Normalising to the stored form fixes both.
  */
-function canonicalInstant(value: string | undefined): string | undefined {
+export function canonicalInstant(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? value : new Date(parsed).toISOString();

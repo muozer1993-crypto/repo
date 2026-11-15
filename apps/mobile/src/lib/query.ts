@@ -23,6 +23,8 @@ export const qk = {
   catalog: ['catalog'] as const,
   challenges: (status?: string) => ['challenges', status ?? 'all'] as const,
   challenge: (id: string) => ['challenge', id] as const,
+  // under the detail's key: whatever refetches the detail reloads these pages too
+  challengeFeed: (id: string) => ['challenge', id, 'feed'] as const,
   results: (id: string) => ['results', id] as const,
   friends: ['friends'] as const,
   blocked: ['blocked'] as const,

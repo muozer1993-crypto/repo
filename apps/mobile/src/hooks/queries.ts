@@ -4,6 +4,9 @@ import type {
   ChallengeResults,
   ChallengeSummary,
   Entry,
+  FeedCursor,
+  FeedItem,
+  FeedPage,
   FriendsView,
   LeaderboardEntry,
   Notification,
@@ -77,6 +80,47 @@ export function useChallenge(id: string | undefined) {
     queryFn: () => api.challenge(id as string),
     enabled: !!id,
     refetchInterval: 45_000,
+  });
+}
+
+/**
+ * "Daha eski girişler": the entries past the detail's newest 40, which an
+ * itiraz has to reach as long as the çelınc runs. Off until the reader asks.
+ *
+ * The pages start from the newest, the first one the detail's 40 and the 40
+ * before them, not from the detail's `feedCursor`. The detail refetches on its
+ * own every 45 s, and each new entry pushes its oldest row out of `feed`: pages
+ * hung on an older cursor would never show that row again, while one unbroken
+ * run from the top has no gap to lose it in. `feedRows` drops the repeats.
+ */
+export function useChallengeFeed(id: string, enabled: boolean) {
+  const api = useApi();
+  return useInfiniteQuery({
+    queryKey: qk.challengeFeed(id),
+    queryFn: ({ pageParam }) => api.challengeFeed(id, pageParam ?? { limit: 2 * LIMITS.FEED_PAGE }),
+    initialPageParam: null as FeedCursor | null,
+    getNextPageParam: (lastPage) => lastPage.next ?? undefined,
+    enabled: enabled && !!id,
+  });
+}
+
+/**
+ * The detail's feed with the loaded older pages merged in, newest first like
+ * the server orders it. The detail's copy of a row wins: it refetches every
+ * 45 s, the pages only after a write or a notification about this çelınc.
+ */
+export function feedRows(feed: readonly FeedItem[], pages: readonly FeedPage[] | undefined): FeedItem[] {
+  const seen = new Set(feed.map((item) => item.id));
+  const rows = [...feed];
+  for (const item of (pages ?? []).flatMap((page) => page.items)) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    rows.push(item);
+  }
+  // (createdAt, id) descending, the server's order; both compare as plain strings there too
+  return rows.sort((a, b) => {
+    if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
+    return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
   });
 }
 

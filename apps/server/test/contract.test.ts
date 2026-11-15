@@ -200,6 +200,12 @@ describe('API contract as the mobile client consumes it', () => {
     expect(typeof detail.canPoke).toBe('boolean');
     // the picker reads this to decide who it may offer a line about
     expect(Array.isArray(detail.pokeTargets)).toBe(true);
+    // two rows fit in one look: no "Daha eski girişler"
+    expect(detail.feedCursor).toBeNull();
+    const older = (await call(winner.token, 'GET', `/challenges/${created.id}/feed`)).body;
+    expect(Array.isArray(older.items)).toBe(true);
+    expect(older.items.length).toBe(detail.feed.length);
+    expect(older.next).toBeNull();
 
     /* poke ----------------------------------------------------------------- */
     await call(winner.token, 'POST', `/challenges/${created.id}/poke`, { toUserId: loser.me.id });

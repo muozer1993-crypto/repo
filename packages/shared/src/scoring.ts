@@ -70,6 +70,12 @@ export const LIMITS = {
   REMATCH_START_DELAY_MS: 5 * 60 * 1000,
   INBOX_PAGE_DEFAULT: 30,
   INBOX_PAGE_MAX: 100,
+  /**
+   * How many of the newest entries a çelınc's detail carries in `feed`, and
+   * the size of a page of older ones (`GET /challenges/:id/feed`).
+   */
+  FEED_PAGE: 40,
+  FEED_PAGE_MAX: 100,
   UPLOAD_MAX_BYTES: 5 * 1024 * 1024,
 } as const;
 

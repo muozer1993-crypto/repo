@@ -14,7 +14,9 @@ import {
   type Entry,
   type ParticipantView,
   type Challenge,
+  type FeedPage,
 } from '@koydum/shared';
+import { newId } from '../src/db/index.js';
 import { runSchedulerOnce } from '../src/services/challenges.js';
 import { challengeFeed } from '../src/services/challengeViews.js';
 import { getEntryRow } from '../src/services/entries.js';
@@ -1230,5 +1232,135 @@ describe('POST /challenges/:id/entries/:entryId/proof', () => {
     });
     expect(withdraw.statusCode).toBe(400);
     expect(errorCode(withdraw)).toBe('challenge_not_active');
+  });
+});
+
+describe('GET /challenges/:id/feed', () => {
+  /** A typed row written at `at`, straight into the table: sixty posts would only slow the suite down. */
+  function insertEntry(h: TestApp, challengeId: string, userId: string, at: string, value = 1): string {
+    const id = newId();
+    h.db
+      .prepare(
+        `INSERT INTO entries (id, challenge_id, user_id, day_key, value, source, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'manual', 'ok', ?, ?)`,
+      )
+      .run(id, challengeId, userId, today(h), value, at, at);
+    return id;
+  }
+
+  function feedPage(h: TestApp, user: RegisteredUser, challengeId: string, query = '') {
+    return authed(h.app, user.token)({ method: 'GET', url: `/challenges/${challengeId}/feed${query}` });
+  }
+
+  function detailOf(h: TestApp, user: RegisteredUser, challengeId: string) {
+    return authed(h.app, user.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+  }
+
+  it('pages past the 40 newest from the cursor the detail hands out, an old disputed row aside', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await liveChallenge(harness, 'su_bardak');
+    // sixty rows a second apart, oldest first
+    const ids = Array.from({ length: 60 }, (_, i) =>
+      insertEntry(harness!, challengeId, (i % 2 === 0 ? ali : veli).me.id, iso(harness!, (i - 60) * 1000)),
+    );
+    const newestFirst = [...ids].reverse();
+    // the oldest one is disputed, so the detail carries it however old
+    const disputed = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${ids[0]}/dispute`,
+      payload: { reason: 'ilk gün bu kadar mı' },
+    });
+    expect(disputed.statusCode).toBe(201);
+
+    const detail = (await detailOf(harness, ali, challengeId)).json<ChallengeDetail>();
+    expect(detail.feed.map((item) => item.id)).toEqual([...newestFirst.slice(0, 40), ids[0]]);
+    // the 40th newest, not the disputed row at the bottom of the feed
+    expect(detail.feedCursor).toEqual({ before: iso(harness, -40_000), beforeId: newestFirst[39] });
+
+    const { before, beforeId } = detail.feedCursor!;
+    const response = await feedPage(harness, ali, challengeId, `?before=${encodeURIComponent(before)}&beforeId=${beforeId}`);
+    expect(response.statusCode).toBe(200);
+    const page = response.json<FeedPage>();
+    expect(page.items.map((item) => item.id)).toEqual(newestFirst.slice(40));
+    expect(page.next).toBeNull();
+    // the page carries what the detail's rows carry: the disputed one still says how far the itiraz got
+    expect(page.items.at(-1)).toMatchObject({ id: ids[0], status: 'disputed', displayName: 'Ali' });
+  });
+
+  it('gives a feed that fits in one look no cursor', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await liveChallenge(harness, 'su_bardak');
+    for (let i = 0; i < 40; i++) insertEntry(harness, challengeId, ali.me.id, iso(harness, (i - 40) * 1000));
+
+    const detail = (await detailOf(harness, ali, challengeId)).json<ChallengeDetail>();
+    expect(detail.feed).toHaveLength(40);
+    expect(detail.feedCursor).toBeNull();
+  });
+
+  it('pages from the newest without a cursor, and only one player\'s rows with userId', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await liveChallenge(harness, 'su_bardak');
+    const aliIds: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const user = i % 2 === 0 ? ali : veli;
+      const id = insertEntry(harness, challengeId, user.me.id, iso(harness, (i - 10) * 1000));
+      if (user === ali) aliIds.unshift(id);
+    }
+
+    const first = (await feedPage(harness, veli, challengeId, `?userId=${ali.me.id}&limit=3`)).json<FeedPage>();
+    expect(first.items.map((item) => item.id)).toEqual(aliIds.slice(0, 3));
+    expect(first.items.every((item) => item.userId === ali.me.id)).toBe(true);
+    const { before, beforeId } = first.next!;
+    const rest = (
+      await feedPage(harness, veli, challengeId, `?userId=${ali.me.id}&before=${encodeURIComponent(before)}&beforeId=${beforeId}`)
+    ).json<FeedPage>();
+    expect(rest.items.map((item) => item.id)).toEqual(aliIds.slice(3));
+    expect(rest.next).toBeNull();
+
+    const everybody = (await feedPage(harness, veli, challengeId)).json<FeedPage>();
+    expect(everybody.items).toHaveLength(10);
+    expect(everybody.next).toBeNull();
+  });
+
+  it('neither skips nor repeats rows written in the same millisecond at a page boundary', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await liveChallenge(harness, 'su_bardak');
+    // one device sync writes every day it carries at the same instant
+    const at = iso(harness, -60_000);
+    const ids = [ali, veli, ali, veli, ali, veli, ali].map((user, i) => insertEntry(harness!, challengeId, user.me.id, at, i + 1));
+    insertEntry(harness, challengeId, ali.me.id, iso(harness, -120_000));
+
+    const seen: string[] = [];
+    let query = '?limit=2';
+    for (let pages = 0; pages < 10; pages++) {
+      const page = (await feedPage(harness, ali, challengeId, query)).json<FeedPage>();
+      seen.push(...page.items.map((item) => item.id));
+      if (!page.next) break;
+      // an offset form of the same instant pages the same way
+      const offset = new Date(Date.parse(page.next.before) + 3 * 3_600_000).toISOString().replace('Z', '+03:00');
+      query = `?limit=2&before=${encodeURIComponent(offset)}&beforeId=${page.next.beforeId}`;
+    }
+    expect(seen).toHaveLength(8);
+    expect(new Set(seen).size).toBe(8);
+    expect(seen.slice(0, 7).sort()).toEqual([...ids].sort());
+  });
+
+  it('answers 404 to anybody outside the çelınc, and 400 to an id without its instant', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await liveChallenge(harness, 'su_bardak');
+    const cem = await registerUser(harness.app, 'cem');
+    befriend(harness.app, ali.me.id, cem.me.id);
+
+    const outsider = await feedPage(harness, cem, challengeId);
+    expect(outsider.statusCode).toBe(404);
+    expect(errorCode(outsider)).toBe('challenge_not_found');
+    const madeUp = await feedPage(harness, ali, randomUUID());
+    expect(madeUp.statusCode).toBe(404);
+    expect(errorCode(madeUp)).toBe('challenge_not_found');
+
+    const loose = await feedPage(harness, ali, challengeId, `?beforeId=${randomUUID()}`);
+    expect(loose.statusCode).toBe(400);
+    expect(errorCode(loose)).toBe('validation');
+    expect((await feedPage(harness, ali, challengeId, `?limit=${LIMITS.FEED_PAGE_MAX + 1}`)).statusCode).toBe(400);
   });
 });

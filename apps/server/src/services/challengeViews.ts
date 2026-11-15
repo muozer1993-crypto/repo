@@ -15,7 +15,9 @@ import type {
   ChallengeSummary,
   Dispute,
   Entry,
+  FeedCursor,
   FeedItem,
+  FeedPage,
   ParticipantView,
   Taunt,
   VulgarityLevel,
@@ -25,9 +27,10 @@ import { badRequest, forbidden, notFound } from '../errors.js';
 import { asVulgarityLevel, toChallenge, toDispute, toEntry, toFeedItem, toTaunt } from '../serialize.js';
 import { computeStandings, disputesOpenUntil, getChallengeRow } from './challenges.js';
 import { disputeDeadlines, disputeThreshold, disputedEntries } from './entries.js';
+import { canonicalInstant } from './notifications.js';
 
 /** How many recent entries the detail feed carries (SPEC 2.2). */
-export const FEED_LIMIT = 40;
+export const FEED_LIMIT: number = LIMITS.FEED_PAGE;
 
 // ---------------------------------------------------------------------------
 // Access
@@ -130,7 +133,88 @@ export function challengeFeed(db: Database, challengeId: string, limit = FEED_LI
                OR e.id IN (SELECT id FROM entries WHERE challenge_id = ? ORDER BY created_at DESC, id DESC LIMIT ?))
         ORDER BY e.created_at DESC, e.id DESC`,
     )
-    .all(challengeId, challengeId, limit) as (EntryRow & { display_name: string })[];
+    .all(challengeId, challengeId, limit) as FeedRow[];
+  return toFeedItems(db, challengeId, rows);
+}
+
+export interface FeedPageOptions {
+  /** Only rows older than this instant… */
+  before?: string;
+  /** …or written in that same millisecond with a smaller id. */
+  beforeId?: string;
+  /** Only this player's rows. */
+  userId?: string;
+  limit?: number;
+}
+
+/**
+ * One page of the feed, newest first (GET /challenges/:id/feed). The detail
+ * carries the newest 40, and an itiraz stays open for the whole çelınc: four
+ * players of a 14-day steps çelınc write 56 rows, ten people's focus sessions
+ * bury Tuesday by Thursday, and the itiraz chip lives only on a feed row.
+ *
+ * Paged on (created_at, id), the feed's own order, not on the instant alone:
+ * one device sync writes several days in the same millisecond, and a cut at
+ * the instant would skip the rest of them or repeat them. An edit keeps
+ * `created_at`, so a row stays on its page. One row past `limit` is read to
+ * tell whether another page follows.
+ */
+export function challengeFeedPage(db: Database, challengeId: string, options: FeedPageOptions = {}): FeedPage {
+  const limit = Math.min(Math.max(1, Math.trunc(options.limit ?? FEED_LIMIT)), LIMITS.FEED_PAGE_MAX);
+  const filters: string[] = [];
+  const params: unknown[] = [challengeId];
+  if (options.userId !== undefined) {
+    filters.push('AND e.user_id = ?');
+    params.push(options.userId);
+  }
+  const before = canonicalInstant(options.before);
+  if (before !== undefined && options.beforeId !== undefined) {
+    filters.push('AND (e.created_at < ? OR (e.created_at = ? AND e.id < ?))');
+    params.push(before, before, options.beforeId);
+  } else if (before !== undefined) {
+    filters.push('AND e.created_at < ?');
+    params.push(before);
+  }
+  const rows = db
+    .prepare(
+      `SELECT e.*, u.display_name AS display_name FROM entries e
+         JOIN users u ON u.id = e.user_id
+        WHERE e.challenge_id = ? ${filters.join(' ')}
+        ORDER BY e.created_at DESC, e.id DESC
+        LIMIT ?`,
+    )
+    .all(...params, limit + 1) as FeedRow[];
+  const page = rows.slice(0, limit);
+  const last = page[page.length - 1];
+  return {
+    items: toFeedItems(db, challengeId, page),
+    next: rows.length > limit && last ? cursorOf(last) : null,
+  };
+}
+
+/**
+ * Where the rows older than the detail's newest `limit` start; null when the
+ * feed already reaches the first entry. The server works it out because the
+ * feed also carries every disputed row however old: its last item is not
+ * where the newest stop.
+ */
+export function feedCursor(db: Database, challengeId: string, limit = FEED_LIMIT): FeedCursor | null {
+  const rows = db
+    .prepare('SELECT created_at, id FROM entries WHERE challenge_id = ? ORDER BY created_at DESC, id DESC LIMIT 2 OFFSET ?')
+    .all(challengeId, limit - 1) as { created_at: string; id: string }[];
+  // the limit-th row, and only when a row older than it exists
+  const last = rows[0];
+  return rows.length === 2 && last ? cursorOf(last) : null;
+}
+
+type FeedRow = EntryRow & { display_name: string };
+
+function cursorOf(row: { created_at: string; id: string }): FeedCursor {
+  return { before: row.created_at, beforeId: row.id };
+}
+
+/** Feed rows as the app reads them, with the itiraz clock and vote count only the whole çelınc knows. */
+function toFeedItems(db: Database, challengeId: string, rows: FeedRow[]): FeedItem[] {
   const deadlines = disputeDeadlines(db, challengeId);
   const needed = disputeThreshold(acceptedCount(db, challengeId));
   const open = new Map(disputedEntries(db, challengeId).map((row) => [row.id, row.open_count]));
@@ -272,6 +356,7 @@ export function buildDetail(
     disputesCloseAt: Number.isFinite(disputesClose) ? new Date(disputesClose).toISOString() : null,
     myEntries: myEntries(db, challenge.id, userId),
     feed: challengeFeed(db, challenge.id),
+    feedCursor: feedCursor(db, challenge.id),
     disputes: challengeDisputes(db, challenge.id),
     taunts: tauntsForUser(db, challenge.id, userId),
     canTaunt: canTauntList(db, challenge, userId),

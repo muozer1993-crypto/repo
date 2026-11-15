@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ChallengeFeedQuerySchema,
   ChallengeListQuerySchema,
   ChangePasswordBodySchema,
   CreateChallengeBodySchema,
@@ -350,6 +351,16 @@ describe('query schemas', () => {
     expect(InboxQuerySchema.parse({})).toEqual({ limit: 30 });
     expect(InboxQuerySchema.parse({ limit: '10', before: '2024-05-01T00:00:00Z' })).toEqual({ limit: 10, before: '2024-05-01T00:00:00Z' });
     expect(InboxQuerySchema.safeParse({ limit: '1000' }).success).toBe(false);
+  });
+
+  it('ChallengeFeedQuery takes a page size up to FEED_PAGE_MAX, and an id only with its instant', () => {
+    expect(ChallengeFeedQuerySchema.parse({})).toEqual({ limit: 40 });
+    const cursor = { before: '2026-01-05T08:59:20.000Z', beforeId: 'e-1' };
+    expect(ChallengeFeedQuerySchema.parse({ ...cursor, userId: 'u-1', limit: '80' })).toEqual({ ...cursor, userId: 'u-1', limit: 80 });
+    expect(ChallengeFeedQuerySchema.parse({ before: cursor.before })).toEqual({ before: cursor.before, limit: 40 });
+    expect(issuePaths(ChallengeFeedQuerySchema.safeParse({ beforeId: 'e-1' }))).toEqual(['before']);
+    expect(ChallengeFeedQuerySchema.safeParse({ limit: '101' }).success).toBe(false);
+    expect(ChallengeFeedQuerySchema.safeParse({ before: 'dün' }).success).toBe(false);
   });
 
   it('ChallengeListQuery splits comma-separated statuses', () => {

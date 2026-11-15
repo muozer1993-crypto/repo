@@ -4,6 +4,7 @@
  *   GET  /challenges?status=active,pending,finished
  *   POST /challenges
  *   GET  /challenges/:id
+ *   GET  /challenges/:id/feed?before=&beforeId=&userId=&limit=
  *   POST /challenges/:id/accept | /decline | /leave | /cancel
  *   POST /challenges/:id/invite
  *
@@ -19,10 +20,12 @@ import {
   deadlineFitsWindow,
   getChallengeType,
   isValidHHmm,
+  ChallengeFeedQuerySchema,
   ChallengeListQuerySchema,
   type Challenge,
   type ChallengeDetail,
   type ChallengeSummary,
+  type FeedPage,
 } from '@koydum/shared';
 import { badRequest, conflict, forbidden, parseBody, parseQuery } from '../errors.js';
 import { newId, nowIso, type ChallengeRow, type Database, type UserRow } from '../db/index.js';
@@ -33,6 +36,7 @@ import {
   buildDetail,
   buildSummary,
   cancelledByCreatorCopy,
+  challengeFeedPage,
   declinedCopy,
   freshDetail,
   getParticipant,
@@ -326,6 +330,18 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const challenge = requireChallengeRow(db, id);
     requireMembership(db, challenge, me.id);
     return buildDetail(db, challenge, me.id, app.now(), app.schedulerBootAt.at);
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /challenges/:id/feed — the entries older than the detail's feed
+  // -------------------------------------------------------------------------
+  app.get('/challenges/:id/feed', { preHandler: app.authenticate }, async (request): Promise<FeedPage> => {
+    const me = request.user;
+    const { id } = request.params as IdParams;
+    const challenge = requireChallengeRow(db, id);
+    requireMembership(db, challenge, me.id);
+    const query = parseQuery(ChallengeFeedQuerySchema, request.query ?? {});
+    return challengeFeedPage(db, challenge.id, query);
   });
 
   // -------------------------------------------------------------------------

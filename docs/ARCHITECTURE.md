@@ -167,6 +167,18 @@ hariç, son akşamın sayıları o saatte gelir; `disputesCloseAt`), yoksa art a
 sonucu günlerce bekletebilirdi. Bitişten sonra ayrılmak da kapalıdır: teke tek çelıncta kaybeden
 ayrılıp sonucu iptal ettirebilirdi.
 
+İtiraz çelınc boyunca açıktır ama itiraz düğmesi yalnız akışın satırlarındadır, akış da en yeni
+40 girişi (artı itiraz bekleyen her girişi) taşır. Dört kişilik 14 günlük bir adım çelıncı 56 satır
+yazar, on kişilik bir odak haftası salıyı perşembeye gömer: ilk günler itiraz edilemez kalıyordu.
+"Daha eski girişler" onları `GET /challenges/:id/feed` ile sayfa sayfa getirir. Sayfalar
+(`created_at`, `id`) çiftiyle kesilir, akışın kendi sırasıyla: bir telefon senkronu birkaç günü aynı
+milisaniyede yazar, yalnız ana göre kesmek o satırları atlar ya da tekrarlar. Ayrıntı ekranı nerede
+durduğunu kendisi söyleyemez (sonunda eski bir itirazlı satır durabilir), o yüzden sunucu
+`feedCursor`'ı verir. Uygulama ise sayfaları o imleçten değil en yeniden başlatır (ilk sayfa 80
+satır), ayrıntının 40'ını tekrar indirmek pahasına: ayrıntı kendi başına 45 saniyede bir yenilenir
+ve her yeni giriş en eskisini 40'ın dışına iter. Eski bir imleçten başlayan sayfalar o satırı bir
+daha göstermezdi; en yeniden kesintisiz gelen bir dizide arada kaybolacak yer yoktur.
+
 ## Puanlama
 
 `packages/shared/src/scoring.ts` saf bir fonksiyondur: girdi olarak çelınc tipi, gün listesi ve

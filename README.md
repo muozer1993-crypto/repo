@@ -720,7 +720,10 @@ değiştirirse "Geri çek" ile itirazını kaldırır (aynı girişe bir daha it
 sayısını ya da fotoğrafını değiştirirse edebilir). Bitişe yakın gelen bir itiraz yüzünden sonuç
 en fazla 12 saat bekleyebilir. İtiraz sadece çelınc sürerken açılır; adım ve ekran süresi çelınclarında
 son akşamın sayıları bitişten sonraki bir saatte geldiği için o saat de sayılır (bilgisayar bitişte
-uyuyorduysa o saat uyandığı andan başlar). Uygulama itiraz düğmesini de sadece bu sürede gösterir. Fotoğraf kanıtı, bir
+uyuyorduysa o saat uyandığı andan başlar). Uygulama itiraz düğmesini de sadece bu sürede gösterir.
+Akışta en yeni 40 giriş görünür (itiraz bekleyenler ne kadar eski olursa olsun hep oradadır); daha
+eskisine itiraz etmek için listenin altındaki **Daha eski girişler**'e dokun, her dokunuşta 40 tane
+daha gelir. Kalabalık ya da uzun bir çelıncta ilk günlerin girişleri böylece hâlâ sorgulanabilir. Fotoğraf kanıtı, bir
 sayı yazılan türlerde çelıncı açan kişi isterse zorunlu olur; evet/hayır günleri ve check-in'lerde
 fotoğraf yok.
 Sunucu her kanıt fotoğrafını kaydetmeden önce telefonun içine yazdığı konumu ve çekim bilgisini

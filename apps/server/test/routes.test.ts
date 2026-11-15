@@ -105,6 +105,7 @@ const SPEC_ENDPOINTS: [SpecMethod, string][] = [
   ['GET', '/challenges'],
   ['POST', '/challenges'],
   ['GET', '/challenges/:id'],
+  ['GET', '/challenges/:id/feed'],
   ['POST', '/challenges/:id/accept'],
   ['POST', '/challenges/:id/decline'],
   ['POST', '/challenges/:id/leave'],

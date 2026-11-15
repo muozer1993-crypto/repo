@@ -428,6 +428,21 @@ export interface FeedItem {
   disputeVotes?: { open: number; needed: number } | null;
 }
 
+/**
+ * Where a page of the feed stops: the `createdAt` and `id` of its last row,
+ * the feed's own order. The next page is the rows after it.
+ */
+export interface FeedCursor {
+  before: string;
+  beforeId: string;
+}
+
+/** `GET /challenges/:id/feed`: newest first; `next` is null on the last page. */
+export interface FeedPage {
+  items: FeedItem[];
+  next: FeedCursor | null;
+}
+
 export interface Dispute {
   id: string;
   entryId: string;
@@ -474,6 +489,14 @@ export interface ChallengeDetail extends ChallengeSummary {
    * it out, and the app falls back to the end plus `LIMITS.DEVICE_SETTLE_MS`.
    */
   disputesCloseAt?: string | null;
+  /**
+   * Set when the çelınc has entries older than the `LIMITS.FEED_PAGE` newest
+   * in `feed`: where `GET /challenges/:id/feed` goes on from them. The server
+   * hands it out because `feed` also carries every disputed row however old,
+   * so its last item is not where the newest stop. `null` when `feed` already
+   * reaches the first entry; an older server leaves it out.
+   */
+  feedCursor?: FeedCursor | null;
 }
 
 /** `GET /challenges/:id/results` */

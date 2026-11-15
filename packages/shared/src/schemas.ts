@@ -446,6 +446,24 @@ export const InboxQuerySchema = z.object({
 });
 export type InboxQuery = z.infer<typeof InboxQuerySchema>;
 
+/**
+ * A page of a çelınc's entries older than `before` (SPEC 2.2). `beforeId`
+ * breaks the tie between rows written in the same millisecond; it means
+ * nothing without the instant it belongs to.
+ */
+export const ChallengeFeedQuerySchema = z
+  .object({
+    before: IsoDateTimeSchema.optional(),
+    beforeId: IdSchema.optional(),
+    userId: IdSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(LIMITS.FEED_PAGE_MAX).default(LIMITS.FEED_PAGE),
+  })
+  .refine((v) => v.beforeId === undefined || v.before !== undefined, {
+    message: 'beforeId ile birlikte before da gerekli',
+    path: ['before'],
+  });
+export type ChallengeFeedQuery = z.infer<typeof ChallengeFeedQuerySchema>;
+
 /** `?status=active,pending` → `['active', 'pending']` (omitted → all statuses). */
 export const ChallengeListQuerySchema = z.object({
   status: z

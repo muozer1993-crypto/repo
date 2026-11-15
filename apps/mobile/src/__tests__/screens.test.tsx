@@ -1635,6 +1635,126 @@ describe('an itiraz on the feed', () => {
     expect(text).toContain('Diğerlerine de haber gitti. Çoğunluk itiraz ederse sahibinin 12 saati başlar.');
     expect(text).not.toContain('Kankalar bakacak.');
   });
+
+  /** A detail whose feed stops at two rows with older ones on the server, Ali's and mine taking turns. */
+  function withOlderEntries() {
+    const detail = challengeDetail();
+    const rival = { ...detail.me!, user: ALI, score: 9000, rank: 2 };
+    detail.participants = [detail.me!, rival];
+    const row = (id: string, hoursAgo: number, value: number) => {
+      const user = value % 2 === 1 ? ALI : detail.me!.user;
+      return {
+        id,
+        userId: user.id,
+        displayName: user.displayName,
+        dayKey: '2026-09-08',
+        value,
+        source: 'manual' as const,
+        status: 'ok' as const,
+        createdAt: new Date(Date.now() - hoursAgo * 3_600_000).toISOString(),
+        proofUrl: null,
+        answerBy: null,
+        disputeVotes: null,
+      };
+    };
+    const feed = [row('e-1', 1, 11111), row('e-2', 2, 22222)];
+    const older = [row('e-3', 50, 33333), row('e-4', 51, 44444), row('e-5', 52, 55555)];
+    return {
+      detail: { ...detail, feed, feedCursor: { before: feed[1]!.createdAt, beforeId: 'e-2' } },
+      feed,
+      older,
+    };
+  }
+
+  /** The itiraz chips on screen; "Yalan Bu" is the level-2 label. */
+  function disputeChips(tree: ReactTestRenderer) {
+    return tree.root.findAll((node) => node.props.label === 'Yalan Bu' && typeof node.props.onPress === 'function');
+  }
+
+  it('reaches the entries past the newest 40 with "Daha eski girişler", each with its itiraz chip, none twice', async () => {
+    searchParams.id = 'c-1';
+    const { detail, feed, older } = withOlderEntries();
+    api.challenge = jest.fn(async () => detail);
+    const cursor = { before: older[1]!.createdAt, beforeId: 'e-4' };
+    api.challengeFeed = jest
+      .fn()
+      // the first page runs from the newest, so it repeats the detail's rows
+      .mockResolvedValueOnce({ items: [...feed, older[0], older[1]], next: cursor })
+      .mockResolvedValueOnce({ items: [older[2]], next: null });
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(api.challengeFeed).not.toHaveBeenCalled();
+    expect(rendered(tree)).not.toContain('33.333');
+    expect(disputeChips(tree)).toHaveLength(1);
+
+    press(tree, 'Daha eski girişler');
+    await settle();
+    expect(api.challengeFeed).toHaveBeenCalledWith('c-1', { limit: 2 * LIMITS.FEED_PAGE });
+    let text = rendered(tree);
+    expect(text).toContain('33.333 adım');
+    expect(text).toContain('44.444 adım');
+    expect(text.split('11.111 adım')).toHaveLength(2);
+    expect(text.split('22.222 adım')).toHaveLength(2);
+    // Ali's older row can be disputed like any other while the çelınc runs
+    expect(disputeChips(tree)).toHaveLength(2);
+
+    press(tree, 'Daha eski girişler');
+    await settle();
+    expect(api.challengeFeed).toHaveBeenLastCalledWith('c-1', cursor);
+    text = rendered(tree);
+    expect(text).toContain('55.555 adım');
+    expect(disputeChips(tree)).toHaveLength(3);
+    // newest first, and nothing left to ask for
+    expect(text.indexOf('22.222 adım')).toBeLessThan(text.indexOf('33.333 adım'));
+    expect(text.indexOf('44.444 adım')).toBeLessThan(text.indexOf('55.555 adım'));
+    expect(text).not.toContain('DAHA ESKİ GİRİŞLER');
+
+    // the oldest row's chip files the itiraz on that entry
+    api.disputeEntry = jest.fn(async () => ({ entry: {}, answerBy: null, standings: [] }));
+    act(() => {
+      disputeChips(tree)[2]!.props.onPress();
+    });
+    typeInto(tree, 'Neden yalan?', 'iki gün önce evdeydi');
+    await act(async () => {
+      await findWith(tree, 'title', 'İtirazı gönder', 'onPress').props.onPress();
+    });
+    expect(api.disputeEntry).toHaveBeenCalledWith('c-1', 'e-5', 'iki gün önce evdeydi');
+  });
+
+  it('shows no "Daha eski girişler" when the feed already holds every entry', async () => {
+    searchParams.id = 'c-1';
+    const { detail } = withOlderEntries();
+    api.challenge = jest.fn(async () => ({ ...detail, feedCursor: null }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('22.222 adım');
+    expect(rendered(tree)).not.toContain('DAHA ESKİ GİRİŞLER');
+  });
+
+  it('says so when the older entries do not come, and the button asks again', async () => {
+    searchParams.id = 'c-1';
+    const { detail, older } = withOlderEntries();
+    api.challenge = jest.fn(async () => detail);
+    api.challengeFeed = jest
+      .fn()
+      .mockRejectedValueOnce(NETWORK_ERROR)
+      .mockResolvedValueOnce({ items: older, next: null });
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    press(tree, 'Daha eski girişler');
+    await settle();
+    expect(rendered(tree)).toContain('Eski girişler gelmedi. Bir daha dene.');
+    press(tree, 'Daha eski girişler');
+    await settle();
+    expect(api.challengeFeed).toHaveBeenCalledTimes(2);
+    expect(rendered(tree)).toContain('55.555 adım');
+    expect(rendered(tree)).not.toContain('gelmedi');
+  });
 });
 
 describe('a loser still waiting for the winner to talk', () => {

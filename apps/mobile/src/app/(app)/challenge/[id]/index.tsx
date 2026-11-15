@@ -43,10 +43,12 @@ import { Standings } from '@/components/Standings';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import {
+  feedRows,
   useAddEntry,
   useAddEntryProof,
   useChallenge,
   useChallengeAction,
+  useChallengeFeed,
   useDeleteEntry,
   useDispute,
   useFriends,
@@ -1622,6 +1624,25 @@ function Feed({
   const [answering, setAnswering] = useState<FeedItem | null>(null);
   const [pickedUrl, setPickedUrl] = useState<string | null>(null);
 
+  // The detail carries the newest 40 (and every disputed row), and an itiraz
+  // is open for the whole çelınc: in a busy one the first days' rows are only
+  // reachable through "Daha eski girişler".
+  const [olderOpen, setOlderOpen] = useState(false);
+  const older = useChallengeFeed(challengeId, olderOpen);
+  const rows = olderOpen ? feedRows(detail.feed, older.data?.pages) : detail.feed;
+  // before the first page the server's word, after it whether a page is left
+  const moreOlder = olderOpen ? !older.data || older.hasNextPage : !!detail.feedCursor;
+  const olderFailed = older.isFetchNextPageError || (older.isError && !older.data);
+  const loadOlder = () => {
+    if (!olderOpen) {
+      setOlderOpen(true);
+      return;
+    }
+    // one page at a time, and never over a refetch, which fetchNextPage would cancel
+    if (older.isFetching) return;
+    void (older.data ? older.fetchNextPage() : older.refetch());
+  };
+
   // Only a friend's itiraz could undo a mistyped value before this: the server
   // lets you delete your own manual rows while the çelınc is running.
   const active = detail.challenge.status === 'active';
@@ -1757,7 +1778,7 @@ function Feed({
         </Text>
       ) : (
         <View style={styles.feedList}>
-          {detail.feed.map((item) => {
+          {rows.map((item) => {
             const isMine = item.userId === meId;
             // an open itiraz explains a disputed row, an upheld one a rejected row
             const shown = item.status === 'disputed' ? 'open' : item.status === 'rejected' ? 'upheld' : null;
@@ -1796,6 +1817,24 @@ function Feed({
           })}
         </View>
       )}
+
+      {moreOlder ? (
+        <View style={styles.olderFooter}>
+          {olderFailed ? (
+            <Text variant="tiny" faint center>
+              Eski girişler gelmedi. Bir daha dene.
+            </Text>
+          ) : null}
+          <Button
+            title="Daha eski girişler"
+            variant="ghost"
+            size="sm"
+            icon="⏬"
+            loading={older.isLoading || older.isFetchingNextPage}
+            onPress={loadOlder}
+          />
+        </View>
+      ) : null}
 
       <Sheet visible={!!target} onClose={() => setTarget(null)} title={t('dispute_button', level)}>
         <Text variant="small" muted>
@@ -2327,6 +2366,7 @@ const styles = StyleSheet.create({
   boolHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 
   feedList: { gap: Spacing.lg },
+  olderFooter: { alignItems: 'center', gap: Spacing.xs, paddingTop: Spacing.md },
   proofButtons: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   proofPreview: { width: '100%', height: 220, borderRadius: Radius.md, backgroundColor: Colors.surfaceHigh },
   feedRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },

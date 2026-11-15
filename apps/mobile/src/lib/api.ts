@@ -6,6 +6,7 @@ import type {
   ChallengeSummary,
   ChallengeType,
   Entry,
+  FeedPage,
   FriendsView,
   LeaderboardEntry,
   Me,
@@ -334,6 +335,11 @@ export class ApiClient {
 
   challenge(id: string) {
     return this.request<ChallengeDetail>('GET', `/challenges/${id}`);
+  }
+
+  /** A page of a çelınc's entries, newest first, older than `before` when given. */
+  challengeFeed(id: string, query: { before?: string; beforeId?: string; userId?: string; limit?: number } = {}) {
+    return this.request<FeedPage>('GET', `/challenges/${id}/feed`, { query });
   }
 
   createChallenge(body: {
