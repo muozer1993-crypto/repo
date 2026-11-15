@@ -171,7 +171,22 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
     app.log.warn({ err, uploadDir }, 'upload directory unavailable, /uploads is not served');
   }
   if (uploadDirReady) {
-    await app.register(fastifyStatic, { root: uploadDir, prefix: '/uploads/', decorateReply: false });
+    await app.register(fastifyStatic, {
+      root: uploadDir,
+      prefix: '/uploads/',
+      decorateReply: false,
+      // A name is a fresh UUID and never reused, so a photo never changes under its
+      // URL: phones, and any cache on the way, keep it instead of downloading every
+      // feed thumb again.
+      maxAge: '365d',
+      immutable: true,
+      // Served as an image and nothing else: no sniffing a "photo" into HTML, and
+      // opened on its own in a browser it can run nothing.
+      setHeaders: (reply) => {
+        reply.header('x-content-type-options', 'nosniff');
+        reply.header('content-security-policy', "default-src 'none'; img-src 'self'; sandbox");
+      },
+    });
   }
 
   registerAuth(app, { db, config, now });

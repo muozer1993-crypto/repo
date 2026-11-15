@@ -171,6 +171,50 @@ async function createUserDirectly(
   return { token: signToken({ sub: id }, app.config.jwtSecret, undefined, app.now()), me: toMe(app.db, row, app.now()) };
 }
 
+/** A real 1×1 baseline JPEG (JFIF), the kind a phone's encoder writes, with no EXIF. */
+export const JPEG_1X1 = Buffer.from(
+  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCzRRRXwR9sf//Z',
+  'base64',
+);
+
+/** Stands for a phone's coordinates inside the EXIF below: a test looks for it in what was stored. */
+export const GPS_MARKER = 'GPSLAT41.0082';
+
+/**
+ * `JPEG_1X1` with an APP1 Exif segment right after SOI, where Android's ExifInterface
+ * puts it: a little-endian TIFF header, an empty IFD and then `GPS_MARKER`. Stripped,
+ * it is `JPEG_1X1` again, byte for byte.
+ */
+export const JPEG_WITH_GPS = ((): Buffer => {
+  const exif = Buffer.concat([
+    Buffer.from('Exif\0\0', 'latin1'),
+    // 'II*\0', the first IFD at 8, no entries in it, no next IFD
+    Buffer.from('49492a00' + '08000000' + '0000' + '00000000', 'hex'),
+    Buffer.from(GPS_MARKER, 'latin1'),
+  ]);
+  const length = Buffer.alloc(2);
+  length.writeUInt16BE(exif.length + 2);
+  return Buffer.concat([JPEG_1X1.subarray(0, 2), Buffer.from([0xff, 0xe1]), length, exif, JPEG_1X1.subarray(2)]);
+})();
+
+/** A multipart/form-data body with one binary file part, for `app.inject`. */
+export function multipart(file: { filename: string; contentType: string; content: Buffer; field?: string }): {
+  payload: Buffer;
+  headers: Record<string, string>;
+} {
+  const boundary = `----koydum${Math.random().toString(16).slice(2)}`;
+  const head = Buffer.from(
+    `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="${file.field ?? 'file'}"; filename="${file.filename}"\r\n` +
+      `Content-Type: ${file.contentType}\r\n\r\n`,
+  );
+  const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
+  return {
+    payload: Buffer.concat([head, file.content, tail]),
+    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+  };
+}
+
 /** `const call = authed(app, token); await call({ method: 'GET', url: '/me' })`. */
 export function authed(app: FastifyInstance, token: string) {
   return (options: InjectOptions) =>

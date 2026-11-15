@@ -1,9 +1,12 @@
 /**
- * Boot: .env → config → database → app → listen → scheduler (and, on Windows, the
- * helper that keeps the PC awake), plus a clean shutdown.
+ * Boot: .env → config → database → app → the old proof photos' clean-up → listen →
+ * scheduler (and, on Windows, the helper that keeps the PC awake), plus a clean
+ * shutdown.
  * `npm run dev -w apps/server` (tsx watch) or `npm start -w apps/server`; under
  * `npm run internet` the script supervises this process and talks to it over IPC.
  */
+import path from 'node:path';
+import type { FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { openDb } from './db/index.js';
@@ -11,6 +14,7 @@ import { loadDotEnv } from './env.js';
 import { listenErrorMessage } from './listenError.js';
 import { startKeepAwake } from './keepAwake.js';
 import { ownerLogStream, wantsReadableLogs } from './log.js';
+import { scrubUploadDir } from './services/images.js';
 import { startScheduler } from './services/scheduler.js';
 
 /**
@@ -19,6 +23,22 @@ import { startScheduler } from './services/scheduler.js';
  * scheduler's own 10 s wait, below the script's 15 s kill.
  */
 const SHUTDOWN_DEADLINE_MS = 12_000;
+
+/**
+ * Photos uploaded before the server stripped them still carry the phone's GPS
+ * (services/images.ts). Before listen: once a photo is served with a year's cache,
+ * the copy a phone or a proxy keeps is the one it got first. A failure is a line
+ * in the window, never a reason not to start; the next start tries again.
+ */
+async function scrubOldPhotos(app: FastifyInstance, uploadDir: string): Promise<void> {
+  try {
+    const { cleaned, failed } = await scrubUploadDir(path.resolve(uploadDir));
+    if (failed > 0) app.log.warn({ cleaned, failed }, 'proof photos scrubbed');
+    else if (cleaned > 0) app.log.info({ cleaned }, 'proof photos scrubbed');
+  } catch (err) {
+    app.log.warn({ err }, 'proof photo scrub failed');
+  }
+}
 
 async function main(): Promise<void> {
   // before anything reads process.env: the README's apps/server/.env is where PORT lives
@@ -74,6 +94,8 @@ async function main(): Promise<void> {
     shutdown('uncaughtException', 1);
   });
 
+  await scrubOldPhotos(app, config.uploadDir);
+  if (shuttingDown) return;
   await app.listen({ port: config.port, host: config.host });
   // only once the port is ours: a second window that cannot listen must not run a
   // pass (notifications, pushes, the backup) against the same database first

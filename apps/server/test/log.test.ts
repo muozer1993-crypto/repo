@@ -104,6 +104,21 @@ describe('ownerLogStream', () => {
     ]);
   });
 
+  it('says how many old proof photos lost their location, and how many could not', () => {
+    const { stream, lines } = capture();
+    stream.write(pino({ cleaned: 12, msg: 'proof photos scrubbed' }));
+    stream.write(pino({ level: 40, cleaned: 2, failed: 1, msg: 'proof photos scrubbed' }));
+    stream.write(pino({ level: 40, cleaned: 0, failed: 3, msg: 'proof photos scrubbed' }));
+    stream.write(pino({ cleaned: 0, failed: 0, msg: 'proof photos scrubbed' }));
+    stream.write(pino({ level: 40, err: { message: 'EACCES: permission denied' }, msg: 'proof photo scrub failed' }));
+    expect(lines().slice(1)).toEqual([
+      '21:03:12 • 12 eski kanıt fotoğrafındaki konum bilgisi silindi',
+      '21:03:12 ! 2 eski kanıt fotoğrafındaki konum bilgisi silindi; 1 fotoğrafta silinemedi, bir dahaki açılışta yine denerim',
+      '21:03:12 ! 3 eski kanıt fotoğrafındaki konum bilgisi silinemedi, bir dahaki açılışta yine denerim',
+      '21:03:12 ! eski kanıt fotoğraflarındaki konum bilgisi silinemedi, bir dahaki açılışta yine denerim: EACCES: permission denied',
+    ]);
+  });
+
   it('marks a failed request and a slow one as warnings', () => {
     const { stream, lines } = capture();
     stream.write(pino({ level: 40, reqId: 'req-7', method: 'POST', url: '/challenges', statusCode: 500, ms: 812, msg: 'request failed' }));

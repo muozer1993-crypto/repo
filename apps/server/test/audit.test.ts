@@ -25,7 +25,7 @@ import { runSchedulerOnce, sendNudges, sendReminders } from '../src/services/cha
 import { computeUserStats } from '../src/services/stats.js';
 import { sendTaunt } from '../src/services/taunts.js';
 import type { ChallengeRow, UserRow } from '../src/db/index.js';
-import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
+import { JPEG_WITH_GPS, authed, befriend, makeApp, multipart, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
 
@@ -851,27 +851,12 @@ describe('appended entries are replay-safe', () => {
 });
 
 describe('POST /uploads per-account cap', () => {
-  const boundary = 'koydumaudit';
-  const body = [
-    `--${boundary}`,
-    'Content-Disposition: form-data; name="file"; filename="proof.jpg"',
-    'Content-Type: image/jpeg',
-    '',
-    'x'.repeat(64),
-    `--${boundary}--`,
-    '',
-  ].join('\r\n');
+  const form = multipart({ filename: 'proof.jpg', contentType: 'image/jpeg', content: JPEG_WITH_GPS });
 
   it('stops the 61st photo in an hour and opens again once the window has passed', async () => {
     harness = await makeApp({ now: NOW });
     const ali = await registerUser(harness.app, 'ali');
-    const upload = () =>
-      authed(harness!.app, ali.token)({
-        method: 'POST',
-        url: '/uploads',
-        headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
-        payload: body,
-      });
+    const upload = () => authed(harness!.app, ali.token)({ method: 'POST', url: '/uploads', ...form });
     for (let i = 0; i < 60; i += 1) expect((await upload()).statusCode).toBe(201);
     const blocked = await upload();
     expect(blocked.statusCode).toBe(429);

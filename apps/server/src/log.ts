@@ -141,6 +141,19 @@ function duration(minutes: number): string {
   return rest === 0 ? `${hours} saat` : `${hours} saat ${rest} dakika`;
 }
 
+/** The start's pass over the old proof photos (index.ts); a pass that changed nothing is not logged. */
+function scrubLine(entry: Entry): string | null {
+  const cleaned = count(entry, 'cleaned');
+  const failed = count(entry, 'failed');
+  const again = 'bir dahaki açılışta yine denerim';
+  if (cleaned > 0 && failed > 0) {
+    return `${cleaned} eski kanıt fotoğrafındaki konum bilgisi silindi; ${failed} fotoğrafta silinemedi, ${again}`;
+  }
+  if (cleaned > 0) return `${cleaned} eski kanıt fotoğrafındaki konum bilgisi silindi`;
+  if (failed > 0) return `${failed} eski kanıt fotoğrafındaki konum bilgisi silinemedi, ${again}`;
+  return null;
+}
+
 /** The query string never got into the entry (app.ts); an invite code has no business here. */
 function requestLine(entry: Entry): string {
   return `${text(entry.method)} ${text(entry.url)} → ${text(entry.statusCode)} (${text(entry.ms)} ms)`;
@@ -173,6 +186,8 @@ const MESSAGES: Record<string, (entry: Entry) => string | null> = {
   'database backup copied to BACKUP_DIR': (e) => `yedek BACKUP_DIR'a da kopyalandı: ${text(e.file)}`,
   'database backup copy to BACKUP_DIR failed, trying again in an hour': (e) =>
     `yedek BACKUP_DIR'a kopyalanamadı, bir saat sonra yine denerim (${text(e.dir)})`,
+  'proof photos scrubbed': scrubLine,
+  'proof photo scrub failed': () => 'eski kanıt fotoğraflarındaki konum bilgisi silinemedi, bir dahaki açılışta yine denerim',
   'upload directory unavailable, /uploads is not served': (e) =>
     `fotoğraf klasörü açılamadı, kanıt fotoğrafları bu açılışta çalışmaz (${text(e.uploadDir)})`,
   'request failed': (e) => `istek patladı: ${requestLine(e)}`,

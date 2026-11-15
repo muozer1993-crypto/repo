@@ -9,7 +9,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CHALLENGE_TYPES, SHARED_VERSION, type FriendsView, type Me, type Notification } from '@koydum/shared';
 import { newId, nowIso, type ChallengeRow, type EntryRow, type UserRow } from '../src/db/index.js';
-import { authed, makeApp, registerUser, type TestApp } from './helpers.js';
+import { GPS_MARKER, JPEG_WITH_GPS, authed, makeApp, multipart, registerUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
 
@@ -80,24 +80,6 @@ function entriesOf(h: TestApp, challengeId: string, userId: string): EntryRow[] 
 
 function userRow(h: TestApp, id: string): UserRow {
   return h.db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow;
-}
-
-/** Minimal multipart/form-data body for `app.inject`. */
-function multipart(file: { filename: string; contentType: string; content: Buffer; field?: string }): {
-  payload: Buffer;
-  headers: Record<string, string>;
-} {
-  const boundary = `----koydum${Math.random().toString(16).slice(2)}`;
-  const head = Buffer.from(
-    `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="${file.field ?? 'file'}"; filename="${file.filename}"\r\n` +
-      `Content-Type: ${file.contentType}\r\n\r\n`,
-  );
-  const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
-  return {
-    payload: Buffer.concat([head, file.content, tail]),
-    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1151,6 +1133,64 @@ describe('POST /uploads', () => {
     const response = await authed(h.app, me.token)({ method: 'POST', url: '/uploads', ...form });
     expect(response.statusCode).toBe(201);
     expect(response.json<{ url: string }>().url).toMatch(/\.jpg$/);
+  });
+
+  it('stores a camera shot without the EXIF that says where it was taken', async () => {
+    const h = await boot();
+    const me = await registerUser(h.app, 'mustafa');
+    const form = multipart({ filename: 'kanit.jpg', contentType: 'image/jpeg', content: JPEG_WITH_GPS });
+
+    const response = await authed(h.app, me.token)({ method: 'POST', url: '/uploads', ...form });
+    expect(response.statusCode).toBe(201);
+
+    const served = await h.app.inject({ method: 'GET', url: response.json<{ url: string }>().url });
+    expect(served.statusCode).toBe(200);
+    expect(served.rawPayload.subarray(0, 2).toString('hex')).toBe('ffd8');
+    expect(served.rawPayload.includes('Exif')).toBe(false);
+    expect(served.rawPayload.includes(GPS_MARKER)).toBe(false);
+  });
+
+  it('drops the text chunks of a PNG and keeps the picture', async () => {
+    const h = await boot();
+    const me = await registerUser(h.app, 'mustafa');
+    // signature, IHDR, a tEXt chunk, IEND: the walker copies or drops whole chunks, CRCs untouched
+    const chunk = (type: string, data: Buffer): Buffer => {
+      const length = Buffer.alloc(4);
+      length.writeUInt32BE(data.length);
+      return Buffer.concat([length, Buffer.from(type, 'latin1'), data, Buffer.alloc(4)]);
+    };
+    const signature = Buffer.from('89504e470d0a1a0a', 'hex');
+    const ihdr = chunk('IHDR', Buffer.from('00000001000000010802000000', 'hex'));
+    const iend = chunk('IEND', Buffer.alloc(0));
+    const withText = Buffer.concat([signature, ihdr, chunk('tEXt', Buffer.from(`Comment\0${GPS_MARKER}`, 'latin1')), iend]);
+    const form = multipart({ filename: 'kanit.png', contentType: 'image/png', content: withText });
+
+    const response = await authed(h.app, me.token)({ method: 'POST', url: '/uploads', ...form });
+    expect(response.statusCode).toBe(201);
+    const filename = response.json<{ url: string }>().url.split('/').pop()!;
+    expect(fs.readFileSync(path.join(h.config.uploadDir, filename))).toEqual(Buffer.concat([signature, ihdr, iend]));
+  });
+
+  it('refuses text that calls itself a photo, and a JPEG broken before its picture', async () => {
+    const h = await boot();
+    const me = await registerUser(h.app, 'mustafa');
+    const call = authed(h.app, me.token);
+
+    const text = multipart({ filename: 'kanit.png', contentType: 'image/png', content: Buffer.from('<html>koydum</html>') });
+    const fake = await call({ method: 'POST', url: '/uploads', ...text });
+    expect(fake.statusCode).toBe(400);
+    expect(fake.json<{ error: { code: string } }>().error.code).toBe('invalid_file_type');
+
+    // the APP1's length runs past the end of the file
+    const cut = multipart({ filename: 'kanit.jpg', contentType: 'image/jpeg', content: JPEG_WITH_GPS.subarray(0, 12) });
+    const broken = await call({ method: 'POST', url: '/uploads', ...cut });
+    expect(broken.statusCode).toBe(400);
+    expect(broken.json<{ error: { code: string; message: string } }>().error).toEqual({
+      code: 'invalid_file_type',
+      message: 'Bu fotoğraf bozuk görünüyor, başka bir tane seç.',
+    });
+
+    expect(fs.readdirSync(h.config.uploadDir)).toHaveLength(0);
   });
 
   it('rejects non-images, missing files and anonymous callers', async () => {

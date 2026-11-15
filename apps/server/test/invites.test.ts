@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { makeApp, registerUser, type TestApp } from './helpers.js';
+import { JPEG_WITH_GPS, makeApp, multipart, registerUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
 const dirs: string[] = [];
@@ -280,13 +280,12 @@ describe('POST /uploads', () => {
   it('answers with a path the phone resolves against its own server address', async () => {
     harness = await appWith(tempAppDir());
     const ali = await registerUser(harness.app, 'ali');
-    const boundary = 'koydumrel';
-    const body = [`--${boundary}`, 'Content-Disposition: form-data; name="file"; filename="k.jpg"', 'Content-Type: image/jpeg', '', 'x'.repeat(32), `--${boundary}--`, ''].join('\r\n');
+    const form = multipart({ filename: 'k.jpg', contentType: 'image/jpeg', content: JPEG_WITH_GPS });
     const uploaded = await harness.app.inject({
       method: 'POST',
       url: '/uploads',
-      headers: { authorization: `Bearer ${ali.token}`, 'content-type': `multipart/form-data; boundary=${boundary}` },
-      payload: body,
+      payload: form.payload,
+      headers: { ...form.headers, authorization: `Bearer ${ali.token}` },
     });
     expect(uploaded.statusCode).toBe(201);
     const url = uploaded.json<{ url: string }>().url;

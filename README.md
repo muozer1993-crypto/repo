@@ -697,6 +697,10 @@ son akşamın sayıları bitişten sonraki bir saatte geldiği için o saat de s
 uyuyorduysa o saat uyandığı andan başlar). Uygulama itiraz düğmesini de sadece bu sürede gösterir. Fotoğraf kanıtı, bir
 sayı yazılan türlerde çelıncı açan kişi isterse zorunlu olur; evet/hayır günleri ve check-in'lerde
 fotoğraf yok.
+Sunucu her kanıt fotoğrafını kaydetmeden önce telefonun içine yazdığı konumu ve çekim bilgisini
+siler: fotoğrafı açan kanka, nerede çekildiğini göremez. Daha önce yüklenmiş fotoğrafları da bu
+sürümle ilk açılışta temizler, pencerede "12 eski kanıt fotoğrafındaki konum bilgisi silindi" gibi
+bir satır çıkar. Bunun için uygulamayı güncellemek gerekmez.
 
 Çekmeyen yerde (bodrumdaki spor salonu, metro) giriş yine yapılır: telefonda sıraya girer, bağlantı
 gelince kendiliğinden gider. Kanıt fotoğrafı da öyle: yüklenemezse uygulama "Fotoğraf telefonda"

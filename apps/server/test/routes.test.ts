@@ -199,6 +199,12 @@ describe('SPEC 2.2 route table', () => {
     const response = await harness.app.inject({ method: 'GET', url: '/uploads/kanit.txt' });
     expect(response.statusCode).toBe(200);
     expect(response.body).toBe('koydum');
+    // a name is never reused, so a phone may keep the photo for good
+    expect(response.headers['cache-control']).toContain('immutable');
+    expect(response.headers['cache-control']).toContain('max-age=31536000');
+    // and a browser treats it as what its extension says, with nothing allowed to run
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['content-security-policy']).toContain('sandbox');
   });
 
   it('mounts the dev routes only when they are enabled', async () => {
