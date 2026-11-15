@@ -223,7 +223,7 @@ describe('which days get a check-in poke', () => {
   });
 
   it('takes back only today\'s poke after a check-in, and a refresh does not put it back', async () => {
-    // a parked check-in: the server still says nothing was entered today
+    // a list read just before the check-in landed: nothing entered today yet
     const client = listOf(checkinSummary({ id: 'c9', endsAt: new Date(NOW.getTime() + 2 * DAY_MS) }));
     await refreshReminders(client, 2, TZ);
     mockCancel.mockClear();

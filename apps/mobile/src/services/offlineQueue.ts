@@ -146,6 +146,11 @@ export function uploadLocalPhoto(client: ApiClient, uri: string): Promise<{ url:
 
 const PHOTO_GONE = 'Kanıt fotoğrafı telefonda bulunamadı.';
 const PHOTO_TOO_SLOW = 'Kanıt fotoğrafı gitmedi, bağlantı çok yavaştı.';
+/**
+ * The server's "Check-in sadece bugün için yapılır." reads as the friend's
+ * mistake; they pressed it on the day, and only the queue arrived on the next.
+ */
+const CHECKIN_DAY_OVER = 'Check-in sunucuya ulaşamadan gün bitti, o gün sayılmadı.';
 
 type PhotoOutcome =
   | { kind: 'sent'; url: string }
@@ -338,7 +343,8 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
         // the server will never accept this one
         dropped += 1;
-        const failedReason = photoLost ? `${photoLost} ${error.message}` : error.message;
+        const refusal = error.code === 'checkin_today_only' ? CHECKIN_DAY_OVER : error.message;
+        const failedReason = photoLost ? `${photoLost} ${refusal}` : refusal;
         touched.set(item.id, { ...item, attempts: item.attempts + 1, failedReason });
         continue;
       }

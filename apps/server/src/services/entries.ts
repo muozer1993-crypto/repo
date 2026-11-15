@@ -3,7 +3,8 @@
  *
  * Everything the client sends is advisory: the day window, the caps, the check-in
  * verdict and the entry `late` flag are all decided here from the SERVER clock and
- * the catalog type stored on the challenge, never from `clientTime`.
+ * the catalog type stored on the challenge, never from `clientTime` — except a
+ * check-in tapped while this server was not running (`checkinInstant`).
  *
  * Day keys always live in the WRITER's timezone — the one PINNED on
  * `challenge_participants` when they joined, not the editable `users.timezone` — so
@@ -50,6 +51,7 @@ import {
 import { restoreFromPhone } from './deviceSync.js';
 import { isBlockedBetween } from './friends.js';
 import { notify } from './notifications.js';
+import { tappedWhileDown } from './pauses.js';
 import { awardBadges } from './stats.js';
 
 export interface EntryWriteInput {
@@ -238,6 +240,22 @@ export function dayWindowError(issue: DayWindowIssue, metricType: MetricType, so
   return badRequest('day_too_old', `En fazla ${backfillDaysFor(metricType, source)} gün geriye giriş yapabilirsin.`);
 }
 
+/**
+ * The moment a check-in is judged at: `now`, unless `now` misses its day or its
+ * deadline and the phone says it was tapped while this server was not running.
+ * "Geldim" at 23:10 for a 23:30 deadline, parked while the owner's PC slept and
+ * sent at 08:30, is judged at 23:10: the friend was in time, only the server was
+ * not there to hear it. Only inside a pause the scheduler itself wrote down
+ * (`tappedWhileDown`), so it never reaches before the server went away nor into a
+ * time it was up. The trade-off: during that pause a phone with its clock turned
+ * back can claim any minute of it, on time included; outside it, it buys nothing.
+ */
+function checkinInstant(db: Database, body: EntryBody, deadline: string, tz: string, now: Date): Date {
+  const missed = body.dayKey !== todayKey(tz, now) || !isBeforeOrEqualHHmm(localTimeHHmm(now, tz), deadline);
+  if (!missed) return now;
+  return tappedWhileDown(db, body.clientTime, now) ?? now;
+}
+
 /** The Turkish 400 for a typed entry after the end; says what is still coming in. */
 function challengeEndedError(type: ChallengeType): HttpError {
   if (type.deviceMetric === 'steps') {
@@ -358,26 +376,28 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
     }
 
     case 'checkin_deadline': {
-      if (body.dayKey !== todayKey(tz, now)) {
+      // The verdict is the SERVER's wall-clock time in the zone pinned at join time:
+      // neither a phone with its clock rolled back nor a profile timezone edited
+      // mid-challenge can buy an extra hour (the one exception, a tap while the
+      // server was down, is `checkinInstant`'s). A deadline stored before the window
+      // check (erken_yat at 00:00) is read as the type's default, or no check-in
+      // in that çelınc could ever count.
+      const deadline = effectiveDeadline(type, challenge.deadline_time);
+      const at = checkinInstant(db, body, deadline, tz, now);
+      if (body.dayKey !== todayKey(tz, at)) {
         throw badRequest('checkin_today_only', 'Check-in sadece bugün için yapılır.');
       }
       if (selectDayEntry(db, challenge.id, user.id, body.dayKey)) {
         throw conflict('already_checked_in', 'Bugün zaten check-in yaptın.');
       }
-      // The verdict is the SERVER's wall-clock time in the zone pinned at join time:
-      // neither a phone with its clock rolled back nor a profile timezone edited
-      // mid-challenge can buy an extra hour. A deadline stored before the window
-      // check (erken_yat at 00:00) is read as the type's default, or no check-in
-      // in that çelınc could ever count.
-      const deadline = effectiveDeadline(type, challenge.deadline_time);
-      const localNow = localTimeHHmm(now, tz);
+      const localAt = localTimeHHmm(at, tz);
       // "yattım" at 02:00 is not an early bedtime, it is last night's late one:
       // before the type's window opens the button does nothing for today.
-      if (type.checkinWindowStart && isBeforeOrEqualHHmm(localNow, type.checkinWindowStart) && localNow !== type.checkinWindowStart) {
+      if (type.checkinWindowStart && isBeforeOrEqualHHmm(localAt, type.checkinWindowStart) && localAt !== type.checkinWindowStart) {
         // no suffix after the time: 04:00, 05:00 and 19:00 each want a different one
         throw badRequest('checkin_too_early', `Bu check-in saat ${type.checkinWindowStart} olmadan sayılmıyor. Biraz erken geldin.`);
       }
-      const onTime = isBeforeOrEqualHHmm(localNow, deadline);
+      const onTime = isBeforeOrEqualHHmm(localAt, deadline);
       return { entry: insertEntry(db, input, onTime ? 1 : 0, !onTime), created: true };
     }
 

@@ -179,10 +179,12 @@ Bilinmesi gerekenler:
   pencerede "bilgisayar 8 saat uyumuş" gibi bir satır çıkar. Uyurken biten bir adım ya da ekran
   süresi çelıncında kazanan, telefonlar bir saat daha beklendikten sonra belli olur, o saatte gelen
   sayılara itiraz da edilebilir; uykudayken süresi dolan bir itirazın sahibi de fotoğraf eklemek
-  için bir saat daha alır. Ama uyurken basılan "Geldim" sunucuya ancak uyanınca ulaşır ve saati
-  geçtiyse geç sayılır; son gece elle yazılan sayılar ve odak seansları da süre bittiyse reddedilir
-  (uygulama hangi çelıncın hangi gününün gitmediğini söyler). Check-in, elle sayı ve odak
-  çelınclarında bilgisayarın uyumaması şart.
+  için bir saat daha alır. Uyurken (ya da sunucu kapalıyken) basılan "Geldim" de basıldığı saatle
+  sayılır: sunucu ne zaman uyuduğunu kendi yazar, telefon check-in'i sırada tutup uyanınca gönderir.
+  Bunun için telefonun onu bilgisayar uyandıktan sonraki 12 saat içinde göndermesi lazım; kankanın
+  uygulamayı bir kez açması yeter. Ama son gece elle yazılan sayılar, odak seansları ve uyurken biten
+  bir check-in çelıncının son günü süre bittiyse reddedilir (uygulama hangi çelıncın hangi gününün
+  gitmediğini söyler). Elle sayı ve odak çelınclarında bilgisayarın uyumaması şart.
 * **Sunucu çökerse pencere onu kendisi yeniden açar.** "Sunucu düştü, yeniden açıyorum" yazar,
   birkaç saniye sonra sunucu geri gelir. Tünel yerinde kaldığı için adres de aynıdır, kimseye
   yeni bağlantı atmana gerek yok. On dakikada beş kere çökerse bırakır ve kapanır; sebebi hemen

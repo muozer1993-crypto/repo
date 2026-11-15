@@ -280,6 +280,9 @@ export function NotificationBridge() {
         if (result.sent > 0) {
           void queryClient.invalidateQueries({ queryKey: ['challenges'] });
           void queryClient.invalidateQueries({ queryKey: ['challenge'] });
+          // A parked check-in keeps today's poke until it lands; the refresh
+          // that ran beside this drain may have read the list before it did.
+          void scheduleReminders();
         }
         // The background handler runs this too while the app is alive but off
         // screen: a toast there reaches nobody, and clearing after it lost the

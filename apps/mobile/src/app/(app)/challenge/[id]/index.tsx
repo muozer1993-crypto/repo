@@ -63,6 +63,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { useTimezone } from '@/hooks/useTimezone';
 import { syncDeviceNow } from '@/services/deviceSyncNow';
+import { pendingForChallenge } from '@/services/offlineQueue';
 import { recordingSince } from '@/services/recordingSteps';
 import { skipTodayCheckinReminder } from '@/services/reminders';
 import {
@@ -1110,10 +1111,18 @@ function FocusAction({ id, detail, level, today }: ActionProps) {
 
 /* checkin_deadline ------------------------------------------------------- */
 
+/**
+ * A parked check-in has not counted yet. The server judges it when it arrives,
+ * at the tap only when it was asleep then (SPEC 2.3), so "Saatinde geldin" here
+ * was a promise nobody could keep.
+ */
+const CHECKIN_QUEUED =
+  'Sunucuya ulaşamadım. Sunucu uyuyorsa bastığın saat sayılır, telefonun çekmiyorsa gittiği saat. Bağlanınca uygulamayı aç.';
+
 function CheckinAction({ id, detail, level, today, tz }: ActionProps) {
   const addEntry = useAddEntry(id);
   const toast = useToast();
-  const [result, setResult] = useState<'ok' | 'late' | null>(null);
+  const [result, setResult] = useState<'ok' | 'late' | 'queued' | null>(null);
 
   const entry = detail.myEntries.find((e) => e.dayKey === today);
   const done = !!entry;
@@ -1121,24 +1130,27 @@ function CheckinAction({ id, detail, level, today, tz }: ActionProps) {
 
   const checkIn = async () => {
     try {
+      // Another tap while the first one waits replaces it in the queue but keeps
+      // its time: that is when "Geldim" was pressed, and what a server that
+      // slept through it goes by.
+      const parked = (await pendingForChallenge(id)).find(
+        (item) => item.body.source === 'checkin' && item.body.dayKey === today
+      );
       const response = await addEntry.mutateAsync({
         dayKey: today,
         value: 1,
         source: 'checkin',
-        clientTime: nowIso(),
+        clientTime: parked?.body.clientTime ?? nowIso(),
       });
-      // sent or parked, today is done: the 30-minutes-left poke must not ring
-      void skipTodayCheckinReminder(id, tz);
       if (response.queued || !response.entry) {
-        // offline: the check-in is parked and will be sent when we are back
-        setResult('ok');
-        toast({
-          title: 'Kaydedildi',
-          body: 'Şu an sunucuya ulaşamadım. Bağlantı gelince gönderilecek.',
-          kind: 'info',
-        });
+        // Not in yet, so today's 30-minutes-left poke stays: tapping it brings
+        // the app to the front, which sends the queue before the deadline.
+        setResult('queued');
+        toast({ title: 'Check-in gitmedi, sırada', body: CHECKIN_QUEUED, kind: 'danger' });
         return;
       }
+      // the server has it: the poke must not ring
+      void skipTodayCheckinReminder(id, tz);
       const late = response.entry.late === true || response.entry.value <= 0;
       setResult(late ? 'late' : 'ok');
       toast({
@@ -1151,7 +1163,9 @@ function CheckinAction({ id, detail, level, today, tz }: ActionProps) {
     }
   };
 
-  const shown = result ?? (done ? (entry && entry.value > 0 ? 'ok' : 'late') : null);
+  const settled = done ? (entry && entry.value > 0 ? 'ok' : 'late') : null;
+  // once the parked one lands, the server's verdict replaces "sırada"
+  const shown = result === 'queued' && settled ? settled : (result ?? settled);
 
   return (
     <View style={styles.actionBody}>
@@ -1169,7 +1183,11 @@ function CheckinAction({ id, detail, level, today, tz }: ActionProps) {
         disabled={done}
         onPress={() => void checkIn()}
       />
-      {shown ? (
+      {shown === 'queued' ? (
+        <Text variant="small" color={Colors.danger}>
+          {CHECKIN_QUEUED}
+        </Text>
+      ) : shown ? (
         <Text variant="small" color={shown === 'late' ? Colors.danger : Colors.success}>
           {t(shown === 'late' ? 'checkin_late' : 'checkin_ok', level)}
         </Text>

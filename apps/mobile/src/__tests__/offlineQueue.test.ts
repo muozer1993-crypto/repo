@@ -92,6 +92,15 @@ describe('offline entry queue', () => {
     expect(await readQueue()).toEqual([]);
   });
 
+  it('says a check-in that reached the server only the next day was lost to the wait, not to the friend', async () => {
+    await enqueueEntry('c1', { ...body('2026-09-07', 1), source: 'checkin' }, 'c1:2026-09-07:checkin:');
+    const addEntry = jest
+      .fn()
+      .mockRejectedValue(new ApiError('checkin_today_only', 'Check-in sadece bugün için yapılır.', 400));
+    expect(await flushQueue(fakeClient(addEntry))).toMatchObject({ sent: 0, dropped: 1 });
+    expect((await readQueue())[0].failedReason).toBe('Check-in sunucuya ulaşamadan gün bitti, o gün sayılmadı.');
+  });
+
   it('keeps everything when the session ended, for the next sign-in', async () => {
     await enqueueEntry('c1', body('2026-09-08', 3), 'a');
     await enqueueEntry('c1', body('2026-09-07', 4), 'b');

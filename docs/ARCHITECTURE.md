@@ -26,13 +26,25 @@ değiştirdiğinde iki taraf da aynı anda derlenmez, hata anında ortaya çıka
 
 Bir çelınc "gün" üzerinden puanlanır ve gün, **kullanıcının kendi saat dilimine** göre hesaplanır
 (`users.timezone`). İstanbul'daki biriyle Berlin'deki biri aynı çelıncta yarışırken herkesin
-günü kendi yerel gece yarısında döner. Sunucu hiçbir zaman istemcinin gönderdiği saate güvenmez:
+günü kendi yerel gece yarısında döner. Sunucu istemcinin gönderdiği saate, tek bir istisna dışında,
+güvenmez:
 
-* `clientTime` sadece kayıt amaçlıdır, doğrulamada kullanılmaz.
+* `clientTime` kayıt içindir, doğrulamada kullanılmaz. İstisnası sunucu yokken basılan check-in
+  (aşağıda).
 * Check-in'in "geç mi" olduğuna sunucu kendi saatiyle karar verir. Son saat, türün açılış
   saatinden sonra olmak zorunda (`deadlineFitsWindow`): erken yatmada 00:00 her check-in'i ya
   erken ya geç sayardı. Bu kuraldan önce yazılmış böyle bir saat türün varsayılanıyla okunur
   (`effectiveDeadline`); ekranda görünen, hatırlatmanın kurulduğu ve rövanşa geçen saat de odur.
+* Sunucunun duyamadığı zamanlar da olur: bilgisayar uyur, kapanır, pencere kapanır. Zamanlayıcı
+  bunları `server_pauses`'a yazar: iki vuruşu arasında beş dakikadan uzun bir boşluk, ya da açılırken
+  kapanmadan önceki son vuruşundan (`server_state`) bu yana geçen süre. O arada telefonun sıraya
+  aldığı check-in sunucuya ancak sonra varır. Vardığı an günü ya da son saati kaçırıyorsa ve
+  `clientTime` son 12 saatte biten böyle bir aralığın içindeyse, check-in basıldığı ana göre
+  değerlendirilir (`checkinInstant`): son saat 23:30, bilgisayar 23:00-08:00 uyumuş, 23:10'da basılıp
+  08:30'da gelen "Geldim" o gecenin ve zamanında sayılır. 22:00 yazan bir check-in'e güvenilmez,
+  sunucu o saatte ayaktaydı ve basılsaydı duyardı. Bedeli: kayıtlı bir kesintinin içinde saatini
+  geri almış bir telefon o aralığın herhangi bir dakikasını iddia edebilir; dışında hiçbir şey
+  kazanmaz.
 * Sunucu çelınc bittikten sonra odak dakikası almaz. Odak ekranı seansı kalan süreye sığdırır,
   molalarla uzayan seansı da bitişe 30 saniye kala kapatıp tam dakikalarını gönderir.
 * Geçmiş güne giriş penceresi (manuel 2 gün, adım 7 gün) sunucunun "şimdi"sine göredir.
@@ -677,10 +689,12 @@ Check-in uyarısı eskiden her gün tekrarlayan tek bir alarmdı ve çelıncın 
 çelıncın kalan her günü için ayrı, tarihli bir alarm kurulur (en fazla 14 gün ileriye, toplamda en
 fazla 60 bildirim; iPhone en yakın 64'ünü tutup gerisini sessizce atar). Başlangıçtan önce ya da
 bitişten sonra alarm yoktur, gün anahtarları da sunucunun saydığı gibi hesabın saat diliminde
-sayılır. Sadece kabul edilmiş çelınclara kurulur, cevaplanmamış bir davet çalmaz. "Geldim"e
-basılınca, giriş sunucuya gitse de çevrimdışı sıraya alınsa da, o günün alarmı silinir; sunucu
-sıraya alınmış check-in'i kuyruk boşalınca öğrendiği için, uygulama açık kaldıkça sonraki yenilemeler
-de o günü geri kurmaz. Alarmlar her ön plana dönüşte, arka plan görevinde (uygulama kapalıyken
+sayılır. Sadece kabul edilmiş çelınclara kurulur, cevaplanmamış bir davet çalmaz. "Geldim"
+sunucuya varınca o günün alarmı silinir; listeyi ondan hemen önce okumuş bir yenileme de, uygulama
+açık kaldıkça, o günü geri kurmaz. Sıraya alınan check-in'in alarmı kalır: check-in henüz sayılmadı
+(ekran eskiden yine de "Saatinde geldin" diyordu, şimdi "Check-in gitmedi, sırada" der). Alarm
+çalınca uygulama öne gelir ve kuyruk boşalır; bir şey gönderen her boşaltmadan sonra alarmlar bir
+kez daha kurulur, yerine varan check-in kendi alarmını da götürür. Alarmlar her ön plana dönüşte, arka plan görevinde (uygulama kapalıyken
 de) ve Ayarlar'daki anahtarda baştan kurulur.
 
 ## İzinler

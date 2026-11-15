@@ -20,6 +20,7 @@ import { newId } from '../src/db/index.js';
 import { runSchedulerOnce } from '../src/services/challenges.js';
 import { challengeFeed } from '../src/services/challengeViews.js';
 import { getEntryRow } from '../src/services/entries.js';
+import { recordPause } from '../src/services/pauses.js';
 import { computeUserStats } from '../src/services/stats.js';
 import { listByType } from '../src/services/notifications.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
@@ -502,6 +503,75 @@ describe('checkin_deadline entries', () => {
     });
     expect(yesterday.statusCode).toBe(400);
     expect(errorCode(yesterday)).toBe('checkin_today_only');
+  });
+
+  describe('tapped while the server was off', () => {
+    // Erken Yatma Sözü, 23:30. The owner's PC slept from 23:00 to 08:00 Istanbul
+    // time; the phone parked "Geldim" and sends it at 08:30 the next morning.
+    const SLEPT = '2026-01-05T20:00:00.000Z'; // 23:00
+    const WOKE = '2026-01-06T05:00:00.000Z'; // 08:00
+    const SENT = '2026-01-06T05:30:00.000Z'; // 08:30
+    const NIGHT = '2026-01-05';
+
+    async function parkedCheckin(clientTime: string, options: { slept?: [string, string] | null; sentAt?: string } = {}) {
+      harness = await makeApp({ now: NOW });
+      const { ali, challengeId } = await liveChallenge(harness, 'erken_yat', { deadlineTime: '23:30' });
+      const slept = options.slept === undefined ? [SLEPT, WOKE] : options.slept;
+      if (slept) recordPause(harness.db, new Date(slept[0]), new Date(slept[1]));
+      harness.setNow(options.sentAt ?? SENT);
+      return post(harness, ali, challengeId, { dayKey: NIGHT, value: 1, source: 'checkin', clientTime });
+    }
+
+    it('counts a tap before the deadline on time, the morning after', async () => {
+      const response = await parkedCheckin('2026-01-05T20:10:00.000Z'); // 23:10
+      expect(response.statusCode).toBe(201);
+      expect(response.json<{ entry: Entry }>().entry).toMatchObject({ dayKey: NIGHT, value: 1 });
+      expect(response.json<{ entry: Entry }>().entry.late).toBeUndefined();
+    });
+
+    it('counts a tap inside the pause but past the deadline late', async () => {
+      const response = await parkedCheckin('2026-01-05T20:40:00.000Z'); // 23:40
+      expect(response.statusCode).toBe(201);
+      expect(response.json<{ entry: Entry }>().entry).toMatchObject({ value: 0, late: true });
+    });
+
+    it('gives nothing to a time from before the server went away: it was up to hear it', async () => {
+      const response = await parkedCheckin('2026-01-05T19:00:00.000Z'); // 22:00
+      expect(response.statusCode).toBe(400);
+      expect(errorCode(response)).toBe('checkin_today_only');
+    });
+
+    it('judges by its own clock when it never stopped', async () => {
+      const response = await parkedCheckin('2026-01-05T20:10:00.000Z', { slept: null });
+      expect(response.statusCode).toBe(400);
+      expect(errorCode(response)).toBe('checkin_today_only');
+    });
+
+    it('stops vouching for the pause twelve hours after it woke', async () => {
+      const response = await parkedCheckin('2026-01-05T20:10:00.000Z', { sentAt: '2026-01-06T17:01:00.000Z' });
+      expect(response.statusCode).toBe(400);
+      expect(errorCode(response)).toBe('checkin_today_only');
+    });
+
+    it('saves a tap that reached it the same evening past the deadline, whatever offset the phone wrote', async () => {
+      // asleep from 23:00 to 23:45, sent at 23:50
+      const response = await parkedCheckin('2026-01-05T23:10:00+03:00', {
+        slept: [SLEPT, '2026-01-05T20:45:00.000Z'],
+        sentAt: '2026-01-05T20:50:00.000Z',
+      });
+      expect(response.statusCode).toBe(201);
+      expect(response.json<{ entry: Entry }>().entry.value).toBe(1);
+    });
+
+    it('takes the arrival when it is in time anyway, never a tap that would put it out', async () => {
+      // tapped at 18:30 while asleep, before the window opens; sent at 23:20, in time
+      const response = await parkedCheckin('2026-01-05T15:30:00.000Z', {
+        slept: ['2026-01-05T15:00:00.000Z', '2026-01-05T20:15:00.000Z'],
+        sentAt: '2026-01-05T20:20:00.000Z',
+      });
+      expect(response.statusCode).toBe(201);
+      expect(response.json<{ entry: Entry }>().entry.value).toBe(1);
+    });
   });
 });
 

@@ -12,6 +12,7 @@ import type { Database } from '../db/index.js';
 import { clearDeletedTraces } from './accounts.js';
 import { backupIfDue, copyBackupIfDue } from './backup.js';
 import { runSchedulerOnce } from './challenges.js';
+import { readLastBeat, recordPause, writeLastBeat } from './pauses.js';
 import { createPushSender, type PushSender } from './push.js';
 
 export const SCHEDULER_INTERVAL_MS = 30_000;
@@ -77,6 +78,23 @@ export function startScheduler(
   let lastBeatMs = bootAt.getTime();
   // the itiraz route and the çelınc detail read it (`disputesOpenUntil`)
   app.schedulerBootAt.at = bootAt;
+
+  // Every pause is written down: a check-in a phone parked while nobody could
+  // hear it counts at its tap (`tappedWhileDown`). A failed write costs only
+  // that, and must not throw out of the interval and take the server with it.
+  const remember = (write: () => void): void => {
+    try {
+      write();
+    } catch (err) {
+      app.log.warn({ err }, 'writing down when the server was off failed');
+    }
+  };
+  // A process that was stopped (Ctrl+C, the window closed, the power cut) left
+  // its last beat behind: the time since then is a pause like a sleep.
+  remember(() => {
+    const lastRun = readLastBeat(db);
+    if (lastRun && bootAt.getTime() - lastRun.getTime() > RESUME_GAP_MS) recordPause(db, lastRun, bootAt);
+  });
 
   const tick = async (): Promise<void> => {
     try {
@@ -149,10 +167,13 @@ export function startScheduler(
     const next = nextBootAt(bootAt, lastBeatMs, now);
     if (next !== bootAt) {
       app.log.warn({ minutes: Math.round((now.getTime() - lastBeatMs) / 60_000) }, 'scheduler resumed after a pause');
+      remember(() => recordPause(db, new Date(lastBeatMs), now));
     }
     bootAt = next;
     app.schedulerBootAt.at = bootAt;
     lastBeatMs = now.getTime();
+    // what the next start reads back
+    remember(() => writeLastBeat(db, now));
 
     if (inFlight) return; // never overlap two passes
     inFlight = tick().finally(() => {

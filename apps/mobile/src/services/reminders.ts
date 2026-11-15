@@ -119,10 +119,9 @@ function checkinIdentifier(challengeId: string, dayKey: string): string {
 }
 
 /**
- * Today's slots the reader checked in for on this phone. A parked (offline)
- * check-in reaches the server only when the queue drains, and a refresh that
- * reads the list before that would put the slot right back. Keyed by the
- * identifier, so yesterday's entries never match again.
+ * Today's slots the reader checked in for on this phone. A refresh that read
+ * the list just before the check-in landed would put the slot right back.
+ * Keyed by the identifier, so yesterday's entries never match again.
  */
 const checkedInHere = new Set<string>();
 
@@ -192,9 +191,10 @@ async function refresh(client: Pick<ApiClient, 'challenges'>, level: 1 | 2 | 3, 
 }
 
 /**
- * Takes back today's check-in poke once the reader has checked in, sent or
- * parked offline. Without it a check-in at 06:05 still got "30 dakikan kaldı"
- * at 06:30, because nothing refreshed the reminders in between.
+ * Takes back today's check-in poke once the server has the reader's check-in.
+ * Without it a check-in at 06:05 still got "30 dakikan kaldı" at 06:30,
+ * because nothing refreshed the reminders in between. A parked one keeps it:
+ * it has not counted yet, and the poke brings the app (and the queue) back.
  *
  * Waits its turn behind a refresh that may be about to schedule that very slot.
  */

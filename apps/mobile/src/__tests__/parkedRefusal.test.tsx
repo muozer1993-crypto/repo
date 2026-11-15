@@ -48,8 +48,9 @@ jest.mock('@/services/background', () => ({
     mockBackground.handler = handler;
   },
 }));
+const mockRefreshReminders = jest.fn(async () => 0);
 jest.mock('@/services/reminders', () => ({
-  refreshReminders: async () => 0,
+  refreshReminders: () => mockRefreshReminders(),
   clearReminders: async () => {},
 }));
 jest.mock('@/services/stepSync', () => ({ syncStepsNow: async () => ({ days: 0, updated: 0 }) }));
@@ -185,6 +186,22 @@ describe('a parked entry the server refuses for good', () => {
     await settle();
 
     expect(texts(tree)).toContain('“Su içme” · 8 Eylül: Süre bitti, artık giriş yok.');
+  });
+});
+
+describe('a parked check-in that gets through', () => {
+  it("puts the phone's reminders right again, as only a sent check-in takes its poke back", async () => {
+    appState.currentState = 'active';
+    addEntry.mockResolvedValue({ entry: null, standings: [] });
+    const today = safeTodayKey('Europe/Istanbul');
+    await enqueueEntry('c4', { dayKey: today, value: 1, source: 'checkin', clientTime: new Date().toISOString() }, 'c4:gun');
+    mockRefreshReminders.mockClear();
+    render();
+    await settle();
+
+    expect(await readQueue()).toEqual([]);
+    // once beside the drain, once after it, when the server has the check-in
+    expect(mockRefreshReminders).toHaveBeenCalledTimes(2);
   });
 });
 

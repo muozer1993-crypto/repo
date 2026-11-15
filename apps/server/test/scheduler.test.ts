@@ -26,6 +26,7 @@ import {
   startScheduler,
   STOP_WAIT_MS,
 } from '../src/services/scheduler.js';
+import { readLastBeat, writeLastBeat } from '../src/services/pauses.js';
 import { getBadges } from '../src/services/stats.js';
 import { newId, nowIso, type ChallengeRow, type ParticipantRow } from '../src/db/index.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
@@ -898,6 +899,69 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
     expect(nextBootAt(prev, lastBeat, new Date(lastBeat + RESUME_GAP_MS))).toBe(prev);
     const woke = new Date(lastBeat + 6 * MINUTE);
     expect(nextBootAt(prev, lastBeat, woke)).toBe(woke);
+  });
+
+  /** What the scheduler wrote down as time it was not running (a parked check-in counts at its tap inside one). */
+  function pauses(h: TestApp): { started_at: string; ended_at: string }[] {
+    return h.db.prepare('SELECT started_at, ended_at FROM server_pauses ORDER BY started_at').all() as {
+      started_at: string;
+      ended_at: string;
+    }[];
+  }
+
+  it('writes down a sleep between two beats, and not a beat a minute late', async () => {
+    harness = await makeApp({ now: NOW });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush });
+      const beat = async (): Promise<void> => {
+        await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
+        await new Promise((resolve) => setImmediate(resolve));
+      };
+
+      // a busy minute is no sleep
+      at(harness, NOW, MINUTE);
+      await beat();
+      expect(pauses(harness)).toEqual([]);
+      expect(readLastBeat(harness.db)?.toISOString()).toBe(iso(harness));
+
+      // two hours without a beat: the laptop's lid was shut
+      const lastBeat = iso(harness);
+      at(harness, lastBeat, 2 * HOUR);
+      await beat();
+      expect(pauses(harness)).toEqual([{ started_at: lastBeat, ended_at: iso(harness) }]);
+      expect(readLastBeat(harness.db)?.toISOString()).toBe(iso(harness));
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
+  it('writes down the time a stopped server was off when it starts again', async () => {
+    harness = await makeApp({ now: NOW });
+    // Ctrl+C three hours ago: its last beat is all the old process left
+    const lastRun = iso(harness, -3 * HOUR);
+    writeLastBeat(harness.db, new Date(lastRun));
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush });
+      expect(pauses(harness)).toEqual([{ started_at: lastRun, ended_at: NOW }]);
+      expect(readLastBeat(harness.db)?.toISOString()).toBe(NOW);
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+
+    // started again a minute after that run's last beat: nothing worth writing down
+    at(harness, NOW, MINUTE);
+    try {
+      stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush });
+      expect(pauses(harness)).toHaveLength(1);
+    } finally {
+      await stop?.();
+    }
   });
 
   it('gives the phones their hour from the moment it wakes, not from the end it slept through', async () => {

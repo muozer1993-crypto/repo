@@ -353,6 +353,25 @@ const NUDGES_SENT_USER_DAY = `
 CREATE INDEX IF NOT EXISTS idx_nudges_sent_user_day ON nudges_sent(user_id, day_key);
 `;
 
+/**
+ * When this server was not running: the owner's PC asleep, switched off or its
+ * window closed (`startScheduler` writes them down from its beats, kept in
+ * `server_state`). A check-in a phone parked while nobody could hear it counts
+ * at the moment it was tapped if that moment is inside one of these
+ * (`validateAndUpsertEntry`); outside them the server was up, and its own clock
+ * decides.
+ */
+const SERVER_PAUSES = `
+CREATE TABLE IF NOT EXISTS server_pauses (
+  started_at TEXT NOT NULL,
+  ended_at   TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS server_state (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -367,4 +386,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '011_entry_answer_from', sql: ENTRY_ANSWER_FROM },
   { id: '012_token_version', sql: TOKEN_VERSION },
   { id: '013_nudges_sent_user_day', sql: NUDGES_SENT_USER_DAY },
+  { id: '014_server_pauses', sql: SERVER_PAUSES },
 ];

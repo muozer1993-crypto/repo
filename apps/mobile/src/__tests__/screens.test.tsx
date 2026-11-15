@@ -1632,7 +1632,7 @@ describe('a check-in', () => {
     expect(mockReminders.skipToday).toHaveBeenCalledWith('c-1', expect.any(String));
   });
 
-  it('takes it back as well when the check-in is parked offline', async () => {
+  it('keeps the poke and says the check-in is waiting when it is parked offline', async () => {
     searchParams.id = 'c-1';
     api.challenge = jest.fn(async () => checkinDetail());
     api.addEntry = jest.fn(async () => {
@@ -1648,7 +1648,43 @@ describe('a check-in', () => {
     await settle();
 
     expect(await readQueue()).toHaveLength(1);
-    expect(mockReminders.skipToday).toHaveBeenCalledWith('c-1', expect.any(String));
+    // the poke is what brings the app, and the queue, back before the deadline
+    expect(mockReminders.skipToday).not.toHaveBeenCalled();
+    expect(rendered(tree)).toContain('Check-in gitmedi, sırada');
+    expect(rendered(tree)).toContain('Sunucu uyuyorsa bastığın saat sayılır');
+    expect(rendered(tree)).not.toContain('Saatinde geldin');
+    expect(rendered(tree)).not.toContain('Geldin!');
+    // still a button: another try once there is signal
+    expect(findWith(tree, 'title', 'Geldim', 'onPress').props.disabled).toBeFalsy();
+  });
+
+  it('keeps the first tap\'s time when the parked check-in is tapped again', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => checkinDetail());
+    api.addEntry = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    await act(async () => {
+      await findWith(tree, 'title', 'Geldim', 'onPress').props.onPress();
+    });
+    await settle();
+    const [first] = await readQueue();
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      await findWith(tree, 'title', 'Geldim', 'onPress').props.onPress();
+    });
+    await settle();
+
+    const queue = await readQueue();
+    expect(queue).toHaveLength(1);
+    expect(queue[0]?.body.clientTime).toBe(first?.body.clientTime);
+    const calls = (api.addEntry as jest.Mock).mock.calls as [string, { clientTime: string }][];
+    expect(calls.map(([, sent]) => sent.clientTime)).toEqual([first?.body.clientTime, first?.body.clientTime]);
   });
 
   it('leaves the poke alone when the server turns the check-in down', async () => {
