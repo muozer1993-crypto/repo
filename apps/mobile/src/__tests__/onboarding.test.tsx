@@ -11,12 +11,14 @@
 import type { Me } from '@koydum/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
-import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { ScrollView, StyleSheet } from 'react-native';
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider } from '@/components/Toast';
 import { ApiClient } from '@/lib/api';
 import { useAuth } from '@/store/auth';
+import { Spacing } from '@/theme';
 
 const mockReplace = jest.fn();
 
@@ -84,13 +86,14 @@ const ME = {
 
 const mounted: { tree: ReactTestRenderer; client: QueryClient }[] = [];
 
-function render(element: ReactElement): ReactTestRenderer {
+/** `bottom` is what the home indicator or Android's navigation bar takes off the window */
+function render(element: ReactElement, bottom = 34): ReactTestRenderer {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   let tree!: ReactTestRenderer;
   act(() => {
     tree = create(
       <SafeAreaProvider
-        initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
+        initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom } }}>
         <QueryClientProvider client={client}>
           <ToastProvider>{element}</ToastProvider>
         </QueryClientProvider>
@@ -209,11 +212,44 @@ describe('the bridge during the welcome slides', () => {
 });
 
 describe('the permission slide', () => {
-  function renderSlides(): ReactTestRenderer {
+  function renderSlides(bottom?: number): ReactTestRenderer {
     useAuth.setState({ token: 'tok', me: ME, onboarding: true });
     const OnboardingScreen = require('@/app/onboarding').default;
-    return render(<OnboardingScreen />);
+    return render(<OnboardingScreen />, bottom);
   }
+
+  /** The nearest native view above `node` that sets its own bottom padding. */
+  function paddingBelow(node: ReactTestInstance): unknown {
+    for (let at = node.parent; at; at = at.parent) {
+      if (typeof at.type !== 'string') continue;
+      const bottom = StyleSheet.flatten(at.props.style)?.paddingBottom;
+      if (bottom !== undefined) return bottom;
+    }
+    return undefined;
+  }
+
+  /** The scroll view `node` sits in. */
+  function scrollerOf(node: ReactTestInstance): ReactTestInstance | null {
+    for (let at = node.parent; at; at = at.parent) if (at.type === ScrollView) return at;
+    return null;
+  }
+
+  // Android draws the slides under its 3-button bar: DEVAM had a 24 dp gap
+  // above the window's edge, so its lower 24 dp sat under Back/Home/Recents
+  it('keeps DEVAM above the navigation bar, and its old gap where there is none', () => {
+    expect(paddingBelow(findWith(renderSlides(48), 'title', 'DEVAM', 'onPress'))).toBe(48);
+    expect(paddingBelow(findWith(renderSlides(0), 'title', 'DEVAM', 'onPress'))).toBe(Spacing.xl);
+  });
+
+  // on a short phone or with a large font the two buttons ran off the slide with no way to reach them
+  it('lets the permission slide scroll to its buttons', () => {
+    const tree = renderSlides(48);
+    for (const title of ['Bildirim izni', 'Adım izni']) {
+      const scroller = scrollerOf(findWith(tree, 'title', title, 'onPress'));
+      expect(scroller).not.toBeNull();
+      expect(scroller!.props.horizontal).toBeFalsy();
+    }
+  });
 
   it('is the fourth slide, and its two buttons ask for each permission', async () => {
     const tree = renderSlides();

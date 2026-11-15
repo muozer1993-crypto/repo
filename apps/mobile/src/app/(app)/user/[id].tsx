@@ -299,7 +299,12 @@ export default function UserProfileScreen() {
     .map((badge) => ({ key: badge.key, ...badgeTitle(badge, level) }));
 
   return (
-    <Screen scroll onRefresh={pull.onRefresh} refreshing={pull.refreshing} contentStyle={styles.content}>
+    <Screen
+      scroll
+      safeBottom
+      onRefresh={pull.onRefresh}
+      refreshing={pull.refreshing}
+      contentStyle={styles.content}>
       <Pressable accessibilityRole="button" onPress={back} hitSlop={12}>
         <Text variant="small" color={Colors.accent} bold>
           ‹ Geri

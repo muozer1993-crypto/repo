@@ -324,7 +324,7 @@ export default function FocusScreen() {
 
   if (!session || session.status === 'idle') {
     return (
-      <Screen scroll contentStyle={styles.content}>
+      <Screen scroll safeBottom contentStyle={styles.content}>
         <View style={styles.pickerHead}>
           <Text style={styles.bigEmoji}>🎯</Text>
           <Text variant="big" center>
@@ -397,7 +397,7 @@ export default function FocusScreen() {
 
   if (session.status === 'done') {
     return (
-      <Screen scroll contentStyle={styles.content}>
+      <Screen scroll safeBottom contentStyle={styles.content}>
         <Animated.View
           style={[
             styles.pickerHead,
@@ -453,7 +453,7 @@ export default function FocusScreen() {
   if (session.status === 'abandoned') {
     const earned = snap?.earnedMinutes ?? 0;
     return (
-      <Screen scroll contentStyle={styles.content}>
+      <Screen scroll safeBottom contentStyle={styles.content}>
         <View style={styles.pickerHead}>
           <Text style={styles.bigEmoji}>💀</Text>
           <Text variant="big" center color={Colors.danger}>
@@ -511,8 +511,11 @@ export default function FocusScreen() {
   const paused = session.status === 'paused';
   const graceLeft = paused && session.leftAt != null ? Math.max(0, GRACE_MS - (now - session.leftAt)) : 0;
 
+  // Scrolls so that "Vazgeç" can still be reached on a short phone or with a
+  // large font, where the paused card pushed it under the navigation bar. Its
+  // own key, so the dial does not open at wherever the picker was scrolled to.
   return (
-    <Screen contentStyle={styles.timerContent}>
+    <Screen key="timer" scroll safeBottom contentStyle={styles.timerContent}>
       <View style={styles.timerTop}>
         <Text variant="label">{detail.challenge.title || type.nameTr}</Text>
         <Text variant="tiny" faint>

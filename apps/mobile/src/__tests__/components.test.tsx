@@ -1,6 +1,6 @@
 import { NavigationContext } from 'expo-router/react-navigation';
 import { useEffect, useState, type ReactElement } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 
@@ -14,7 +14,7 @@ import { Standings } from '@/components/Standings';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
 import { ToastProvider, useToast } from '@/components/Toast';
-import { Spacing } from '@/theme';
+import { Layout, Spacing } from '@/theme';
 
 /** What the /health probe says; the real hook would poll the network. */
 const mockConnection = { online: true, checked: true, longOffline: false };
@@ -174,6 +174,54 @@ describe('keyboard avoidance', () => {
     os = jest.replaceProperty(Platform, 'OS', 'web');
     expect(avoiders(screen)).toStrictEqual([{ behavior: undefined, keyboardVerticalOffset: 0 }]);
     expect(avoiders(sheet)).toStrictEqual([{ behavior: undefined, keyboardVerticalOffset: undefined }]);
+  });
+});
+
+describe('Screen and the navigation bar', () => {
+  // a Samsung with the 3-button bar: 48 dp of the window sit under Back/Home/Recents
+  const SAFE_AREA = {
+    frame: { x: 0, y: 0, width: 360, height: 640 },
+    insets: { top: 24, left: 0, right: 0, bottom: 48 },
+  };
+
+  /** the bottom padding of the screen's body and, when it scrolls, of the scroll content */
+  function bottomsOf(element: ReactElement): { body?: unknown; scroll?: unknown } {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<SafeAreaProvider initialMetrics={SAFE_AREA}>{element}</SafeAreaProvider>);
+    });
+    const [body] = tree.root.findAll(
+      (node) => typeof node.type === 'string' && StyleSheet.flatten(node.props.style)?.maxWidth === Layout.maxWidth
+    );
+    const [scroller] = tree.root.findAllByType(ScrollView);
+    const found = {
+      body: StyleSheet.flatten(body!.props.style).paddingBottom,
+      scroll: scroller ? StyleSheet.flatten(scroller.props.contentContainerStyle).paddingBottom : undefined,
+    };
+    act(() => {
+      tree.unmount();
+    });
+    return found;
+  }
+
+  it('lifts the end of a screen above the bar when asked', () => {
+    expect(bottomsOf(<Screen safeBottom><View /></Screen>)).toStrictEqual({ body: 48, scroll: undefined });
+    // a scroll screen pads its content, so it still slides under the bar on the way
+    expect(bottomsOf(<Screen scroll safeBottom><View /></Screen>)).toStrictEqual({ body: 0, scroll: Spacing.xxl + 48 });
+    expect(bottomsOf(<Screen scroll safeBottom bottomInset={Spacing.xxl}><View /></Screen>)).toStrictEqual({
+      body: Spacing.xxl,
+      scroll: Spacing.xxl + 48,
+    });
+  });
+
+  // a tab screen gets the same inset, and its tab bar already stands on it
+  it('leaves every other screen as it was', () => {
+    expect(bottomsOf(<Screen><View /></Screen>)).toStrictEqual({ body: 0, scroll: undefined });
+    expect(bottomsOf(<Screen scroll><View /></Screen>)).toStrictEqual({ body: 0, scroll: Spacing.xxl });
+    expect(bottomsOf(<Screen onRefresh={() => {}} bottomInset={Spacing.xxl}><View /></Screen>)).toStrictEqual({
+      body: Spacing.xxl,
+      scroll: Spacing.xxl,
+    });
   });
 });
 

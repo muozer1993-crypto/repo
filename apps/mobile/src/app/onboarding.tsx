@@ -10,6 +10,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
@@ -78,6 +79,7 @@ export default function OnboardingScreen() {
   const level = useLevel();
   const setOnboarding = useAuth((s) => s.setOnboarding);
   const { width: windowWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const scroller = useRef<ScrollView>(null);
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
@@ -130,7 +132,7 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <Screen padded={false} contentStyle={styles.content}>
+    <Screen padded={false}>
       <View style={styles.top}>
         <Text variant="small" color={Colors.accent} black>
           KOYDUM
@@ -153,51 +155,59 @@ export default function OnboardingScreen() {
         contentContainerStyle={styles.pagerContent}>
         {SLIDES.map((slide) => (
           <View key={slide.key} style={[styles.slide, { width }]}>
-            {/* a smaller picture on the permission slide, so its two buttons fit a small phone */}
-            <View style={[styles.artWrap, slide.permissions && styles.artWrapSmall]}>
-              <Text style={[styles.art, slide.permissions && styles.artSmall]}>{level === 1 ? (slide.politeArt ?? slide.art) : slide.art}</Text>
-            </View>
-            <Text variant="huge" center style={styles.title}>
-              {slide.titles[level]}
-            </Text>
-            <Text variant="lead" muted center>
-              {t(slide.key, level)}
-            </Text>
-            {slide.permissions ? (
-              <View style={styles.permissions}>
-                {answers.push ? (
-                  <Chip icon="✅" label="Bildirim izni verildi" color={Colors.success} style={styles.granted} />
-                ) : (
-                  <Button
-                    title="Bildirim izni"
-                    icon="🔔"
-                    variant="secondary"
-                    fullWidth
-                    loading={asking === 'push'}
-                    disabled={asking !== null}
-                    onPress={() => void ask('push')}
-                  />
-                )}
-                {answers.steps ? (
-                  <Chip icon="✅" label="Adım izni verildi" color={Colors.success} style={styles.granted} />
-                ) : (
-                  <Button
-                    title="Adım izni"
-                    icon="🚶"
-                    variant="secondary"
-                    fullWidth
-                    loading={asking === 'steps'}
-                    disabled={asking !== null}
-                    onPress={() => void ask('steps')}
-                  />
-                )}
-                {answers.push === false || answers.steps === false ? (
-                  <Text variant="tiny" faint center>
-                    Vermezsen de olur, sonra Ayarlar’dan açarsın.
-                  </Text>
-                ) : null}
+            {/* each slide scrolls on its own, so a short phone or a large font
+                still reaches the permission buttons instead of cutting them off;
+                one that fits stays put (iOS would bounce it) */}
+            <ScrollView
+              contentContainerStyle={styles.slideContent}
+              alwaysBounceVertical={false}
+              showsVerticalScrollIndicator={false}>
+              {/* a smaller picture on the permission slide, so its two buttons fit a small phone */}
+              <View style={[styles.artWrap, slide.permissions && styles.artWrapSmall]}>
+                <Text style={[styles.art, slide.permissions && styles.artSmall]}>{level === 1 ? (slide.politeArt ?? slide.art) : slide.art}</Text>
               </View>
-            ) : null}
+              <Text variant="huge" center style={styles.title}>
+                {slide.titles[level]}
+              </Text>
+              <Text variant="lead" muted center>
+                {t(slide.key, level)}
+              </Text>
+              {slide.permissions ? (
+                <View style={styles.permissions}>
+                  {answers.push ? (
+                    <Chip icon="✅" label="Bildirim izni verildi" color={Colors.success} style={styles.granted} />
+                  ) : (
+                    <Button
+                      title="Bildirim izni"
+                      icon="🔔"
+                      variant="secondary"
+                      fullWidth
+                      loading={asking === 'push'}
+                      disabled={asking !== null}
+                      onPress={() => void ask('push')}
+                    />
+                  )}
+                  {answers.steps ? (
+                    <Chip icon="✅" label="Adım izni verildi" color={Colors.success} style={styles.granted} />
+                  ) : (
+                    <Button
+                      title="Adım izni"
+                      icon="🚶"
+                      variant="secondary"
+                      fullWidth
+                      loading={asking === 'steps'}
+                      disabled={asking !== null}
+                      onPress={() => void ask('steps')}
+                    />
+                  )}
+                  {answers.push === false || answers.steps === false ? (
+                    <Text variant="tiny" faint center>
+                      Vermezsen de olur, sonra Ayarlar’dan açarsın.
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </ScrollView>
           </View>
         ))}
       </ScrollView>
@@ -208,7 +218,9 @@ export default function OnboardingScreen() {
         ))}
       </View>
 
-      <View style={styles.footer}>
+      {/* the window runs under Android's navigation bar: the button stands above
+          it, and keeps its old gap where there is no bar */}
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, Spacing.xl) }]}>
         <Button
           title={isLast ? 'BAŞLAYALIM' : 'DEVAM'}
           size="lg"
@@ -222,7 +234,6 @@ export default function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: Spacing.xl },
   top: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -235,8 +246,10 @@ const styles = StyleSheet.create({
   },
   pager: { flex: 1 },
   pagerContent: { alignItems: 'stretch' },
-  slide: {
-    flex: 1,
+  // flex, not only the pager's stretch: on the web each page sits in a column wrapper of its own
+  slide: { flex: 1 },
+  slideContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: Spacing.xl,

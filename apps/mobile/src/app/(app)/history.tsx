@@ -2,6 +2,7 @@ import type { ChallengeSummary, VulgarityLevel } from '@koydum/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChallengeCard } from '@/components/ChallengeCard';
 import { Chip } from '@/components/Chip';
@@ -64,6 +65,7 @@ export default function HistoryScreen() {
   const params = useLocalSearchParams<{ with?: string; show?: string }>();
   const level = useLevel();
   const meId = useAuth((s) => s.me?.id ?? null);
+  const insets = useSafeAreaInsets();
   // the list home already holds: opening this costs no request, and its
   // "Hepsini gör (N)" always matches what is here
   const challenges = useChallenges();
@@ -172,7 +174,12 @@ export default function HistoryScreen() {
         keyExtractor={(summary) => summary.challenge.id}
         style={styles.list}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.listContent, shown.length === 0 && styles.listEmpty]}
+        // the list scrolls under Android's navigation bar, but its last card must not stop there
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: Spacing.xxl + insets.bottom },
+          shown.length === 0 && styles.listEmpty,
+        ]}
         ListHeaderComponent={header}
         refreshing={pull.refreshing}
         onRefresh={pull.onRefresh}
@@ -211,7 +218,7 @@ const styles = StyleSheet.create({
   rivalText: { flexShrink: 1 },
   chips: { gap: Spacing.sm, paddingVertical: Spacing.xs },
   list: { flex: 1 },
-  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xxl },
+  listContent: { paddingHorizontal: Spacing.lg },
   listEmpty: { flexGrow: 1 },
   skeletons: { gap: Spacing.md, paddingTop: Spacing.sm },
   skeleton: { borderRadius: Radius.lg },

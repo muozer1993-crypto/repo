@@ -200,7 +200,7 @@ export default function InviteScreen() {
   };
 
   return (
-    <Screen scroll contentStyle={styles.content}>
+    <Screen scroll safeBottom contentStyle={styles.content}>
       <View style={styles.hero}>
         <Text style={styles.emoji}>{emoji}</Text>
         <Text variant="big">{name ? `${name} seni çağırıyor` : 'Davet geldi'}</Text>

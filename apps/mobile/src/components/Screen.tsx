@@ -29,6 +29,12 @@ export interface ScreenProps {
   contentStyle?: ViewStyle;
   /** extra bottom padding, e.g. for a floating action button */
   bottomInset?: number;
+  /**
+   * keeps the last of the content clear of Android's navigation bar (and the
+   * iOS home indicator). Not for tab screens: they get the same inset again and
+   * the tab bar already stands on it.
+   */
+  safeBottom?: boolean;
   keyboard?: boolean;
 }
 
@@ -42,45 +48,50 @@ export function Screen({
   style,
   contentStyle,
   bottomInset = 0,
+  safeBottom,
   keyboard,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const stripHeight = useOfflineStripHeight();
+  const scrolls = !!(scroll || onRefresh);
+  // Android draws every route edge-to-edge, under the 3-button bar too: without
+  // this the last button sat partly under Back/Home/Recents. A scroll screen pads
+  // the end of its content instead, so the content still scrolls under the bar.
+  const safePad = safeBottom ? insets.bottom : 0;
   const body = (
     <View
       style={[
         styles.inner,
         padded && { paddingHorizontal: Spacing.lg },
-        { paddingBottom: bottomInset },
+        { paddingBottom: bottomInset + (scrolls ? 0 : safePad) },
         contentStyle,
       ]}>
       {children}
     </View>
   );
 
-  const content =
-    scroll || onRefresh ? (
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl
-              refreshing={!!refreshing}
-              onRefresh={onRefresh}
-              tintColor={Colors.accent}
-              colors={[Colors.accent]}
-              progressBackgroundColor={Colors.surface}
-            />
-          ) : undefined
-        }>
-        {body}
-      </ScrollView>
-    ) : (
-      body
-    );
+  const content = scrolls ? (
+    <ScrollView
+      style={styles.flex}
+      contentContainerStyle={[styles.scrollContent, safePad > 0 && { paddingBottom: Spacing.xxl + safePad }]}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl
+            refreshing={!!refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.accent}
+            colors={[Colors.accent]}
+            progressBackgroundColor={Colors.surface}
+          />
+        ) : undefined
+      }>
+      {body}
+    </ScrollView>
+  ) : (
+    body
+  );
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }, style]}>

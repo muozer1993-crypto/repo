@@ -81,7 +81,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <Screen glow scroll keyboard contentStyle={styles.content}>
+    <Screen glow scroll keyboard safeBottom contentStyle={styles.content}>
       <View style={styles.hero}>
         <Text variant="giant" style={styles.logo}>
           KOYDUM

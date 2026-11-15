@@ -3,14 +3,14 @@ import { LIMITS, addDays, todayKey } from '@koydum/shared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
-import { RefreshControl, TextInput } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider } from '@/components/Toast';
 import { ApiClient, ApiError } from '@/lib/api';
 import { clearPendingInvite, readPendingInvite, savePendingInvite } from '@/services/invite';
-import { Colors } from '@/theme';
+import { Colors, Spacing } from '@/theme';
 
 /**
  * Every list screen has to survive the three states the server actually
@@ -4104,6 +4104,36 @@ describe('the Android back button', () => {
     expect(mockPreventRemove.prevent).toBe(true);
     expect(pressBack()).toBe(true);
     expect(rendered(tree)).toContain('Seansı bitirelim mi?');
+
+    const { saveSession } = require('@/services/focus') as typeof import('@/services/focus');
+    await act(async () => {
+      await saveSession(null);
+    });
+  });
+});
+
+describe('the focus timer on a short phone', () => {
+  // The timer was the one screen with buttons that could not scroll: on a
+  // 640 dp phone with the 3-button bar, the paused card pushed "Vazgeç" under it
+  it('scrolls, and its last button ends above the navigation bar', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge: { ...detail.challenge, typeKey: 'odak_seansi', metricType: 'focus_minutes' as const, unit: 'dk' },
+    }));
+    const FocusScreen = require('@/app/(app)/focus/[id]').default;
+    const tree = renderScreen(<FocusScreen />);
+    await settle();
+    press(tree, 'Başlat');
+    expect(rendered(tree)).toContain('Elini telefondan çek');
+
+    let scroller = findWith(tree, 'title', 'Vazgeç', 'onPress').parent;
+    while (scroller && scroller.type !== ScrollView) scroller = scroller.parent;
+    expect(scroller).not.toBeNull();
+    expect(StyleSheet.flatten(scroller!.props.contentContainerStyle).paddingBottom).toBe(
+      Spacing.xxl + SAFE_AREA.insets.bottom
+    );
 
     const { saveSession } = require('@/services/focus') as typeof import('@/services/focus');
     await act(async () => {

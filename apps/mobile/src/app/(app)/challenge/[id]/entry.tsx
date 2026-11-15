@@ -264,7 +264,7 @@ export default function EntryModalScreen() {
   };
 
   return (
-    <Screen scroll keyboard contentStyle={styles.content}>
+    <Screen scroll keyboard safeBottom contentStyle={styles.content}>
       <View style={styles.header}>
         <View style={styles.headerBody}>
           <Text variant="title" numberOfLines={1}>

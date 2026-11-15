@@ -867,7 +867,7 @@ export default function SettingsScreen() {
   const recapOn = prefOverride.recapEnabled ?? me?.recapEnabled ?? true;
 
   return (
-    <Screen scroll contentStyle={styles.content}>
+    <Screen scroll safeBottom contentStyle={styles.content}>
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"

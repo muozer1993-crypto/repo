@@ -111,7 +111,7 @@ export default function ServerScreen() {
   };
 
   return (
-    <Screen scroll keyboard contentStyle={styles.content}>
+    <Screen scroll keyboard safeBottom contentStyle={styles.content}>
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"

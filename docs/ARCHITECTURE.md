@@ -521,6 +521,16 @@ boyu kadar aşağı da iter; KeyboardAvoidingView yerini pencereye göre değil 
 bağlantı yokken yazılan bir form (bodrumda girilen adım, şeridin açtığı sunucu adresi ekranı)
 klavyenin o kadar altında kalırdı. Toast'lar şeridin dışında kalır ve gerçek boşluğu bilir.
 
+Ekranın altı da aynı dertteydi: pencere Android'in gezinme çubuğunun da arkasına uzanır.
+Samsung'larda sık görülen üç tuşlu çubuk (Geri, Ana ekran, Son uygulamalar) 48 dp tutar ve en
+alttaki düğmenin, örneğin skor girişindeki "Kaydet"in ya da tanıtımdaki "DEVAM"ın, bir kısmını
+örtüyordu. Sonu bir düğmeyle biten ekranlar artık `Screen safeBottom` ile bu boşluğu bırakır.
+Kayan ekranda boşluk içeriğin sonuna eklenir: içerik çubuğun altından yine kayar, ama en aşağı
+inince düğme çubuğun üstünde durur. Odak sayacı da artık kayar; küçük telefonda ya da büyük
+yazıda duraklama kartı "Vazgeç"i aşağı itse bile ona ulaşılır. Sekmeli ekranlara eklenmez, çünkü
+sekme çubuğu bu boşluğun üstüne zaten oturur; çelınc açma sihirbazının alt düğmeleri ve alttan
+açılan kartlar da altlarını kendileri ayarlar.
+
 ## Bağlantı yokken
 
 Giriş en çok çekmeyen yerde yapılır: bodrumdaki spor salonu, metro, merdiven boşluğu. Sunucuya
