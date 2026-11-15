@@ -4,6 +4,7 @@
  *   npm run yonet -- kullanicilar        everybody, when they last came by, running çelınclar
  *   npm run yonet -- sikayetler          reports, newest first
  *   npm run yonet -- sifre <kullanici>   a new password for a friend who forgot theirs
+ *   npm run yonet -- sil <kullanici>     closes an account, as "Hesabı sil" in the app does
  *   npm run yonet -- yedekler            the daily backups, here and in BACKUP_DIR
  *   npm run yonet -- geri-yukle [yedek]  a backup back in place of the database
  *
@@ -13,14 +14,17 @@
  * the file is missing. Safe while the server runs: WAL lets a second connection
  * in and busy_timeout waits out the server's writes. All but geri-yukle, which
  * swaps the file out from under the server and so refuses while it answers.
+ * sil cannot be undone, so it asks first; with nobody at the keyboard to answer
+ * it only goes ahead with --evet.
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import readline from 'node:readline/promises';
 import { DEFAULT_TIMEZONE, dayKeyInTz, localTimeHHmm } from '@koydum/shared';
 import { loadConfig, type Config } from '../config.js';
 import { openDb, type Database } from '../db/index.js';
 import { loadDotEnv } from '../env.js';
-import { listReports, listUsers, resetPassword } from '../services/admin.js';
+import { accountToDelete, deleteAccount, listReports, listUsers, resetPassword } from '../services/admin.js';
 import {
   backupCopyDir,
   backupDir,
@@ -36,12 +40,13 @@ const HELP = `KOYDUM yönetim komutları (sunucuyu açan kişi için)
   npm run yonet -- kullanicilar        herkes: ne zaman katıldı, en son ne zaman girdi, kaç çelıncı sürüyor
   npm run yonet -- sikayetler          gelen şikayetler, en yenisi en üstte
   npm run yonet -- sifre <kullanici>   şifresini unutan kankaya yeni şifre
+  npm run yonet -- sil <kullanici>     hesabı kapatır: giriş yapamaz, süren çelınclarından çıkar, kanıt fotoğrafları silinir
   npm run yonet -- yedekler            veritabanının günlük yedekleri ve nerede durdukları
   npm run yonet -- geri-yukle [yedek]  bir yedeği geri yükler (adını yazmazsan en yenisini)
 
 Sunucu açıkken de çalışır. Sadece geri-yukle için önce sunucuyu kapat.`;
 
-type Command = 'users' | 'reports' | 'password' | 'backups' | 'restore';
+type Command = 'users' | 'reports' | 'password' | 'delete' | 'backups' | 'restore';
 
 /** The owner may well type the Turkish letters; both spellings work. */
 const COMMANDS: Record<string, Command> = {
@@ -51,6 +56,8 @@ const COMMANDS: Record<string, Command> = {
   şikayetler: 'reports',
   sifre: 'password',
   şifre: 'password',
+  sil: 'delete',
+  kapat: 'delete',
   yedekler: 'backups',
   'geri-yukle': 'restore',
   'geri-yükle': 'restore',
@@ -93,7 +100,7 @@ function printUsers(db: Database): void {
         when(u.createdAt, false),
         when(u.lastSeenAt),
         String(u.activeChallenges),
-        u.deletedAt ? `hesabını sildi (${when(u.deletedAt, false)})` : '',
+        u.deletedAt ? `silindi (${when(u.deletedAt, false)})` : '',
       ]),
     ),
   );
@@ -128,6 +135,43 @@ async function printPassword(db: Database, username: string | undefined): Promis
       ' Sonra Ayarlar → Hesap → "Şifreni değiştir"den kendi şifresini koysun' +
       ' (yeni sürümde; 1.0\'da bu düğme yok, önce güncellesin).',
   );
+  return 0;
+}
+
+/** Waits for the owner's answer on the terminal; only "evet" (or "e") is a yes. */
+async function ask(question: string): Promise<boolean> {
+  const terminal = readline.createInterface({ input: process.stdin, output: process.stdout });
+  // Ctrl+C closes the prompt and leaves the question hanging: that is a no too
+  const closed = new Promise<string>((resolve) => terminal.once('close', () => resolve('')));
+  try {
+    const answer = await Promise.race([terminal.question(`${question} `), closed]);
+    return ['evet', 'e'].includes(answer.trim().toLocaleLowerCase('tr'));
+  } finally {
+    terminal.close();
+  }
+}
+
+async function closeAccount(db: Database, uploadDir: string, args: string[]): Promise<number> {
+  const sure = args.includes('--evet');
+  const username = args.find((arg) => arg !== '--evet');
+  if (!username || username.trim() === '') {
+    console.error('✗ Kimin hesabı? Örnek: npm run yonet -- sil ali');
+    return 1;
+  }
+  const account = accountToDelete(db, username);
+  if (!sure) {
+    // piped or run by a script: nobody can answer, and a guess here is never undone
+    if (!process.stdin.isTTY) {
+      console.error(`✗ Sormadan silmem. Eminsen sonuna --evet ekle: npm run yonet -- sil ${account.username} --evet`);
+      return 1;
+    }
+    if (!(await ask(`${account.displayName} (@${account.username}) silinsin mi? Geri alınamaz. (evet/hayır)`))) {
+      console.log('\nPeki, hesaba dokunmadım.');
+      return 1;
+    }
+  }
+  const closed = deleteAccount(db, account.username, new Date(), path.resolve(uploadDir));
+  console.log(`Tamam, @${closed.username} kapatıldı. Telefonundaki oturum hemen düştü.`);
   return 0;
 }
 
@@ -256,6 +300,7 @@ async function main(argv: string[]): Promise<number> {
   try {
     if (command === 'users') printUsers(db);
     else if (command === 'reports') printReports(db);
+    else if (command === 'delete') return await closeAccount(db, config.uploadDir, rest);
     else return await printPassword(db, rest[0]);
     return 0;
   } finally {

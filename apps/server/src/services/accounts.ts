@@ -3,12 +3,14 @@ import type { VulgarityLevel } from '@koydum/shared';
  * Account lifecycle (social group): creation, invite codes, password changes and
  * soft deletion.
  *
- * Kept out of the route modules because registration and `DELETE /me` both need
- * the same invariants — a unique invite code, a lowercase unique username, and a
- * deletion that anonymises instead of dropping rows (finished challenges, taunts
- * and standings must survive so nobody's history rots when a friend leaves).
+ * Kept out of the route modules because registration, `DELETE /me` and the owner's
+ * CLI need the same invariants — a unique invite code, a lowercase unique username,
+ * and a deletion that anonymises instead of dropping rows (finished challenges,
+ * taunts and standings must survive so nobody's history rots when a friend leaves).
  */
-import { newId, newInviteCode, nowIso, type Database, type UserRow } from '../db/index.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { newId, newInviteCode, nowIso, type Database, type EntryRow, type UserRow } from '../db/index.js';
 import { cancelIfAbandoned, getChallengeRow, stillOpen } from './challenges.js';
 import { announceDisputeClocks } from './entries.js';
 
@@ -111,11 +113,22 @@ export function anonymizedUsername(userId: string): string {
  *   a dispute's 12 hours): there an accepted player stays in, exactly as the leave route
  *   refuses to let them out — otherwise a loser could delete the account to turn a lost
  *   1v1 into "not enough players";
- * - finished/cancelled challenges, their entries, taunts and badges are untouched.
+ * - every entry of theirs loses its note and proof photo, in every çelınc but the ones
+ *   they stay in above (an itiraz there may still be waiting on that photo). Values and
+ *   statuses stay, so no standing or result moves;
+ * - with `uploadDir`, the photo files those entries pointed at are deleted from it,
+ *   unless some entry still points at one (`removeUnusedPhotos`);
+ * - finished/cancelled challenges, the rest of their entries, taunts and badges are
+ *   untouched.
  *
- * Returns the anonymised row.
+ * Shared by `DELETE /me` and the owner's `npm run yonet -- sil`. Returns the anonymised row.
  */
-export function softDeleteUser(db: Database, user: UserRow, now: Date = new Date()): UserRow {
+export function softDeleteUser(
+  db: Database,
+  user: UserRow,
+  now: Date = new Date(),
+  options: { uploadDir?: string } = {},
+): UserRow {
   const at = nowIso(now);
   let username = anonymizedUsername(user.id);
   // Defensive: a re-used prefix would violate the UNIQUE index and kill the request.
@@ -123,6 +136,7 @@ export function softDeleteUser(db: Database, user: UserRow, now: Date = new Date
     username = `${username}_${user.id.replace(/-/g, '').slice(8, 12)}`;
   }
 
+  const photos = new Set<string>();
   const run = db.transaction(() => {
     db.prepare(
       `UPDATE users
@@ -140,13 +154,29 @@ export function softDeleteUser(db: Database, user: UserRow, now: Date = new Date
       )
       .all(user.id) as { challenge_id: string; status: string }[];
     const leave = db.prepare("UPDATE challenge_participants SET status = 'left' WHERE challenge_id = ? AND user_id = ?");
+    const stayingIn = new Set<string>();
     for (const { challenge_id: challengeId, status } of open) {
       const challenge = getChallengeRow(db, challengeId);
       // over but not yet decided: the result stands with them in it
-      if (status === 'accepted' && challenge && !stillOpen(challenge, now)) continue;
+      if (status === 'accepted' && challenge && !stillOpen(challenge, now)) {
+        stayingIn.add(challengeId);
+        continue;
+      }
       leave.run(challengeId, user.id);
       // one player fewer is a smaller itiraz majority (see the leave route)
       if (!cancelIfAbandoned(db, challengeId, now)) announceDisputeClocks(db, challengeId, now);
+    }
+
+    // "Hesabı sil" promises the photos and notes go. The value stays, so a
+    // finished çelınc still adds up to the result everybody was told.
+    const traces = db
+      .prepare('SELECT id, challenge_id, proof_url FROM entries WHERE user_id = ? AND (proof_url IS NOT NULL OR note IS NOT NULL)')
+      .all(user.id) as Pick<EntryRow, 'id' | 'challenge_id' | 'proof_url'>[];
+    const clear = db.prepare('UPDATE entries SET proof_url = NULL, note = NULL WHERE id = ?');
+    for (const entry of traces) {
+      if (stayingIn.has(entry.challenge_id)) continue;
+      clear.run(entry.id);
+      if (entry.proof_url) photos.add(entry.proof_url);
     }
 
     // Pending friend requests in either direction are meaningless now.
@@ -156,6 +186,40 @@ export function softDeleteUser(db: Database, user: UserRow, now: Date = new Date
     );
   });
   run();
+  // after the commit: a file deleted for a rolled-back delete would be gone for good
+  if (options.uploadDir) removeUnusedPhotos(db, photos, options.uploadDir);
 
   return db.prepare('SELECT * FROM users WHERE id = ?').get(user.id) as UserRow;
+}
+
+/**
+ * A proof photo's address as `POST /uploads` hands it out (`/uploads/<uuid>.<ext>`),
+ * or with a server address in front, as older apps stored it. The file name is
+ * the random one the server gave it, so nothing else (a `../`, a file the owner
+ * keeps in the folder) can ever match.
+ */
+const UPLOADED_PHOTO = /\/uploads\/([0-9a-f-]{36}\.(?:jpg|png|webp))$/;
+
+/**
+ * Deletes the files behind `urls` from `uploadDir`, except one that an entry
+ * still points at. The API takes any address as a proof, so somebody else's
+ * entry can carry the same URL, and their photo must not vanish with this
+ * account. A file already gone, or one the disk will not let go of, is skipped:
+ * the account is deleted either way, and what stays is a file nothing links to.
+ */
+function removeUnusedPhotos(db: Database, urls: Iterable<string>, uploadDir: string): void {
+  const names = new Set<string>();
+  for (const url of urls) {
+    const name = UPLOADED_PHOTO.exec(url)?.[1];
+    if (name) names.add(name);
+  }
+  const stillShown = db.prepare("SELECT 1 FROM entries WHERE proof_url LIKE '%/uploads/' || ? LIMIT 1");
+  for (const name of names) {
+    if (stillShown.get(name)) continue;
+    try {
+      fs.rmSync(path.join(uploadDir, name), { force: true });
+    } catch {
+      // a folder by that name, or a locked file on Windows: leave it
+    }
+  }
 }

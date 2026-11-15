@@ -557,6 +557,7 @@ cd C:\Users\ArisK\koydum
 npm run yonet -- kullanicilar     # herkes: ne zaman katıldı, en son ne zaman girdi, kaç çelıncı sürüyor
 npm run yonet -- sikayetler       # gelen şikayetler, en yenisi en üstte
 npm run yonet -- sifre ali        # şifresini unutan ali'ye yeni şifre
+npm run yonet -- sil ali          # ali'nin hesabını kapatır (önce sorar, geri alınamaz)
 npm run yonet -- yedekler         # günlük yedekler: hangileri var, nerede duruyorlar
 npm run yonet -- geri-yukle       # en yeni yedeği geri yükler (önce sunucuyu kapat)
 ```
@@ -582,7 +583,18 @@ verdiğin şifreyle kalır.
 
 **Şikayetler.** Uygulamada biri birini şikayet edince sunucu penceresine `YENİ ŞİKAYET` diye bir
 satır düşer, `npm run yonet -- sikayetler` de hepsini listeler. Gerisi sana kalmış: konuşursunuz,
-gerekirse engellemesini söylersin.
+gerekirse engellemesini söylersin. Tanımadığın biri girdiyse `npm run yonet -- sil <kullanici>`
+ile hesabını kapat.
+
+**Hesap kapatmak.** `npm run yonet -- sil ali` önce "Ali (@ali) silinsin mi?" diye sorar, `evet`
+yazarsan kapatır. Uygulamadaki **Hesabı sil** ne yapıyorsa o olur: telefonundaki oturum hemen
+düşer, o hesapla bir daha giremez, süren çelınclarından çıkar (iki kişilikse çelınc iptal olur),
+kanıt fotoğrafları ve notları silinir. Biten çelınclardaki skoru sonuçlar bozulmasın diye "Silinen
+kanka" adıyla kalır. Süresi bitip sonucu henüz çıkmamış bir çelınc (bitişten sonraki bir saat,
+süren bir itiraz) onu bırakmaz, oradaki fotoğrafı da kalır. Geri alınamaz. Bir betikten
+çalıştırıyorsan soracak kimse olmadığı için sonuna `--evet` ekle:
+`npm run yonet -- sil ali --evet`. Davet bağlantısı elinde olan biri yeniden kaydolabilir;
+bağlantıyı nerelere attığına dikkat et.
 
 Docker'da çalıştırıyorsan komutun başına `docker compose exec koydum` ekle:
 `docker compose exec koydum npm run yonet -- sifre ali`. VPS'te sunucuyu `DATA_DIR` ile
@@ -849,7 +861,7 @@ koydum/
 │   │   └── assets/brand/  ikon, splash, favicon
 │   └── server/
 │       ├── src/routes/    HTTP uçları
-│       ├── src/cli/       npm run yonet (şifre sıfırlama, kullanıcılar, şikayetler)
+│       ├── src/cli/       npm run yonet (şifre sıfırlama, kullanıcılar, şikayetler, hesap kapatma)
 │       ├── src/services/  çelınc yaşam döngüsü, bildirim, push
 │       └── src/db/        şema ve göçler
 ├── packages/shared/       tipler, şemalar, puanlama, katalog, laflar

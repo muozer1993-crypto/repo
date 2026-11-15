@@ -812,7 +812,7 @@ export default function SettingsScreen() {
   const deleteAccount = async () => {
     const first = await confirmTr(
       'Hesabı sil',
-      'Çelınclar, skorlar, rozetler, laf soktukların… hepsi gidecek. Devam edeyim mi?',
+      'Hesabın, kanıt fotoğrafların ve notların silinecek, süren çelınclardan çıkacaksın. Biten çelınclarda skorun “Silinen kanka” adıyla kalır. Devam edeyim mi?',
       'Devam et'
     );
     if (!first) return;
@@ -1193,7 +1193,8 @@ export default function SettingsScreen() {
             onPress={() => void deleteAccount()}
           />
           <Text variant="micro" faint>
-            Hesabı silmek her şeyi siler: çelınclar, skorlar, rozetler, yediğin ve koyduğun ne varsa.
+            Hesabını silersen bir daha giremezsin; kanıt fotoğrafların ve notların silinir, süren çelınclardan
+            çıkarsın. Biten çelınclardaki skorların, sonuçlar bozulmasın diye “Silinen kanka” adıyla kalır.
           </Text>
         </View>
       </Card>

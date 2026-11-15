@@ -690,6 +690,22 @@ yani sunucu açıkken çalışır. Yeni şifre o hesabın bütün açık oturuml
 Oturumlar); kanka yeni şifreyle bir daha girer. Şikayetler de aynı yoldan okunur (`sikayetler`): uygulamada onları okuyan bir ekran yok,
 sunucu her yeni şikayette kendi penceresine bir `warn` satırı düşer.
 
+Şikayetin cevabı da burada: davet bağlantısı WhatsApp gruplarında elden ele geçer; tanımadığı biri
+kaydolduysa sunucuyu açan onun hesabını `npm run yonet -- sil <kullanici>` ile kapatır. İş
+uygulamadaki "Hesabı sil"in kendisidir (`softDeleteUser`, `services/accounts.ts`): satır silinmez,
+adı "Silinen kanka" olur, `authenticate` silinmiş satıra hemen 401 verir. Geri alınamadığı için
+komut önce adını sorar; cevap verecek bir terminal yoksa `--evet` olmadan hiçbir şey yapmaz.
+
+Silinen hesabın kanıt fotoğrafları ve notları da gider. Eskiden "Hesabı sil" her şeyin gideceğini
+söylüyordu, oysa fotoğraflar diskte duruyor, adresini bilen herkese açılıyordu. Şimdi kullanıcının
+girişlerinde `note` ve `proof_url` boşalır; değer ve durum kalır ki biten bir çelıncın sonucu
+herkese söylenenle aynı kalsın. Dosyalar commit'ten sonra silinir; yalnızca adı sunucunun verdiği
+türdense (`<uuid>.jpg|png|webp`) ve başka hiçbir giriş o adresi göstermiyorsa: API kanıt olarak
+her adresi kabul eder, aynı adres başkasının girişinde de olabilir. Diskte olmayan dosya atlanır.
+Sonucu henüz çıkmamış bir çelınctaki (bitişten sonraki saat, süren itiraz) girişlere dokunulmaz,
+çünkü kullanıcı o çelıncta kalır ve bir itirazın cevabı o fotoğraf olabilir. Telefonlarda
+önbelleğe girmiş bir kopya (fotoğraflar bir yıl önbellekte durur) sunucudan silinemez.
+
 Bilgisayarı uyanık tutmak da onun işi olurdu, ama akla gelmez: dizüstü 15-30 dakika boşta kalınca
 uyur ve uyuyan sunucuya kimse bağlanamaz. Bu yüzden sunucu Windows'ta açılırken gizli bir
 PowerShell başlatır (`src/keepAwake.ts`). O, `SetThreadExecutionState` ile sistemin uyumamasını

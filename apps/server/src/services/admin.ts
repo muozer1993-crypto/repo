@@ -5,14 +5,16 @@
  * There is no email and no reset link — a friends-only server has nobody to send
  * one — so a forgotten password is fixed by the owner: a fresh one is set here and
  * handed over in a message. Reports land in the same place, since nothing in the
- * app reads them. Pure functions over a Database, so the CLI stays a printer and
- * the tests drive them against the in-memory database.
+ * app reads them, and so does the answer to one: the invite link gets forwarded,
+ * and a stranger who signed up with it is closed out here. Pure functions over a
+ * Database, so the CLI stays a printer and the tests drive them against the
+ * in-memory database.
  */
 import { randomInt } from 'node:crypto';
 import { foldUsername } from '@koydum/shared';
 import { hashPassword } from '../auth/password.js';
 import type { Database, UserRow } from '../db/index.js';
-import { replacePassword } from './accounts.js';
+import { replacePassword, softDeleteUser } from './accounts.js';
 
 export interface AdminUser {
   username: string;
@@ -29,6 +31,12 @@ export interface AdminReport {
   reported: string;
   reason: string;
   createdAt: string;
+}
+
+/** An account as the owner knows it: the name before any anonymising. */
+export interface AccountName {
+  username: string;
+  displayName: string;
 }
 
 export interface PasswordReset {
@@ -51,6 +59,15 @@ function tempPassword(): string {
   let out = '';
   for (let i = 0; i < TEMP_PASSWORD_LENGTH; i++) out += TEMP_PASSWORD_ALPHABET[randomInt(TEMP_PASSWORD_ALPHABET.length)];
   return out;
+}
+
+/** The row the owner means, or the Turkish error the CLI prints as it is. */
+function userNamed(db: Database, username: string): UserRow {
+  // the spelling the app stores, so "sifre Şeyma" finds seyma
+  const name = foldUsername(username).replace(/^@/, '');
+  const row = db.prepare('SELECT * FROM users WHERE username = ?').get(name) as UserRow | undefined;
+  if (!row) throw new Error(`"${name}" diye bir kullanıcı yok. Liste için: npm run yonet -- kullanicilar`);
+  return row;
 }
 
 /** Everybody, live accounts first; deleted ones keep their anonymised name. */
@@ -97,13 +114,36 @@ export function listReports(db: Database): AdminReport[] {
  * track of. They sign in again with the new password.
  */
 export async function resetPassword(db: Database, username: string): Promise<PasswordReset> {
-  // the spelling the app stores, so "sifre Şeyma" finds seyma
-  const name = foldUsername(username).replace(/^@/, '');
-  const row = db.prepare('SELECT * FROM users WHERE username = ?').get(name) as UserRow | undefined;
-  if (!row) throw new Error(`"${name}" diye bir kullanıcı yok. Liste için: npm run yonet -- kullanicilar`);
-  if (row.deleted_at !== null) throw new Error(`"${name}" hesabını silmiş, sıfırlanacak bir şifre kalmadı.`);
+  const row = userNamed(db, username);
+  if (row.deleted_at !== null) throw new Error(`"${row.username}" hesabını silmiş, sıfırlanacak bir şifre kalmadı.`);
 
   const password = tempPassword();
   replacePassword(db, row.id, await hashPassword(password));
   return { username: row.username, displayName: row.display_name, password };
+}
+
+/** The live account `sil` would close, or why not. */
+function closableUser(db: Database, username: string): UserRow {
+  const row = userNamed(db, username);
+  if (row.deleted_at !== null) throw new Error(`"${row.username}" hesabı zaten silinmiş.`);
+  return row;
+}
+
+/** Who `deleteAccount` would close, so the CLI can ask about them by name first. Throws as it does. */
+export function accountToDelete(db: Database, username: string): AccountName {
+  const row = closableUser(db, username);
+  return { username: row.username, displayName: row.display_name };
+}
+
+/**
+ * Closes `username` the way "Hesabı sil" does (softDeleteUser): the phones
+ * signed in to it get a 401 on their next request, it leaves its running
+ * çelınclar (a 1v1 left with one player is cancelled) and its proof photos
+ * leave `uploadDir`. For a stranger who got hold of the invite link, or a
+ * friend who wants out and has no phone left. Returns the name it had.
+ */
+export function deleteAccount(db: Database, username: string, now: Date = new Date(), uploadDir?: string): AccountName {
+  const row = closableUser(db, username);
+  softDeleteUser(db, row, now, { uploadDir });
+  return { username: row.username, displayName: row.display_name };
 }

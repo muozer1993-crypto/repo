@@ -9,6 +9,7 @@
  * for every matching çelınc the user is actually playing — see
  * `services/deviceSync.ts`. The app never has to know which challenges exist.
  */
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import {
   ChangePasswordBodySchema,
@@ -134,7 +135,7 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete('/me', auth, async (request) => {
     const { row } = requireUser(request);
-    const deleted = softDeleteUser(db, row, app.now());
+    const deleted = softDeleteUser(db, row, app.now(), { uploadDir: path.resolve(config.uploadDir) });
     return { ok: true, username: deleted.username };
   });
 

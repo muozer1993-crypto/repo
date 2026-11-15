@@ -7,9 +7,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CHALLENGE_TYPES, SHARED_VERSION, type FriendsView, type Me, type Notification } from '@koydum/shared';
+import {
+  CHALLENGE_TYPES,
+  SHARED_VERSION,
+  type ChallengeDetail,
+  type ChallengeResults,
+  type FriendsView,
+  type Me,
+  type Notification,
+} from '@koydum/shared';
 import { newId, nowIso, type ChallengeRow, type EntryRow, type UserRow } from '../src/db/index.js';
-import { GPS_MARKER, JPEG_WITH_GPS, authed, makeApp, multipart, registerUser, type TestApp } from './helpers.js';
+import { GPS_MARKER, JPEG_1X1, JPEG_WITH_GPS, authed, makeApp, multipart, registerUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
 
@@ -329,6 +337,149 @@ describe('DELETE /me', () => {
       payload: { username: 'mustafa', password: 'sifre123', displayName: 'Yeni Mustafa' },
     });
     expect(reuse.statusCode).toBe(201);
+  });
+
+  /** A proof photo stored the way the app stores one, and the URL the upload answered. */
+  async function uploadPhoto(h: TestApp, token: string): Promise<{ url: string; file: string }> {
+    const form = multipart({ filename: 'kanit.jpg', contentType: 'image/jpeg', content: JPEG_1X1 });
+    const response = await authed(h.app, token)({ method: 'POST', url: '/uploads', ...form });
+    expect(response.statusCode).toBe(201);
+    const url = response.json<{ url: string }>().url;
+    return { url, file: path.join(h.config.uploadDir, url.split('/').pop()!) };
+  }
+
+  function insertEntry(
+    h: TestApp,
+    challengeId: string,
+    userId: string,
+    fields: { dayKey: string; value: number; note?: string; proofUrl?: string },
+  ): string {
+    const id = newId();
+    const at = nowIso(h.now());
+    h.db
+      .prepare(
+        `INSERT INTO entries (id, challenge_id, user_id, day_key, value, source, note, proof_url, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'manual', ?, ?, 'ok', ?, ?)`,
+      )
+      .run(id, challengeId, userId, fields.dayKey, fields.value, fields.note ?? null, fields.proofUrl ?? null, at, at);
+    return id;
+  }
+
+  function entryRow(h: TestApp, id: string): EntryRow {
+    return h.db.prepare('SELECT * FROM entries WHERE id = ?').get(id) as EntryRow;
+  }
+
+  it('deletes the proof photos and notes of a finished çelınc and keeps the scores', async () => {
+    const h = await boot();
+    const user = await registerUser(h.app, 'mustafa');
+    const rival = await registerUser(h.app, 'kemal');
+    const finished = insertChallenge(h, {
+      creatorId: rival.me.id,
+      accepted: [rival.me.id, user.me.id],
+      startsAt: '2025-12-01T00:00:00.000Z',
+      endsAt: '2025-12-08T00:00:00.000Z',
+      status: 'finished',
+    });
+    const photo = await uploadPhoto(h, user.token);
+    // the oldest apps stored the address with the server in front
+    const legacy = await uploadPhoto(h, user.token);
+    const rivalPhoto = await uploadPhoto(h, rival.token);
+    const withPhoto = insertEntry(h, finished, user.me.id, { dayKey: '2025-12-02', value: 12_000, note: 'Sahilden eve yürüdüm', proofUrl: photo.url });
+    const withLegacy = insertEntry(h, finished, user.me.id, {
+      dayKey: '2025-12-03',
+      value: 9_000,
+      proofUrl: `http://localhost:4000${legacy.url}`,
+    });
+    // a photo that is already gone from the disk does not stop the deletion
+    const gone = insertEntry(h, finished, user.me.id, { dayKey: '2025-12-04', value: 7_000, proofUrl: `/uploads/${newId()}.jpg` });
+    const rivalEntry = insertEntry(h, finished, rival.me.id, { dayKey: '2025-12-02', value: 8_000, note: 'Kemal yürüdü', proofUrl: rivalPhoto.url });
+
+    const rivalCall = authed(h.app, rival.token);
+    const standings = async () =>
+      (await rivalCall({ method: 'GET', url: `/challenges/${finished}/results` }))
+        .json<ChallengeResults>()
+        .standings.map((p) => [p.user.id, p.score, p.rank]);
+    const before = await standings();
+    expect(before).toEqual([
+      [user.me.id, 28_000, 1],
+      [rival.me.id, 8_000, 2],
+    ]);
+
+    expect((await authed(h.app, user.token)({ method: 'DELETE', url: '/me' })).statusCode).toBe(200);
+
+    for (const id of [withPhoto, withLegacy, gone]) {
+      expect(entryRow(h, id)).toMatchObject({ note: null, proof_url: null, status: 'ok' });
+    }
+    expect(entryRow(h, withPhoto).value).toBe(12_000);
+    expect(fs.existsSync(photo.file)).toBe(false);
+    expect(fs.existsSync(legacy.file)).toBe(false);
+    expect((await h.app.inject({ method: 'GET', url: photo.url })).statusCode).toBe(404);
+
+    // Kemal's own photo and note are his, and the result reads the same
+    expect(fs.existsSync(rivalPhoto.file)).toBe(true);
+    expect(entryRow(h, rivalEntry)).toMatchObject({ note: 'Kemal yürüdü', proof_url: rivalPhoto.url });
+    expect(await standings()).toEqual(before);
+    const feed = (await rivalCall({ method: 'GET', url: `/challenges/${finished}` })).json<ChallengeDetail>().feed;
+    expect(feed.find((item) => item.id === withPhoto)).toMatchObject({ displayName: 'Silinen kanka', value: 12_000, proofUrl: null });
+  });
+
+  it('keeps a photo file that somebody else’s entry still shows', async () => {
+    const h = await boot();
+    const user = await registerUser(h.app, 'mustafa');
+    const rival = await registerUser(h.app, 'kemal');
+    const finished = insertChallenge(h, {
+      creatorId: rival.me.id,
+      accepted: [rival.me.id, user.me.id],
+      startsAt: '2025-12-01T00:00:00.000Z',
+      endsAt: '2025-12-08T00:00:00.000Z',
+      status: 'finished',
+    });
+    const photo = await uploadPhoto(h, user.token);
+    const mine = insertEntry(h, finished, user.me.id, { dayKey: '2025-12-02', value: 12_000, proofUrl: photo.url });
+    // the API takes any address as a proof, so the same URL can sit in Kemal's entry
+    const his = insertEntry(h, finished, rival.me.id, { dayKey: '2025-12-02', value: 8_000, proofUrl: photo.url });
+
+    expect((await authed(h.app, user.token)({ method: 'DELETE', url: '/me' })).statusCode).toBe(200);
+
+    expect(entryRow(h, mine).proof_url).toBeNull();
+    expect(entryRow(h, his).proof_url).toBe(photo.url);
+    expect(fs.existsSync(photo.file)).toBe(true);
+    expect((await h.app.inject({ method: 'GET', url: photo.url })).statusCode).toBe(200);
+  });
+
+  it('keeps the proof in a çelınc that is over but still being decided', async () => {
+    const h = await boot();
+    const user = await registerUser(h.app, 'mustafa');
+    const rival = await registerUser(h.app, 'kemal');
+    // ended half an hour ago: the phones' hour and any itiraz still run, with him in it
+    const settling = insertChallenge(h, {
+      creatorId: rival.me.id,
+      accepted: [rival.me.id, user.me.id],
+      startsAt: '2026-01-01T00:00:00.000Z',
+      endsAt: '2026-01-05T08:30:00.000Z',
+      status: 'active',
+    });
+    const finished = insertChallenge(h, {
+      creatorId: rival.me.id,
+      accepted: [rival.me.id, user.me.id],
+      startsAt: '2025-12-01T00:00:00.000Z',
+      endsAt: '2025-12-08T00:00:00.000Z',
+      status: 'finished',
+    });
+    const photo = await uploadPhoto(h, user.token);
+    const kept = insertEntry(h, settling, user.me.id, { dayKey: '2026-01-04', value: 12_000, note: 'Kanıt burada', proofUrl: photo.url });
+    // the same photo in a finished one goes from that entry, but the file stays for the one above
+    const cleared = insertEntry(h, finished, user.me.id, { dayKey: '2025-12-02', value: 12_000, proofUrl: photo.url });
+
+    expect((await authed(h.app, user.token)({ method: 'DELETE', url: '/me' })).statusCode).toBe(200);
+
+    const status = h.db
+      .prepare('SELECT status FROM challenge_participants WHERE challenge_id = ? AND user_id = ?')
+      .get(settling, user.me.id) as { status: string };
+    expect(status.status).toBe('accepted');
+    expect(entryRow(h, kept)).toMatchObject({ note: 'Kanıt burada', proof_url: photo.url });
+    expect(entryRow(h, cleared).proof_url).toBeNull();
+    expect(fs.existsSync(photo.file)).toBe(true);
   });
 });
 

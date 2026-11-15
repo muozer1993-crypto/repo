@@ -1,10 +1,11 @@
 /**
  * The owner's `npm run yonet`: a friend who forgot the password gets back in
- * with the one it prints, reports are finally readable, and the user list shows
- * who is still around. The CLI itself is spawned against a throwaway DATA_DIR,
- * the way npm runs it.
+ * with the one it prints, reports are finally readable, the user list shows
+ * who is still around and a stranger who signed up can be closed out. The CLI
+ * itself is spawned against a throwaway DATA_DIR, the way npm runs it.
  */
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import { createRequire } from 'node:module';
@@ -14,9 +15,9 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Challenge } from '@koydum/shared';
 import { hashPassword } from '../src/auth/password.js';
-import { openDb } from '../src/db/index.js';
+import { newId, openDb, type Database } from '../src/db/index.js';
 import { createUser } from '../src/services/accounts.js';
-import { listReports, listUsers, resetPassword } from '../src/services/admin.js';
+import { accountToDelete, deleteAccount, listReports, listUsers, resetPassword } from '../src/services/admin.js';
 import { backupIfDue, copyBackupIfDue } from '../src/services/backup.js';
 import { authed, befriend, DEFAULT_PASSWORD, makeApp, registerUser, type TestApp } from './helpers.js';
 
@@ -92,6 +93,61 @@ describe('resetPassword', () => {
     // deleting frees the name, so the old one is simply unknown now
     await expect(resetPassword(h.db, 'veli')).rejects.toThrow('diye bir kullanıcı yok');
     await expect(resetPassword(h.db, anonymised)).rejects.toThrow('hesabını silmiş');
+  });
+});
+
+describe('deleteAccount', () => {
+  it('closes the account the owner names, Turkish letters and all, and its phone is out at once', async () => {
+    const seyma = await registerUser(h.app, 'seyma', { displayName: 'Şeyma' });
+    const me = authed(h.app, seyma.token);
+    expect((await me({ method: 'GET', url: '/me' })).statusCode).toBe(200);
+
+    expect(accountToDelete(h.db, 'Şeyma')).toEqual({ username: 'seyma', displayName: 'Şeyma' });
+    expect(deleteAccount(h.db, ' @Şeyma ', h.now(), h.config.uploadDir)).toEqual({ username: 'seyma', displayName: 'Şeyma' });
+
+    expect((await me({ method: 'GET', url: '/me' })).statusCode).toBe(401);
+    expect((await login(h.app, 'seyma', DEFAULT_PASSWORD)).statusCode).toBe(401);
+    const row = listUsers(h.db).find((u) => u.deletedAt !== null);
+    expect(row).toMatchObject({ displayName: 'Silinen kanka', deletedAt: h.now().toISOString() });
+  });
+
+  it('refuses an unknown name and an account already deleted', async () => {
+    const veli = await registerUser(h.app, 'veli');
+    await authed(h.app, veli.token)({ method: 'DELETE', url: '/me' });
+    const anonymised = listUsers(h.db)[0]!.username;
+
+    expect(() => deleteAccount(h.db, 'kimse')).toThrow('"kimse" diye bir kullanıcı yok. Liste için: npm run yonet -- kullanicilar');
+    expect(() => accountToDelete(h.db, anonymised)).toThrow(`"${anonymised}" hesabı zaten silinmiş.`);
+    expect(() => deleteAccount(h.db, anonymised)).toThrow('hesabı zaten silinmiş');
+  });
+
+  it('walks out of a running 1v1, which is cancelled for the one left in it', async () => {
+    const ali = await registerUser(h.app, 'ali');
+    const veli = await registerUser(h.app, 'veli');
+    befriend(h.app, ali.me.id, veli.me.id);
+    const created = await authed(h.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: {
+        typeKey: 'adim_yarisi',
+        startsAt: h.now().toISOString(),
+        endsAt: new Date(h.now().getTime() + 3 * 24 * 3600_000).toISOString(),
+        participantIds: [veli.me.id],
+      },
+    });
+    const challengeId = created.json<Challenge>().id;
+    await authed(h.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+
+    h.advance(60 * 60_000);
+    deleteAccount(h.db, 'veli', h.now(), h.config.uploadDir);
+
+    expect(h.db.prepare('SELECT status FROM challenges WHERE id = ?').get(challengeId)).toEqual({ status: 'cancelled' });
+    expect(
+      h.db.prepare('SELECT status FROM challenge_participants WHERE challenge_id = ? AND user_id = ?').get(challengeId, veli.me.id),
+    ).toEqual({ status: 'left' });
+    expect(
+      h.db.prepare("SELECT data FROM notifications WHERE user_id = ? AND type = 'challenge_cancelled'").get(ali.me.id),
+    ).toEqual({ data: JSON.stringify({ challengeId, reason: 'everyone_left' }) });
   });
 });
 
@@ -203,6 +259,71 @@ describe('npm run yonet', () => {
     } finally {
       await server.close();
     }
+  }, 60_000);
+
+  /** Veli's finished çelınc with Ali, his day in it backed by a photo in DATA_DIR/uploads. */
+  function veliWithPhoto(db: Database, dataDir: string): { photo: string; entryId: string } {
+    const ali = createUser(db, { username: 'ali', displayName: 'Ali', passwordHash: 'x', timezone: 'Europe/Istanbul' });
+    const veli = createUser(db, { username: 'veli', displayName: 'Veli', passwordHash: 'x', timezone: 'Europe/Istanbul' });
+    const at = '2025-12-08T00:00:00.000Z';
+    const challengeId = newId();
+    db.prepare(
+      `INSERT INTO challenges (id, creator_id, type_key, metric_type, direction, unit, title, starts_at, ends_at, status, created_at)
+       VALUES (?, ?, 'adim_yarisi', 'auto_steps', 'higher', 'adım', 'Adım yarışı', '2025-12-01T00:00:00.000Z', ?, 'finished', ?)`,
+    ).run(challengeId, ali.id, at, at);
+    const join = db.prepare(
+      "INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at) VALUES (?, ?, 'accepted', ?, ?)",
+    );
+    for (const user of [ali, veli]) join.run(challengeId, user.id, at, at);
+    const name = `${randomUUID()}.jpg`;
+    fs.mkdirSync(path.join(dataDir, 'uploads'));
+    fs.writeFileSync(path.join(dataDir, 'uploads', name), 'jpeg');
+    const entryId = newId();
+    db.prepare(
+      `INSERT INTO entries (id, challenge_id, user_id, day_key, value, source, note, proof_url, created_at, updated_at)
+       VALUES (?, ?, ?, '2025-12-02', 12000, 'manual', 'Sahilde', ?, ?, ?)`,
+    ).run(entryId, challengeId, veli.id, `/uploads/${name}`, at, at);
+    return { photo: path.join(dataDir, 'uploads', name), entryId };
+  }
+
+  it('sil asks first, goes ahead with --evet and takes the proof photos with the account', async () => {
+    const dataDir = tempDataDir();
+    const dbPath = path.join(dataDir, 'koydum.db');
+    const db = openDb(dbPath);
+    const { photo, entryId } = veliWithPhoto(db, dataDir);
+    db.close();
+    const env = { UPLOAD_DIR: '' };
+
+    // no terminal to answer on: nothing is deleted on a guess
+    const unasked = await run(dataDir, ['sil', 'veli'], env);
+    expect(unasked.code).toBe(1);
+    expect(unasked.err).toContain('npm run yonet -- sil veli --evet');
+    expect(usersIn(dbPath).sort()).toEqual(['ali', 'veli']);
+    expect(fs.existsSync(photo)).toBe(true);
+
+    const closed = await run(dataDir, ['SİL', '@Veli', '--evet'], env);
+    expect(closed.err).toBe('');
+    expect(closed.code).toBe(0);
+    expect(closed.out).toContain('Tamam, @veli kapatıldı. Telefonundaki oturum hemen düştü.');
+    expect(fs.existsSync(photo)).toBe(false);
+    const after = openDb(dbPath);
+    try {
+      expect(listUsers(after).map((u) => [u.username === 'ali' ? 'ali' : 'silinen', u.deletedAt !== null])).toEqual([
+        ['ali', false],
+        ['silinen', true],
+      ]);
+      expect(after.prepare('SELECT value, note, proof_url FROM entries WHERE id = ?').get(entryId)).toEqual({
+        value: 12000,
+        note: null,
+        proof_url: null,
+      });
+    } finally {
+      after.close();
+    }
+
+    const again = await run(dataDir, ['kapat', 'veli', '--evet'], env);
+    expect(again.code).toBe(1);
+    expect(again.err).toContain('"veli" diye bir kullanıcı yok');
   }, 60_000);
 
   it('answers an unknown command with the help and a failure', async () => {
