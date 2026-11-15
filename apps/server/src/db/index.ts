@@ -150,6 +150,8 @@ export interface ParticipantRow {
   final_rank: number | null;
   /** Timezone pinned when the user joined; NULL for rows predating the column. */
   timezone: string | null;
+  /** The player whose invite brought them in (migration 015); NULL means the creator. */
+  invited_by: string | null;
 }
 
 export interface EntryRow {

@@ -19,6 +19,7 @@ import { useToast } from '@/components/Toast';
 import { useFriendAction, useFriends } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { useInviteLink } from '@/hooks/useInviteLink';
+import { useNewKankaToast } from '@/hooks/useNewKankaToast';
 import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
@@ -42,6 +43,7 @@ export default function FriendsScreen() {
   const friends = useFriends();
   const pull = usePullRefresh(() => friends.refetch());
   const action = useFriendAction();
+  const newKanka = useNewKankaToast();
   const queryClient = useQueryClient();
 
   // The tab stays mounted and nothing refetches on focus (lib/query), so a
@@ -123,17 +125,20 @@ export default function FriendsScreen() {
     );
   };
 
-  const respond = (friendshipId: string, kind: 'accept' | 'decline', name: string) => {
+  const respond = (friendshipId: string, kind: 'accept' | 'decline', user: PublicUser) => {
     setBusyKey(friendshipId);
     action.mutate(
       { kind, friendshipId },
       {
-        onSuccess: () =>
-          toast({
-            title: kind === 'accept' ? 'Kanka oldunuz' : 'Reddettin',
-            body: kind === 'accept' ? `${name} artık listende. Aç bir çelınc.` : `${name} eklenmedi.`,
-            kind: kind === 'accept' ? 'success' : 'info',
-          }),
+        onSuccess: (result) => {
+          if (kind === 'decline') {
+            toast({ title: 'Reddettin', body: `${user.displayName} eklenmedi.`, kind: 'info' });
+            return;
+          }
+          // a running çelınc of mine that could take them beats "Aç bir çelınc"
+          const invitable = 'invitable' in result ? result.invitable : undefined;
+          newKanka(user, invitable, `${user.displayName} artık listende. Aç bir çelınc.`);
+        },
         onError: fail,
         onSettled: () => setBusyKey(null),
       }
@@ -271,7 +276,7 @@ export default function FriendsScreen() {
                         size="sm"
                         variant="success"
                         loading={action.isPending && busyKey === incomingId}
-                        onPress={() => respond(incomingId, 'accept', user.displayName)}
+                        onPress={() => respond(incomingId, 'accept', user)}
                       />
                     ) : (
                       <Button
@@ -331,14 +336,14 @@ export default function FriendsScreen() {
                     variant="success"
                     loading={action.isPending && busyKey === request.id}
                     disabled={action.isPending && busyKey === request.id}
-                    onPress={() => respond(request.id, 'accept', request.user.displayName)}
+                    onPress={() => respond(request.id, 'accept', request.user)}
                   />
                   <Button
                     title="Reddet"
                     size="sm"
                     variant="ghost"
                     disabled={action.isPending && busyKey === request.id}
-                    onPress={() => respond(request.id, 'decline', request.user.displayName)}
+                    onPress={() => respond(request.id, 'decline', request.user)}
                   />
                 </View>
               }

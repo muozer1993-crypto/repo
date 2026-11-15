@@ -372,6 +372,17 @@ CREATE TABLE IF NOT EXISTS server_state (
 );
 `;
 
+/**
+ * Who called an invitee in. Any player may bring a friend into a running
+ * çelınc (`POST /challenges/:id/invite`), and the newcomer is usually somebody
+ * else's kanka than the creator's: their "Reddet" goes to whoever asked, and
+ * the home card names that person. NULL means the creator: the wizard's and a
+ * rematch's invitees, and every row from before this.
+ */
+const PARTICIPANT_INVITED_BY = `
+ALTER TABLE challenge_participants ADD COLUMN invited_by TEXT;
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -387,4 +398,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '012_token_version', sql: TOKEN_VERSION },
   { id: '013_nudges_sent_user_day', sql: NUDGES_SENT_USER_DAY },
   { id: '014_server_pauses', sql: SERVER_PAUSES },
+  { id: '015_participant_invited_by', sql: PARTICIPANT_INVITED_BY },
 ];

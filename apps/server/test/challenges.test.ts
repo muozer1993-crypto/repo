@@ -5,7 +5,7 @@
  * (`makeApp`), so "now" is exact and no test depends on wall-clock timing.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { LIMITS, addDays, todayKey, DEFAULT_TIMEZONE, type ChallengeDetail, type ChallengeResults, type LeaderboardEntry, type Challenge } from '@koydum/shared';
+import { LIMITS, addDays, todayKey, DEFAULT_TIMEZONE, type ChallengeDetail, type ChallengeResults, type ChallengeSummary, type LeaderboardEntry, type Challenge } from '@koydum/shared';
 import { runSchedulerOnce } from '../src/services/challenges.js';
 import { listByType } from '../src/services/notifications.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
@@ -915,19 +915,14 @@ describe('POST /challenges/:id/invite', () => {
     expect(me?.score).toBe(20000);
   });
 
-  it('is the creator\'s call, and only for friends nobody blocked', async () => {
+  it('is only for friends nobody blocked', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await twoPlayerChallenge(harness);
     const cem = await registerUser(harness.app, 'cem');
     const eda = await registerUser(harness.app, 'eda');
     const stranger = await registerUser(harness.app, 'yabanci');
     befriend(harness.app, ali.me.id, cem.me.id);
-    befriend(harness.app, veli.me.id, cem.me.id);
     befriend(harness.app, ali.me.id, eda.me.id);
-
-    const byVeli = await invite(harness, veli, challengeId, [cem.me.id]);
-    expect(byVeli.statusCode).toBe(403);
-    expect(byVeli.json().error.code).toBe('not_creator');
 
     const outsider = await invite(harness, stranger, challengeId, [cem.me.id]);
     expect(outsider.statusCode).toBe(404);
@@ -961,6 +956,83 @@ describe('POST /challenges/:id/invite', () => {
     expect(again.statusCode).toBe(409);
     expect(again.json().error.code).toBe('already_in');
     expect(listByType(harness.db, cem.me.id, 'challenge_invite')).toHaveLength(1);
+  });
+
+  it('lets any player call their own kanka in, and a no goes back to whoever called', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await twoPlayerChallenge(harness);
+    // Cem came through Veli's link: he is Veli's kanka, not the creator's
+    const cem = await registerUser(harness.app, 'cem', { displayName: 'Cem' });
+    const eda = await registerUser(harness.app, 'eda', { displayName: 'Eda' });
+    befriend(harness.app, veli.me.id, cem.me.id);
+    befriend(harness.app, ali.me.id, eda.me.id);
+    expect((await invite(harness, ali, challengeId, [eda.me.id])).statusCode).toBe(200);
+
+    // somebody still deciding cannot call anybody yet
+    const byEda = await invite(harness, eda, challengeId, [ali.me.id]);
+    expect(byEda.statusCode).toBe(403);
+    expect(byEda.json().error).toMatchObject({ code: 'not_participant', message: 'Önce çelınca katıl, sonra kanka çağırırsın.' });
+
+    // only one's own kanka
+    const notVelis = await invite(harness, veli, challengeId, [eda.me.id]);
+    expect(notVelis.statusCode).toBe(400);
+    expect(notVelis.json().error.code).toBe('not_friends');
+
+    // the creator's block keeps Veli's kanka out as well
+    await authed(harness.app, ali.token)({ method: 'POST', url: `/users/${cem.me.id}/block` });
+    const blocked = await invite(harness, veli, challengeId, [cem.me.id]);
+    expect(blocked.statusCode).toBe(400);
+    expect(blocked.json().error.code).toBe('blocked_in_challenge');
+    await authed(harness.app, ali.token)({ method: 'POST', url: `/users/${cem.me.id}/unblock` });
+
+    const byVeli = await invite(harness, veli, challengeId, [cem.me.id]);
+    expect(byVeli.statusCode).toBe(200);
+    const inbox = listByType(harness.db, cem.me.id, 'challenge_invite');
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0].body).toContain('Veli');
+    expect(JSON.parse(inbox[0].data)).toEqual({ challengeId, fromUserId: veli.me.id });
+
+    // the home card names who called
+    const cemCall = authed(harness.app, cem.token);
+    const [summary] = (await cemCall({ method: 'GET', url: '/challenges' })).json<ChallengeSummary[]>();
+    expect(summary.me?.invitedBy).toBe(veli.me.id);
+    const invitedBy = Object.fromEntries(summary.participants.map((p) => [p.user.id, p.invitedBy]));
+    expect(invitedBy).toEqual({ [ali.me.id]: null, [veli.me.id]: ali.me.id, [eda.me.id]: ali.me.id, [cem.me.id]: veli.me.id });
+
+    // Cem's no is Veli's news; the creator never asked him
+    expect((await cemCall({ method: 'POST', url: `/challenges/${challengeId}/decline` })).statusCode).toBe(200);
+    expect(listByType(harness.db, veli.me.id, 'challenge_declined').map((n) => JSON.parse(n.data))).toEqual([
+      { challengeId, fromUserId: cem.me.id },
+    ]);
+    expect(listByType(harness.db, ali.me.id, 'challenge_declined')).toHaveLength(0);
+  });
+
+  it('tells both the creator and whoever called when a çelınc not started yet gets a yes', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const can = await registerUser(harness.app, 'can', { displayName: 'Can' });
+    const cem = await registerUser(harness.app, 'cem', { displayName: 'Cem' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, can.me.id);
+    befriend(harness.app, veli.me.id, cem.me.id);
+    const created = await createChallenge(harness, ali, {
+      participantIds: [veli.me.id, can.me.id],
+      startsAt: iso(harness, DAY),
+      endsAt: iso(harness, 4 * DAY),
+    });
+    const id = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    expect((await invite(harness, veli, id, [cem.me.id])).statusCode).toBe(200);
+
+    await authed(harness.app, cem.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    const heard = (userId: string) =>
+      listByType(harness!.db, userId, 'challenge_accepted').filter((n) => JSON.parse(n.data).fromUserId === cem.me.id);
+    expect(heard(ali.me.id)).toHaveLength(1);
+    expect(heard(veli.me.id)).toHaveLength(1);
+    // Can is in it too, but nobody waits on his answer before the start
+    expect(heard(can.me.id)).toHaveLength(0);
   });
 
   it('does not put somebody a player blocked into that player\'s running çelınc', async () => {

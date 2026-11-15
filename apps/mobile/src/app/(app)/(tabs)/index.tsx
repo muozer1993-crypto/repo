@@ -521,7 +521,9 @@ function InviteCard({
   const refreshMe = useAuth((s) => s.refreshMe);
   const tz = useTimezone();
   const type = getChallengeType(summary.challenge.typeKey);
-  const inviter = summary.participants.find((p) => p.user.id === summary.challenge.creatorId)?.user;
+  // any player may call a kanka in; an older server names nobody, and then it was the creator
+  const inviterId = summary.me?.invitedBy ?? summary.challenge.creatorId;
+  const inviter = summary.participants.find((p) => p.user.id === inviterId)?.user;
   // How long, whether a typed number wants a photo, and what is at stake: what
   // friends used to say yes to blind and then bail over. The full rules are one
   // tap away, on the çelınc screen above "Varım".

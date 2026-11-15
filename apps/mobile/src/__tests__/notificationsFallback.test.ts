@@ -164,6 +164,15 @@ describe('where a tapped notification goes', () => {
     });
   });
 
+  it('opens the running çelınc a new kanka could join, with them ticked, and Kankalar otherwise', () => {
+    expect(
+      routeForNotificationData({ type: 'friend_accepted', userId: 'u2', friendshipId: 'f1', challengeId: 'c1', notificationId: 'n5' })
+    ).toEqual({ kind: 'challenge', challengeId: 'c1', invite: 'u2', notificationId: 'n5' });
+    // nothing to call them into, or an older server: the friends tab as before
+    expect(routeForNotificationData({ type: 'friend_accepted', userId: 'u2', friendshipId: 'f1' })).toEqual({ kind: 'friends' });
+    expect(routeForNotificationData({ type: 'friend_accepted', challengeId: 'c1' })).toEqual({ kind: 'challenge', challengeId: 'c1' });
+  });
+
   it('adds no id when there is no row behind it', () => {
     // the phone's own reminders and the "N bildirim daha" summary
     expect(routeForNotificationData({ type: 'inbox' })).toEqual({ kind: 'inbox' });

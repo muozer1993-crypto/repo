@@ -216,7 +216,8 @@ export async function setBadgeCount(count: number): Promise<void> {
 }
 
 type RouteTarget =
-  | { kind: 'challenge'; challengeId: string }
+  /** `invite`: a new kanka to call in, the sheet opens with them ticked */
+  | { kind: 'challenge'; challengeId: string; invite?: string }
   | { kind: 'results'; challengeId: string }
   | { kind: 'inbox' }
   | { kind: 'friends' };
@@ -242,6 +243,12 @@ function targetForPayload(payload: Record<string, unknown>): RouteTarget {
   const type = typeof payload.type === 'string' ? payload.type : '';
   const challengeId = typeof payload.challengeId === 'string' ? payload.challengeId : null;
 
+  // A new kanka my running çelınc could still take: the tap is for calling
+  // them in, not for a second çelınc. Older servers send no çelınc with it.
+  if (type === 'friend_accepted' && challengeId) {
+    const userId = typeof payload.userId === 'string' ? payload.userId : '';
+    return userId ? { kind: 'challenge', challengeId, invite: userId } : { kind: 'challenge', challengeId };
+  }
   if (type === 'friend_request' || type === 'friend_accepted') return { kind: 'friends' };
   if (!challengeId) return { kind: 'inbox' };
   if (type === 'taunt' || type === 'challenge_finished') return { kind: 'results', challengeId };

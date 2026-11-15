@@ -995,6 +995,85 @@ describe('friends', () => {
     expect(again.statusCode).toBe(201);
   });
 
+  it('points a new kanka at a running çelınc that could still take them', async () => {
+    const h = await boot();
+    const asker = await registerUser(h.app, 'mustafa', { displayName: 'Mustafa' });
+    const target = await registerUser(h.app, 'kemal', { displayName: 'Kemal' });
+    const ali = await registerUser(h.app, 'ali');
+    const veli = await registerUser(h.app, 'veli');
+    const hour = 60 * 60 * 1000;
+    const startsAt = nowIso(new Date(h.now().getTime() - 24 * hour));
+    // the group çelınc Kemal plays in, and Mustafa's own one with Veli
+    const kemals = insertChallenge(h, {
+      creatorId: ali.me.id,
+      accepted: [ali.me.id, target.me.id],
+      startsAt,
+      endsAt: nowIso(new Date(h.now().getTime() + 3 * 24 * hour)),
+      title: 'Ofis adım ligi',
+    });
+    const mustafas = insertChallenge(h, {
+      creatorId: veli.me.id,
+      accepted: [veli.me.id, asker.me.id],
+      startsAt,
+      endsAt: nowIso(new Date(h.now().getTime() + 2 * 24 * hour)),
+      title: 'Kahve kimden',
+    });
+
+    const asked = await authed(h.app, asker.token)({ method: 'POST', url: '/friends/request', payload: { username: 'kemal' } });
+    const friendshipId = asked.json<{ friendshipId: string }>().friendshipId;
+    const accepted = await authed(h.app, target.token)({ method: 'POST', url: `/friends/${friendshipId}/accept` });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json<{ invitable: unknown[] }>().invitable).toEqual([
+      { id: kemals, title: 'Ofis adım ligi', endsAt: nowIso(new Date(h.now().getTime() + 3 * 24 * hour)) },
+    ]);
+
+    // the tap opens Mustafa's çelınc, and the copy calls Kemal into it instead of a new one
+    const [news] = (await authed(h.app, asker.token)({ method: 'GET', url: '/me/inbox' })).json<Notification[]>();
+    expect(news).toMatchObject({ type: 'friend_accepted', data: { userId: target.me.id, friendshipId, challengeId: mustafas } });
+    expect(news?.body).toBe('Kemal kanka isteğini kabul etti. “Kahve kimden” çelıncına çağır, grubu bölme.');
+
+    // the one who came through the code is offered to the code's owner the same way
+    const newcomer = await registerUser(h.app, 'cem', { displayName: 'Cem' });
+    h.db.prepare('UPDATE users SET vulgarity_max = 1 WHERE id = ?').run(target.me.id);
+    const joined = await authed(h.app, newcomer.token)({
+      method: 'POST',
+      url: '/friends/request',
+      payload: { inviteCode: target.me.inviteCode },
+    });
+    expect(joined.json<{ status: string }>().status).toBe('accepted');
+    const [welcome] = (await authed(h.app, target.token)({ method: 'GET', url: '/me/inbox' })).json<Notification[]>();
+    expect(welcome).toMatchObject({ type: 'friend_accepted', data: { via: 'invite', challengeId: kemals } });
+    expect(welcome?.body).toBe('Cem davetinle katıldı, artık arkadaşsınız. “Ofis adım ligi” çelıncına davet edebilirsin.');
+  });
+
+  it('says "Aç bir çelınc" when no çelınc could take the new kanka', async () => {
+    const h = await boot();
+    const asker = await registerUser(h.app, 'mustafa');
+    const target = await registerUser(h.app, 'kemal', { displayName: 'Kemal' });
+    const ali = await registerUser(h.app, 'ali');
+    const veli = await registerUser(h.app, 'veli');
+    const hour = 60 * 60 * 1000;
+    const at = (offsetHours: number) => nowIso(new Date(h.now().getTime() + offsetHours * hour));
+    // Kemal's ends in 30 minutes: nobody new may accept any more
+    insertChallenge(h, { creatorId: ali.me.id, accepted: [ali.me.id, target.me.id], startsAt: at(-48), endsAt: at(0.5) });
+    // Mustafa's: Kemal is invited already, and in the other one Veli blocked Kemal
+    insertChallenge(h, { creatorId: ali.me.id, accepted: [ali.me.id, asker.me.id], invited: [target.me.id], startsAt: at(-24), endsAt: at(48) });
+    insertChallenge(h, { creatorId: veli.me.id, accepted: [veli.me.id, asker.me.id], startsAt: at(-24), endsAt: at(48) });
+    await authed(h.app, veli.token)({ method: 'POST', url: `/users/${target.me.id}/block` });
+    // and a finished one is not running at all
+    insertChallenge(h, { creatorId: ali.me.id, accepted: [ali.me.id, asker.me.id], startsAt: at(-72), endsAt: at(24), status: 'finished' });
+
+    const asked = await authed(h.app, asker.token)({ method: 'POST', url: '/friends/request', payload: { username: 'kemal' } });
+    const friendshipId = asked.json<{ friendshipId: string }>().friendshipId;
+    const accepted = await authed(h.app, target.token)({ method: 'POST', url: `/friends/${friendshipId}/accept` });
+    expect(accepted.json<{ invitable: unknown[] }>().invitable).toEqual([]);
+
+    const [news] = (await authed(h.app, asker.token)({ method: 'GET', url: '/me/inbox' })).json<Notification[]>();
+    expect(news?.type).toBe('friend_accepted');
+    expect(news?.data).toEqual({ userId: target.me.id, friendshipId });
+    expect(news?.body).toBe('Kemal kanka isteğini kabul etti. Aç bir çelınc, koy bakalım.');
+  });
+
   it('removes an accepted friendship', async () => {
     const h = await boot();
     const asker = await registerUser(h.app, 'mustafa');

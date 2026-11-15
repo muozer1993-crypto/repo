@@ -21,6 +21,7 @@
 import {
   DEFAULT_TIMEZONE,
   LIMITS,
+  acceptClosesAt,
   addDays,
   compareDayKeys,
   computeScore,
@@ -404,6 +405,9 @@ export function computeStandings(db: Database, challenge: ChallengeRow, now: Dat
 
   const finished = challenge.status === 'finished';
   const views: ParticipantView[] = [];
+  // a row with nobody in `invited_by` is the wizard's or a rematch's, and the creator's own has nobody
+  const invitedBy = (participant: ParticipantRow): string | null =>
+    participant.invited_by ?? (participant.user_id === challenge.creator_id ? null : challenge.creator_id);
 
   for (const participant of accepted) {
     const user = users.get(participant.user_id);
@@ -419,6 +423,7 @@ export function computeStandings(db: Database, challenge: ChallengeRow, now: Dat
       lastEntryAt: lastEntryAt.get(participant.user_id) ?? null,
       isWinner: finished ? challenge.winner_id === participant.user_id : (computed?.isWinner ?? false),
       lastSyncAt: lastSyncAt(participant.user_id),
+      invitedBy: invitedBy(participant),
     });
   }
 
@@ -437,6 +442,7 @@ export function computeStandings(db: Database, challenge: ChallengeRow, now: Dat
       lastEntryAt: lastEntryAt.get(participant.user_id) ?? null,
       isWinner: false,
       lastSyncAt: null,
+      invitedBy: invitedBy(participant),
     });
   }
 
@@ -707,6 +713,37 @@ export function stillOpen(challenge: ChallengeRow, now: Date): boolean {
     (challenge.status === 'pending' || challenge.status === 'active') &&
     now.getTime() < Date.parse(challenge.ends_at)
   );
+}
+
+/**
+ * The çelınclar `inviterId` could call `friendId` into right now, soonest end
+ * first: the rules of `POST /challenges/:id/invite`, read without refusing.
+ * Somebody who just became a kanka is usually the friend a running group
+ * çelınc was waiting for, and "Kanka oldunuz" used to say "Aç bir çelınc",
+ * which split the group.
+ */
+export function invitableFor(db: Database, inviterId: string, friendId: string, now: Date): ChallengeRow[] {
+  const mine = db
+    .prepare(
+      `SELECT c.* FROM challenges c
+         JOIN challenge_participants p ON p.challenge_id = c.id
+        WHERE p.user_id = ? AND p.status = 'accepted' AND c.status IN ('pending', 'active')
+        ORDER BY c.ends_at ASC, c.created_at ASC`,
+    )
+    .all(inviterId) as ChallengeRow[];
+  return mine.filter((challenge) => {
+    if (!stillOpen(challenge, now) || now.getTime() >= acceptClosesAt(challenge.starts_at, challenge.ends_at)) {
+      return false;
+    }
+    const rows = participantRows(db, challenge.id);
+    const theirs = rows.find((p) => p.user_id === friendId);
+    if (theirs?.status === 'accepted' || theirs?.status === 'invited') return false;
+    // played and walked out: the accept route would not let them back
+    if (theirs?.status === 'left' && theirs.joined_at !== null) return false;
+    const seated = rows.filter((p) => p.status === 'accepted' || p.status === 'invited');
+    if (seated.filter((p) => p.user_id !== challenge.creator_id).length >= LIMITS.PARTICIPANTS_MAX) return false;
+    return !seated.some((p) => p.user_id !== inviterId && isBlockedBetween(db, friendId, p.user_id));
+  });
 }
 
 /**

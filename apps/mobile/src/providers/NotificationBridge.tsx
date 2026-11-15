@@ -48,6 +48,7 @@ function openRoute(route: Exclude<NotificationRoute, null>): void {
   if (route.kind === 'inbox') router.push('/(app)/(tabs)/inbox');
   else if (route.kind === 'friends') router.push('/(app)/(tabs)/friends');
   else if (route.kind === 'results') router.push(`/challenge/${route.challengeId}/results`);
+  else if (route.invite) router.push({ pathname: '/challenge/[id]', params: { id: route.challengeId, invite: route.invite } });
   else router.push(`/challenge/${route.challengeId}`);
 }
 

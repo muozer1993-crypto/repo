@@ -167,8 +167,10 @@ function settlingNote(type: ChallengeType | undefined, awaitingProof: boolean): 
 /* ----------------------------------------------------------------- screen */
 
 export default function ChallengeDetailScreen() {
-  const params = useLocalSearchParams<{ id: string }>();
+  // `invite`: a new kanka to call in (the "Kanka oldunuz" toast and notification)
+  const params = useLocalSearchParams<{ id: string; invite?: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
+  const invite = typeof params.invite === 'string' && params.invite ? params.invite : undefined;
   const level = useLevel();
   const me = useAuth((s) => s.me);
   const meId = me?.id ?? null;
@@ -328,11 +330,12 @@ export default function ChallengeDetailScreen() {
   const deciding = answering && joinable;
   const joinClosed = answering && (challenge.status === 'pending' || challenge.status === 'active') && !joinable;
   /**
-   * The creator may call more friends in while somebody new could still accept:
-   * the server closes invites together with accepts, so a button past that
-   * would only earn an error.
+   * Any player may call more of their own kankas in while somebody new could
+   * still accept: the newcomer is often a friend of somebody other than the
+   * creator. The server closes invites together with accepts, so a button past
+   * that would only earn an error.
    */
-  const canInvite = isCreator && isPlayer && !settling && joinable;
+  const canInvite = isPlayer && !settling && joinable;
 
   return (
     <Screen
@@ -483,7 +486,15 @@ export default function ChallengeDetailScreen() {
             {t('challenge_pending_you', level)}
           </Text>
         ) : null}
-        {canInvite ? <InviteMore id={id} participants={participants} level={level} /> : null}
+        {canInvite ? (
+          <InviteMore
+            id={id}
+            participants={participants}
+            creatorId={challenge.creatorId}
+            level={level}
+            invite={invite}
+          />
+        ) : null}
       </Card>
 
       {/* -------------------------------------------------- invite reply */}
@@ -715,20 +726,27 @@ function RejoinCard({ id, level, metric }: { id: string; level: VulgarityLevel; 
 /* ------------------------------------------------------------- kanka ekle */
 
 /**
- * "Kanka ekle" for the creator. Phones get KOYDUM over days, and the friend who
- * installs on day two should join this çelınc rather than a second one that
- * splits the group. The friends list is only fetched once the sheet opens.
+ * "Kanka ekle" for every player. Phones get KOYDUM over days, and the friend
+ * who installs on day two should join this çelınc rather than a second one
+ * that splits the group; they are often the kanka of whoever handed out the
+ * link, not of the creator. The friends list is only fetched once the sheet
+ * opens. With `invite` (a kanka who just came in) it opens at once with them
+ * ticked.
  */
 function InviteMore({
   id,
   participants,
+  creatorId,
   level,
+  invite,
 }: {
   id: string;
   participants: ParticipantView[];
+  creatorId: string;
   level: VulgarityLevel;
+  invite?: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!invite);
   return (
     <>
       <Button
@@ -744,7 +762,14 @@ function InviteMore({
         onClose={() => setOpen(false)}
         title={byLevel(level, 'Kimi çağıralım?', 'Kimi çağırıyorsun?', 'Kimi getiriyorsun? 🍆')}>
         {open ? (
-          <InvitePicker id={id} participants={participants} level={level} onDone={() => setOpen(false)} />
+          <InvitePicker
+            id={id}
+            participants={participants}
+            creatorId={creatorId}
+            level={level}
+            initial={invite}
+            onDone={() => setOpen(false)}
+          />
         ) : null}
       </Sheet>
     </>
@@ -754,18 +779,23 @@ function InviteMore({
 function InvitePicker({
   id,
   participants,
+  creatorId,
   level,
+  initial,
   onDone,
 }: {
   id: string;
   participants: ParticipantView[];
+  creatorId: string;
   level: VulgarityLevel;
+  /** ticked from the start; dropped below like anybody no longer on offer */
+  initial?: string;
   onDone: () => void;
 }) {
   const friendsQuery = useFriends();
   const invite = useInviteToChallenge(id);
   const toast = useToast();
-  const [picked, setPicked] = useState<string[]>([]);
+  const [picked, setPicked] = useState<string[]>(initial ? [initial] : []);
 
   // Whoever is in, still deciding, or walked out is not offered; a "Reddet" is,
   // since asking again is the point. The server takes an invitee's "Ayrıl" back
@@ -773,10 +803,11 @@ function InvitePicker({
   const listed = new Set(participants.filter((p) => p.status !== 'declined').map((p) => p.user.id));
   const friends = (friendsQuery.data?.friends ?? []).filter((friend) => !listed.has(friend.id));
   const chosen = friends.filter((friend) => picked.includes(friend.id));
-  // the wizard's cap: everybody in or still invited, the creator aside
+  // the wizard's cap: everybody in or still invited, the creator aside (who
+  // may have left by now, when somebody else is the one calling)
   const seats =
     LIMITS.PARTICIPANTS_MAX -
-    (participants.filter((p) => p.status === 'accepted' || p.status === 'invited').length - 1);
+    participants.filter((p) => (p.status === 'accepted' || p.status === 'invited') && p.user.id !== creatorId).length;
 
   const toggle = (userId: string) =>
     setPicked((prev) => (prev.includes(userId) ? prev.filter((x) => x !== userId) : [...prev, userId]));

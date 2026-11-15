@@ -363,7 +363,9 @@ Arkadaşın bağlantıya dokununca sunucunun kendi sayfası açılır:
   Sayfa bunu kendisi ayarlar: `apk:yayinla` ile yayınlanan APK 1.1.0'dan eskiyse ya da sürümü
   bilinmiyorsa kopyalanacak kutuda bağlantı değil sadece adres durur ve bu yol yazar,
 * kayıt olunca kanka olursunuz; senin **Kabul**'e basman gerekmez, yeni kankan hemen bir çelınc
-  açabilir, sen de onu süren çelıncına çağırabilirsin.
+  açabilir, sen de onu süren çelıncına çağırabilirsin. Oynadığın bir çelınc onu hâlâ alabiliyorsa
+  "Yeni kanka" bildirimi o çelıncın adını söyler, dokununca da çelınc yeni kankan seçili olarak
+  açılır (bkz. [Çelınc sürerken kanka ekleme](#çelınc-sürerken-kanka-ekleme)).
 
 Davet bağlantısı senin "evet"inin yerine geçer: onunla gelen yeni hesap (bir haftadan genç)
 sorulmadan kankan olur. Daha eski bir hesap (arkadaşlıktan çıkardığın ama kodunu saklayan biri
@@ -810,23 +812,35 @@ Sihirbazda başlangıcı **Hemen** seçersen süre o an işlemeye başlar, ama k
 yarış yok: listedeki kart **RAKİP YOK** der, çelınc ekranı "Rakip bekleniyor, 1/2 kişi" gösterir
 ve tek başınayken "öndesin" demez. İlk kabul edenle ikinize "Çelınc başladı" bildirimi gider;
 sonradan katılan her kanka için içeridekilere "Ali kabul etti" gelir (seviyene göre "Ali varım
-dedi" ya da "Ali sahaya indi 🍆"). İleri bir tarihte başlayan çelıncta kabulleri sadece açan duyar,
-başlangıç saatinde herkese "başladı" gider. Kimse katılmazsa çelınc bitişte iptal olur. Engellediğin
+dedi" ya da "Ali sahaya indi 🍆"). İleri bir tarihte başlayan çelıncta kabulleri sadece açan duyar
+(sonradan **Kankaları Çağır** ile gelen birinin kabulünü onu çağıran da duyar), başlangıç saatinde
+herkese "başladı" gider. Kimse katılmazsa çelınc bitişte iptal olur. Engellediğin
 (ya da seni engelleyen) birinin kabulü sana bildirilmez.
 
 ### Çelınc sürerken kanka ekleme
 
-Uygulamayı herkes aynı gün kurmuyor. Çelıncı sen açtıysan çelınc ekranında, sıralamanın altında
-**Kankaları Çağır** düğmesi durur (seviyene göre "Arkadaş Davet Et" ya da "Kurban Getir" yazar).
-Dokununca çelıncta olmayan kankaların çıkar; seçtiklerine davet bildirimi gider, kabul eden
-sıralamaya girer. İkinci gün katılan kankanın telefonunun zaten saydığı günler (adım, Android'de
-ekran süresi) kabul ettiği anda kendiliğinden dolar; **Eksik günü yaz** sadece telefonun bilmediği
-günler için (bkz. [Adım sayımı nasıl çalışıyor](#adım-sayımı-nasıl-çalışıyor)). Böylece "beni de
-ekle" diyen için ikinci bir çelınc açıp grubu bölmen gerekmez.
+Uygulamayı herkes aynı gün kurmuyor. Kabul ettiğin her çelıncın ekranında, çelıncı kim açmış
+olursa olsun, sıralamanın altında **Kankaları Çağır** düğmesi durur (seviyene göre "Arkadaş Davet
+Et" ya da "Kurban Getir" yazar). Dokununca çelıncta olmayan kankaların çıkar; seçtiklerine senin
+adınla davet bildirimi gider, kabul eden sıralamaya girer. İkinci gün katılan kankanın telefonunun
+zaten saydığı günler (adım, Android'de ekran süresi) kabul ettiği anda kendiliğinden dolar; **Eksik
+günü yaz** sadece telefonun bilmediği günler için (bkz. [Adım sayımı nasıl
+çalışıyor](#adım-sayımı-nasıl-çalışıyor)). Böylece "beni de ekle" diyen için ikinci bir çelınc açıp
+grubu bölmen gerekmez.
 
-* Sadece çelıncı açan ekler. Yeni gelen önce kankan olmalı: senin davet bağlantınla kaydolduysa
-  zaten kankandır, hemen eklersin. Kullanıcı adıyla istek attıysa **Kankalar** sekmesinde kabul
-  etmen yeter.
+* Herkes kendi kankasını ekler; yeni gelenin çelıncı açanla kanka olması gerekmez. Grup
+  çelıncını Ali açtıysa ve bağlantıyı sen dağıttıysan, yeni geleni sen eklersin. Yeni gelen önce
+  senin kankan olmalı: senin davet bağlantınla kaydolduysa zaten kankandır, hemen eklersin.
+  Kullanıcı adıyla istek attıysa **Kankalar** sekmesinde kabul etmen yeter. Henüz kabul etmediğin
+  bir çelınca kimseyi çağıramazsın.
+* Yeni bir kankan olunca (bağlantınla geldi ya da isteğini kabul ettin) oynadığın bir çelınc onu
+  hâlâ alabiliyorsa bildirim de **Kabul**'den sonraki yazı da "Aç bir çelınc" demez, o çelıncın adını
+  söyler: "“Ofis Ligi” çelıncına çağır, grubu bölme." Dokununca çelınc açılır, **Kankaları Çağır**
+  yeni kankan seçili gelir; **Çağır**'a basman yeter.
+* Davet bildirimi de ana sayfadaki davet kartı da seni kimin çağırdığını yazar. Reddedersen haber
+  çelıncı açana değil, seni çağırana gider. Çelıncı iptal etmek yine sadece açanın elinde.
+* Düğmenin açandan başkasında görünmesi yeni APK ile gelir: eski APK'da sadece çelıncı açan görür,
+  "Yeni kanka" bildirimine dokununca da Kankalar sekmesi açılır.
 * Daveti reddeden kankayı yeniden çağırabilirsin, ona yeni bir bildirim gider. Oynayıp ayrılan
   geri dönemez.
 * Son bir saatte kimse eklenmez (kısa çelınclarda sürenin son dörtte birinde); o sırada daveti
@@ -835,7 +849,7 @@ ekle" diyen için ikinci bir çelınc açıp grubu bölmen gerekmez.
   eklenemez." der, kimin kimi engellediğini söylemez.
 * Eklenen kanka, ondan önce başlamış bir itiraz saatini durdurmaz: o itiraz, başladığı anda
   çelıncta olanların çoğunluğuyla açıldı ve öyle kalır.
-* Bir çelıncta senden başka en fazla 15 kişi olur. Reddedenler bu sayıya girmez.
+* Bir çelıncta açandan başka en fazla 15 kişi olur. Reddedenler bu sayıya girmez.
 
 ---
 

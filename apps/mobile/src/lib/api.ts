@@ -7,6 +7,7 @@ import type {
   ChallengeType,
   Entry,
   FeedPage,
+  FriendAcceptResult,
   FriendsView,
   LeaderboardEntry,
   Me,
@@ -359,8 +360,9 @@ export class ApiClient {
     return this.request<{ status: 'pending' | 'accepted' }>('POST', '/friends/request', { body });
   }
 
+  /** `invitable`: my running çelınclar the new kanka could still join (older servers leave it out). */
   acceptFriend(friendshipId: string) {
-    return this.request<{ ok: true }>('POST', `/friends/${friendshipId}/accept`);
+    return this.request<FriendAcceptResult>('POST', `/friends/${friendshipId}/accept`);
   }
 
   declineFriend(friendshipId: string) {
@@ -440,7 +442,7 @@ export class ApiClient {
     return this.request<{ ok: true }>('POST', `/challenges/${id}/cancel`);
   }
 
-  /** The creator bringing friends into a çelınc already under way; answers with the fresh detail. */
+  /** A player bringing friends into a çelınc already under way; answers with the fresh detail. */
   inviteToChallenge(id: string, userIds: string[]) {
     return this.request<ChallengeDetail>('POST', `/challenges/${id}/invite`, { body: { userIds } });
   }

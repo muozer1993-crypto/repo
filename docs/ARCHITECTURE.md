@@ -71,9 +71,10 @@ Zamanlayıcıyı beklemeyen iki iptal var: açanın kendi iptali ve "herkes kaç
 bir ayrılma ya da bir hesap silme çelıncta kabul etmiş ya da hâlâ davetli iki kişi bırakmazsa çelınc
 o istekle birlikte iptal olur (`cancelIfAbandoned`). Yoksa reddedilmiş bir teke tek, açanı bir hafta
 "önde" yürütür, sonunda da "kimse kabul etmedi" diye kapanırdı. Davetli biri hâlâ kabul edip iki
-kişi yapabilecekse bekler. Reddeden açana, ayrılan içeride kalanlara haber verir ("Ali tırstı,
-reddetti", "Ali havlu attı"), engelli ikiliye hiçbir şey gitmez. Bitişten sonra ikisi de sessizdir
-ve iptal etmez: o bekleyişte sonuç zamanlayıcınındır, kaybeden kimse ayrılıp sonucu bozamaz.
+kişi yapabilecekse bekler. Reddeden onu çağırana (sonradan "Kanka ekle" ile çağrılmadıysa açana),
+ayrılan içeride kalanlara haber verir ("Ali tırstı, reddetti", "Ali havlu attı"), engelli ikiliye
+hiçbir şey gitmez. Bitişten sonra ikisi de sessizdir ve iptal etmez: o bekleyişte sonuç
+zamanlayıcınındır, kaybeden kimse ayrılıp sonucu bozamaz.
 Reddetmek de son söz değildir: çelınc sürdükçe reddeden kabul edebilir, uygulama bunu çelınc
 ekranında "Katıl" diye sunar. Oynayıp ayrılan geri giremez (`already_left`): herkese "havlu attı"
 dendi, itiraz çoğunluğu da ona göre küçüldü. Sessiz bir davetli yüzünden bitişe kadar açık kalıp
@@ -85,14 +86,19 @@ açan vardır; zamanlayıcı yalnızca `pending` çelıncları başlattığı i�
 "başladı" hiç denmiyordu. Onu iki kişi yapan ilk kabul (daha önce kimse katılmadıysa) ikisine
 `challenge_started` gönderir. Başlangıç saati geçmiş bir `pending` çelıncı iki kişi yapan kabul
 hiçbir şey göndermez: zamanlayıcı onu 30 saniye içinde başlatır ve aynısını söyler. Diğer her
-kabul `challenge_accepted` olur ("Ali kabul etti"): başlamamış çelıncta açana, süren çelıncta
-içerideki herkese; ret ve ayrılmayla aynı yoldan (`tellWhoIsIn`), engelli ikiliye ve silinmiş
-hesaba gitmez. Kimse katılmadan süren bir çelıncta uygulama "öndesin" demez, "Rakip bekleniyor"
+kabul `challenge_accepted` olur ("Ali kabul etti"): başlamamış çelıncta açana ve onu çağıran başka
+biriyse ona da, süren çelıncta içerideki herkese; ret ve ayrılmayla aynı yoldan (`tellWhoIsIn`),
+engelli ikiliye ve silinmiş hesaba gitmez. Kimse katılmadan süren bir çelıncta uygulama "öndesin" demez, "Rakip bekleniyor"
 der.
 
-Çelıncı açan, çelınc sürerken kanka da ekleyebilir (`POST /challenges/:id/invite`): uygulamayı
-herkes aynı gün kurmuyor, ikinci gün gelen kanka için açılan ikinci bir çelınc grubu böler. Eklenen,
-sihirbazda seçilmiş gibi `invited` girer ve aynı kapıdan kabul eder. Kapı da ikisi için aynı anda
+Çelınc sürerken oyuncular kanka da ekleyebilir (`POST /challenges/:id/invite`): uygulamayı herkes
+aynı gün kurmuyor, ikinci gün gelen kanka için açılan ikinci bir çelınc grubu böler. Eskiden bunu
+yalnızca açan yapabiliyordu, ama yeni gelen çoğu zaman bağlantıyı dağıtanın kankası olur, açanın
+değil: grup çelıncını başka biri açmışsa yeni geleni ne açan (kankası değil) ne de bağlantıyı
+dağıtan (açan değil) ekleyebiliyordu, üç kişi WhatsApp'ta çözüyordu. Artık kabul etmiş her oyuncu
+kendi kankasını çağırır. Eklenen, sihirbazda seçilmiş gibi `invited` girer ve aynı kapıdan kabul
+eder; satır kimin çağırdığını tutar (`invited_by`, boşsa açan): ret ona gider, ana sayfadaki davet
+kartı da onun adını yazar. İptal yine yalnızca açanındır. Kapı da ikisi için aynı anda
 kapanır (`acceptClosesAt`: bitişten bir saat önce, kısa çelıncta sürenin son dörtte biri); kabul
 edilemeyecek bir davet boş bir bildirimdir. Sunucu bu anı her çelıncla gönderir
 (`Challenge.acceptClosesAt`) ve uygulama kapıyı kuralın kendi kopyasına değil, ona bakarak kapatır:
@@ -834,6 +840,15 @@ engeller: o hâlâ istek gönderir. Engel iki yönde de 403 kalır. Kod altı ka
 alfabeden; doğru bir tahmin artık bir arkadaşlık demek. Bu yüzden bir hesabın kimseyi bulamayan
 kodları saatte 20 ile sınırlı (`INVITE_CODE_MISSES_PER_USER`, süreç içi `AttemptLimiter`), sınırı
 aşan doğru kodla gelse de bekler.
+
+Yeni kanka çoğu zaman süren bir grup çelıncının beklediği kişidir, ama "kanka oldunuz" haberi
+("Aç bir çelınc, koy bakalım") ve dokununca açılan Kankalar sekmesi ikinci bir çelınca itiyordu.
+Her `friend_accepted` artık okuyanın yeni kankayı hemen çağırabileceği çelıncları arar
+(`invitableFor`: davet ucunun kuralları, hata vermeden okunur) ve en erken biteni varsa adını
+söyler ("“Ofis Ligi” çelıncına çağır, grubu bölme."), `challengeId` de dokunuşu oraya, yeni kanka
+seçili "Kanka ekle"ye götürür. Kabul eden taraf aynı listeyi `/accept` cevabında (`invitable`) alır
+ve uygulamanın "Kanka oldunuz" uyarısı aynısını söyler; listeyi göndermeyen eski sunucuda uygulama
+kendi çelınc listesine bakar.
 
 Uygulamada giriş ekranındaki "Önce sunucuyu seç"e yapıştırılan davet bağlantısı kayıt ekranına
 geçirir: sunucu seçmemiş bir telefon yeni birinin telefonudur, giriş formu ona ancak "şifre yanlış"

@@ -111,9 +111,11 @@ function requireFriend(db: Database, meId: string, userId: string): UserRow {
 }
 
 /**
- * "Ali tırstı": a no goes to the creator, a walk-out to the players still in,
- * each at their own level. A yes goes to the creator while the çelınc has not
- * started (the one waiting for answers), and to every other player once it
+ * "Ali tırstı": a no goes to whoever called Ali in (the creator, unless
+ * another player brought him with "Kanka ekle"), a walk-out to the players
+ * still in, each at their own level. A yes goes to the creator, and to the
+ * one who called if that is somebody else, while the çelınc has not started
+ * (they are the ones waiting for answers), and to every other player once it
  * runs. Only people still in the race hear it, and never across a block:
  * somebody who blocked Ali does not want that name in the inbox.
  */
@@ -125,11 +127,16 @@ function tellWhoIsIn(
   at: string,
 ): void {
   const players = acceptedParticipants(db, challenge.id);
-  const creatorOnly =
-    type === 'challenge_declined' || (type === 'challenge_accepted' && challenge.status === 'pending');
+  const inviter = getParticipant(db, challenge.id, who.id)?.invited_by ?? challenge.creator_id;
+  const only =
+    type === 'challenge_declined'
+      ? [inviter]
+      : type === 'challenge_accepted' && challenge.status === 'pending'
+        ? [challenge.creator_id, inviter]
+        : null;
   for (const participant of players) {
     if (participant.user_id === who.id) continue;
-    if (creatorOnly && participant.user_id !== challenge.creator_id) continue;
+    if (only && !only.includes(participant.user_id)) continue;
     if (isBlockedBetween(db, who.id, participant.user_id)) continue;
     const user = getUserRow(db, participant.user_id);
     if (!user || user.deleted_at !== null) continue;
@@ -469,10 +476,13 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
   // POST /challenges/:id/invite
   // -------------------------------------------------------------------------
   /**
-   * The creator brings friends into a çelınc that already exists: phones get
+   * A player brings friends into a çelınc that already exists: phones get
    * KOYDUM over days, and the friend who installs on day two should not need a
-   * second çelınc that splits the group. They come in `invited`, exactly like
-   * the ones picked in the wizard, and accept through the same door.
+   * second çelınc that splits the group. Any player may, not only the creator:
+   * the newcomer is usually somebody else's kanka (the one who handed out the
+   * link), and only their own friends can call them. They come in `invited`,
+   * exactly like the ones picked in the wizard, accept through the same door,
+   * and the row remembers who called (`invited_by`): a no goes back to them.
    */
   app.post('/challenges/:id/invite', { preHandler: app.authenticate }, async (request): Promise<ChallengeDetail> => {
     const me = request.user;
@@ -481,9 +491,13 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const challenge = requireChallengeRow(db, id);
     const membership = requireMembership(db, challenge, me.id);
 
-    if (challenge.creator_id !== me.id) throw forbidden('not_creator', 'Sadece çelıncı açan kanka ekleyebilir.');
     if (membership.status !== 'accepted') {
-      throw forbidden('not_participant', 'Bu çelınctan ayrıldın, kimseyi çağıramazsın.');
+      throw forbidden(
+        'not_participant',
+        membership.status === 'left' && membership.joined_at !== null
+          ? 'Bu çelınctan ayrıldın, kimseyi çağıramazsın.'
+          : 'Önce çelınca katıl, sonra kanka çağırırsın.',
+      );
     }
     const body = parseBody(InviteToChallengeBodySchema, request.body);
     // past the end only the result is left (the settle hour, an itiraz's photo)
@@ -547,16 +561,17 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const run = db.transaction(() => {
       for (const { user, row } of invitees) {
         if (row) {
-          // a fresh invite: it goes to the end of the line-up like a new one
+          // a fresh invite: it goes to the end of the line-up like a new one, and it is the new caller's
           db.prepare(
-            "UPDATE challenge_participants SET status = 'invited', invited_at = ? WHERE challenge_id = ? AND user_id = ?",
-          ).run(iso, challenge.id, user.id);
+            `UPDATE challenge_participants SET status = 'invited', invited_at = ?, invited_by = ?
+              WHERE challenge_id = ? AND user_id = ?`,
+          ).run(iso, me.id, challenge.id, user.id);
         } else {
           // `timezone` stays empty until they accept, like any invitee (see POST /challenges)
           db.prepare(
-            `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at, final_score, final_rank, timezone)
-             VALUES (?, ?, 'invited', ?, NULL, NULL, NULL, NULL)`,
-          ).run(challenge.id, user.id, iso);
+            `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at, final_score, final_rank, timezone, invited_by)
+             VALUES (?, ?, 'invited', ?, NULL, NULL, NULL, NULL, ?)`,
+          ).run(challenge.id, user.id, iso, me.id);
         }
         const copy = inviteCopy(levelOf(user), me.row.display_name, challenge.title);
         notify(db, {

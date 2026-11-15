@@ -124,8 +124,13 @@ function dataString(data: Record<string, unknown> | undefined, key: string): str
 function targetFor(item: Notification): string | null {
   const challengeId = dataString(item.data, 'challengeId');
   switch (item.type) {
+    case 'friend_accepted': {
+      // a new kanka my running çelınc could still take: open it with them ticked
+      if (!challengeId) return '/(app)/(tabs)/friends';
+      const userId = dataString(item.data, 'userId');
+      return userId ? `/challenge/${challengeId}?invite=${encodeURIComponent(userId)}` : `/challenge/${challengeId}`;
+    }
     case 'friend_request':
-    case 'friend_accepted':
       return '/(app)/(tabs)/friends';
     case 'badge':
     case 'recap': // the leaderboard lives on the profile

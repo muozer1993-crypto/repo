@@ -406,6 +406,13 @@ export interface ParticipantView {
    * other çelınc. Older servers leave it out.
    */
   lastSyncAt?: string | null;
+  /**
+   * Who called this player in: any player may bring a friend into a running
+   * çelınc, and everybody the wizard or a rematch invited was called by the
+   * creator. Null for the creator. Older servers leave it out; the creator is
+   * the inviter then.
+   */
+  invitedBy?: string | null;
 }
 
 export interface ChallengeSummary {
@@ -597,6 +604,27 @@ export interface FriendsView {
   friends: PublicUser[];
   incoming: FriendRequestView[];
   outgoing: FriendRequestView[];
+}
+
+/** A running çelınc the reader could call a new kanka into. */
+export interface InvitableChallenge {
+  id: string;
+  title: string;
+  endsAt: string;
+}
+
+/** `POST /friends/:friendshipId/accept` */
+export interface FriendAcceptResult {
+  status: 'accepted';
+  friendshipId: string;
+  /** null once the requester's account is gone */
+  user: PublicUser | null;
+  /**
+   * The çelınclar the accepter plays in that could still take the requester,
+   * soonest end first: the newcomer is usually who a running group çelınc was
+   * waiting for. Older servers leave it out.
+   */
+  invitable?: InvitableChallenge[];
 }
 
 export interface LeaderboardEntry {

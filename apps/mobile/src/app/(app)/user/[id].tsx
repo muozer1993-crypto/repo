@@ -1,3 +1,4 @@
+import type { PublicUser } from '@koydum/shared';
 import { LIMITS, badgeTitle, getBadge } from '@koydum/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
@@ -19,6 +20,7 @@ import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import { useChallenges, useFriendAction, useFriends, useProfile } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
+import { useNewKankaToast } from '@/hooks/useNewKankaToast';
 import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
@@ -52,6 +54,7 @@ export default function UserProfileScreen() {
   // a çelınc still running between us is not "henüz karşı karşıya gelmediniz"
   const live = useChallenges('active,pending');
   const friendAction = useFriendAction();
+  const newKanka = useNewKankaToast();
 
   const [reportOpen, setReportOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -151,11 +154,13 @@ export default function UserProfileScreen() {
     );
   };
 
-  const acceptRequest = (friendshipId: string) => {
+  const acceptRequest = (friendshipId: string, user: PublicUser) => {
     friendAction.mutate(
       { kind: 'accept', friendshipId },
       {
-        onSuccess: () => toast({ title: 'Kanka oldunuz', body: 'Artık çelınc açabilirsin.', kind: 'success' }),
+        // a running çelınc of mine that could take them beats "çelınc aç"
+        onSuccess: (result) =>
+          newKanka(user, 'invitable' in result ? result.invitable : undefined, 'Artık çelınc açabilirsin.'),
         onError: failFriendAction,
       }
     );
@@ -417,7 +422,7 @@ export default function UserProfileScreen() {
                 icon="🫂"
                 fullWidth
                 loading={friendAction.isPending}
-                onPress={() => acceptRequest(incomingRequestId)}
+                onPress={() => acceptRequest(incomingRequestId, user)}
               />
               <Text variant="tiny" faint center>
                 Kabul edince çelınc açabilirsin.

@@ -20,7 +20,7 @@ import { clearPendingInvite, readPendingInvite, savePendingInvite } from '@/serv
 
 /* ------------------------------------------------------------------ mocks */
 
-const searchParams: { id?: string; with?: string; show?: string; day?: string } = {};
+const searchParams: { id?: string; with?: string; show?: string; day?: string; invite?: string } = {};
 
 /** The last focus effect a screen handed over; nothing navigates here, so tests run it by hand. */
 const mockFocus: { effect?: () => void } = {};
@@ -281,6 +281,7 @@ beforeEach(() => {
   delete searchParams.with;
   delete searchParams.show;
   delete searchParams.day;
+  delete searchParams.invite;
   for (const key of Object.keys(api)) delete api[key];
   Object.assign(api, {
     challenges: jest.fn(async () => []),
@@ -892,6 +893,22 @@ describe('an invite, before and after the door closes', () => {
     expect(text).toContain('Ali davet etti');
     expect(text).toMatch(/📅 7 gün · .+ · 📸 Kanıt lazım/);
     expect(text).toContain('🎁 Kaybeden kahve ısmarlar · 💀 Kaybeden bulaşık yıkar');
+  });
+
+  it('names the player who called on the home card, not the creator', async () => {
+    const VELI = { id: 'u-4', username: 'veli', displayName: 'Veli', avatarEmoji: '🐺', createdAt: '2026-09-01T00:00:00.000Z' };
+    const { challenge, participants, me } = screenTimeInvite();
+    const called = { ...me, invitedBy: VELI.id };
+    const veli = { ...participants[0], user: VELI, invitedBy: ALI.id };
+    api.challenges = jest.fn(async () => [
+      { challenge, participants: [participants[0], veli, called], me: called, unreadTaunts: 0 },
+    ]);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Veli davet etti');
+    expect(rendered(tree)).not.toContain('Ali davet etti');
   });
 
   it('leaves an invite nobody can accept any more out of Davetler', async () => {
@@ -4714,16 +4731,62 @@ describe('"Kanka ekle" on a çelınc already under way', () => {
     expect(rendered(tree)).not.toContain('Kimi çağırıyorsun?');
   });
 
-  it('is not there for a friend who did not open the çelınc', async () => {
+  it('is there for every player, not only whoever opened the çelınc', async () => {
     searchParams.id = 'c-1';
     const detail = mine();
     api.challenge = jest.fn(async () => ({ ...detail, challenge: { ...detail.challenge, creatorId: ALI.id } }));
+    // the newcomer is often my kanka and not the creator's
+    api.friends = jest.fn(async () => ({ friends: [CEM], incoming: [], outgoing: [] }));
+    api.inviteToChallenge = jest.fn(async () => mine());
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('KANKALARI ÇAĞIR');
+    press(tree, CTA);
+    await settle();
+    act(() => {
+      friendRow(tree, CEM.id)!.props.onToggle(CEM.id);
+    });
+    press(tree, 'Çağır (1)');
+    await settle();
+    expect(api.inviteToChallenge).toHaveBeenCalledWith('c-1', [CEM.id]);
+  });
+
+  it('is not there for somebody who has not said yes yet', async () => {
+    searchParams.id = 'c-1';
+    const detail = mine();
+    const me = { ...detail.me!, status: 'invited' as const, score: 0, rank: 0 };
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge: { ...detail.challenge, creatorId: ALI.id },
+      participants: [me, ...detail.participants.slice(1)],
+      me,
+    }));
     const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
     const tree = renderScreen(<ChallengeScreen />);
     await settle();
 
     expect(rendered(tree)).toContain('Haftalık Adım');
     expect(rendered(tree)).not.toContain('KANKALARI ÇAĞIR');
+  });
+
+  it('opens with the new kanka ticked when the "Kanka oldunuz" tap brings me here', async () => {
+    searchParams.id = 'c-1';
+    searchParams.invite = CEM.id;
+    api.challenge = jest.fn(async () => mine());
+    api.friends = jest.fn(async () => ({ friends: [ALI, CEM, VELI], incoming: [], outgoing: [] }));
+    api.inviteToChallenge = jest.fn(async () => mine());
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Kimi çağırıyorsun?');
+    expect(friendRow(tree, CEM.id)?.props.selected).toBe(true);
+    expect(friendRow(tree, VELI.id)?.props.selected).toBe(false);
+    press(tree, 'Çağır (1)');
+    await settle();
+    expect(api.inviteToChallenge).toHaveBeenCalledWith('c-1', [CEM.id]);
   });
 
   it('goes away when the last hour starts, as the server stops taking anybody new', async () => {
@@ -4738,6 +4801,81 @@ describe('"Kanka ekle" on a çelınc already under way', () => {
     // still running: the countdown is there, the button is not
     expect(rendered(tree)).toContain('BİTMESİNE');
     expect(rendered(tree)).not.toContain('KANKALARI ÇAĞIR');
+  });
+});
+
+describe('"Kanka oldunuz" while a çelınc of mine still takes players', () => {
+  const CEM = { id: 'u-3', username: 'cem', displayName: 'Cem', avatarEmoji: '🦁', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** Cem asked; the list the home tab keeps is mounted too, as in the app. */
+  async function friendsTab() {
+    api.friends = jest.fn(async () => ({ friends: [], incoming: [{ id: 'f-1', user: CEM }], outgoing: [] }));
+    api.challenges = jest.fn(async () => [challengeDetail()]);
+    const { useChallenges } = require('@/hooks/queries') as typeof import('@/hooks/queries');
+    function ChallengeList() {
+      useChallenges();
+      return null;
+    }
+    const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
+    const tree = renderScreen(
+      <>
+        <ChallengeList />
+        <FriendsScreen />
+      </>
+    );
+    await settle();
+    return tree;
+  }
+
+  function tapToast(tree: ReactTestRenderer, body: string): void {
+    const [toast] = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityRole === 'button' &&
+        typeof node.props.onPress === 'function' &&
+        node.findAll((child) => child.props.children === body).length > 0
+    );
+    if (!toast) throw new Error(`"${body}" diyen bildirim yok`);
+    act(() => {
+      toast.props.onPress();
+    });
+  }
+
+  it('names the çelınc the server offers, and the tap opens its "Kanka ekle" with Cem ticked', async () => {
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.push.mockClear();
+    api.acceptFriend = jest.fn(async () => ({
+      status: 'accepted',
+      friendshipId: 'f-1',
+      user: CEM,
+      invitable: [{ id: 'c-7', title: 'Ofis Ligi', endsAt: new Date(Date.now() + 86_400_000).toISOString() }],
+    }));
+    const tree = await friendsTab();
+
+    press(tree, 'Kabul');
+    await settle();
+    expect(api.acceptFriend).toHaveBeenCalledWith('f-1');
+    const body = 'Cem artık listende. “Ofis Ligi” çelıncına çağır, grubu bölme.';
+    expect(rendered(tree)).toContain(body);
+    expect(rendered(tree)).not.toContain('Aç bir çelınc');
+
+    tapToast(tree, body);
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/challenge/[id]', params: { id: 'c-7', invite: CEM.id } });
+  });
+
+  it('finds the çelınc in my list when an older server names none, and says "Aç bir çelınc" when the server has none', async () => {
+    // an older server: no `invitable` at all
+    api.acceptFriend = jest.fn(async () => ({ status: 'accepted', friendshipId: 'f-1', user: CEM }));
+    const tree = await friendsTab();
+    press(tree, 'Kabul');
+    await settle();
+    expect(rendered(tree)).toContain('Cem artık listende. “Haftalık Adım” çelıncına çağır, grubu bölme.');
+
+    // a new server that found nothing: my list does not overrule it
+    api.acceptFriend = jest.fn(async () => ({ status: 'accepted', friendshipId: 'f-1', user: CEM, invitable: [] }));
+    const again = await friendsTab();
+    press(again, 'Kabul');
+    await settle();
+    expect(rendered(again)).toContain('Cem artık listende. Aç bir çelınc.');
   });
 });
 

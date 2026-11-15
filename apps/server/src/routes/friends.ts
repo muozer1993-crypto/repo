@@ -19,6 +19,7 @@ import type { FastifyInstance } from 'fastify';
 import {
   FriendDeleteQuerySchema,
   FriendRequestBodySchema,
+  type FriendAcceptResult,
   type FriendsView,
   type PublicUser,
   type VulgarityLevel,
@@ -27,6 +28,7 @@ import { newId, nowIso, type Database, type FriendshipRow, type UserRow } from '
 import { badRequest, conflict, forbidden, notFound, parseBody, parseQuery, tooMany } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { asVulgarityLevel, toPublicUser } from '../serialize.js';
+import { invitableFor } from '../services/challenges.js';
 import { friendRows, friendshipBetween, incomingRequests, outgoingRequests } from '../services/friends.js';
 import { notify } from '../services/notifications.js';
 import { AttemptLimiter, retryAfterText } from '../services/throttle.js';
@@ -43,21 +45,91 @@ function requestCopy(level: VulgarityLevel, name: string): { title: string; body
   return { title: '👊 Kanka isteği', body: `${name} seni kanka listesine ekledi. Kabul et de çelınc açalım.` };
 }
 
-function acceptedCopy(level: VulgarityLevel, name: string): { title: string; body: string } {
-  if (level === 1) return { title: 'Kanka isteğin kabul edildi', body: `${name} kanka isteğini kabul etti.` };
-  if (level === 3) return { title: '🍆 Kanka oldunuz', body: `${name} kabul etti. Şimdi kime koyacağını seç.` };
-  return { title: '🔥 Kanka oldunuz', body: `${name} kanka isteğini kabul etti. Aç bir çelınc, koy bakalım.` };
+interface Copy {
+  title: string;
+  body: string;
+}
+
+/**
+ * The last line of "kanka oldunuz": with a çelınc of the reader's that could
+ * still take the new kanka (`open`, its title), call them into it rather than
+ * open a second one that splits the group. The title sits in quotes before
+ * "çelıncına", so no suffix has to agree with free text.
+ */
+function nextStep(level: VulgarityLevel, open: string | undefined, otherwise: string): string {
+  if (open === undefined) return otherwise;
+  if (level === 1) return `“${open}” çelıncına davet edebilirsin.`;
+  if (level === 3) return `“${open}” çelıncına çek, o da yesin 🍆`;
+  return `“${open}” çelıncına çağır, grubu bölme.`;
+}
+
+function acceptedCopy(level: VulgarityLevel, name: string, open?: string): Copy {
+  if (level === 1) {
+    return {
+      title: 'Kanka isteğin kabul edildi',
+      body: `${name} kanka isteğini kabul etti. ${nextStep(level, open, '')}`.trimEnd(),
+    };
+  }
+  if (level === 3) {
+    return {
+      title: '🍆 Kanka oldunuz',
+      body: `${name} kabul etti. ${nextStep(level, open, 'Şimdi kime koyacağını seç.')}`,
+    };
+  }
+  return {
+    title: '🔥 Kanka oldunuz',
+    body: `${name} kanka isteğini kabul etti. ${nextStep(level, open, 'Aç bir çelınc, koy bakalım.')}`,
+  };
 }
 
 /** To the code's owner: somebody came in through their invite and is a friend already. */
-function joinedByCodeCopy(level: VulgarityLevel, name: string): { title: string; body: string } {
-  if (level === 1) return { title: 'Davetin kabul gördü', body: `${name} davetinle katıldı, artık arkadaşsınız.` };
-  if (level === 3) return { title: '🍆 Yeni kurban', body: `${name} davetine kandı, kurban hazır. Kime koyacağını biliyorsun.` };
-  return { title: '🔥 Yeni kanka', body: `${name} davetinle geldi, artık kankasınız. Aç bir çelınc, koy bakalım.` };
+function joinedByCodeCopy(level: VulgarityLevel, name: string, open?: string): Copy {
+  if (level === 1) {
+    return {
+      title: 'Davetin kabul gördü',
+      body: `${name} davetinle katıldı, artık arkadaşsınız. ${nextStep(level, open, '')}`.trimEnd(),
+    };
+  }
+  if (level === 3) {
+    return {
+      title: '🍆 Yeni kurban',
+      body: `${name} davetine kandı, kurban hazır. ${nextStep(level, open, 'Kime koyacağını biliyorsun.')}`,
+    };
+  }
+  return {
+    title: '🔥 Yeni kanka',
+    body: `${name} davetinle geldi, artık kankasınız. ${nextStep(level, open, 'Aç bir çelınc, koy bakalım.')}`,
+  };
 }
 
 function levelOf(user: UserRow): VulgarityLevel {
   return asVulgarityLevel(user.vulgarity_max);
+}
+
+/**
+ * `friend_accepted` to `recipient`: `friend` is their kanka now. When a çelınc
+ * the recipient plays in could still take the new kanka (`invitableFor`, the
+ * one ending soonest), the copy says so and `challengeId` sends the tap there
+ * instead of to Kankalar.
+ */
+function tellFriendAccepted(
+  db: Database,
+  now: Date,
+  recipient: UserRow,
+  friend: UserRow,
+  data: { friendshipId: string; via?: 'invite' },
+  copyFor: (level: VulgarityLevel, name: string, open?: string) => Copy,
+): void {
+  const [open] = invitableFor(db, recipient.id, friend.id, now);
+  const copy = copyFor(levelOf(recipient), friend.display_name, open?.title);
+  notify(db, {
+    userId: recipient.id,
+    type: 'friend_accepted',
+    title: copy.title,
+    body: copy.body,
+    data: { userId: friend.id, ...data, ...(open ? { challengeId: open.id } : {}) },
+    createdAt: nowIso(now),
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -132,17 +204,8 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
 
     // The inviter's yes was given when they shared the code; see the file header.
     const viaCode = byCode && now.getTime() - Date.parse(me.row.created_at) <= INVITE_AUTO_ACCEPT_MAX_AGE_MS;
-    const tellJoined = (friendshipId: string): void => {
-      const copy = joinedByCodeCopy(levelOf(target), me.row.display_name);
-      notify(db, {
-        userId: target.id,
-        type: 'friend_accepted',
-        title: copy.title,
-        body: copy.body,
-        data: { userId: me.id, friendshipId, via: 'invite' },
-        createdAt: at,
-      });
-    };
+    const tellJoined = (friendshipId: string): void =>
+      tellFriendAccepted(db, now, target, me.row, { friendshipId, via: 'invite' }, joinedByCodeCopy);
 
     if (existing?.status === 'pending' && existing.requester_id === me.id) {
       if (!viaCode) throw conflict('already_requested', 'İsteğini zaten gönderdin, cevabı bekle.');
@@ -164,15 +227,7 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
     // They asked first → accept instead of piling up a second pending row.
     if (existing?.status === 'pending') {
       db.prepare("UPDATE friendships SET status = 'accepted', updated_at = ? WHERE id = ?").run(at, existing.id);
-      const copy = acceptedCopy(levelOf(target), me.row.display_name);
-      notify(db, {
-        userId: target.id,
-        type: 'friend_accepted',
-        title: copy.title,
-        body: copy.body,
-        data: { userId: me.id, friendshipId: existing.id },
-        createdAt: at,
-      });
+      tellFriendAccepted(db, now, target, me.row, { friendshipId: existing.id }, acceptedCopy);
       return { status: 'accepted' as const, friendshipId: existing.id, user: toPublicUser(target) };
     }
 
@@ -207,28 +262,24 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
     return reply.code(201).send({ status: 'pending' as const, friendshipId, user: toPublicUser(target) });
   });
 
-  app.post<{ Params: { id: string } }>('/friends/:id/accept', auth, async (request) => {
+  app.post<{ Params: { id: string } }>('/friends/:id/accept', auth, async (request): Promise<FriendAcceptResult> => {
     const me = requireUser(request);
     const friendship = loadPendingForAddressee(db, request.params.id, me.id);
-    const at = nowIso(app.now());
+    const now = app.now();
+    const at = nowIso(now);
 
     db.prepare("UPDATE friendships SET status = 'accepted', updated_at = ? WHERE id = ?").run(at, friendship.id);
 
     const requester = db.prepare('SELECT * FROM users WHERE id = ?').get(friendship.requester_id) as UserRow | undefined;
-    if (requester && requester.deleted_at === null) {
-      const copy = acceptedCopy(levelOf(requester), me.row.display_name);
-      notify(db, {
-        userId: requester.id,
-        type: 'friend_accepted',
-        title: copy.title,
-        body: copy.body,
-        data: { userId: me.id, friendshipId: friendship.id },
-        createdAt: at,
-      });
-    }
+    const live = requester && requester.deleted_at === null ? requester : undefined;
+    if (live) tellFriendAccepted(db, now, live, me.row, { friendshipId: friendship.id }, acceptedCopy);
 
+    // the accepter's side of the same news: the app's toast offers the çelınc
+    const invitable = live
+      ? invitableFor(db, me.id, live.id, now).map((c) => ({ id: c.id, title: c.title, endsAt: c.ends_at }))
+      : [];
     const friend: PublicUser | null = requester ? toPublicUser(requester) : null;
-    return { status: 'accepted' as const, friendshipId: friendship.id, user: friend };
+    return { status: 'accepted' as const, friendshipId: friendship.id, user: friend, invitable };
   });
 
   app.post<{ Params: { id: string } }>('/friends/:id/decline', auth, async (request) => {
