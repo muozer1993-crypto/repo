@@ -868,7 +868,7 @@ function NeutralHeader({ title, subtitle, emoji }: { title: string; subtitle: st
 
 /* podium ------------------------------------------------------------------ */
 
-const PLACE_COLOR = [Colors.yellow, Colors.textMuted, Colors.accentDim];
+const PLACE_COLOR = [Colors.yellow, Colors.textMuted, Colors.bronze];
 const PLACE_HEIGHT = [104, 78, 60];
 const PLACE_AVATAR = [72, 52, 48];
 

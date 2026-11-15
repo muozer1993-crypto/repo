@@ -922,8 +922,10 @@ davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), r
 ### 3.7 Visual language
 
 Dark background `#0B0B0F`, surfaces `#16161D`, accent hot pink `#FF3D71`, secondary yellow `#FFD400`, success `#2EE59D`,
-danger `#FF4D4D`, text `#F5F5F7`, muted `#9A9AA5`. Big bold headings (uppercase for CTAs: "KOY BAKALIM", "GELDİM",
-"KOYDUM MU?"). Emoji-heavy. Haptics on key actions. Loading skeletons/spinners; every list has an EmptyState with level copy.
+danger `#FF4D4D`, text `#F5F5F7`, muted `#9A9AA5`, faint `#868692` (the quietest text; it still carries things said
+nowhere else, so like muted it keeps 4.5:1 on the background and both surfaces), bronze `#CD7F32` for third place on the
+podium. Big bold headings (uppercase for CTAs: "KOY BAKALIM", "GELDİM", "KOYDUM MU?"). Emoji-heavy. Haptics on key
+actions. Loading skeletons/spinners; every list has an EmptyState with level copy.
 
 ---------------------------------------------------------------------------------------
 

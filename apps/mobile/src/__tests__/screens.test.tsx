@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '@/components/Toast';
 import { ApiClient, ApiError } from '@/lib/api';
 import { clearPendingInvite, readPendingInvite, savePendingInvite } from '@/services/invite';
+import { Colors } from '@/theme';
 
 /**
  * Every list screen has to survive the three states the server actually
@@ -1898,6 +1899,9 @@ describe('a yes/no day', () => {
     const text = rendered(tree);
     expect(text).toContain('İTİRAZLA DÜŞTÜ');
     expect(text).toContain('Kankalar bu güne itiraz etti, gün sayılmıyor.');
+    // outlined: filled, the chip wrote white on the faint grey, which white does not read on
+    const [dropped] = tree.root.findAll((node) => node.props.label === 'İTİRAZLA DÜŞTÜ');
+    expect(dropped!.props.filled).toBeFalsy();
     // the row for today has no answer buttons left; only the empty yesterday row could have any
     expect(buttons(tree, 'İçmedim ✅').length).toBeLessThanOrEqual(1);
   });
@@ -2508,6 +2512,18 @@ describe('answering back, and a tie', () => {
     expect(leaderText).toContain('ORTADA KALAN HESAP');
     expect(leaderText).not.toContain('CEZA');
     expect(leaderText).not.toContain('Öndekilerle');
+  });
+
+  it('draws third place on the podium in bronze, not in a maroon the dark card swallows', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => tied());
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    // Veli's score and the number on his pedestal
+    const bronze = tree.root.findAll((node) => node.props.color === Colors.bronze);
+    expect(bronze.map((node) => textIn(node.props.children).join(''))).toEqual(['3.000 adım', '3']);
   });
 
   it('shows a co-leader the laf the other one threw, and that theirs went', async () => {

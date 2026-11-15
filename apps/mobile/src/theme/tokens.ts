@@ -23,7 +23,15 @@ export const Colors = {
   info: '#4D9BFF',
   text: '#F5F5F7',
   textMuted: '#9A9AA5',
-  textFaint: '#5F5F6B',
+  /**
+   * the quietest text, yet it still carries things said nowhere else (a day
+   * friends threw out, a phone gone silent, a sync gap), so it keeps 4.5:1 on
+   * bg, surface and surfaceHigh: outdoors on a cheap LCD anything dimmer is gone.
+   * Stays below textMuted so the two still read as two steps.
+   */
+  textFaint: '#868692',
+  /** third place on the podium; accentDim there was maroon on near-black */
+  bronze: '#CD7F32',
   black: '#000000',
   white: '#FFFFFF',
   /** translucent overlays */

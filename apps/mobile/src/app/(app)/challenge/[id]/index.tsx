@@ -1358,8 +1358,10 @@ function BooleanRow({
     <View style={styles.boolBlock}>
       <View style={styles.boolHeader}>
         <Text variant="label">{label}</Text>
+        {/* outlined, like the card's "İPTAL": filled, the chip writes white on
+            textFaint's grey, too light a ground for white to read */}
         {rejected ? (
-          <Chip label="İTİRAZLA DÜŞTÜ" color={Colors.textFaint} size="sm" filled />
+          <Chip label="İTİRAZLA DÜŞTÜ" color={Colors.textFaint} size="sm" />
         ) : done ? (
           <Chip
             label={upperTr(value === 1 ? yes : no)}
