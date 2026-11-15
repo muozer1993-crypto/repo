@@ -582,8 +582,9 @@ verdiğin şifreyle kalır.
 * Türkçe harfle yazsan da bulur: `npm run yonet -- sifre Şeyma` hesabı `seyma` diye arar.
   Kullanıcı adlarında Türkçe harf olmaz, uygulama kayıtta ş'yi s'ye, ı'yı i'ye çevirir.
 * Şifre sıfırlamak o hesabın bütün açık oturumlarını kapatır; kanka yeni şifreyle bir daha girer.
-  Ayarlar'dan kendi şifresini değiştirince de öteki telefonlar kapanır, değiştirdiği telefon açık
-  kalır. Hesabı bir kankanın telefonunda açık kaldıysa şifresini değiştirmesi yeter.
+  Ayarlar'dan kendi şifresini değiştirince de öteki telefonlardaki oturumları kapanır, değiştirdiği
+  telefondaki oturumu açık kalır. Hesabı bir kankanın telefonunda açık kaldıysa şifresini
+  değiştirmesi yeter.
 * Çok yanlış deneme yaptıysa uygulama "Çok fazla deneme yaptın" der; yazdığı süre kadar beklesin.
 
 **Şikayetler.** Uygulamada biri birini şikayet edince sunucu penceresine `YENİ ŞİKAYET` diye bir
