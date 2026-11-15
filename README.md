@@ -1098,6 +1098,39 @@ hesap açar.
 Günler kullanıcının kendi saat dilimine göre hesaplanır. Yurt dışına çıkarsan Ayarlar
 ekranındaki "cihazdan güncelle" düğmesine bas.
 
+**Uygulama "Saatler tutmuyor" ya da "Başlangıç sunucunun saatine göre geçmişte kalıyor" diyor.**
+Sunucu her şeye kendi saatiyle karar verir: çelıncın ne zaman başlayıp biteceğine, check-in'in
+hangi güne ve zamanında mı sayılacağına. Uygulama sunucunun saatini telefonunkiyle karşılaştırır;
+fark 3 dakikayı geçince ana sayfada ve Ayarlar'da hangisinin ne kadar ileri ya da geri olduğunu
+yazar. "Hemen" başlayan çelıncı zaten sunucunun saatiyle kurar. Güncellemeyi almamış eski
+uygulama ise telefonun saatini gönderir ve sunucu beş dakikadan eski bir başlangıcı geri çevirir;
+o zaman çıkan mesaj yukarıdaki ikincisidir.
+
+Telefonların saati neredeyse hep otomatiktir (Ayarlar → Tarih ve saat → otomatik). Yanlış olan
+çoğu zaman sunucunun çalıştığı bilgisayardır. Windows'ta Ayarlar → Zaman ve dil → Tarih ve saat
+bölümünde **Saati otomatik olarak ayarla**'yı aç, sonra **Şimdi eşitle**'ye bas. Ya da
+PowerShell'i yönetici olarak açıp:
+
+```powershell
+Start-Service w32time
+w32tm /resync
+Get-Date
+```
+
+Son satır bilgisayarın şimdi kaç olduğunu sandığını yazar. Sunucuyu yeniden başlatman gerekmez;
+saat düzelince kart da birkaç dakika içinde kaybolur.
+
+Bilgisayarda Windows'un yanında Linux da kuruluysa sebep büyük ihtimalle odur: Linux donanım
+saatini UTC tutar, Windows ise yerel saat sanır. Linux'tan Windows'a her dönüşte saat 3 saat
+geri başlar ve Windows kendisi eşitleyene kadar (bazen günlerce) öyle kalır. O arada
+check-in'ler yanlış saate göre sayılır ya da geri çevrilir, çelınclar saatlerce kayık biter,
+eski uygulamayla "Hemen" çelınc hiç açılmaz. Kalıcı çözüm için Linux'ta bir kere şunu çalıştır,
+iki sistem de donanım saatini yerel saat sayar:
+
+```bash
+sudo timedatectl set-local-rtc 1 --adjust-system-clock
+```
+
 ---
 
 ## Testler

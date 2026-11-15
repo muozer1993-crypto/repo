@@ -23,6 +23,7 @@ import { qk } from '@/lib/query';
 import { dropParked, enqueueEntry, flushQueue, uploadLocalPhoto } from '@/services/offlineQueue';
 import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/store/auth';
+import { noteServerTime } from '@/utils/serverClock';
 
 /* --------------------------------------------------------------- reads */
 
@@ -32,7 +33,8 @@ import { useAuth } from '@/store/auth';
  *
  * It also says who it is (`serverId`), which the store keeps while signed in:
  * a phone that already knows the id before the tunnel's next new address can
- * tell that address is the same server (services/serverMove.ts).
+ * tell that address is the same server (services/serverMove.ts). And what its
+ * clock reads, which the connection probe also hands to utils/serverClock.
  */
 export function useServerInfo() {
   const api = useApi();
@@ -41,7 +43,9 @@ export function useServerInfo() {
   return useQuery({
     queryKey: qk.health,
     queryFn: async () => {
+      const sentAt = Date.now();
       const health = await api.health();
+      noteServerTime(health.time, sentAt, Date.now());
       void rememberServerId(health.serverId, serverUrl);
       return health;
     },

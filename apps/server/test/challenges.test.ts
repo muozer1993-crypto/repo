@@ -209,13 +209,33 @@ describe('POST /challenges', () => {
       endsAt: iso(harness, 24 * 60 * 60 * 1000),
     });
     expect(inThePast.statusCode).toBe(400);
-    expect(inThePast.json().error.code).toBe('validation');
+    expect(inThePast.json().error.code).toBe('start_in_past');
 
     const tooLong = await createChallenge(harness, ali, {
       participantIds: [veli.me.id],
       endsAt: iso(harness, 90 * 24 * 60 * 60 * 1000),
     });
     expect(tooLong.statusCode).toBe(400);
+  });
+
+  it('says a start in the past is by the server\'s clock, and lets one inside the grace through', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+    const veli = await registerUser(harness.app, 'veli');
+    befriend(harness.app, ali.me.id, veli.me.id);
+
+    // a "Hemen" from a phone 10 minutes slow: older wizards show only the message, so it says why
+    const slow = await createChallenge(harness, ali, { participantIds: [veli.me.id], startsAt: iso(harness, -10 * 60 * 1000) });
+    expect(slow.statusCode).toBe(400);
+    expect(slow.json().error).toMatchObject({
+      code: 'start_in_past',
+      message:
+        'Başlangıç sunucunun saatine göre geçmişte kalıyor. Telefonunun ya da sunucu bilgisayarının saati yanlış olabilir; ikisinde de otomatik saat açık olsun.',
+    });
+
+    const late = await createChallenge(harness, ali, { participantIds: [veli.me.id], startsAt: iso(harness, -2 * 60 * 1000) });
+    expect(late.statusCode).toBe(201);
+    expect(late.json<Challenge>().status).toBe('active');
   });
 
   it('requires deadlineTime for a check-in challenge', async () => {

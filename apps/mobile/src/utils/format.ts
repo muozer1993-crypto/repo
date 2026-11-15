@@ -81,6 +81,20 @@ export function forHoursTr(hours: number): string {
 }
 
 /**
+ * A gap between two clocks, either way round: "20 dakika", "3 saat", "3 saat
+ * 5 dakika", "4 gün". Whole minutes, and past two days whole days, like
+ * forHoursTr.
+ */
+export function clockGapTr(ms: number): string {
+  const minutes = Math.round(Math.abs(ms) / 60_000);
+  if (minutes < 60) return `${minutes} dakika`;
+  const hours = Math.floor(minutes / 60);
+  if (hours >= 48) return `${Math.round(hours / 24)} gün`;
+  const rest = minutes % 60;
+  return rest ? `${hours} saat ${rest} dakika` : `${hours} saat`;
+}
+
+/**
  * "2026-09-08" -> "8 Eylül" / "8 Eylül Salı". The table lives in the shared
  * package, so a day reads the same on screen and in the server's push copy.
  */

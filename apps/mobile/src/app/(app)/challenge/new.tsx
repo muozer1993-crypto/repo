@@ -37,6 +37,7 @@ import { confirmTr } from '@/utils/confirm';
 import { endOfDayInTz, safeDayKey, safeTodayKey, zonedInstant } from '@/utils/datetime';
 import { formatDayKey, formatTime } from '@/utils/format';
 import { byLevel, typeDescription } from '@/utils/levelCopy';
+import { serverNow, useClockSkew } from '@/utils/serverClock';
 
 /* ------------------------------------------------------------------ copy */
 
@@ -68,7 +69,11 @@ function formatMoment(iso: string, tz: string): string {
 }
 
 /**
- * Start/end as ISO strings; "Hemen" means now (the server allows a 5 dk grace).
+ * Start/end as ISO strings; "Hemen" means `now` (the server allows a 5 dk grace).
+ *
+ * `now` is the SERVER's clock (utils/serverClock): the server refuses a start
+ * more than 5 dk in its own past, so a phone running 20 minutes slow could
+ * never open a "Hemen" çelınc, and "yarın" is the server's tomorrow.
  *
  * The window is built in the ACCOUNT's zone, because that is the zone the
  * server slices into day keys — and the end is snapped to the last millisecond
@@ -76,9 +81,13 @@ function formatMoment(iso: string, tz: string): string {
  * four (which would quietly add a `missingDayPenalty` day to a lower-is-better
  * çelınc). A window too short to be legal falls back to plain 24 h steps.
  */
-function computeWindow(startMode: StartMode, days: number, tz: string): { startsAt: string; endsAt: string } {
-  const now = new Date();
-  const todayKeyLocal = safeTodayKey(tz);
+function computeWindow(
+  startMode: StartMode,
+  days: number,
+  tz: string,
+  now: Date
+): { startsAt: string; endsAt: string } {
+  const todayKeyLocal = safeTodayKey(tz, now);
   const start =
     startMode === 'tomorrow'
       ? (zonedInstant(addDays(todayKeyLocal, 1), 9, 0, tz) ?? new Date(now.getTime() + DAY_MS))
@@ -268,6 +277,13 @@ export default function NewChallengeScreen() {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(preselected ? [preselected] : []);
 
+  // The start and end shown before "KOY BAKALIM" count from the phone's clock
+  // as of the last step (never `Date.now()` in render: impure for the React
+  // Compiler) plus the server's skew, a subscription, so a /health answer that
+  // lands mid-wizard still moves them. The tap itself reads serverNow().
+  const [shownAt, setShownAt] = useState(() => Date.now());
+  const skew = useClockSkew();
+
   const type = typeKey ? getChallengeType(typeKey) : undefined;
   const needsDeadline = type?.metricType === 'checkin_deadline';
   const canProof = photoApplies(type);
@@ -307,7 +323,12 @@ export default function NewChallengeScreen() {
     participantIds.length >= LIMITS.PARTICIPANTS_MIN &&
     participantIds.length <= LIMITS.PARTICIPANTS_MAX;
 
-  const preview = computeWindow(startMode, daysValid ? days : (type?.defaultDurationDays ?? 1), tz);
+  const preview = computeWindow(
+    startMode,
+    daysValid ? days : (type?.defaultDurationDays ?? 1),
+    tz,
+    new Date(shownAt + (skew ?? 0))
+  );
   const finalTitle = (title.trim() || type?.nameTr || '').slice(0, LIMITS.CHALLENGE_TITLE_MAX);
 
   const stepValid = step === 0 ? !!type : step === 1 ? settingsValid : step === 2 ? friendsValid : true;
@@ -371,7 +392,10 @@ export default function NewChallengeScreen() {
 
   const goNext = () => {
     if (!stepValid) return;
-    if (step < 3) setStep(step + 1);
+    if (step < 3) {
+      setShownAt(Date.now());
+      setStep(step + 1);
+    }
   };
 
   /** A deep link straight into the wizard has no history to pop. */
@@ -415,7 +439,7 @@ export default function NewChallengeScreen() {
 
   const submit = async () => {
     if (!type || !settingsValid || !friendsValid) return;
-    const { startsAt, endsAt } = computeWindow(startMode, days, tz);
+    const { startsAt, endsAt } = computeWindow(startMode, days, tz, serverNow());
     try {
       const challenge = await create.mutateAsync({
         typeKey: type.key,

@@ -11,6 +11,7 @@ import { Card } from '@/components/Card';
 import { ChallengeCard } from '@/components/ChallengeCard';
 import { needsProof, scheduleLine } from '@/components/ChallengeRules';
 import { Chip } from '@/components/Chip';
+import { ClockSkewCard } from '@/components/ClockSkewCard';
 import { EmptyState } from '@/components/EmptyState';
 import { Skeleton } from '@/components/Loading';
 import { PermissionBanner } from '@/components/PermissionBanner';
@@ -118,6 +119,7 @@ export default function HomeScreen() {
         <UpdateBanner />
         <PermissionBanner />
         <BatteryBanner />
+        <ClockSkewCard style={styles.banner} />
 
         <StepsHeader state={steps} />
 
@@ -646,6 +648,7 @@ const styles = StyleSheet.create({
   },
   brand: { flex: 1, gap: 2 },
   wordmark: { letterSpacing: -1.5 },
+  banner: { marginBottom: Spacing.md },
   stepsCard: { marginBottom: Spacing.xl },
   stepsRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   stepsBody: { flex: 1, gap: 2 },

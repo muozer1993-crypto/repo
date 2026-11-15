@@ -5048,3 +5048,77 @@ describe('the rövanş rung on the profile', () => {
     expect(rendered(tree)).not.toContain('3 rövanş kazan');
   });
 });
+
+describe('a server whose clock is off from the phone', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const HOURS_3 = 3 * 60 * 60_000;
+
+  /** As if /health had just answered with the server `skewMs` ahead of this phone. */
+  function serverAhead(skewMs: number): void {
+    const { noteServerTime } = require('@/utils/serverClock') as typeof import('@/utils/serverClock');
+    const now = Date.now();
+    act(() => {
+      noteServerTime(new Date(now + skewMs).toISOString(), now, now);
+    });
+  }
+
+  // the reading lives in a module every screen in this file shares
+  afterEach(() => serverAhead(0));
+
+  it('says so on home with hours between them, not over a minute', async () => {
+    serverAhead(60_000);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+    expect(rendered(tree)).not.toContain('Saatler tutmuyor');
+
+    // a Windows PC that last booted Linux, 3 hours behind until it resyncs
+    serverAhead(-HOURS_3);
+    expect(rendered(tree)).toContain('Saatler tutmuyor');
+    expect(rendered(tree)).toContain('Sunucunun saati seninkinden 3 saat geri.');
+    expect(rendered(tree)).toContain('“Şimdi eşitle”ye bassın.');
+  });
+
+  it('says so in Ayarlar too', async () => {
+    serverAhead(20 * 60_000);
+    const SettingsScreen = require('@/app/(app)/settings').default;
+    const tree = renderScreen(<SettingsScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('Sunucunun saati seninkinden 20 dakika ileri.');
+  });
+
+  it('starts a "Hemen" çelınc at the server\'s now, not the phone\'s', async () => {
+    serverAhead(HOURS_3);
+    api.friends = jest.fn(async () => ({ friends: [ALI], incoming: [], outgoing: [] }));
+    api.createChallenge = jest.fn(async () => ({ id: 'c-new' }));
+    const NewChallengeScreen = require('@/app/(app)/challenge/new').default;
+    const tree = renderScreen(<NewChallengeScreen />);
+    await settle();
+
+    const [row] = tree.root.findAll(
+      (node) => typeof node.props.onSelect === 'function' && node.props.type?.key === 'adim_yarisi'
+    );
+    if (!row) throw new Error('adim_yarisi bulunamadı');
+    act(() => {
+      row.props.onSelect(row.props.type);
+    });
+    press(tree, 'İleri');
+    press(tree, 'İleri');
+    const [ali] = tree.root.findAll(
+      (node) => typeof node.props.onToggle === 'function' && node.props.user?.id === ALI.id
+    );
+    if (!ali) throw new Error('Ali bulunamadı');
+    act(() => {
+      ali.props.onToggle(ALI.id);
+    });
+    press(tree, 'İleri');
+    await act(async () => {
+      findWith(tree, 'title', 'KOY BAKALIM', 'onPress').props.onPress();
+    });
+
+    expect(api.createChallenge).toHaveBeenCalledTimes(1);
+    const [body] = api.createChallenge.mock.calls[0] as [{ startsAt: string }];
+    // a phone 3 hours slow used to send its own now, which the server refused as the past
+    expect(Math.abs(Date.parse(body.startsAt) - (Date.now() + HOURS_3))).toBeLessThan(5_000);
+  });
+});

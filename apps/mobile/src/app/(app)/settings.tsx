@@ -27,6 +27,7 @@ import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Chip } from '@/components/Chip';
+import { ClockSkewCard } from '@/components/ClockSkewCard';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
@@ -1017,6 +1018,9 @@ export default function SettingsScreen() {
         </Pressable>
       </Card>
       ) : null}
+
+      {/* ------- clock: only while it is off, baked-in address or not ------- */}
+      <ClockSkewCard />
 
       {/* ------------------------------------------------------------ push */}
       <Card>

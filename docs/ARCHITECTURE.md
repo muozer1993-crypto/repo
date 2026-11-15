@@ -52,6 +52,19 @@ güvenmez:
 Sunucudaki tek "şimdi" kaynağı `app.now()`'dur. Testler oraya kontrollü bir saat enjekte eder,
 bu yüzden çelınc yaşam döngüsü gerçek zamana hiç bağlı değildir.
 
+Uygulama da sunucunun saatine bakar. Her `/health` cevabı o saati (`time`) taşır; telefon onu
+isteğin gidiş-dönüşünün ortasında okunmuş sayar ve aradaki farkı tutar (`utils/serverClock.ts`;
+5 saniye ve üstü süren bir cevap bir şey söylemez, sayılmaz). Sihirbazın "Hemen"i ve "yarın
+09:00"ı bu farkla, yani sunucunun saatiyle kurulur: sunucu beş dakikadan eski bir başlangıcı
+reddettiği için 20 dakika geri kalan bir telefon eskiden hiç "Hemen" çelınc açamazdı. Bu
+düzeltmeden önceki uygulamalar telefonun saatini gönderir; onlar artık genel "Gönderdiğin bilgiler
+geçersiz." yerine `start_in_past` hatasının nedenini söyleyen mesajını görür. Fark 3 dakikayı
+geçince ana sayfada ve Ayarlar'da hangi saatin ne kadar ileri ya da geri olduğunu söyleyen bir
+kart çıkar. Yanlış olan çoğu zaman bilgisayardır: Linux'la yan yana kurulu bir Windows, Linux'tan
+sonra donanım saatini yerel saat sanıp 3 saat geri başlar ve eşitlenene kadar öyle kalır. O
+arada check-in'ler yanlış saate göre değerlendirilir, çelınclar saatlerce kayık biter; kart
+bilgisayarın saatini nasıl eşitleyeceğini anlatır.
+
 ## Çelıncın ömrü
 
 ```

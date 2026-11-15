@@ -1,4 +1,5 @@
 import {
+  clockGapTr,
   dateRange,
   formatClock,
   formatDayKey,
@@ -100,6 +101,14 @@ describe('Turkish formatting', () => {
     expect(forHoursTr(5)).toBe('5 saattir');
     expect(forHoursTr(47)).toBe('47 saattir');
     expect(forHoursTr(50)).toBe('2 gündür');
+  });
+
+  it('says how far apart two clocks are, whichever is ahead', () => {
+    expect(clockGapTr(20 * 60_000)).toBe('20 dakika');
+    // a reading a few seconds either side of the hour is still that hour
+    expect(clockGapTr(-(3 * 3_600_000 - 2_000))).toBe('3 saat');
+    expect(clockGapTr(3 * 3_600_000 + 5 * 60_000)).toBe('3 saat 5 dakika');
+    expect(clockGapTr(4 * 24 * 3_600_000)).toBe('4 gün');
   });
 
   it('joins a value with its unit', () => {

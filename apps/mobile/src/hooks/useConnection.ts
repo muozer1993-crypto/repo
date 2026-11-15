@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { useAuth } from '@/store/auth';
+import { noteServerTime } from '@/utils/serverClock';
 
 /**
  * Is the KOYDUM server reachable right now?
@@ -59,9 +60,23 @@ export function useConnection(): ConnectionState {
       try {
         const controller = new AbortController();
         const abort = setTimeout(() => controller.abort(), 6000);
+        const sentAt = Date.now();
         const response = await fetch(`${serverUrl}/health`, { signal: controller.signal });
-        clearTimeout(abort);
+        const receivedAt = Date.now();
         ok = response.ok;
+        if (ok) {
+          // The server's clock rides along (utils/serverClock). A body that is
+          // not ours leaves the last reading as it was and the probe a success;
+          // the abort still covers the read, so a stalled body cannot stop the
+          // probes for good.
+          try {
+            const body = (await response.json()) as { time?: unknown } | null;
+            if (typeof body?.time === 'string') noteServerTime(body.time, sentAt, receivedAt);
+          } catch {
+            // not JSON, or cut off
+          }
+        }
+        clearTimeout(abort);
       } catch {
         ok = false;
       }

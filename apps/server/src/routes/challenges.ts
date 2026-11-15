@@ -15,6 +15,7 @@ import type { FastifyInstance } from 'fastify';
 import {
   LIMITS,
   InviteToChallengeBodySchema,
+  IsoDateTimeSchema,
   acceptClosesAt,
   createChallengeBodySchema,
   deadlineFitsWindow,
@@ -243,6 +244,19 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       throw badRequest(
         'deadline_outside_window',
         `Check-in saati ${rawType.checkinWindowStart} sonrası, en geç 23:59 olmalı. Saati değiştirip tekrar dene.`,
+      );
+    }
+    // So is a start in the past. Older wizards take "Hemen" from the phone's
+    // own clock: one running slow, or a server PC whose clock is off (Windows
+    // next to a Linux install, until it resyncs), had every "Hemen" refused
+    // with nothing to say which clock was wrong. They show the message, too.
+    if (
+      IsoDateTimeSchema.safeParse(raw.startsAt).success &&
+      Date.parse(raw.startsAt as string) < now.getTime() - LIMITS.START_GRACE_MS
+    ) {
+      throw badRequest(
+        'start_in_past',
+        'Başlangıç sunucunun saatine göre geçmişte kalıyor. Telefonunun ya da sunucu bilgisayarının saati yanlış olabilir; ikisinde de otomatik saat açık olsun.',
       );
     }
     // The clock is injected so `startsAt >= now - 5min` follows the test clock too.
