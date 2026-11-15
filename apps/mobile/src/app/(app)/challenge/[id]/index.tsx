@@ -1260,6 +1260,7 @@ function BooleanAction({ id, detail, type, level, today, yesterday, dayKeys }: A
         yes={yes}
         no={no}
         value={todayEntry?.value}
+        rejected={todayEntry?.status === 'rejected'}
         busy={busyDay === today}
         onYes={() => void send(today, 1)}
         onNo={() => void send(today, 0)}
@@ -1272,6 +1273,7 @@ function BooleanAction({ id, detail, type, level, today, yesterday, dayKeys }: A
           yes={yes}
           no={no}
           value={yesterdayEntry?.value}
+          rejected={yesterdayEntry?.status === 'rejected'}
           busy={busyDay === yesterday}
           onYes={() => void send(yesterday, 1)}
           onNo={() => void send(yesterday, 0)}
@@ -1286,6 +1288,7 @@ function BooleanRow({
   yes,
   no,
   value,
+  rejected,
   busy,
   onYes,
   onNo,
@@ -1295,6 +1298,8 @@ function BooleanRow({
   yes: string;
   no: string;
   value: number | undefined;
+  /** friends upheld an itiraz on this day: it counts for nothing and the server keeps it that way */
+  rejected?: boolean;
   busy: boolean;
   onYes: () => void;
   onNo: () => void;
@@ -1304,7 +1309,9 @@ function BooleanRow({
     <View style={styles.boolBlock}>
       <View style={styles.boolHeader}>
         <Text variant="label">{label}</Text>
-        {done ? (
+        {rejected ? (
+          <Chip label="İTİRAZLA DÜŞTÜ" color={Colors.textFaint} size="sm" filled />
+        ) : done ? (
           <Chip
             label={upperTr(value === 1 ? yes : no)}
             color={value === 1 ? Colors.success : Colors.danger}
@@ -1313,24 +1320,30 @@ function BooleanRow({
           />
         ) : null}
       </View>
-      <View style={styles.row}>
-        <Button
-          title={`${yes} ✅`}
-          size="md"
-          style={styles.grow}
-          variant={value === 1 ? 'success' : 'primary'}
-          loading={busy}
-          onPress={onYes}
-        />
-        <Button
-          title={`${no} ❌`}
-          size="md"
-          style={styles.grow}
-          variant={value === 0 ? 'danger' : 'secondary'}
-          disabled={busy}
-          onPress={onNo}
-        />
-      </View>
+      {rejected ? (
+        <Text variant="tiny" faint>
+          Kankalar bu güne itiraz etti, gün sayılmıyor. Artık değiştirilemez.
+        </Text>
+      ) : (
+        <View style={styles.row}>
+          <Button
+            title={`${yes} ✅`}
+            size="md"
+            style={styles.grow}
+            variant={value === 1 ? 'success' : 'primary'}
+            loading={busy}
+            onPress={onYes}
+          />
+          <Button
+            title={`${no} ❌`}
+            size="md"
+            style={styles.grow}
+            variant={value === 0 ? 'danger' : 'secondary'}
+            disabled={busy}
+            onPress={onNo}
+          />
+        </View>
+      )}
     </View>
   );
 }

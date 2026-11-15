@@ -313,8 +313,20 @@ export default function UserProfileScreen() {
       </View>
 
       <View style={styles.statsRow}>
-        <Stat label="Koydu" value={user.stats.wins} emoji="🍆" color={Colors.success} compact />
-        <Stat label="Yedi" value={user.stats.losses} emoji="🍽️" color={Colors.danger} compact />
+        <Stat
+          label={level === 1 ? 'Galibiyet' : 'Koydu'}
+          value={user.stats.wins}
+          emoji={level === 1 ? '🏆' : '🍆'}
+          color={Colors.success}
+          compact
+        />
+        <Stat
+          label={level === 1 ? 'Yenilgi' : 'Yedi'}
+          value={user.stats.losses}
+          emoji={level === 1 ? '😵' : '🍽️'}
+          color={Colors.danger}
+          compact
+        />
         <Stat
           label="Çelınc"
           value={user.stats.challengesPlayed}

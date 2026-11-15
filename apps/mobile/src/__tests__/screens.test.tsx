@@ -1638,6 +1638,21 @@ describe('a yes/no day', () => {
 
     expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ dayKey: yesterday, value: 1 }));
   });
+
+  it('shows a day an itiraz threw out as gone, with no buttons to tap', async () => {
+    searchParams.id = 'c-1';
+    const thrownOut = { ...mark(today(), 1), status: 'rejected' as const };
+    api.challenge = jest.fn(async () => smokeFree([thrownOut]));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('İTİRAZLA DÜŞTÜ');
+    expect(text).toContain('Kankalar bu güne itiraz etti, gün sayılmıyor.');
+    // the row for today has no answer buttons left; only the empty yesterday row could have any
+    expect(buttons(tree, 'İçmedim ✅').length).toBeLessThanOrEqual(1);
+  });
 });
 
 describe('an itiraz on the feed', () => {
@@ -4468,6 +4483,45 @@ describe('badge names at the reader\'s level', () => {
     expect(text).toContain('İlk Zafer');
     expect(text).toContain('🏆');
     expect(text).not.toContain('Saplamacı');
+  });
+});
+
+describe('the score tiles at the reader\'s level', () => {
+  it('a "Nazik" reader sees Galibiyet and Yenilgi on their own karne, no eggplant', async () => {
+    mockLevel.value = 1;
+    const ProfileScreen = require('@/app/(app)/(tabs)/profile').default;
+    const polite = renderScreen(<ProfileScreen />);
+    await settle();
+    expect(rendered(polite)).toContain('🏆 0 GALİBİYET');
+    expect(rendered(polite)).toContain('YENİLGİ');
+    expect(rendered(polite)).not.toContain('YEDİM');
+    expect(rendered(polite)).not.toContain('KOYDUM');
+
+    mockLevel.value = 2;
+    const casual = renderScreen(<ProfileScreen />);
+    await settle();
+    expect(rendered(casual)).toContain('🍆 0 KOYDUM');
+    expect(rendered(casual)).toContain('YEDİM');
+  });
+
+  it('a friend\'s score reads the same way', async () => {
+    const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+    mockLevel.value = 1;
+    searchParams.id = ALI.id;
+    api.userProfile = jest.fn(async () => ({
+      ...ALI,
+      stats: { wins: 2, losses: 1, challengesPlayed: 3 },
+      badges: [],
+    }));
+    api.friends = jest.fn(async () => ({ friends: [ALI], incoming: [], outgoing: [] }));
+    const UserScreen = require('@/app/(app)/user/[id]').default;
+    const tree = renderScreen(<UserScreen />);
+    await settle();
+    const text = rendered(tree);
+    expect(text).toContain('🏆 2 GALİBİYET');
+    expect(text).toContain('😵 1 YENİLGİ');
+    expect(text).not.toContain('KOYDU');
+    expect(text).not.toContain('🍆');
   });
 });
 

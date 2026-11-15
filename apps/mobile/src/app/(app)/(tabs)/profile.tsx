@@ -347,8 +347,19 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <Text variant="label">Karne</Text>
         <View style={styles.statRow}>
-          <Stat label="Koydum" value={statValue(stats, 'wins')} emoji="🍆" color={Colors.success} />
-          <Stat label="Yedim" value={statValue(stats, 'losses')} emoji="😵" color={Colors.danger} />
+          {/* "Nazik" reads the same numbers without the eggplant, as the recap card does */}
+          <Stat
+            label={level === 1 ? 'Galibiyet' : 'Koydum'}
+            value={statValue(stats, 'wins')}
+            emoji={level === 1 ? '🏆' : '🍆'}
+            color={Colors.success}
+          />
+          <Stat
+            label={level === 1 ? 'Yenilgi' : 'Yedim'}
+            value={statValue(stats, 'losses')}
+            emoji="😵"
+            color={Colors.danger}
+          />
           <Stat label="Berabere" value={statValue(stats, 'ties')} emoji="🤝" />
         </View>
         <View style={styles.statRow}>
