@@ -69,6 +69,12 @@ export function registerAuth(app: FastifyInstance, deps: AuthDeps): void {
     if (!row || row.deleted_at !== null) {
       throw unauthorized('unauthorized', 'Oturumun geçersiz ya da süresi dolmuş. Tekrar giriş yap.');
     }
+    // Signed before the last password change or owner reset: whoever still holds
+    // it (a friend's phone the account was once opened on) is out. Same single
+    // code; the message is what the signed-out phone shows on its login screen.
+    if (claims.ver !== row.token_version) {
+      throw unauthorized('unauthorized', 'Şifren değişti, bu telefondaki oturum kapandı. Yeni şifreyle gir.');
+    }
 
     const last = row.last_seen_at ? Date.parse(row.last_seen_at) : 0;
     if (!Number.isFinite(last) || now.getTime() - last > LAST_SEEN_THROTTLE_MS) {

@@ -62,6 +62,7 @@ export function NotificationBridge() {
   const level = useLevel();
   const tz = useTimezone();
   const queryClient = useQueryClient();
+  /** `${session token}|${device push token}` the server last accepted */
   const pushTokenSent = useRef<string | null>(null);
 
   // --- push registration -------------------------------------------------
@@ -74,6 +75,10 @@ export function NotificationBridge() {
     if (onboarding) return;
     let cancelled = false;
     let busy = false;
+    // Keyed on the session too: a password change hands this phone a new token
+    // and clears the push token on the server (the phones it signed out might
+    // hold it), so the same device token has to go up again.
+    const session = `${token}|`;
     installNotificationHandler();
     // A phone that booted without signal (or reached the server a second too
     // late) used to stay without push for the whole session: the POST ran once.
@@ -93,12 +98,13 @@ export function NotificationBridge() {
         if (registration.reason) void setItem(StorageKeys.pushReason, registration.reason);
         else void removeItem(StorageKeys.pushReason);
         if (!registration.token) return;
-        if (pushTokenSent.current === registration.token) return;
+        const sent = session + registration.token;
+        if (pushTokenSent.current === sent) return;
         await makeClient().setPushToken({
           token: registration.token,
           platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
         });
-        pushTokenSent.current = registration.token;
+        pushTokenSent.current = sent;
         await setItem(StorageKeys.pushToken, registration.token);
       } catch {
         // the inbox poll below keeps the app usable without push; next foreground retries
@@ -108,7 +114,7 @@ export function NotificationBridge() {
     };
     void register();
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && pushTokenSent.current === null) void register();
+      if (state === 'active' && !pushTokenSent.current?.startsWith(session)) void register();
     });
     return () => {
       cancelled = true;

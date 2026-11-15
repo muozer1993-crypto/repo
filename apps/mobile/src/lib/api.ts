@@ -50,8 +50,11 @@ export interface ApiClientOptions {
   token?: string | null;
   /** milliseconds; a phone on a bad connection should fail fast */
   timeoutMs?: number;
-  /** called whenever the server rejects our token, so the app can log out */
-  onUnauthorized?: () => void;
+  /**
+   * called whenever the server rejects our token, so the app can log out; the
+   * error carries the server's reason (an expired session, a password change)
+   */
+  onUnauthorized?: (error: ApiError) => void;
 }
 
 type Query = Record<string, string | number | boolean | null | undefined>;
@@ -81,7 +84,7 @@ export class ApiClient {
   baseUrl: string;
   token: string | null;
   private readonly timeoutMs: number;
-  private readonly onUnauthorized?: () => void;
+  private readonly onUnauthorized?: (error: ApiError) => void;
 
   constructor(options: ApiClientOptions) {
     this.baseUrl = stripTrailingSlash(options.baseUrl);
@@ -155,8 +158,9 @@ export class ApiClient {
       const envelope = payload as { error?: { code?: string; message?: string; issues?: unknown } } | null;
       const code = envelope?.error?.code ?? `http_${response.status}`;
       const message = envelope?.error?.message ?? 'Bir şeyler ters gitti.';
-      if (response.status === 401) this.onUnauthorized?.();
-      throw new ApiError(code, message, response.status, envelope?.error?.issues);
+      const error = new ApiError(code, message, response.status, envelope?.error?.issues);
+      if (response.status === 401) this.onUnauthorized?.(error);
+      throw error;
     }
 
     return payload as T;

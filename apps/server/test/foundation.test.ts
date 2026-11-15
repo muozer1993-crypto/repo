@@ -1,6 +1,7 @@
 /**
  * Foundation tests: the pieces every route module builds on.
  */
+import { createHmac } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { hashPassword, verifyPassword } from '../src/auth/password.js';
 import { DEFAULT_TTL_SECONDS, bearerToken, signToken, verifyToken } from '../src/auth/jwt.js';
@@ -66,7 +67,17 @@ describe('jwt', () => {
   it('signs and verifies', () => {
     const token = signToken({ sub: 'user-1' }, secret);
     expect(token.split('.')).toHaveLength(3);
-    expect(verifyToken(token, secret)).toEqual({ sub: 'user-1' });
+    expect(verifyToken(token, secret)).toEqual({ sub: 'user-1', ver: 0 });
+  });
+
+  it('carries the token version, and reads a token from before versions as version 0', () => {
+    expect(verifyToken(signToken({ sub: 'user-1', ver: 3 }, secret), secret)).toEqual({ sub: 'user-1', ver: 3 });
+
+    // signed the way every token was before `ver` existed: { sub, iat, exp }
+    const head = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const claims = Buffer.from(JSON.stringify({ sub: 'user-1', iat: 1, exp: 9999999999 })).toString('base64url');
+    const signature = createHmac('sha256', secret).update(`${head}.${claims}`).digest('base64url');
+    expect(verifyToken(`${head}.${claims}.${signature}`, secret)).toEqual({ sub: 'user-1', ver: 0 });
   });
 
   it('rejects a wrong secret and a tampered payload', () => {
@@ -81,11 +92,11 @@ describe('jwt', () => {
   it('rejects an expired token and accepts one inside its ttl', () => {
     const issuedAt = new Date('2026-01-01T00:00:00.000Z');
     const token = signToken({ sub: 'user-1' }, secret, 60, issuedAt);
-    expect(verifyToken(token, secret, new Date('2026-01-01T00:00:30.000Z'))).toEqual({ sub: 'user-1' });
+    expect(verifyToken(token, secret, new Date('2026-01-01T00:00:30.000Z'))).toEqual({ sub: 'user-1', ver: 0 });
     expect(verifyToken(token, secret, new Date('2026-01-01T00:01:01.000Z'))).toBeNull();
 
     const long = signToken({ sub: 'user-1' }, secret, DEFAULT_TTL_SECONDS, issuedAt);
-    expect(verifyToken(long, secret, new Date('2026-03-01T00:00:00.000Z'))).toEqual({ sub: 'user-1' });
+    expect(verifyToken(long, secret, new Date('2026-03-01T00:00:00.000Z'))).toEqual({ sub: 'user-1', ver: 0 });
   });
 
   it('rejects garbage and reads bearer headers', () => {

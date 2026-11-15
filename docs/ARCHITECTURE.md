@@ -598,14 +598,29 @@ atılıyordu, arka plan görevi de 401'i yutup adım göndermeyi sessizce bırak
 görev), `POST /auth/refresh` ile token'ı taze 90 günlükle değiştirir. Süresi dolmuş bir token
 yenilenmez; yenileme içeride kalmanın yolu, geri girmenin değil. Yenileme sürerken çıkış yapan
 birinin token'ı depoya geri yazılmaz. Sunucu yine de bir token'ı reddederse (401) uygulama çıkış
-yapar ve giriş ekranı bir kereliğine "Oturumun düşmüş, bir daha gir." der; önceden hiçbir şey
-demeden giriş ekranını gösteriyordu.
+yapar ve giriş ekranı bir kereliğine nedenini söyler: 401'in kendi mesajını, mesaj yoksa
+"Oturumun düşmüş, bir daha gir." der; önceden hiçbir şey demeden giriş ekranını gösteriyordu.
 
 Şifre, Ayarlar → Hesap → "Şifreni değiştir"den değişir (`POST /me/password`). Yanlış girilen
 mevcut şifre 401 değil 400 `wrong_password` döner, çünkü uygulama her 401'de çıkış yapar; bir
 yazım hatası o anki oturuma mal olmamalı. Buradaki tahmin hakkı da girişteki kadardır: hesap
-başına 15 dakikada 8 yanlış. Token'lar durumsuz olduğundan şifre değişince başka
-telefonlarda açık oturumlar kapanmaz; bunun için sunucunun iptal listesi tutması gerekirdi.
+başına 15 dakikada 8 yanlış.
+
+Şifre değişince başka telefonlardaki oturumlar kapanır. Kankalar birbirinin telefonundan hesabına
+girer, herkes "123456" ile başlar; eskiden orada açık kalan bir oturum yeni şifreden sonra da laf
+sokabiliyor, çelıncı reddedip "tırstı" dedirtebiliyor, hesabı silebiliyordu. İptal listesi yerine
+her kullanıcının bir `token_version`'ı var (migration 012) ve her token imzalandığı andaki sürümü
+`ver` olarak taşır; `authenticate` ikisi tutmazsa 401 `unauthorized` döner, mesajı "Şifren
+değişti, bu telefondaki oturum kapandı. Yeni şifreyle gir." Şifre değişimi de sahibin sıfırlaması
+da `replacePassword`'dan (`services/accounts.ts`) geçer: sürümü bir artırır, push token'ı da siler,
+çünkü o token dışarı atılan telefonlardan birinin olabilir ve o telefonun kendi çıkışı artık 401
+alıp onu silemez. Şifreyi değiştiren telefon cevapta yeni sürümle imzalı bir token alır;
+NotificationBridge push token'ı oturum başına bir kez gönderdiği için aynı cihaz token'ını yeni
+oturumla yeniden yollar. `ver` taşımayan eski token'lar 0 sayılır, her hesap da 0'dan başlar; yani
+güncellemenin kendisi kimseyi dışarı atmaz. `/auth/refresh` sürümü korur, açık kalan bir oturum
+kendini yenileyerek de kurtulamaz. Uygulamada bir 401 ancak istemci mağazadaki token'la kurulduysa
+çıkış yaptırır: şifre değişirken yolda olan eski token'lı bir istek, şifreyi değiştiren telefonu
+dışarı atmamalı.
 
 Kullanıcı adının tek bir yazımı var: `foldUsername` (`packages/shared/src/text.ts`) küçültür,
 Türkçe harfleri ASCII'ye çevirir (ş→s, ı→i, İ→i), kalan aksanları, boşlukları ve görünmez
@@ -671,8 +686,8 @@ E-posta yok, şifre sıfırlama bağlantısı da yok: bu bir arkadaş grubu, her
 tanır. Şifresini unutana yeni şifreyi o verir: `npm run yonet -- sifre ali` (`src/cli/yonet.ts`;
 işin kendisi `services/admin.ts`'te). Komut sunucunun kullandığı veritabanı dosyasını ikinci bir
 bağlantıyla açar. WAL ikinci bağlantıyı içeri alır, `busy_timeout` sunucunun yazmasını bekler;
-yani sunucu açıkken çalışır. Oturumlar durumsuz JWT olduğundan yeni şifre açık oturumları
-kapatmaz. Şikayetler de aynı yoldan okunur (`sikayetler`): uygulamada onları okuyan bir ekran yok,
+yani sunucu açıkken çalışır. Yeni şifre o hesabın bütün açık oturumlarını kapatır (bkz.
+Oturumlar); kanka yeni şifreyle bir daha girer. Şikayetler de aynı yoldan okunur (`sikayetler`): uygulamada onları okuyan bir ekran yok,
 sunucu her yeni şikayette kendi penceresine bir `warn` satırı düşer.
 
 Bilgisayarı uyanık tutmak da onun işi olurdu, ama akla gelmez: dizüstü 15-30 dakika boşta kalınca

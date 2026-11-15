@@ -3,6 +3,10 @@
  * Logging out takes the account's phone-side alarms with it: a phone handed
  * to someone else, or signed into another account, must not keep ringing
  * "30 dakikan kaldı" for the old account's check-ins for two more weeks.
+ *
+ * And the server's 401 logs out only the session it was about: a password
+ * change retires every older token, this phone's included, and a request still
+ * out with it must not sign out the phone that just changed it.
  */
 const mockClearReminders = jest.fn(async () => {});
 jest.mock('@/services/reminders', () => ({ clearReminders: () => mockClearReminders() }));
@@ -31,5 +35,57 @@ describe('logout', () => {
     await useAuth.getState().logout();
 
     expect(useAuth.getState().token).toBeNull();
+  });
+});
+
+describe('a 401 from the server', () => {
+  const REASON = 'Şifren değişti, bu telefondaki oturum kapandı. Yeni şifreyle gir.';
+
+  function answer401(body: unknown) {
+    global.fetch = jest.fn(
+      async () => new Response(body === null ? '' : JSON.stringify(body), { status: 401 })
+    ) as unknown as typeof fetch;
+  }
+
+  beforeEach(() => {
+    mockClearReminders.mockClear();
+    useAuth.setState({ token: 'eski', me: ME, sessionEnded: false, sessionEndReason: null });
+  });
+
+  it('leaves alone the session that replaced the token it was about', async () => {
+    const before = useAuth.getState().client();
+    // the password sheet's answer landed while this request was out
+    useAuth.setState({ token: 'yeni' });
+    answer401({ error: { code: 'unauthorized', message: REASON } });
+
+    await expect(before.me()).rejects.toMatchObject({ status: 401 });
+
+    expect(useAuth.getState().token).toBe('yeni');
+    expect(useAuth.getState().sessionEnded).toBe(false);
+    expect(mockClearReminders).not.toHaveBeenCalled();
+  });
+
+  it("signs out the session it was about, keeping the server's reason for the login screen", async () => {
+    answer401({ error: { code: 'unauthorized', message: REASON } });
+
+    await expect(useAuth.getState().client().me()).rejects.toMatchObject({ status: 401 });
+
+    expect(useAuth.getState().token).toBeNull();
+    expect(useAuth.getState().sessionEnded).toBe(true);
+    expect(useAuth.getState().sessionEndReason).toBe(REASON);
+    expect(mockClearReminders).toHaveBeenCalledTimes(1);
+
+    useAuth.getState().clearSessionEnded();
+    expect(useAuth.getState().sessionEndReason).toBeNull();
+  });
+
+  it('keeps no reason from a 401 that is not our envelope', async () => {
+    answer401(null); // a proxy in the way
+
+    await expect(useAuth.getState().client().me()).rejects.toMatchObject({ status: 401 });
+
+    expect(useAuth.getState().token).toBeNull();
+    expect(useAuth.getState().sessionEnded).toBe(true);
+    expect(useAuth.getState().sessionEndReason).toBeNull();
   });
 });

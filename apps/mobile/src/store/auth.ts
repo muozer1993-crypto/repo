@@ -29,6 +29,12 @@ interface AuthState {
    */
   sessionEnded: boolean;
   /**
+   * What the server said when it turned the token down ("Şifren değişti, …"
+   * after a password change elsewhere), shown in place of the generic line.
+   * Null when it said nothing we can show.
+   */
+  sessionEndReason: string | null;
+  /**
    * The welcome slides are on screen, right after sign-up. NotificationBridge
    * holds back everything that raises a system dialog until they are gone, so
    * the notification and activity prompts come from the slide that explains
@@ -76,6 +82,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   serverId: null,
   refreshing: false,
   sessionEnded: false,
+  sessionEndReason: null,
   onboarding: false,
 
   hydrate: async () => {
@@ -117,7 +124,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     // cached challenges, inbox or unread badge
     const previous = get().me;
     if (previous && previous.id !== me.id) queryClient.clear();
-    set({ token, me, sessionEnded: false });
+    set({ token, me, sessionEnded: false, sessionEndReason: null });
     // The address was right a moment ago, so this is the time to learn which
     // server it is: when the tunnel hands out a new address later, the id is
     // what tells "same server" from "another one". Best effort, never awaited.
@@ -189,7 +196,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     ]);
   },
 
-  clearSessionEnded: () => set({ sessionEnded: false }),
+  clearSessionEnded: () => set({ sessionEnded: false, sessionEndReason: null }),
 
   setOnboarding: (on) => set({ onboarding: on }),
 
@@ -198,10 +205,21 @@ export const useAuth = create<AuthState>((set, get) => ({
     return new ApiClient({
       baseUrl: serverUrl,
       token,
-      onUnauthorized: () => {
+      onUnauthorized: (error) => {
+        // A 401 for a token this phone no longer holds says nothing about the
+        // session it has now. A request still out while the password was being
+        // changed here comes back 401 (the change retired its token), and must
+        // not sign out the phone that just changed it.
+        if (get().token !== token) return;
         // A wrong password on the login screen is a 401 too, and there is no
         // session to lose there.
-        if (get().token) set({ sessionEnded: true });
+        if (token) {
+          set({
+            sessionEnded: true,
+            // only our own envelope: a proxy's bare 401 has no reason to show
+            sessionEndReason: error.code === 'unauthorized' && error.message ? error.message : null,
+          });
+        }
         void get().logout();
       },
     });

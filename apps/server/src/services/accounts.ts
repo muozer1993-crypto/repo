@@ -1,6 +1,7 @@
 import type { VulgarityLevel } from '@koydum/shared';
 /**
- * Account lifecycle (social group): creation, invite codes and soft deletion.
+ * Account lifecycle (social group): creation, invite codes, password changes and
+ * soft deletion.
  *
  * Kept out of the route modules because registration and `DELETE /me` both need
  * the same invariants — a unique invite code, a lowercase unique username, and a
@@ -59,18 +60,37 @@ export function createUser(db: Database, input: CreateUserInput, now: Date = new
     deleted_at: null,
     nudges_enabled: 1,
     recap_enabled: 1,
+    token_version: 0,
   };
 
   db.prepare(
     `INSERT INTO users (id, username, display_name, password_hash, avatar_emoji, vulgarity_max, timezone,
                         invite_code, push_token, push_platform, reminder_hour, created_at, last_seen_at, deleted_at,
-                        nudges_enabled, recap_enabled)
+                        nudges_enabled, recap_enabled, token_version)
      VALUES (@id, @username, @display_name, @password_hash, @avatar_emoji, @vulgarity_max, @timezone,
              @invite_code, @push_token, @push_platform, @reminder_hour, @created_at, @last_seen_at, @deleted_at,
-             @nudges_enabled, @recap_enabled)`,
+             @nudges_enabled, @recap_enabled, @token_version)`,
   ).run(row);
 
   return row;
+}
+
+/**
+ * Stores a new password hash and signs out every session the account has: the
+ * token version moves on, so each token signed before it is refused
+ * (plugins/auth.ts). The push token goes too, because the phone it belongs to
+ * may be one of those sessions, and that phone's own logout can no longer
+ * clear it (it gets a 401). Shared by `POST /me/password` and the owner's reset;
+ * the phone that changed it registers its push token again with the new session.
+ * Returns the row as stored now.
+ */
+export function replacePassword(db: Database, userId: string, passwordHash: string): UserRow {
+  db.prepare(
+    `UPDATE users
+        SET password_hash = ?, token_version = token_version + 1, push_token = NULL, push_platform = NULL
+      WHERE id = ?`,
+  ).run(passwordHash, userId);
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRow;
 }
 
 /** `deleted_<first 8 hex chars of the id>` — the SPEC's anonymised username. */

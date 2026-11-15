@@ -12,6 +12,7 @@ import { randomInt } from 'node:crypto';
 import { foldUsername } from '@koydum/shared';
 import { hashPassword } from '../auth/password.js';
 import type { Database, UserRow } from '../db/index.js';
+import { replacePassword } from './accounts.js';
 
 export interface AdminUser {
   username: string;
@@ -90,8 +91,10 @@ export function listReports(db: Database): AdminReport[] {
 }
 
 /**
- * Gives `username` a new random password and returns it in plain text. Phones
- * already signed in stay signed in: tokens are stateless and outlive a new hash.
+ * Gives `username` a new random password and returns it in plain text. Every
+ * phone still signed in to the account is signed out, the friend's own included:
+ * a reset is also how somebody gets their account back from a phone they lost
+ * track of. They sign in again with the new password.
  */
 export async function resetPassword(db: Database, username: string): Promise<PasswordReset> {
   // the spelling the app stores, so "sifre Şeyma" finds seyma
@@ -101,6 +104,6 @@ export async function resetPassword(db: Database, username: string): Promise<Pas
   if (row.deleted_at !== null) throw new Error(`"${name}" hesabını silmiş, sıfırlanacak bir şifre kalmadı.`);
 
   const password = tempPassword();
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(password), row.id);
+  replacePassword(db, row.id, await hashPassword(password));
   return { username: row.username, displayName: row.display_name, password };
 }

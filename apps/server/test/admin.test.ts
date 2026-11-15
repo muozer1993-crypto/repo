@@ -59,6 +59,29 @@ describe('resetPassword', () => {
     expect((await login(h.app, 'Şeyma', reset.password)).statusCode).toBe(200);
   });
 
+  it('signs out every phone still signed in, and the new password signs back in', async () => {
+    const seyma = await registerUser(h.app, 'seyma', { displayName: 'Şeyma' });
+    const me = authed(h.app, seyma.token);
+    await me({ method: 'POST', url: '/me/push-token', payload: { token: 'ExponentPushToken[seyma]', platform: 'android' } });
+
+    const reset = await resetPassword(h.db, 'Şeyma');
+
+    const kicked = await me({ method: 'GET', url: '/me' });
+    expect(kicked.statusCode).toBe(401);
+    expect(kicked.json<{ error: { code: string; message: string } }>().error).toEqual({
+      code: 'unauthorized',
+      message: 'Şifren değişti, bu telefondaki oturum kapandı. Yeni şifreyle gir.',
+    });
+
+    const back = await login(h.app, 'seyma', reset.password);
+    expect(back.statusCode).toBe(200);
+    const fresh = authed(h.app, back.json<{ token: string }>().token);
+    const profile = await fresh({ method: 'GET', url: '/me' });
+    expect(profile.statusCode).toBe(200);
+    // nothing is pushed to a phone that may no longer be hers
+    expect(profile.json<{ hasPushToken: boolean }>().hasPushToken).toBe(false);
+  });
+
   it('refuses an unknown name and a deleted account', async () => {
     const veli = await registerUser(h.app, 'veli');
     expect((await authed(h.app, veli.token)({ method: 'DELETE', url: '/me' })).statusCode).toBe(200);

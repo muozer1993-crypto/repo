@@ -229,7 +229,8 @@ interface PasswordErrors {
  * "Şifreni değiştir": the place a sign-up "123456", or the temporary password
  * the owner handed out with `npm run yonet -- sifre`, becomes a real one. The
  * server answers a wrong current password with a 400, never a 401, so a typo
- * here does not log anybody out.
+ * here does not log anybody out. A right one signs out every other phone on the
+ * account; this one carries on with the token the answer brings.
  */
 function PasswordSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const api = useApi();
@@ -343,7 +344,7 @@ function PasswordSheet({ visible, onClose }: { visible: boolean; onClose: () => 
       />
       <Button title="Değiştir" size="lg" fullWidth loading={busy} onPress={() => void submit()} />
       <Text variant="micro" faint>
-        Başka bir telefonda açık kalan oturumun kapanmaz.
+        Diğer telefonlarda açık kalan oturumların kapanır.
       </Text>
     </Sheet>
   );

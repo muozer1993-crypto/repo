@@ -83,7 +83,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     );
 
     const payload: AuthResponse = {
-      token: signToken({ sub: row.id }, config.jwtSecret, undefined, now),
+      token: signToken({ sub: row.id, ver: row.token_version }, config.jwtSecret, undefined, now),
       me: toMe(db, row, now),
     };
     return reply.code(201).send(payload);
@@ -128,7 +128,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     row.last_seen_at = now.toISOString();
 
     const payload: AuthResponse = {
-      token: signToken({ sub: row.id }, config.jwtSecret, undefined, now),
+      token: signToken({ sub: row.id, ver: row.token_version }, config.jwtSecret, undefined, now),
       me: toMe(db, row, now),
     };
     return payload;
@@ -161,11 +161,13 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
    * exactly 90 days after login, so friends who joined the same week were all
    * thrown out on the same day, and a phone that only ran the background task
    * stopped sending steps without a word. The app calls this about once a week.
-   * An expired token gets the usual 401 from `authenticate`: renewal is not a
-   * way back in, only a way to stay in.
+   * An expired token, or one from before a password change, gets the usual 401
+   * from `authenticate`: renewal is not a way back in, only a way to stay in. The
+   * new token keeps the version, so a stray session cannot renew itself past the
+   * next password change either.
    */
   app.post('/auth/refresh', { preHandler: app.authenticate }, async (request) => {
     const { row } = requireUser(request);
-    return { token: signToken({ sub: row.id }, config.jwtSecret, undefined, app.now()) };
+    return { token: signToken({ sub: row.id, ver: row.token_version }, config.jwtSecret, undefined, app.now()) };
   });
 }

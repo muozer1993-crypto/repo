@@ -20,12 +20,15 @@ export default function LoginScreen() {
   const makeClient = useAuth((s) => s.client);
   const serverUrl = useAuth((s) => s.serverUrl);
   const sessionEnded = useAuth((s) => s.sessionEnded);
+  const sessionEndReason = useAuth((s) => s.sessionEndReason);
   const clearSessionEnded = useAuth((s) => s.clearSessionEnded);
 
   // Taken once: the note stays for this visit and is gone by the next one.
   // Without it, a phone that got a 401 simply showed this screen, and nobody
-  // knew why they had been signed out.
-  const [sessionNote] = useState(sessionEnded);
+  // knew why they had been signed out. The server's own reason wins: after a
+  // password change on another phone it says to sign in with the new one, and
+  // "bir daha gir" alone sent people back to the old password.
+  const [sessionNote] = useState(sessionEnded ? (sessionEndReason ?? 'Oturumun düşmüş, bir daha gir.') : null);
   useEffect(() => {
     if (sessionNote) clearSessionEnded();
   }, [sessionNote, clearSessionEnded]);
@@ -93,7 +96,7 @@ export default function LoginScreen() {
       {sessionNote ? (
         <Card edgeColor={Colors.yellow}>
           <Text variant="small" bold>
-            Oturumun düşmüş, bir daha gir.
+            {sessionNote}
           </Text>
         </Card>
       ) : null}

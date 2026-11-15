@@ -4,7 +4,8 @@
  * Tokens used to die exactly 90 days after login with nothing to renew them, and
  * there was no way to replace a throwaway "123456". `/auth/refresh` extends a
  * token that still works; `/me/password` swaps the password without ever
- * answering 401 (the app logs out on any 401).
+ * answering 401 (the app logs out on any 401), and signs out every other phone:
+ * a session left on a friend's phone used to outlive any new password.
  */
 import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -39,6 +40,21 @@ function login(username: string, password: string) {
 
 function changePassword(token: string, currentPassword: string, newPassword: string) {
   return authed(h.app, token)({ method: 'POST', url: '/me/password', payload: { currentPassword, newPassword } });
+}
+
+/** `ver` claim of one of our own tokens. */
+function verOf(token: string): unknown {
+  const claims = token.split('.')[1]!;
+  return (JSON.parse(Buffer.from(claims, 'base64url').toString('utf8')) as { ver?: unknown }).ver;
+}
+
+/** A token the way every one was signed before token versions: `{ sub, iat, exp }`, no `ver`. */
+function legacyToken(userId: string): string {
+  const head = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const iat = Math.floor(h.app.now().getTime() / 1000);
+  const claims = Buffer.from(JSON.stringify({ sub: userId, iat, exp: iat + 90 * 24 * 60 * 60 })).toString('base64url');
+  const signature = createHmac('sha256', h.app.config.jwtSecret).update(`${head}.${claims}`).digest('base64url');
+  return `${head}.${claims}.${signature}`;
 }
 
 describe('POST /auth/refresh', () => {
@@ -81,8 +97,59 @@ describe('POST /me/password', () => {
 
     expect((await login('ali', DEFAULT_PASSWORD)).statusCode).toBe(401);
     expect((await login('ali', 'yepyeni42')).statusCode).toBe(200);
-    // stateless tokens: the phone that was already signed in stays signed in
-    expect((await authed(h.app, ali.token)({ method: 'GET', url: '/me' })).statusCode).toBe(200);
+  });
+
+  it('signs out every other session, and the returned one renews at its new version', async () => {
+    const ali = await registerUser(h.app, 'ali');
+    // the account opened once on a friend's phone, which kept the session
+    const onFriendsPhone = (await login('ali', DEFAULT_PASSWORD)).json<AuthResponse>().token;
+    await authed(h.app, onFriendsPhone)({ method: 'POST', url: '/me/push-token', payload: { token: 'ExponentPushToken[kanka]', platform: 'android' } });
+
+    const body = (await changePassword(ali.token, DEFAULT_PASSWORD, 'yepyeni42')).json<AuthResponse>();
+
+    for (const old of [ali.token, onFriendsPhone]) {
+      const response = await authed(h.app, old)({ method: 'GET', url: '/me' });
+      expect(response.statusCode).toBe(401);
+      // the one code SPEC 2.2 knows; the message is what the phone shows
+      expect(errorCode(response)).toBe('unauthorized');
+      expect(response.json<{ error: { message: string } }>().error.message).toContain('Şifren değişti');
+      // nor can a stray session renew its way past the change
+      expect((await authed(h.app, old)({ method: 'POST', url: '/auth/refresh' })).statusCode).toBe(401);
+    }
+
+    // the friend's phone can no longer clear its push token, so the change did
+    expect(body.me.hasPushToken).toBe(false);
+    const me = await authed(h.app, body.token)({ method: 'GET', url: '/me' });
+    expect(me.statusCode).toBe(200);
+    expect(me.json<{ hasPushToken: boolean }>().hasPushToken).toBe(false);
+
+    const renewed = await authed(h.app, body.token)({ method: 'POST', url: '/auth/refresh' });
+    expect(renewed.statusCode).toBe(200);
+    const { token } = renewed.json<{ token: string }>();
+    expect(verOf(token)).toBe(verOf(body.token));
+    expect(verOf(token)).toBe(1);
+    expect((await authed(h.app, token)({ method: 'GET', url: '/me' })).statusCode).toBe(200);
+
+    // and a login with the new password works on every phone
+    const back = (await login('ali', 'yepyeni42')).json<AuthResponse>().token;
+    expect((await authed(h.app, back)({ method: 'GET', url: '/me' })).statusCode).toBe(200);
+  });
+
+  it('keeps a token signed before token versions working, until the password changes', async () => {
+    const ali = await registerUser(h.app, 'ali');
+    const old = legacyToken(ali.me.id);
+    expect(verOf(old)).toBeUndefined();
+
+    // nobody is signed out by the upgrade itself
+    const me = await authed(h.app, old)({ method: 'GET', url: '/me' });
+    expect(me.statusCode).toBe(200);
+    expect(me.json<{ username: string }>().username).toBe('ali');
+    const renewed = await authed(h.app, old)({ method: 'POST', url: '/auth/refresh' });
+    expect(renewed.statusCode).toBe(200);
+    expect(verOf(renewed.json<{ token: string }>().token)).toBe(0);
+
+    expect((await changePassword(ali.token, DEFAULT_PASSWORD, 'yepyeni42')).statusCode).toBe(200);
+    expect((await authed(h.app, old)({ method: 'GET', url: '/me' })).statusCode).toBe(401);
   });
 
   it('answers a wrong current password with a 400, and the session survives it', async () => {

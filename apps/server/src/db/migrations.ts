@@ -329,6 +329,18 @@ const ENTRY_ANSWER_FROM = `
 ALTER TABLE entries ADD COLUMN answer_from TEXT;
 `;
 
+/**
+ * Which tokens of a user still work: every token carries the number it was
+ * signed with (`ver`), and a password change or an owner reset bumps it, so the
+ * phones still signed in with the old password are out. Tokens are otherwise
+ * stateless, and a session left on a friend's phone outlived any new password.
+ * Existing rows start at 0, which is what a token from before this reads as,
+ * so the upgrade itself signs nobody out.
+ */
+const TOKEN_VERSION = `
+ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -341,4 +353,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '009_entry_answer_by', sql: ENTRY_ANSWER_BY },
   { id: '010_dispute_won_before', sql: DISPUTE_WON_BEFORE },
   { id: '011_entry_answer_from', sql: ENTRY_ANSWER_FROM },
+  { id: '012_token_version', sql: TOKEN_VERSION },
 ];

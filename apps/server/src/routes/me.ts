@@ -30,7 +30,7 @@ import { nowIso, type Database, type UserRow } from '../db/index.js';
 import { badRequest, parseBody, parseQuery, tooMany } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { toMe, toNotification } from '../serialize.js';
-import { softDeleteUser } from '../services/accounts.js';
+import { replacePassword, softDeleteUser } from '../services/accounts.js';
 import { fanOutDeviceDays } from '../services/deviceSync.js';
 import { listInbox, markRead, unreadCount } from '../services/notifications.js';
 import { awardBadges } from '../services/stats.js';
@@ -144,9 +144,11 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
 
   /**
    * Swaps a throwaway "123456" (or the one the owner handed out with
-   * `npm run yonet -- sifre`) for a real one. Answers with a fresh session like
-   * login does. Tokens are stateless JWTs, so other phones already signed in
-   * stay signed in (SPEC 2.2).
+   * `npm run yonet -- sifre`) for a real one. Every other phone signed in to the
+   * account is signed out (`replacePassword` moves the token version on): friends
+   * open each other's accounts on their own phones, and a session left there
+   * used to outlive any new password. Answers with a fresh session like login
+   * does, so this phone stays in (SPEC 2.2).
    */
   app.post('/me/password', auth, async (request) => {
     const { row } = requireUser(request);
@@ -171,12 +173,11 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
       throw badRequest('same_password', 'Yeni şifren eskisiyle aynı. Başka bir şey yaz.');
     }
 
-    const hash = await hashPassword(body.newPassword);
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, row.id);
+    const fresh = replacePassword(db, row.id, await hashPassword(body.newPassword));
 
     const payload: AuthResponse = {
-      token: signToken({ sub: row.id }, config.jwtSecret, undefined, now),
-      me: toMe(db, row, now),
+      token: signToken({ sub: fresh.id, ver: fresh.token_version }, config.jwtSecret, undefined, now),
+      me: toMe(db, fresh, now),
     };
     return payload;
   });

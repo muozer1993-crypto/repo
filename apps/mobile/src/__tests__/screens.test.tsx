@@ -74,9 +74,10 @@ const ME: Me = {
 };
 
 /** what a 401 leaves behind for the login screen (see store/auth) */
-const mockSession = { ended: false };
+const mockSession = { ended: false, reason: null as string | null };
 const mockClearSessionEnded = jest.fn(() => {
   mockSession.ended = false;
+  mockSession.reason = null;
 });
 const mockSetSession = jest.fn(async () => {});
 /** the ApiClient the auth screens build from the store */
@@ -104,6 +105,7 @@ jest.mock('@/store/auth', () => ({
       client: () => ({ login: mockLogin }),
       rememberServerId: jest.fn(async () => {}),
       sessionEnded: mockSession.ended,
+      sessionEndReason: mockSession.reason,
       clearSessionEnded: mockClearSessionEnded,
       onboarding: false,
       setOnboarding: jest.fn(),
@@ -2454,6 +2456,17 @@ describe('login screen', () => {
     const again = renderScreen(<LoginScreen />);
     await settle();
     expect(rendered(again)).not.toContain('Oturumun düşmüş');
+  });
+
+  it("gives the server's reason when it had one, so a password change elsewhere is not a mystery", async () => {
+    mockSession.ended = true;
+    mockSession.reason = 'Şifren değişti, bu telefondaki oturum kapandı. Yeni şifreyle gir.';
+    const LoginScreen = require('@/app/(auth)/login').default;
+    const tree = renderScreen(<LoginScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('Şifren değişti, bu telefondaki oturum kapandı. Yeni şifreyle gir.');
+    expect(rendered(tree)).not.toContain('Oturumun düşmüş');
+    expect(mockSession.reason).toBeNull();
   });
 });
 

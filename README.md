@@ -575,7 +575,9 @@ verdiğin şifreyle kalır.
 * Kullanıcı adını hatırlamıyorsa önce `npm run yonet -- kullanicilar` ile bak.
 * Türkçe harfle yazsan da bulur: `npm run yonet -- sifre Şeyma` hesabı `seyma` diye arar.
   Kullanıcı adlarında Türkçe harf olmaz, uygulama kayıtta ş'yi s'ye, ı'yı i'ye çevirir.
-* Başka bir telefonda açık kalmış oturumu varsa o kapanmaz; şifre sıfırlamak kimseyi dışarı atmaz.
+* Şifre sıfırlamak o hesabın bütün açık oturumlarını kapatır; kanka yeni şifreyle bir daha girer.
+  Ayarlar'dan kendi şifresini değiştirince de öteki telefonlar kapanır, değiştirdiği telefon açık
+  kalır. Hesabı bir kankanın telefonunda açık kaldıysa şifresini değiştirmesi yeter.
 * Çok yanlış deneme yaptıysa uygulama "Çok fazla deneme yaptın" der; yazdığı süre kadar beklesin.
 
 **Şikayetler.** Uygulamada biri birini şikayet edince sunucu penceresine `YENİ ŞİKAYET` diye bir
@@ -963,7 +965,12 @@ adının tam yazımını `npm run yonet -- kullanicilar` gösterir.
 Yeni hesap açmasın, her şeyi sıfırdan başlar. Sen `npm run yonet -- sifre <kullanici-adi>`
 çalıştır, çıkan şifreyi ona gönder. Ayrıntısı [Yönetim komutları](#yönetim-komutları) bölümünde.
 
-**Uygulama "Oturumun düşmüş, bir daha gir." diyor.**
+**Uygulama "Şifren değişti, bu telefondaki oturum kapandı" diyor.**
+Bu hesabın şifresi başka bir telefondan değiştirildi ya da sen `npm run yonet -- sifre` ile
+sıfırladın. Şifre değişince diğer telefonlardaki oturumlar kapanır. Yeni şifreyle girsin;
+şifreyi kendisi değiştirmediyse ve bilmiyorsa sen sıfırla, yenisini ona gönder.
+
+**Uygulama "Oturumun geçersiz ya da süresi dolmuş" ya da "Oturumun düşmüş" diyor.**
 Oturum 90 gün geçerli ve uygulama onu haftada bir kendiliğinden tazeliyor; açılınca ya da arka
 plandaki 15 dakikalık kontrolde. Bu yazıyı görmek için telefonun aylarca sunucuya hiç
 ulaşmamış olması gerekir. Aynı kullanıcı adı ve şifreyle girsin, her şey yerinde. Herkes aynı

@@ -102,6 +102,8 @@ export interface UserRow {
   nudges_enabled: number;
   /** 0 | 1 — the Sunday evening weekly recap */
   recap_enabled: number;
+  /** a token signed with any other `ver` is refused; bumped by a password change or reset */
+  token_version: number;
 }
 
 export interface FriendshipRow {
