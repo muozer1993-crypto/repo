@@ -35,6 +35,7 @@ import { deliverNewInbox } from '@/services/inboxNotifier';
 import { resolveTimezone, safeTodayKey } from '@/utils/datetime';
 import { formatDayKeyFriendly } from '@/utils/format';
 import { byLevel } from '@/utils/levelCopy';
+import { goToTab } from '@/utils/navigation';
 
 /**
  * Glue between the OS and the app:
@@ -58,13 +59,18 @@ import { byLevel } from '@/utils/levelCopy';
  */
 const REPLANS_REMINDERS = new Set(['challenge_accepted', 'challenge_started', 'challenge_cancelled']);
 
-/** The screen a notification opens: the same for a push tap, its toast and the poll's toast. */
+/**
+ * The screen a notification opens: the same for a push tap, its toast and the
+ * poll's toast. `navigate`, not `push`: a "Dürtüldün" toast about the çelınc
+ * on screen (or a second tap on the banner) stacked another copy of it, and
+ * back seemed to do nothing. It still opens another çelınc over this one.
+ */
 function openRoute(route: Exclude<NotificationRoute, null>): void {
-  if (route.kind === 'inbox') router.push('/(app)/(tabs)/inbox');
-  else if (route.kind === 'friends') router.push('/(app)/(tabs)/friends');
-  else if (route.kind === 'results') router.push(`/challenge/${route.challengeId}/results`);
-  else if (route.invite) router.push({ pathname: '/challenge/[id]', params: { id: route.challengeId, invite: route.invite } });
-  else router.push(`/challenge/${route.challengeId}`);
+  if (route.kind === 'inbox') goToTab('/(app)/(tabs)/inbox');
+  else if (route.kind === 'friends') goToTab('/(app)/(tabs)/friends');
+  else if (route.kind === 'results') router.navigate(`/challenge/${route.challengeId}/results`);
+  else if (route.invite) router.navigate({ pathname: '/challenge/[id]', params: { id: route.challengeId, invite: route.invite } });
+  else router.navigate(`/challenge/${route.challengeId}`);
 }
 
 export function NotificationBridge() {
@@ -252,7 +258,7 @@ export function NotificationBridge() {
           kind: newest.type === 'taunt' ? 'taunt' : 'info',
           onPress: () => {
             if (!route) {
-              router.push('/(app)/(tabs)/inbox');
+              goToTab('/(app)/(tabs)/inbox');
               return;
             }
             makeClient()

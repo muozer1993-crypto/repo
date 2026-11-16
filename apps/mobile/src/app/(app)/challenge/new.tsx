@@ -38,6 +38,7 @@ import { confirmTr } from '@/utils/confirm';
 import { safeDayKey } from '@/utils/datetime';
 import { formatDayKey, formatTime } from '@/utils/format';
 import { byLevel, typeDescription } from '@/utils/levelCopy';
+import { goToTab } from '@/utils/navigation';
 import { serverNow, useClockSkew } from '@/utils/serverClock';
 
 /* ------------------------------------------------------------------ copy */
@@ -673,7 +674,7 @@ export default function NewChallengeScreen() {
                 title="Kanka yok"
                 subtitle={t('add_friend_empty', level)}
                 actionLabel={t('invite_friends_cta', level)}
-                onAction={() => router.replace('/(app)/(tabs)/friends')}
+                onAction={() => goToTab('/(app)/(tabs)/friends')}
               />
             ) : (
               <>

@@ -422,6 +422,13 @@ Profil de Sıralama 20 saniyeden eskiyse sekmeye dönünce onu ve karneyi birlik
 bir kankanın kendi çelıncı bitince sana satır gelmez ama sıra değişir.
 Bir bildirime dokunmak onu okunmuş sayar: push da telefonun kendi kopyası da satırın
 `notificationId`'sini taşır.
+Dokunuş (push, onun toast'ı, yoklamanın toast'ı, Gelen'deki satır) ekranı `router.navigate` ile
+açar, `push` ile değil. Öndeki ekran zaten aynı yol ve aynı parametrelerse yenisi açılmaz; başka
+bir çelınc yine üstüne açılır. Eskiden açık çelınca dair bir "Dürtüldün" toast'ı ya da bildirime
+ikinci dokunuş aynı çelıncı bir kez daha üst üste koyuyordu, geri tuşu da bir şey yapmıyor gibi
+görünüyordu. Gelen ve Kankalar sekmelerine `goToTab` (`utils/navigation.ts`) ile gidilir: üstte
+bir ekran varsa önce sekme çubuğuna inilir (`dismissAll`), sonra sekmeye geçilir. Çelınc
+ekranından bir sekmeye `push` ya da `navigate` ikinci bir sekme çubuğunu çelıncın üstüne koyuyordu.
 
 Push kuyruğu ayrı bir tablo değil, gelen kutusunun `pushed_at` ve `push_error`'u boş satırlarıdır;
 neyin hiç gitmeyeceği de orada yazılır. Bir telefon tek hesaba aittir: `POST /me/push-token` aynı

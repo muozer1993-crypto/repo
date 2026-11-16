@@ -94,6 +94,7 @@ import {
 } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
 import { runningUnseen, stillJoinable } from '@/utils/joinWindow';
+import { goToTab } from '@/utils/navigation';
 import { dativeTr, upperTr } from '@/utils/turkish';
 import { resolveServerUrl } from '@/utils/url';
 
@@ -924,7 +925,7 @@ function InvitePicker({
           fullWidth
           onPress={() => {
             onDone();
-            router.push('/(app)/(tabs)/friends');
+            goToTab('/(app)/(tabs)/friends');
           }}
         />
       </View>

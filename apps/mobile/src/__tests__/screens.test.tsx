@@ -28,7 +28,15 @@ const searchParams: { id?: string; with?: string; show?: string; day?: string; i
 const mockFocus: { effect?: () => void } = {};
 
 jest.mock('expo-router', () => ({
-  router: { push: jest.fn(), replace: jest.fn(), back: jest.fn(), navigate: jest.fn(), canGoBack: () => false },
+  router: {
+    push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+    navigate: jest.fn(),
+    canGoBack: () => false,
+    canDismiss: jest.fn(() => false),
+    dismissAll: jest.fn(),
+  },
   useLocalSearchParams: () => searchParams,
   useFocusEffect: (effect: () => void) => {
     mockFocus.effect = effect;
@@ -5419,6 +5427,28 @@ describe('the Android back button', () => {
     }
   });
 
+  it('closes the wizard into the friends tab when there is no kanka to pick', async () => {
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.replace!.mockClear();
+    router.navigate!.mockClear();
+    router.dismissAll!.mockClear();
+    const NewChallengeScreen = require('@/app/(app)/challenge/new').default;
+    const tree = renderScreen(<NewChallengeScreen />);
+    await settle();
+    chooseType(tree, 'adim_yarisi');
+    press(tree, 'İleri');
+    press(tree, 'İleri');
+    await settle();
+    expect(rendered(tree)).toContain('Kanka yok');
+
+    // the wizard is a modal over the tab bar; replacing it put a second tab bar there
+    router.canDismiss!.mockReturnValueOnce(true);
+    press(tree, 'Kankaları Çağır');
+    expect(router.dismissAll).toHaveBeenCalledTimes(1);
+    expect(router.navigate).toHaveBeenCalledWith('/(app)/(tabs)/friends');
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
   it('lets Android close the wizard when nothing has been chosen yet', async () => {
     const NewChallengeScreen = require('@/app/(app)/challenge/new').default;
     renderScreen(<NewChallengeScreen />);
@@ -6376,6 +6406,32 @@ describe('the whole çelınc history', () => {
   });
 });
 
+describe('a tap on a Gelen row', () => {
+  it('opens its çelınc with navigate, so a double tap does not stack it twice', async () => {
+    const at = new Date().toISOString();
+    api.inbox = jest.fn(async () => [
+      { id: 'n-1', type: 'poke', title: '👉 Dürtüldün', body: 'Ali seni dürttü.', data: { challengeId: 'c-1' }, readAt: at, createdAt: at },
+    ]);
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.push!.mockClear();
+    router.navigate!.mockClear();
+    const InboxScreen = require('@/app/(app)/(tabs)/inbox').default;
+    const tree = renderScreen(<InboxScreen />);
+    await settle();
+
+    const [row] = tree.root.findAll(
+      (node) => (node.props.item as { id?: string } | undefined)?.id === 'n-1' && typeof node.props.onPress === 'function'
+    );
+    if (!row) throw new Error('n-1 bulunamadı');
+    act(() => {
+      row.props.onPress(row.props.item);
+      row.props.onPress(row.props.item);
+    });
+    expect(router.navigate).toHaveBeenCalledWith('/challenge/c-1');
+    expect(router.push).not.toHaveBeenCalled();
+  });
+});
+
 describe('an inbox longer than one page', () => {
   const NOW = Date.now();
   /** Row `i` minutes old, unless it is told when; bodies end in "." so 1 is not a prefix of 10. */
@@ -6545,6 +6601,30 @@ describe('"Kanka ekle" on a çelınc already under way', () => {
     press(tree, 'Çağır (1)');
     await settle();
     expect(api.inviteToChallenge).toHaveBeenCalledWith('c-1', [CEM.id]);
+  });
+
+  it('sends whoever has nobody left to call to the friends tab, not a second tab bar over the çelınc', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => mine());
+    // Ali plays and Dan walked out: nobody to offer
+    api.friends = jest.fn(async () => ({ friends: [ALI, DAN], incoming: [], outgoing: [] }));
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.push!.mockClear();
+    router.navigate!.mockClear();
+    router.dismissAll!.mockClear();
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    press(tree, CTA);
+    await settle();
+    expect(rendered(tree)).toContain('Çağıracak kimse kalmadı.');
+
+    // the çelınc sits over the tab bar
+    router.canDismiss!.mockReturnValueOnce(true);
+    press(tree, 'Kankalara git');
+    expect(router.dismissAll).toHaveBeenCalledTimes(1);
+    expect(router.navigate).toHaveBeenCalledWith('/(app)/(tabs)/friends');
+    expect(router.push).not.toHaveBeenCalled();
   });
 
   it('is not there for somebody who has not said yes yet', async () => {

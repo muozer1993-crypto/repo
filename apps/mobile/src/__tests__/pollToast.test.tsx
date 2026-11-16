@@ -15,9 +15,20 @@ import { useAuth } from '@/store/auth';
 
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
+const mockNavigate = jest.fn();
+const mockDismissAll = jest.fn();
 
 jest.mock('expo-router', () => ({
-  router: { push: (...args: unknown[]) => mockPush(...args), replace: (...args: unknown[]) => mockReplace(...args), back: jest.fn(), canGoBack: () => false },
+  router: {
+    push: (...args: unknown[]) => mockPush(...args),
+    navigate: (...args: unknown[]) => mockNavigate(...args),
+    replace: (...args: unknown[]) => mockReplace(...args),
+    back: jest.fn(),
+    canGoBack: () => false,
+    // on a tab: nothing stacked over the tab bar
+    canDismiss: () => false,
+    dismissAll: (...args: unknown[]) => mockDismissAll(...args),
+  },
   Link: ({ children }: { children: React.ReactNode }) => children,
 }));
 
@@ -166,7 +177,8 @@ describe("the inbox poll's toast", () => {
     pressToast(tree, 'KOYDUM MU?');
     await settle();
 
-    expect(mockPush).toHaveBeenCalledWith('/challenge/c1/results');
+    expect(mockNavigate).toHaveBeenCalledWith('/challenge/c1/results');
+    expect(mockPush).not.toHaveBeenCalled();
     expect(markRead).toHaveBeenCalledWith({ ids: ['n1'] });
   });
 
@@ -179,7 +191,9 @@ describe("the inbox poll's toast", () => {
     pressToast(tree, 'KOYDUM MU?');
     await settle();
 
-    expect(mockPush).toHaveBeenCalledWith('/(app)/(tabs)/inbox');
+    expect(mockNavigate).toHaveBeenCalledWith('/(app)/(tabs)/inbox');
+    expect(mockDismissAll).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
     expect(markRead).not.toHaveBeenCalled();
   });
 });

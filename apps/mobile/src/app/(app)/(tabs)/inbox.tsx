@@ -5,7 +5,7 @@ import {
   type Notification,
   type NotificationType,
 } from '@koydum/shared';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useEffect } from 'react';
 import { Pressable, SectionList, type SectionListData, StyleSheet, View } from 'react-native';
 
@@ -121,7 +121,7 @@ function dataString(data: Record<string, unknown> | undefined, key: string): str
 }
 
 /** Where a row goes when tapped — `null` means "stay here". */
-function targetFor(item: Notification): string | null {
+function targetFor(item: Notification): Href | null {
   const challengeId = dataString(item.data, 'challengeId');
   switch (item.type) {
     case 'friend_accepted': {
@@ -240,7 +240,9 @@ export default function InboxScreen() {
   const open = (item: Notification) => {
     if (!item.readAt) markRead.mutate({ ids: [item.id] });
     const target = targetFor(item);
-    if (target) router.push(target);
+    // a double tap on a row opened its çelınc twice, one over the other; Gelen
+    // is a tab, so a tab target here only switches tabs
+    if (target) router.navigate(target);
   };
 
   const markAll = () => {
