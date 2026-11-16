@@ -273,13 +273,16 @@ async function ensureAndroidStepPermission(askAgain = true): Promise<boolean> {
  * (onHostPause) but keeps its baseline, so the first event after coming back
  * carries everything walked in between. Within one day those are that day's
  * steps. Across midnight they cannot be split, and putting them all on the
- * morning counted the evening twice: once on its own day and again on the next,
- * where the server keeps the larger number for good. So the first event of a
- * new day only moves our baseline. Health Connect and the Recording API hold
- * the real per-day numbers; this count loses the few steps walked across
- * midnight with the app open. The day starts as the one the subscription was
- * made on, not the day of its first event, so the rule does not lean on when
- * the native side takes its baseline.
+ * morning counted the evening twice: once on its own day by the Recording API
+ * and again on the next, where the server keeps the larger number for good. So
+ * the first event of a new day only moves our baseline. Health Connect and the
+ * Recording API hold the real per-day numbers. A phone with neither (Play
+ * services too old) loses that jump outright, the evening after the app was
+ * put away and the morning before it came back, rather than putting it on the
+ * wrong day; its count is "yaklaşık", with Beyan et for the real number. With
+ * the app open across midnight only a few steps go. The day starts as the one
+ * the subscription was made on, not the day of its first event, so the rule
+ * does not lean on when the native side takes its baseline.
  */
 export function startForegroundStepTracking(): () => void {
   if (Platform.OS !== 'android') return () => {};

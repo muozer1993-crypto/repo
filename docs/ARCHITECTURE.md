@@ -729,10 +729,13 @@ başlar; o günün öncesini uygulamanın ön planda saydığı değer tamamlar.
 
 Uygulama ekrandan çıkınca expo-sensors sensörü bırakır ama başlangıç değerini tutar; geri
 gelince ilk olay aradaki bütün adımları tek seferde getirir. Aynı gün içindeyse bunlar o günün
-adımıdır, sayılır. Gece yarısını geçtiyse günlere bölünemez ve atılır: hepsini sabaha yazmak
-akşamın adımlarını ertesi güne bir kez daha yazıyordu, sunucu da büyüğü tuttuğu için o gün bir
-daha düzelmiyordu. Günlük doğru sayı Health Connect'te ve Recording API'de; uygulama açıkken
-gece yarısını geçen birkaç adım bu sayımdan düşer.
+adımıdır, sayılır. Gece yarısını geçtiyse günlere bölünemez ve atılır: hepsini sabaha yazmak,
+Recording API'nin akşamın gününe zaten yazdığı adımları ertesi güne bir kez daha yazıyordu,
+sunucu da büyüğü tuttuğu için o gün bir daha düzelmiyordu. Günlük doğru sayı Health Connect'te
+ve Recording API'de. İkisi de olmayan telefon (Play hizmetleri eski) bu sıçramayı yanlış güne
+yazmak yerine tümden kaybeder: uygulama kenara atıldıktan sonraki akşamı da, geri açılmadan
+önceki sabahı da. Onun sayısı zaten "yaklaşık" görünür, gerçek sayı için yanında Beyan et
+vardır. Uygulama açıkken gece yarısını geçerse yalnızca birkaç adım düşer.
 
 Health Connect Android 14'ten beri telefonla gelir, ama içine adım yazan bir uygulama (Samsung
 Health, Google Fit) yoksa boştur ve her güne 0 der. O yüzden Health Connect'in 0'ı hiç
