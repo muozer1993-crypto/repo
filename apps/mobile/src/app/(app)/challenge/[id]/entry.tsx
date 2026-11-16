@@ -23,7 +23,7 @@ import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
 import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
-import { formatDayKeyFriendly, formatNumber } from '@/utils/format';
+import { dropFloatNoise, formatDayKeyFriendly, formatNumber } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
 import { runningUnseen } from '@/utils/joinWindow';
 import { resolveServerUrl } from '@/utils/url';
@@ -43,12 +43,11 @@ function parseValue(text: string): number | null {
  * What is left of a day's cap, cut to the two decimals formatNumber prints:
  * 100 - 5.375 km is 94.625, which would print as "94,63", and typing that is
  * refused as over the cap. The epsilon keeps 0.29 (28.999... cents in floating
- * point) at 0.29; the step back covers a sum whose noise leaves the cap a hair
- * under a whole cent, so the number shown is always one the check takes.
+ * point) at 0.29. `value` comes through `dropFloatNoise` first, so a sum's noise
+ * cannot leave it a hair under a whole cent.
  */
 function floorCents(value: number): number {
-  const cents = Math.floor(value * 100 + 1e-9);
-  return cents / 100 <= value ? cents / 100 : (cents - 1) / 100;
+  return Math.floor(value * 100 + 1e-9) / 100;
 }
 
 function quickAdds(maxPerEntry: number): number[] {
@@ -193,13 +192,13 @@ export default function EntryModalScreen() {
         .filter((entry) => entry.dayKey === selectedDay && entry.status !== 'rejected')
         .reduce((sum, entry) => sum + entry.value, 0)
     : 0;
-  const remaining = appends ? Math.max(0, type.maxPerDay - dayTotal) : type.maxPerEntry;
+  const remaining = appends ? Math.max(0, dropFloatNoise(type.maxPerDay - dayTotal)) : type.maxPerEntry;
   const ceiling = Math.min(type.maxPerEntry, remaining);
   // what the screen says is left: never a cent more than the check below takes
   const left = floorCents(remaining);
 
   const bump = (delta: number) => {
-    const next = Math.min(ceiling, (value ?? 0) + delta);
+    const next = Math.min(ceiling, dropFloatNoise((value ?? 0) + delta));
     setRaw(String(next).replace('.', ','));
     setError(null);
   };
@@ -238,7 +237,8 @@ export default function EntryModalScreen() {
       setError('Sıfırdan büyük bir sayı yaz.');
       return;
     }
-    if (appends && value > remaining) {
+    // a hair of float noise in what was typed is not over the cap
+    if (appends && value > remaining + 1e-9) {
       setError(
         left <= 0
           ? `${dayLabel} için günlük tavan doldu (${formatNumber(type.maxPerDay)} ${type.unitTr}).`

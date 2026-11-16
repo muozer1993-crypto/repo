@@ -939,7 +939,10 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             labelled by formatDayKeyFriendly), the `day` param preselects a day it offers; a step day with an
                             upheld itiraz is locked like a device_locked one (server 409 `day_rejected`);
                             a manual_count çelınc says what is left of the day's cap cut down to the cent ("Bugün için kalan: 94,62 km."
-                            after 5,375 km), never rounded up to a number the cap check would refuse;
+                            after 5,375 km), never rounded up to a number the cap check would refuse; the day's sum and what is left
+                            drop JavaScript's float noise first (`dropFloatNoise`, six decimals), as do the "+" chips' sums in the
+                            field: 14,4 + 59,7 + 15,9 km is 90.00000000000001 in JS but 90 in the server's SUM, and "9,99 km kaldı"
+                            refused the 10 the server takes;
                             on a phone, a photo that cannot go up for lack of a connection (or `server_down`/`not_koydum`) stays on the phone ("Fotoğraf telefonda",
                             previewed with "henüz gitmedi"), counts as the required proof for Kaydet, and goes up with the entry:
                             right then if the connection is back, else from the offline queue (`proofLocalUri`). The feed's

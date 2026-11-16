@@ -13,6 +13,18 @@ export function formatNumber(value: number): string {
   return formatNumberTr(value);
 }
 
+/**
+ * A sum or a difference of typed numbers without JavaScript's float noise:
+ * 14,4 + 59,7 + 15,9 km is 90.00000000000001 here, which left 9.99999... of a
+ * 100 km day: shown as "9,99", greying out a "+10" and refusing the 10 the
+ * server takes (its SUM is exactly 90); 100 - 57,7 put "42,300000000000004" in
+ * the field. Six decimals is far finer than anything typed and far coarser
+ * than the noise.
+ */
+export function dropFloatNoise(value: number): number {
+  return Math.round(value * 1e6) / 1e6;
+}
+
 /** 90 -> "1sa 30dk", 45 -> "45dk" */
 export function formatMinutes(minutes: number): string {
   const total = Math.max(0, Math.round(minutes));

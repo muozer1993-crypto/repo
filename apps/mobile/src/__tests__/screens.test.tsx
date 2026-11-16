@@ -1657,6 +1657,59 @@ describe('the entry modal', () => {
     expect(rendered(tree)).toContain('2,25 km · bugün');
     expect(rendered(tree)).not.toContain('2,3 km');
   });
+
+  /** The reader's runs today in a 100 km a day koşu çelınc, in the order the server lists them. */
+  function runs(...values: number[]) {
+    const detail = challengeDetail();
+    const myEntries: Entry[] = values.map((value, i) => ({
+      id: `e-${i}`, challengeId: 'c-1', userId: 'me-1', dayKey: today(), value, source: 'manual',
+      note: null, proofUrl: null, status: 'ok', createdAt: new Date(Date.now() - (values.length - i) * 60_000).toISOString(),
+    }));
+    return {
+      ...detail,
+      challenge: { ...detail.challenge, typeKey: 'kosu_km', metricType: 'manual_count' as const, unit: 'km', title: 'Koşu haftası' },
+      myEntries,
+    };
+  }
+
+  it('shows and takes the true remainder after runs whose sum is a hair off in floating point', async () => {
+    searchParams.id = 'c-1';
+    // 14,4 + 59,7 + 15,9 is 90.00000000000001 in JavaScript; the server's SUM is 90 and takes a 10
+    api.challenge = jest.fn(async () => runs(14.4, 59.7, 15.9));
+    api.addEntry = jest.fn(async () => ({ entry: {}, standings: [] }));
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Bugün için kalan: 10 km.');
+    act(() => {
+      findWith(tree, 'placeholder', '0', 'onChangeText').props.onChangeText('10');
+    });
+    await act(async () => {
+      await findWith(tree, 'title', 'Kaydet', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(rendered(tree)).not.toContain('kaldı');
+    expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ value: 10 }));
+  });
+
+  it('fills the field from the chips without float noise', async () => {
+    searchParams.id = 'c-1';
+    // 100 - (50,3 + 7,4) is 42.300000000000004 in JavaScript
+    api.challenge = jest.fn(async () => runs(50.3, 7.4));
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Bugün için kalan: 42,3 km.');
+    for (let i = 0; i < 5; i++) {
+      act(() => {
+        findWith(tree, 'label', '+10', 'onPress').props.onPress();
+      });
+    }
+    expect(findWith(tree, 'placeholder', '0', 'onChangeText').props.value).toBe('42,3');
+  });
 });
 
 describe('the screen-time card', () => {
