@@ -1081,6 +1081,12 @@ karar itirazındır. O güne artık elle sayı yazılmaz, sadece telefon yazar; 
 telefonun sayısına da bir kere itiraz edebilir. Telefonun kendi saydığı bir gün itirazla düştüyse
 geri gelmez.
 
+Profildeki adım rozetleri (🥾 Yola Çıktın ve üstü) sadece telefonun saydığı adıma bakar;
+**Beyan et** ile elle yazılan gün oraya sayılmaz (haftalık özet sayar). Rozet bir kere verilince
+geri alınmaz, elle yazılan gün ise itirazla düşebilir. Profildeki sıradaki basamak da bunu söyler:
+"Tek günde 7.500 adım at (telefonun saydığı)". Odak merdiveninin basamağı da altındaki ilerleme
+gibi dakikayla yazar: "Toplam 3.000 dakika odaklan · 1.280/3.000".
+
 ### Ekran süresi nereden geliyor?
 
 | Platform | Kaynak | Not |

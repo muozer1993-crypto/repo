@@ -7001,6 +7001,40 @@ describe('the rövanş rung on the profile', () => {
   });
 });
 
+describe('the odak and adım rungs on the profile', () => {
+  const stats = ME.stats;
+  const badges = ME.badges;
+
+  afterEach(() => {
+    ME.stats = stats;
+    ME.badges = badges;
+  });
+
+  it('asks for focus in minutes, the unit of the progress under it', async () => {
+    ME.stats = { ...stats, focusTotalMinutes: 1280 };
+    ME.badges = ['odak_1', 'odak_2'];
+    const ProfileScreen = require('@/app/(app)/(tabs)/profile').default;
+    const tree = renderScreen(<ProfileScreen />);
+    await settle();
+    const text = rendered(tree);
+    // "Toplam 50sa odaklan" over "1.280 / 3.000" left the reader to convert
+    expect(text).toContain('Toplam 3.000 dakika odaklan');
+    expect(text).toContain('1.280 / 3.000');
+    expect(text).not.toContain('50sa');
+  });
+
+  it('says the step rung counts what the phone counted', async () => {
+    ME.stats = { ...stats, stepsSingleDayMax: 4000 };
+    const ProfileScreen = require('@/app/(app)/(tabs)/profile').default;
+    const tree = renderScreen(<ProfileScreen />);
+    await settle();
+    const text = rendered(tree);
+    // a day typed with "Beyan et" never moves it, and nothing used to say so
+    expect(text).toContain('Tek günde 7.500 adım at (telefonun saydığı)');
+    expect(text).toContain('4.000 / 7.500');
+  });
+});
+
 describe('Sıralama on the profile', () => {
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
 

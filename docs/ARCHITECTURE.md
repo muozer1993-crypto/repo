@@ -596,6 +596,14 @@ okuyanın seviyesi. Anahtar (`koyus_1`) hiç değişmez; `badges` tablosundaki s
 Merdivenin kendi adı da öyle: "Nazik" okuyan profilde "KOYUŞ" ve "YİYİŞ" değil "GALİBİYET" ve
 "YENİLGİ" başlıklarını görür, sıralama da ona "en çok koyanlar" yerine "en çok kazananlar" der.
 
+Adım merdiveni (`stepsSingleDayMax`) yalnızca telefonun saydığına (`steps_daily`) bakar: **Beyan et**
+ile elle yazılan bir gün itirazla düşebilir, rozet ise bir kere verilince geri alınmaz. Haftalık özet
+elle yazılan günü sayar, merdiven saymaz; o yüzden kilitli basamak bunu kendisi söyler ("Tek günde
+7.500 adım at (telefonun saydığı)"), yoksa elle 25.000 yazan kanka neden 0/15.000'de kaldığını
+anlamazdı. Odak merdiveni dakika sayar, kilitli basamağı da rozetin kendisi gibi dakikayla yazar
+("Toplam 3.000 dakika odaklan", altında 1.280/3.000). Hedef saatle ("50sa"), ilerleme dakikayla
+yazılınca okuyan 3.000 dakikanın 50 saat olduğunu kafadan hesaplıyordu.
+
 Erken kalkma merdiveni (`checkinsStreakMax`) sadece **sabah** check-in'lerini sayar: açılış saati
 öğleden önce olan türler, yani Erken Kalkan Koyar ve Yatak Toplama Sabahı
 (`MORNING_CHECKIN_TYPE_KEYS`). Erken Yatma Sözü de bir check-in ama yedi gece "7 gün üst üste

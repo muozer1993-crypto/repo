@@ -40,7 +40,7 @@ import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, Radius, Spacing } from '@/theme';
-import { formatMinutes, formatNumber } from '@/utils/format';
+import { formatNumber } from '@/utils/format';
 
 /** Coming back to the tab refetches a board older than this (the app's staleTime). */
 const PROFILE_FRESH_MS = 20_000;
@@ -67,8 +67,13 @@ const RULE_TEXT: Record<string, (n: number) => string> = {
   wins: (n) => `${formatNumber(n)} çelınc kazan`,
   losses: (n) => `${formatNumber(n)} çelınc kaybet`,
   ties: (n) => `${formatNumber(n)} kez berabere kal`,
-  stepsSingleDayMax: (n) => `Tek günde ${formatNumber(n)} adım at`,
-  focusTotalMinutes: (n) => `Toplam ${formatMinutes(n)} odaklan`,
+  // the ladder reads the phone's count alone (a day typed with "Beyan et" can
+  // still fall to an itiraz, a badge never goes back): somebody who typed
+  // 25.000 sat at 0/15.000 with nothing saying why
+  stepsSingleDayMax: (n) => `Tek günde ${formatNumber(n)} adım at (telefonun saydığı)`,
+  // minutes, like the progress under it and the badge itself: "50sa" over
+  // "1.280/3.000" left the reader to work out that 3.000 was the 50 hours
+  focusTotalMinutes: (n) => `Toplam ${formatNumber(n)} dakika odaklan`,
   checkinsStreakMax: (n) => `${formatNumber(n)} gün üst üste zamanında kalk`,
   disputesWon: (n) => `${formatNumber(n)} itiraz kazan`,
   challengesPlayed: (n) => `${formatNumber(n)} çelınca katıl`,
