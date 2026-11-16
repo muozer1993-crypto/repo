@@ -512,7 +512,8 @@ Kapanış cümlesi metriğe göre değişir: "kalk da iki dolaş" odak çelınc�
 "Bugünkü girişini yapmayı unutma" denmez, daha fazlası istenir: "Biraz daha eklersen fark
 kapanır." / "Biraz daha yap da gir şuraya." / "Bu kadarla olmaz, biraz daha koy." Günlük sınırı
 dolmuş olana (giriş ekranının "tavan doldu" dediği gün) bu da denmez, o çelınc için hiç
-dürtülmez: sunucu fazlasını `daily_cap` ile geri çevirir. Bu kontrol de kayıttan önce yapılır.
+dürtülmez: sunucu fazlasını `daily_cap` ile geri çevirir. Odak çelıncında bugünün 360 dakikası
+dolmuşsa "kısa bir odak seansı" da istenmez, aynı sebeple. Bu kontrol de kayıttan önce yapılır.
 
 ## Haftanın hesabı
 

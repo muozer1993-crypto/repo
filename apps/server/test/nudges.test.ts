@@ -518,6 +518,34 @@ describe('mid-day nudges on a day the reader already logged', () => {
     );
   });
 
+  it('leaves alone a focus player whose 360 minutes today are already in', async () => {
+    harness = await makeApp({ now: NOON });
+    const app = harness.app;
+    const tz = { timezone: 'Europe/Istanbul' };
+    const ayse = await registerUser(app, 'ayse', { displayName: 'Ayşe', ...tz });
+    const mert = await registerUser(app, 'mert', { displayName: 'Mert', vulgarityMax: 1, ...tz });
+    const deniz = await registerUser(app, 'deniz', { displayName: 'Deniz', vulgarityMax: 1, ...tz });
+    const id = seedActive(app, {
+      creatorId: ayse.me.id,
+      accepted: [ayse.me.id, mert.me.id, deniz.me.id],
+      ...week,
+      typeKey: 'odak_seansi',
+      metricType: 'focus_minutes',
+      unit: 'dk',
+    });
+    addSteps(app, id, ayse.me.id, MONDAY, 360, 'focus');
+    addSteps(app, id, ayse.me.id, TUESDAY, 360, 'focus');
+    // Mert sat his whole 360 this morning; Deniz has 180 still to sit
+    addSteps(app, id, mert.me.id, TUESDAY, 180, 'focus');
+    addSteps(app, id, mert.me.id, TUESDAY, 180, 'focus');
+    addSteps(app, id, deniz.me.id, TUESDAY, 180, 'focus');
+
+    sendNudges(app.db, app.now());
+    expect(nudgesOf(harness, mert.me.id)).toHaveLength(0);
+    expect(claimedBy(app, mert.me.id)).toEqual([]);
+    expect(nudgesOf(harness, deniz.me.id)).toHaveLength(1);
+  });
+
   it('names the çelınc the reader can still do something about, and does not count the marked one', async () => {
     harness = await makeApp({ now: NOON });
     const app = harness.app;

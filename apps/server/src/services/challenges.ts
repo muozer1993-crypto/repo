@@ -1266,7 +1266,7 @@ interface NudgeCandidate {
  * switched it off (`users.nudges_enabled`) gets none at all, nor does a
  * screen-time player with nothing reported yet: their gap is the missing-day
  * penalty. A yes/no çelınc the reader has already marked today is left out too,
- * and so is a count çelınc whose daily cap they have already filled.
+ * and so is a count or focus çelınc whose daily cap they have already filled.
  *
  * The one nudge names the çelınc with the biggest gap for its size and counts
  * the others. All of them are claimed in `nudges_sent`, and any row of the
@@ -1353,6 +1353,10 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
       // eklersen" would ask for a set the server refuses (daily_cap). Under a
       // cent left is what the entry form already calls "tavan doldu".
       if (challenge.metric_type === 'manual_count' && typeForChallenge(challenge).maxPerDay - today.total < 0.01) continue;
+      // Likewise a focus çelınc at its daily minutes (360): "Kısa bir odak seansı
+      // farkı kapatır" would send them to a timer the server cuts to nothing
+      // (daily_cap). Under a minute left is a full day: the shortest session is one.
+      if (challenge.metric_type === 'focus_minutes' && typeForChallenge(challenge).maxPerDay - today.total < 1) continue;
 
       const mine = candidates.get(user.id) ?? [];
       mine.push({
