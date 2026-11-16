@@ -18,7 +18,7 @@ import {
 } from '@koydum/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -107,7 +107,7 @@ const BADGE_HOWTO: Record<
     /** in place of `how` at level 1, where it is said in level-2 words */
     howPolite?: string;
     cta: string;
-    href: { pathname: string; params?: Record<string, string> };
+    href: Href;
   }
 > = {
   koyus: {
@@ -122,7 +122,7 @@ const BADGE_HOWTO: Record<
     href: { pathname: '/(app)/challenge/new' },
   },
   adim: {
-    how: 'Tek günde attığın adıma bakar. Bir adım çelıncı açıp yürümen yeter, telefon sayıyor.',
+    how: 'Telefonun bir günde saydığı adıma bakar; "Beyan et" ile elle yazılan sayılmaz. Bir adım çelıncı açıp yürümen yeter.',
     cta: 'Adım çelıncı aç',
     href: { pathname: '/(app)/challenge/new', params: { type: 'adim_yarisi' } },
   },

@@ -583,7 +583,7 @@ Rozetler düz bir duvar değil, yedi **merdivendir**: koyuş, yiyiş, adım, oda
 itiraz, rövanş. Her merdivenin basamakları sırayla açılır ve profil sadece kazandığın basamakları
 artı bir üstünü çizer; daha yukarısı sen oraya gelene kadar hiç görünmez.
 
-Sebebi basit: yirmi iki gri kare, yeni bir kullanıcıya "yapmadığın yirmi iki şey" listesi gösterir.
+Sebebi basit: yirmi bir gri kare, yeni bir kullanıcıya "yapmadığın yirmi bir şey" listesi gösterir.
 Bir sonraki basamak ise bu akşam ne yapacağını söyler. `badgeLadder(stats)` bu listeyi üretir,
 `badgeLevel(family, earned)` de o merdivende kaçıncı basamakta olduğunu verir.
 
