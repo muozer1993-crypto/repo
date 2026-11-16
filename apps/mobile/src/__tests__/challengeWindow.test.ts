@@ -1,4 +1,4 @@
-import { effectiveDeadline, hhmmToMinutes, requireChallengeType } from '@koydum/shared';
+import { createChallengeBodySchema, effectiveDeadline, hhmmToMinutes, requireChallengeType } from '@koydum/shared';
 
 import { computeWindow, type ChallengeWindow } from '@/utils/challengeWindow';
 import { safeDayKeysBetween, zonedInstant } from '@/utils/datetime';
@@ -118,5 +118,18 @@ describe('every other çelınc', () => {
   it('still runs a one-day "Hemen" opened just before midnight for 24 hours', () => {
     const lateNight = new Date('2026-12-31T20:58:00.000Z'); // 23:58
     expect(computeWindow('now', 1, IST, lateNight, ADIM).endsAt).toBe('2027-01-01T20:58:00.000Z');
+  });
+});
+
+describe('60 days across a clock change', () => {
+  // Berlin's 25 October has 25 hours: 60 local days from its first minute are
+  // 60 × 24 h and one more, and the server refused the window with "Çelınc en
+  // fazla 60 gün sürebilir" though the wizard offered 60.
+  it('gives a window the server takes', () => {
+    const midnight = new Date('2026-10-23T22:00:00.000Z'); // 00:00 on 24 October in Berlin
+    const window = computeWindow('now', 60, 'Europe/Berlin', midnight, ADIM);
+    expect(window.endsAt).toBe('2026-12-22T22:59:59.999Z');
+    const body = { typeKey: 'adim_yarisi', participantIds: ['u1'], startsAt: window.startsAt, endsAt: window.endsAt };
+    expect(createChallengeBodySchema({ now: () => midnight.getTime() }).safeParse(body).success).toBe(true);
   });
 });

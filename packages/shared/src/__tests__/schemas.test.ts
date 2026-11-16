@@ -209,9 +209,26 @@ describe('CreateChallengeBody', () => {
     expect(schema.safeParse({ ...base, endsAt: iso(H + 60 * 1000) }).success).toBe(true);
   });
 
-  it('requires endsAt <= startsAt + 60 days', () => {
+  it('requires endsAt <= startsAt + 60 days, and the hour a fall-back adds to them', () => {
     expect(schema.safeParse({ ...base, endsAt: iso(60 * D) }).success).toBe(true);
-    expect(issuePaths(schema.safeParse({ ...base, endsAt: iso(60 * D + 1000) }))).toEqual(['endsAt']);
+    expect(schema.safeParse({ ...base, endsAt: iso(60 * D + H) }).success).toBe(true);
+    const tooLong = schema.safeParse({ ...base, endsAt: iso(60 * D + H + 1000) });
+    expect(issuePaths(tooLong)).toEqual(['endsAt']);
+    expect(tooLong.error?.issues[0]?.message).toBe('Çelınc en fazla 60 gün sürebilir');
+  });
+
+  // The wizard's 60-day "Hemen" at 00:00 in Berlin on 24 October ends at the last
+  // millisecond of 22 December: 60 local days, and the 25-hour 25 October in them.
+  it('takes 60 local days across a clock change', () => {
+    const berlin = Date.parse('2026-10-23T22:00:00.000Z');
+    const atMidnight = createChallengeBodySchema({ now: () => berlin });
+    expect(
+      atMidnight.safeParse({
+        ...base,
+        startsAt: '2026-10-23T22:00:00.000Z',
+        endsAt: '2026-12-22T22:59:59.999Z',
+      }).success,
+    ).toBe(true);
   });
 
   it('enforces participant count and uniqueness', () => {

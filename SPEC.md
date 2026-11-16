@@ -194,7 +194,7 @@ FriendRequestBody { username?: string (same fold), inviteCode?: string } (exactl
 CreateChallengeBody {
   typeKey: string; title?: string (max 40; title, rewardText, penaltyText and TauntBody.customBody are one line
                   like a name, counted after the fold; a note keeps its line breaks);
-  startsAt: ISO (>= now-5min); endsAt: ISO (> startsAt + 1h, <= startsAt + 60d);
+  startsAt: ISO (>= now-5min); endsAt: ISO (> startsAt + 1h, <= startsAt + 60d + 1h: 60 local days across a fall-back are 60 × 24 h and one more);
   participantIds: string[] (1..15, friends only, unique, not self);
   rewardText?: string (max 80); penaltyText?: string (max 80);
   deadlineTime?: 'HH:mm' (required when metricType === 'checkin_deadline'; after the type's checkinWindowStart,

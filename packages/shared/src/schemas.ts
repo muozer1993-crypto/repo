@@ -286,6 +286,9 @@ export interface ChallengeSchemaOptions {
   resolveType?: (typeKey: string) => ChallengeType | undefined;
 }
 
+/** The hour a fall-back adds to a local day (the max-duration check allows it). */
+const DST_HOUR_MS = 60 * 60 * 1000;
+
 /**
  * Factory so the server can inject a clock and a catalog. Everything SPEC 1.6 states
  * about the body is enforced here, including "`deadlineTime` required when
@@ -350,7 +353,11 @@ export function createChallengeBodySchema(opts: ChallengeSchemaOptions = {}) {
       if (end <= start + LIMITS.MIN_DURATION_MS) {
         ctx.addIssue({ code: 'custom', message: 'Çelınc en az 1 saat sürmeli', path: ['endsAt'] });
       }
-      if (end > start + LIMITS.MAX_DURATION_MS) {
+      // 60 local days across a fall-back (Europe/Berlin's 25-hour 25 October)
+      // are an hour more than 60 × 24 h: the wizard ends a çelınc at the last
+      // local midnight, and a 60-day "Hemen" opened in the first hour of a day
+      // was refused for the clock change it had no say in
+      if (end > start + LIMITS.MAX_DURATION_MS + DST_HOUR_MS) {
         ctx.addIssue({
           code: 'custom',
           message: `Çelınc en fazla ${LIMITS.MAX_DURATION_DAYS} gün sürebilir`,
