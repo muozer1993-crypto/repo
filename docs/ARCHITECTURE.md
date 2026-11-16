@@ -712,6 +712,13 @@ sayar. Android 9'dan beri arka plandaki bir uygulama adım sensöründen hiç ol
 uygulama kapalıyken saymanın tek yolu, sayımı Play hizmetlerinin yapması. Kayıt ilk izin anında
 başlar; o günün öncesini uygulamanın ön planda saydığı değer tamamlar.
 
+Uygulama ekrandan çıkınca expo-sensors sensörü bırakır ama başlangıç değerini tutar; geri
+gelince ilk olay aradaki bütün adımları tek seferde getirir. Aynı gün içindeyse bunlar o günün
+adımıdır, sayılır. Gece yarısını geçtiyse günlere bölünemez ve atılır: hepsini sabaha yazmak
+akşamın adımlarını ertesi güne bir kez daha yazıyordu, sunucu da büyüğü tuttuğu için o gün bir
+daha düzelmiyordu. Günlük doğru sayı Health Connect'te ve Recording API'de; uygulama açıkken
+gece yarısını geçen birkaç adım bu sayımdan düşer.
+
 Health Connect Android 14'ten beri telefonla gelir, ama içine adım yazan bir uygulama (Samsung
 Health, Google Fit) yoksa boştur ve her güne 0 der. O yüzden Health Connect'in 0'ı hiç
 gönderilmez, son 7 günde adım görmeyen bir Health Connect de kaynak sayılmaz:

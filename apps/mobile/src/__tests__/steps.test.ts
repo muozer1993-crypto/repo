@@ -281,6 +281,110 @@ describe('Android steps recorded while the app is closed', () => {
   });
 
   /*
+   * expo-sensors lets go of the sensor while the app is off screen and keeps
+   * its baseline, so the first event after a night left in recents carries the
+   * whole night. Put on the morning, Monday's 6.000 came back as Tuesday's too,
+   * beat the Recording API's 500 and stayed on the server for good.
+   */
+  describe('the foreground count after a night in the background', () => {
+    const MONDAY = '2026-11-16';
+    const TUESDAY = '2026-11-17';
+    const at = (day: 16 | 17, hour: number, minute = 0) => new Date(2026, 10, day, hour, minute);
+
+    let stopTracking: (() => void) | undefined;
+
+    beforeEach(() => {
+      // only the clock: settle() and the counter's flush still run on real timers
+      jest.useFakeTimers({
+        doNotFake: [
+          'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',
+          'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval',
+          'clearInterval', 'setTimeout', 'clearTimeout',
+        ],
+      });
+    });
+
+    afterEach(async () => {
+      stopTracking?.();
+      stopTracking = undefined;
+      await settle();
+      await AsyncStorage.removeItem('koydum.stepCache');
+      jest.useRealTimers();
+    });
+
+    /** Starts the counter at `time` and hands back the sensor's callback. */
+    async function trackFrom(time: Date): Promise<(steps: number) => void> {
+      jest.setSystemTime(time);
+      stopTracking = startForegroundStepTracking();
+      await settle();
+      const callback = pedometer.watchStepCount.mock.calls.at(-1)?.[0] as (result: { steps: number }) => void;
+      return (steps) => callback({ steps });
+    }
+
+    function recordingSays(rows: { dayKey: string; steps: number }[]) {
+      withModule({
+        status: jest.fn(async () => 'ok'),
+        subscribe: jest.fn(async () => true),
+        dailySteps: jest.fn(async () => rows),
+      });
+    }
+
+    it("keeps last evening's count off the morning the app comes back", async () => {
+      await recordingSinceLastWeek();
+      recordingSays([
+        { dayKey: TUESDAY, steps: 500 },
+        { dayKey: MONDAY, steps: 6000 },
+      ]);
+      const sensor = await trackFrom(at(16, 23, 50));
+      sensor(1);
+      jest.setSystemTime(at(17, 8, 10));
+      sensor(6501);
+
+      expect(await steps.getDailySteps(2)).toEqual([
+        { dayKey: TUESDAY, steps: 500, source: 'pedometer' },
+        { dayKey: MONDAY, steps: 6000, source: 'pedometer' },
+      ]);
+    });
+
+    it('drops the jump even when no step came before the app was put away', async () => {
+      await recordingSinceLastWeek();
+      recordingSays([{ dayKey: TUESDAY, steps: 500 }]);
+      const sensor = await trackFrom(at(16, 18));
+      jest.setSystemTime(at(17, 8, 10));
+      sensor(6500);
+
+      expect((await steps.getDailySteps(2))[0]).toEqual({ dayKey: TUESDAY, steps: 500, source: 'pedometer' });
+    });
+
+    it('counts again right after the dropped jump on a phone with nothing else to count', async () => {
+      // Play services too old to record: this counter is all the phone has
+      withModule({
+        status: jest.fn(async () => 'play-services'),
+        subscribe: jest.fn(async () => false),
+        dailySteps: jest.fn(async () => []),
+      });
+      const sensor = await trackFrom(at(16, 18));
+      jest.setSystemTime(at(17, 8, 10));
+      sensor(6500);
+      jest.setSystemTime(at(17, 8, 20));
+      sensor(6700);
+
+      expect(await steps.getDailySteps(2)).toEqual([{ dayKey: TUESDAY, steps: 200, source: 'pedometer' }]);
+    });
+
+    it('keeps a jump within the same day: those steps were walked that day', async () => {
+      await recordingSinceLastWeek();
+      recordingSays([{ dayKey: MONDAY, steps: 1200 }]);
+      const sensor = await trackFrom(at(16, 10));
+      sensor(1);
+      jest.setSystemTime(at(16, 18));
+      sensor(3000);
+
+      expect(await steps.getDailySteps(1)).toEqual([{ dayKey: MONDAY, steps: 3000, source: 'pedometer' }]);
+    });
+  });
+
+  /*
    * Android 14+ ships Health Connect, so İZİN VER grants it on phones where
    * nothing writes steps into it. It used to win outright there: 0 adım every
    * day, shown as exact, no Beyan et, and the phone's own count never started.

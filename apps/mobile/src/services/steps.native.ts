@@ -16,7 +16,9 @@ import type { DailySteps, StepAvailability, StepSource } from '@/services/steps'
  *         counted by the phone all day, app open or not.
  *      3. Counting while the app is in the foreground, persisted per day —
  *         surfaced in the UI as "yaklaşık" when it is all there is. It also
- *         fills the morning of the day recording started.
+ *         fills the morning of the day recording started. What was walked
+ *         with the app in the background arrives as one jump on return; a
+ *         jump across midnight is dropped (see startForegroundStepTracking).
  *    Health Connect ships with Android 14+, so a granted one is often empty:
  *    nothing on the phone writes steps into it. It is never trusted over the
  *    other two, only next to them.
@@ -266,10 +268,23 @@ async function ensureAndroidStepPermission(askAgain = true): Promise<boolean> {
  * at most once a run: NotificationBridge starts this again whenever its inputs
  * change, and a no on the welcome slide's "Adım izni" (or the home screen's
  * İZİN VER) must not bring the same dialog straight back.
+ *
+ * expo-sensors lets go of the sensor whenever the app leaves the screen
+ * (onHostPause) but keeps its baseline, so the first event after coming back
+ * carries everything walked in between. Within one day those are that day's
+ * steps. Across midnight they cannot be split, and putting them all on the
+ * morning counted the evening twice: once on its own day and again on the next,
+ * where the server keeps the larger number for good. So the first event of a
+ * new day only moves our baseline. Health Connect and the Recording API hold
+ * the real per-day numbers; this count loses the few steps walked across
+ * midnight with the app open. The day starts as the one the subscription was
+ * made on, not the day of its first event, so the rule does not lean on when
+ * the native side takes its baseline.
  */
 export function startForegroundStepTracking(): () => void {
   if (Platform.OS !== 'android') return () => {};
   let last = 0;
+  let lastDay = '';
   let stopped = false;
   let subscription: { remove: () => void } | null = null;
 
@@ -277,11 +292,17 @@ export function startForegroundStepTracking(): () => void {
     if (!(await ensureAndroidStepPermission(false))) return;
     if (stopped) return;
     try {
+      lastDay = localDayKey(new Date());
       subscription = Pedometer.watchStepCount((result) => {
         const total = Math.max(0, Math.round(result.steps));
+        const day = localDayKey(new Date());
         const delta = total - last;
         last = total;
-        recordSteps(localDayKey(new Date()), delta);
+        if (day !== lastDay) {
+          lastDay = day;
+          return;
+        }
+        recordSteps(day, delta);
       });
       if (stopped) {
         subscription.remove();
