@@ -424,14 +424,20 @@ Bir bildirime dokunmak onu okunmuş sayar: push da telefonun kendi kopyası da s
 `notificationId`'sini taşır.
 Dokunuş (push, onun toast'ı, yoklamanın toast'ı, Gelen'deki satır) ekranı `router.navigate` ile
 açar, `push` ile değil. Öndeki ekran zaten aynı yol ve aynı yol parametresiyse (`id`) yenisi
-açılmaz; başka bir çelınc yine üstüne açılır. O zaman ekran yeniden kurulmaz, `invite` gibi arama
-parametreleri aynı ekrana yerinde verilir. Çelınc ekranı "Kanka ekle" penceresini `invite`'a göre
-anahtarlar (`key`): açık çelınca dair bir "Kanka oldunuz" da pencereyi yeni kanka seçili açar,
-yoksa ilk açılışta okunan `useState` değişmez, dokunuş bir şey yapmıyor gibi görünürdü. Eskiden açık çelınca dair bir "Dürtüldün" toast'ı ya da bildirime
-ikinci dokunuş aynı çelıncı bir kez daha üst üste koyuyordu, geri tuşu da bir şey yapmıyor gibi
-görünüyordu. Gelen ve Kankalar sekmelerine `goToTab` (`utils/navigation.ts`) ile gidilir: üstte
-bir ekran varsa önce sekme çubuğuna inilir (`dismissAll`), sonra sekmeye geçilir. Çelınc
-ekranından bir sekmeye `push` ya da `navigate` ikinci bir sekme çubuğunu çelıncın üstüne koyuyordu.
+açılmaz; başka bir çelınc yine üstüne açılır. Eskiden açık çelınca dair bir "Dürtüldün" toast'ı ya
+da bildirime ikinci dokunuş aynı çelıncı bir kez daha üst üste koyuyordu, geri tuşu da bir şey
+yapmıyor gibi görünüyordu. Öndeki ekran yeniden kurulmaz, `invite` gibi arama parametreleri ona
+yerinde verilir. Çelınc ekranı "Kanka ekle" penceresini bu yüzden `invite`'a göre anahtarlar
+(`key`): açık çelınca dair bir "Kanka oldunuz" da pencereyi yeni kanka seçili açar; yoksa ilk
+açılışta okunan `useState` değişmez, dokunuş bir şey yapmıyor gibi görünürdü. Gelen ve Kankalar
+sekmelerine `goToTab` (`utils/navigation.ts`) ile gidilir: üstte bir ekran varsa önce sekme
+çubuğuna inilir (`dismissAll`), sonra sekmeye geçilir. Çelınc ekranından bir sekmeye `push` ya da
+`navigate` ikinci bir sekme çubuğunu çelıncın üstüne koyuyordu. Davet bağlantısı uygulamanın
+dışında, kök yığında açılır: uygulama açıkken gelen bağlantı onun üstüne biner. Oradan
+"Kankalara git" ve "Vazgeç" `leaveForTab` ile çıkar: önce bağlantıdan inilir (`dismissAll`), bir
+sonraki turda `goToTab`. `replace` bağlantının yerine ikinci bir uygulama koyuyordu; iki sekme
+çubuğu, iki ana ekran, geri tuşu da önceden açık çelınca dönüyordu. Uygulama kapalıyken
+bağlantıdan açılışta altında bir şey yoktur, orada `replace` uygulamayı kurar.
 
 Push kuyruğu ayrı bir tablo değil, gelen kutusunun `pushed_at` ve `push_error`'u boş satırlarıdır;
 neyin hiç gitmeyeceği de orada yazılır. Bir telefon tek hesaba aittir: `POST /me/push-token` aynı

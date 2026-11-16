@@ -18,8 +18,61 @@ import { ToastProvider } from '@/components/Toast';
 const mockSearchParams: { code?: string; server?: string } = {};
 const mockReplace = jest.fn();
 
+/**
+ * The root stack, bottom first, as expo-router 57 showed it with ExpoRoot and
+ * getMockContext, cut down to what leaving the link touches: the app (its own
+ * stack, the tab bar first, `(tabs) /friends` naming the open tab) and the
+ * link over it. A tab route navigated to from a screen over the tab bar stacks
+ * a second tab bar; `replace` puts a whole new app in the link's place. What
+ * `canDismiss` and `dismissAll` go by is the root as of the last tick, and a
+ * `dismissAll` with nothing left there to pop throws, as it does in dev.
+ */
+type MockRootEntry = { link: true } | { app: string[] };
+const mockRoot: { live: MockRootEntry[]; seen: MockRootEntry[] } = { live: [], seen: [] };
+const mockClone = (root: MockRootEntry[]) => root.map((entry) => ('app' in entry ? { app: [...entry.app] } : entry));
+function mockSettleLater(): void {
+  setTimeout(() => {
+    mockRoot.seen = mockClone(mockRoot.live);
+  }, 0);
+}
+const mockTab = (href: string) => `(tabs) ${href.replace('/(app)/(tabs)', '') || '/'}`;
+const mockRouter = {
+  canDismiss: () => {
+    const top = mockRoot.seen[mockRoot.seen.length - 1];
+    return mockRoot.seen.length > 1 || (!!top && 'app' in top && top.app.length > 1);
+  },
+  dismissAll: () => {
+    const top = mockRoot.live[mockRoot.live.length - 1];
+    if (mockRoot.seen.length > 1 && mockRoot.live.length > 1) mockRoot.live.splice(1);
+    else if (mockRoot.seen.length === 1 && top && 'app' in top && top.app.length > 1) top.app.splice(1);
+    else throw new Error("The action 'POP_TO_TOP' was not handled by any navigator.");
+    mockSettleLater();
+  },
+  navigate: (href: string) => {
+    const top = mockRoot.live[mockRoot.live.length - 1];
+    if (!top || !('app' in top)) throw new Error(`navigate ${href} from the link`);
+    const front = top.app[top.app.length - 1]!;
+    if (front.startsWith('(tabs)')) top.app[top.app.length - 1] = mockTab(href);
+    else top.app.push(mockTab(href));
+    mockSettleLater();
+  },
+  replace: (href: string) => {
+    mockReplace(href);
+    if (href.startsWith('/(app)/(tabs)')) mockRoot.live.splice(-1, 1, { app: [mockTab(href)] });
+    mockSettleLater();
+  },
+};
+
 jest.mock('expo-router', () => ({
-  router: { push: jest.fn(), replace: (...args: unknown[]) => mockReplace(...args), back: jest.fn(), canGoBack: () => false },
+  router: {
+    push: jest.fn(),
+    replace: (href: string) => mockRouter.replace(href),
+    back: jest.fn(),
+    canGoBack: () => false,
+    canDismiss: () => mockRouter.canDismiss(),
+    dismissAll: () => mockRouter.dismissAll(),
+    navigate: (href: string) => mockRouter.navigate(href),
+  },
   useLocalSearchParams: () => mockSearchParams,
 }));
 
@@ -168,6 +221,9 @@ beforeEach(async () => {
   mockAuth.serverId = null;
   mockSearchParams.code = 'abc234';
   mockSearchParams.server = 'http://192.168.1.142:4000';
+  // a cold start from the link unless a test says what was open under it
+  mockRoot.live = [{ link: true }];
+  mockRoot.seen = mockClone(mockRoot.live);
 });
 
 describe('invite screen, signed in', () => {
@@ -216,6 +272,56 @@ describe('invite screen, signed in', () => {
     await settle();
     expect(text(tree)).not.toContain('Artık kankasınız');
     expect(text(tree)).toContain('XYZ789');
+  });
+});
+
+describe('invite screen, leaving for the app', () => {
+  /** The link opened over these: the app with its screens, or nothing on a cold start. */
+  function openOver(app: string[] | null): void {
+    mockRoot.live = app ? [{ app }, { link: true }] : [{ link: true }];
+    mockRoot.seen = mockClone(mockRoot.live);
+  }
+
+  it('lands on Kankalar with the one app when the link came over a çelınc', async () => {
+    openOver(['(tabs) /', 'c-1']);
+    const tree = render(<Screen />);
+    await settle();
+    pressButton(tree, 'Kanka isteği gönder');
+    await settle();
+    pressButton(tree, 'Kankalara git');
+    await settle();
+
+    // one tab bar: back from Kankalar closes the app, not the çelınc behind it
+    expect(mockRoot.live).toEqual([{ app: ['(tabs) /friends'] }]);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('goes home with the one app from "Vazgeç", over the tab bar or over a çelınc', async () => {
+    for (const under of [['(tabs) /inbox'], ['(tabs) /', 'c-1']]) {
+      openOver(under);
+      const tree = render(<Screen />);
+      await settle();
+      pressButton(tree, 'Vazgeç');
+      await settle();
+      expect(mockRoot.live).toEqual([{ app: ['(tabs) /'] }]);
+      act(() => {
+        tree.unmount();
+      });
+      mounted.splice(mounted.indexOf(tree), 1);
+    }
+  });
+
+  it('builds the app on a cold start from the link', async () => {
+    openOver(null);
+    const tree = render(<Screen />);
+    await settle();
+    pressButton(tree, 'Kanka isteği gönder');
+    await settle();
+    pressButton(tree, 'Kankalara git');
+    await settle();
+
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)/friends');
+    expect(mockRoot.live).toEqual([{ app: ['(tabs) /friends'] }]);
   });
 });
 

@@ -19,6 +19,7 @@ import { isOtherServer, moveSession } from '@/services/serverMove';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Spacing } from '@/theme';
 import { SERVER_MOVED, byLevel } from '@/utils/levelCopy';
+import { leaveForTab } from '@/utils/navigation';
 import { isLoopbackUrl } from '@/utils/url';
 
 /**
@@ -120,7 +121,7 @@ export default function InviteScreen() {
     };
   }, [code, conflict, differs, linkServer, serverUrl, signedIn]);
 
-  const home = () => router.replace(token ? '/(app)/(tabs)' : '/(auth)/login');
+  const home = () => (token ? leaveForTab('/(app)/(tabs)') : router.replace('/(auth)/login'));
 
   if (!code) {
     return (
@@ -290,7 +291,7 @@ export default function InviteScreen() {
               />
             ) : null}
             {outcome ? (
-              <Button title="Kankalara git" fullWidth onPress={() => router.replace('/(app)/(tabs)/friends')} />
+              <Button title="Kankalara git" fullWidth onPress={() => leaveForTab('/(app)/(tabs)/friends')} />
             ) : (
               <Button title="Vazgeç" variant="ghost" fullWidth disabled={sending} onPress={home} />
             )}
