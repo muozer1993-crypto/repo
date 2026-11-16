@@ -690,6 +690,16 @@ describe('device readings versus typed declarations', () => {
     await throwOut(harness, veli, challengeId, stepRow(harness, challengeId, ali.me.id).id);
     expect(stepRow(harness, challengeId, ali.me.id).status).toBe('rejected');
 
+    // "pedometer" typed into a hand-made request is not the phone: it brings
+    // nothing back, and must not leave a thrown-out "phone" row no sync restores
+    const claimed = await call({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 31000, source: 'pedometer', clientTime: iso(harness) },
+    });
+    expect(claimed.statusCode).toBe(200);
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ value: 30000, source: 'manual', status: 'rejected' });
+
     // a lower honest number is still a number: the rejected row counted 0
     const synced = await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 11800, source: 'pedometer' }] } });
     expect(synced.json<{ updated: number }>().updated).toBe(1);

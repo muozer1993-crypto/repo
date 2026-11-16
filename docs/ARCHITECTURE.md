@@ -177,16 +177,19 @@ Davet edilecek kimse kalmadıysa (`rematchInvitable` 0) düğme sönük durur; �
 Adımı ya da ekran süresini telefonun kendisinin saydığı çelınclar bitişte hemen kapanmaz. Son
 akşamın adımları telefonda bir sonraki arka plan senkronunu bekler (15 dakika ve üstü), gece
 yarısı kapatırsak kazananı eksik sayıyla seçeriz ve sonradan gelen adımlar çöpe gider. Bu yüzden
-çelınc bir saat daha `active` kalır: telefonlar son günü göndermeye devam eder, elle giriş ise
-bitişten itibaren kabul edilmez (`challenge_ended`). Herkesin telefonu son günü bitişten sonra
-gönderdiyse beklemeden kapanır. Sunucu bitişte kapalıysa bir saat açıldığı andan sayılır
-(`bootAt`). Bitişte uyuyan bilgisayar da kapalı sayılır: Windows uyanınca süreç yeniden başlamaz,
-ama zamanlayıcının iki vuruşu arasında beş dakikadan uzun bir boşluk görülünce `bootAt` uyandığı
-ana taşınır (`nextBootAt`). Elle girilen çelınclar tam bitişte kapanır. Bitişten sonra yalnızca
-bitişte bitmiş günler değişebilir (`dayOverByEnd`): bitiş bir günü yarıda kestiyse (başka saat dilimindeki bir
-oyuncu, eski usul 24 saatlik bir çelınc) o günün sonraki okuması bitişten sonra atılan adımları
-da taşır, o yüzden gün bitişteki haliyle kalır ve o oyuncu beklenmez. Bekleyişte dürtme de yoktur:
-"hâlâ açık, sıra sende" yalan olurdu.
+çelınc bir saat daha `active` kalır: telefonlar son günü `POST /me/steps` ve `/me/screen-time` ile
+göndermeye devam eder, `POST /challenges/:id/entries` ise bitişten itibaren hiçbir şey almaz
+(`challenge_ended`). Elle yazılan sayı da, elle hazırlanmış bir istekte "telefon okudu" diye
+(`pedometer`, `usage_stats`) gelen sayı da sonucu gördükten sonra seçilmiş olabilir. Herkesin
+telefonu son günü bitişten sonra gönderdiyse beklemeden kapanır. Sunucu bitişte kapalıysa bir
+saat açıldığı andan sayılır (`bootAt`). Bitişte uyuyan bilgisayar da kapalı sayılır: Windows
+uyanınca süreç yeniden başlamaz, ama zamanlayıcının iki vuruşu arasında beş dakikadan uzun bir
+boşluk görülünce `bootAt` uyandığı ana taşınır (`nextBootAt`). Elle girilen çelınclar tam bitişte
+kapanır. Bitişten sonra senkron yalnızca bitişte bitmiş günleri değiştirebilir (`dayOverByEnd`):
+bitiş bir günü yarıda kestiyse (başka saat dilimindeki bir oyuncu, eski usul 24 saatlik bir
+çelınc) o günün sonraki okuması bitişten sonra atılan adımları da taşır, o yüzden gün bitişteki
+haliyle kalır ve o oyuncu beklenmez. Bekleyişte dürtme de yoktur: "hâlâ açık, sıra sende" yalan
+olurdu.
 
 İtiraz tek başına bir girişi silmez. Diğer oyuncuların çoğunluğu itiraz edince girişin sahibine
 12 saat (`LIMITS.DISPUTE_ANSWER_MS`) tanınır ve giriş bu sürede sayılmaya devam eder; yoksa teke tek
@@ -652,6 +655,13 @@ okuma yine de saklanır.
 Cihaz kaynağı (`pedometer`, `health_connect`, `usage_stats`) elle yazılmış değerin üstüne yazar;
 tersi yasaktır: telefonun okuduğu bir gün için `manual` yazmaya kalkan istek 409 `device_locked`
 alır. Kanıt fotoğrafı da sadece `manual` için zorunludur.
+
+Uygulama giriş ucuna (`POST /challenges/:id/entries`) hiçbir zaman cihaz kaynağı göndermez,
+telefonlar yukarıdaki iki senkron ucunu kullanır. O uca cihaz kaynağıyla gelen bir giriş elle
+hazırlanmış bir istektir ve senkronun kurallarından fazlasını alamaz: telefonun okuduğu bir günü
+(adımda hiçbir günü) aşağı çekemez, itiraz edilen elle yazılmış bir sayının üstüne "telefon
+okudu" yazamaz, itirazla düşmüş bir günü geri getiremez. Böyle bir istekte satır olduğu gibi
+kalır, cevap yine 200 olur.
 
 Telefonun bir güne okuduğu değer sadece büyür: adım da ekran süresi de. Ekran süresi modülü günün
 başından şu ana kadarki ön plan süresini toplar; aynı gün için daha düşük bir okuma ya ikinci bir

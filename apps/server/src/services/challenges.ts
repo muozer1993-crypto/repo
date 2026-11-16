@@ -1030,7 +1030,7 @@ function stillSettling(db: Database, challenge: ChallengeRow, now: Date, bootAt?
  * still inside its answer window (`disputeAwaitingAnswer`): an owner told "12 saat
  * içinde fotoğraf ekle" keeps those hours even when the itiraz came at the last
  * minute. Until then it stays `active`, so a late device sync still fans out into
- * it and a photo can still land; typed entries are refused from `ends_at` on
+ * it and a photo can still land; the entry route takes nothing from `ends_at` on
  * (`challenge_ended` in `validateAndUpsertEntry`).
  */
 export function finalizeEndedChallenges(

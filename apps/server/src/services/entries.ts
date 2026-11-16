@@ -37,7 +37,7 @@ import {
   type UserRow,
 } from '../db/index.js';
 import { badRequest, conflict, forbidden, notFound, type HttpError } from '../errors.js';
-import { challengeWindow, dayOverByEnd, participantTimezone, typeForChallenge } from './challenges.js';
+import { challengeWindow, participantTimezone, typeForChallenge } from './challenges.js';
 import {
   acceptedCount,
   disputeMajorityCopy,
@@ -171,6 +171,23 @@ function hasUpheldDispute(db: Database, entryId: string): boolean {
 }
 
 /**
+ * True when a device reading of `value` sent to the entry route must leave the
+ * day's row as it is. No app sends one there: the phones sync through
+ * `/me/steps` and `/me/screen-time` (`fanOutDeviceDays`), so it is a request
+ * typed by hand, and it gets the sync's rules and no more. A typed number
+ * friends are disputing is the itiraz's to settle; a day the phone already read
+ * only grows (a step day only grows whoever wrote it); and a row friends threw
+ * out is not this route's to bring back, only the phone's own sync restores a
+ * typed one.
+ */
+function phoneLeavesAlone(existing: EntryRow, value: number, direction: ChallengeType['direction']): boolean {
+  if (existing.status === 'rejected') return true;
+  if (existing.status === 'disputed' && !isDeviceSource(existing.source)) return true;
+  if (direction === 'higher') return Number(existing.value) >= value;
+  return isDeviceSource(existing.source) && Number(existing.value) >= value;
+}
+
+/**
  * One row per (challenge, user, day) for the upsert metrics.
  *
  * The stored `status` is preserved on purpose: re-posting a day must not launder a
@@ -256,7 +273,7 @@ function checkinInstant(db: Database, body: EntryBody, deadline: string, tz: str
   return tappedWhileDown(db, body.clientTime, now) ?? now;
 }
 
-/** The Turkish 400 for a typed entry after the end; says what is still coming in. */
+/** The Turkish 400 for any entry after the end; says what is still coming in. */
 function challengeEndedError(type: ChallengeType): HttpError {
   if (type.deviceMetric === 'steps') {
     return badRequest('challenge_ended', 'Süre bitti, artık elle giriş yok. Telefonların saydığı son adımlar toplanıyor.');
@@ -305,9 +322,12 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
 
   // Past its end a phone-counted çelınc stays `active` for up to an hour so the
   // last evening's device sync can land (`finalizeEndedChallenges`). That hour is
-  // for the phones only: a number typed now could be picked after seeing the
-  // final standings. A replay above is still answered — it was written in time.
-  if (now.getTime() >= Date.parse(challenge.ends_at) && !isDeviceSource(body.source)) {
+  // for the phones' own routes (`POST /me/steps`, `/me/screen-time`, through
+  // `fanOutDeviceDays`), never this one: no app posts a device source here, and
+  // anything sent now, a "pedometer" or "usage_stats" typed into a hand-made
+  // request too, could be picked after seeing the final standings. A replay
+  // above is still answered — it was written in time.
+  if (now.getTime() >= Date.parse(challenge.ends_at)) {
     throw challengeEndedError(type);
   }
 
@@ -325,11 +345,6 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
   const at = checkinDeadline !== null ? checkinInstant(db, body, checkinDeadline, tz, now) : now;
   const issue = dayWindowIssue(window, type.metricType, tz, body.dayKey, at, body.source);
   if (issue) throw dayWindowError(issue, type.metricType, body.source);
-  // the same rule as the fan-out: after the whistle a day the end cut in half
-  // keeps what it had, or steps walked after the end would count
-  if (now.getTime() >= Date.parse(challenge.ends_at) && !dayOverByEnd(challenge, tz, body.dayKey)) {
-    throw challengeEndedError(type);
-  }
 
   if (body.value > type.maxPerEntry) {
     throw badRequest('value_too_large', `Tek girişte en fazla ${unitLabel(type, type.maxPerEntry)} girebilirsin.`);
@@ -353,8 +368,8 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
       // (`fanOutDeviceDays`). A typed number on it again would count once the
       // phone restored the row, and the rival who won the itiraz could never
       // file another one on it (one per person per entry).
+      const existing = selectDayEntry(db, challenge.id, user.id, body.dayKey);
       if (!isDeviceSource(body.source)) {
-        const existing = selectDayEntry(db, challenge.id, user.id, body.dayKey);
         if (existing && hasUpheldDispute(db, existing.id)) {
           // a phone reading thrown out is never brought back by a sync either
           throw conflict(
@@ -364,6 +379,10 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
               : 'Bu günü kankalar itirazla yaktı. Artık o güne sadece telefonun saydığı adım yazılır.',
           );
         }
+      } else if (existing && phoneLeavesAlone(existing, body.value, type.direction)) {
+        // a hand-made "pedometer" must not relabel a disputed typed number as
+        // the phone's, nor pull a day down
+        return { entry: existing, created: false };
       }
       return upsertDayEntry(db, input, body.value, false);
     }
@@ -469,6 +488,12 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
       const existing = selectDayEntry(db, challenge.id, user.id, body.dayKey);
       if (existing && isDeviceSource(existing.source) && !isDeviceSource(body.source)) {
         throw conflict('device_locked', 'Bu günün değerini telefon kendisi okudu, elle değiştirilemez.');
+      }
+      // A hand-made "usage_stats" may still replace a typed number, as a sync
+      // does, but its "5" after the phone's 300 must not hand the day to the
+      // wrong player.
+      if (existing && isDeviceSource(body.source) && phoneLeavesAlone(existing, body.value, type.direction)) {
+        return { entry: existing, created: false };
       }
       return upsertDayEntry(db, input, body.value, false);
     }

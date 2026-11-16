@@ -11,6 +11,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_TIMEZONE,
+  LIMITS,
   addDays,
   todayKey,
   type Challenge,
@@ -18,6 +19,7 @@ import {
   type ChallengeResults,
   type ParticipantView,
 } from '@koydum/shared';
+import { runSchedulerOnce } from '../src/services/challenges.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
@@ -268,7 +270,7 @@ describe('usage_stats as an entry source', () => {
       { day_key: today(harness), value: 150, source: 'usage_stats', proof_url: null },
     ]);
 
-    // the phone, however, may keep correcting itself
+    // a higher reading goes in, as a sync's would: today keeps growing
     const later = await call({
       method: 'POST',
       url: `/challenges/${challengeId}/entries`,
@@ -295,6 +297,94 @@ describe('usage_stats as an entry source', () => {
     expect(entries(harness, challengeId, ali.me.id)).toEqual([
       { day_key: today(harness), value: 240, source: 'usage_stats', proof_url: '/uploads/x.jpg' },
     ]);
+  });
+
+  it('never lowers what the phone read, nor turns a disputed typed number into the phone\'s', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await screenTimePair(harness);
+    const day = today(harness);
+
+    // No app sends "usage_stats" here (Android syncs through /me/screen-time):
+    // one is typed by hand, and its 5 after the phone's 300 would steal the day.
+    const synced = await authed(harness.app, ali.token)({ method: 'POST', url: '/me/screen-time', payload: { days: [{ dayKey: day, minutes: 300 }] } });
+    expect(synced.statusCode).toBe(200);
+    const lower = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 5, source: 'usage_stats', clientTime: iso(harness) },
+    });
+    expect(lower.statusCode).toBe(200);
+    expect(lower.json<{ entry: { value: number } }>().entry.value).toBe(300);
+    expect(entries(harness, challengeId, ali.me.id)).toEqual([{ day_key: day, value: 300, source: 'usage_stats', proof_url: null }]);
+
+    // a typed number Ali calls a lie is the itiraz's to settle, as on a sync
+    await typeMinutes(harness, veli, challengeId, day, 60);
+    const typed = entries(harness, challengeId, veli.me.id);
+    const entryId = (harness.db.prepare('SELECT id FROM entries WHERE challenge_id = ? AND user_id = ?').get(challengeId, veli.me.id) as { id: string }).id;
+    const disputed = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'bütün gün telefondaydı' },
+    });
+    expect(disputed.statusCode).toBe(201);
+    const relabel = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 50, source: 'usage_stats', clientTime: iso(harness) },
+    });
+    expect(relabel.statusCode).toBe(200);
+    expect(entries(harness, challengeId, veli.me.id)).toEqual(typed);
+    expect(harness.db.prepare('SELECT status FROM entries WHERE id = ?').get(entryId)).toEqual({ status: 'disputed' });
+  });
+
+  it('takes nothing past the end, so a phone\'s week cannot be lowered once the standings are known', async () => {
+    // three days to midnight in Istanbul
+    const end = '2026-01-07T20:59:59.999Z';
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'ekran_suresi_beyani', startsAt: iso(harness), endsAt: end, participantIds: [veli.me.id] },
+    });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    expect((await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    const days = [today(harness), addDays(today(harness), 1), addDays(today(harness), 2)];
+
+    // 22:00 on the last day: both phones have reported the whole race
+    harness.setNow('2026-01-07T19:00:00.000Z');
+    for (const [user, minutes] of [[ali, 300], [veli, 200]] as const) {
+      const synced = await authed(harness.app, user.token)({
+        method: 'POST',
+        url: '/me/screen-time',
+        payload: { days: days.map((dayKey) => ({ dayKey, minutes })) },
+      });
+      expect(synced.json<{ updated: number }>().updated).toBe(3);
+    }
+
+    // 00:10, the çelınc still waiting for the phones: Ali, behind, sends "his
+    // phone's" 5 minutes for every day
+    harness.setNow('2026-01-07T21:10:00.000Z');
+    for (const dayKey of days) {
+      const late = await authed(harness.app, ali.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/entries`,
+        payload: { dayKey, value: 5, source: 'usage_stats', clientTime: iso(harness) },
+      });
+      expect(late.statusCode).toBe(400);
+      expect(errorCode(late)).toBe('challenge_ended');
+    }
+    expect(entries(harness, challengeId, ali.me.id).map((row) => row.value)).toEqual([300, 300, 300]);
+
+    harness.setNow(new Date(Date.parse(end) + LIMITS.DEVICE_SETTLE_MS + 60_000).toISOString());
+    expect(runSchedulerOnce(harness.db, harness.now()).finalized).toBe(1);
+    expect(harness.db.prepare('SELECT status, winner_id FROM challenges WHERE id = ?').get(challengeId)).toEqual({
+      status: 'finished',
+      winner_id: veli.me.id,
+    });
   });
 
   it('is refused on every other metric', async () => {

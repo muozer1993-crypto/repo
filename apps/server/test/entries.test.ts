@@ -169,7 +169,7 @@ describe('entry rules shared by every metric', () => {
     expect(errorCode(future)).toBe('day_in_future');
   });
 
-  it('after the end takes the phone\'s late count of a finished day but no typed number', async () => {
+  it('after the end takes the phone\'s late count of a finished day through its sync, and nothing here', async () => {
     harness = await makeApp({ now: NOW });
     // runs to 12:00 tomorrow; the scheduler has not been by yet
     const steps = await liveChallenge(harness, 'adim_yarisi', {}, 1);
@@ -188,25 +188,19 @@ describe('entry rules shared by every metric', () => {
     expect(errorCode(typed)).toBe('challenge_ended');
     expect((typed.json() as { error: { message: string } }).error.message).toContain('son adımlar');
 
-    const counted = await post(harness, steps.ali, steps.challengeId, {
+    // The phones' hour is for `/me/steps`: no app sends a "pedometer" here, so
+    // one is a request typed by hand, and gets no more than a typed number.
+    const claimed = await post(harness, steps.ali, steps.challengeId, {
       dayKey: firstDay,
       value: 9000,
       source: 'pedometer',
       clientTime: iso(harness),
     });
-    expect(counted.statusCode).toBe(201);
+    expect(claimed.statusCode).toBe(400);
+    expect(errorCode(claimed)).toBe('challenge_ended');
 
     // The end cut the last day in half at 12:00: its count now carries steps
     // walked after the whistle, so that day keeps what it had.
-    const halfDay = await post(harness, steps.ali, steps.challengeId, {
-      dayKey: lastDay,
-      value: 9000,
-      source: 'pedometer',
-      clientTime: iso(harness),
-    });
-    expect(halfDay.statusCode).toBe(400);
-    expect(errorCode(halfDay)).toBe('challenge_ended');
-
     const synced = await authed(harness.app, steps.veli.token)({
       method: 'POST',
       url: '/me/steps',
@@ -234,6 +228,36 @@ describe('entry rules shared by every metric', () => {
     });
     expect(glass.statusCode).toBe(400);
     expect(errorCode(glass)).toBe('challenge_ended');
+  });
+
+  it('takes nothing past a midnight end, a hand-made "pedometer" neither, while the phones still sync the last day', async () => {
+    harness = await makeApp({ now: NOW });
+    // to the last millisecond of tomorrow in Istanbul: the end cuts no day in half
+    const { ali, veli, challengeId } = await liveChallenge(harness, 'adim_yarisi', { endsAt: '2026-01-06T20:59:59.999Z' });
+    const lastDay = addDays(today(harness), 1);
+    // 00:10 the morning after, inside the hour the phones get to report
+    harness.setNow('2026-01-06T21:10:00.000Z');
+
+    // Ali has seen the final standings: neither a typed number nor one passed
+    // off as the phone's may still raise his last day
+    for (const source of ['manual', 'pedometer', 'health_connect']) {
+      const late = await post(harness, ali, challengeId, { dayKey: lastDay, value: 30000, source, clientTime: iso(harness) });
+      expect(late.statusCode).toBe(400);
+      expect(errorCode(late)).toBe('challenge_ended');
+    }
+    expect(harness.db.prepare('SELECT COUNT(*) AS n FROM entries WHERE challenge_id = ?').get(challengeId)).toEqual({ n: 0 });
+
+    // Veli's phone sending that day now is what the hour is for
+    const synced = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: '/me/steps',
+      payload: { days: [{ dayKey: lastDay, steps: 12000, source: 'health_connect' }] },
+    });
+    expect(synced.statusCode).toBe(200);
+    expect(synced.json<{ updated: number }>().updated).toBe(1);
+    expect(
+      harness.db.prepare('SELECT user_id, day_key, value, source FROM entries WHERE challenge_id = ?').all(challengeId),
+    ).toEqual([{ user_id: veli.me.id, day_key: lastDay, value: 12000, source: 'health_connect' }]);
   });
 
   it('allows 7 days of backfill for steps and only 2 for manual entries', async () => {
@@ -307,6 +331,46 @@ describe('auto_steps entries', () => {
 
     const rows = harness.db.prepare('SELECT COUNT(*) AS n FROM entries WHERE challenge_id = ?').get(challengeId) as { n: number };
     expect(rows.n).toBe(2);
+  });
+
+  it('holds a hand-made "pedometer" to the sync\'s rules: no day pulled down, no disputed typed number relabelled', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await liveChallenge(harness, 'adim_yarisi');
+    const day = today(harness);
+    const row = (userId: string) =>
+      harness!.db
+        .prepare('SELECT value, source, status FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ?')
+        .get(challengeId, userId, day);
+
+    // A beyan Veli calls a lie: written over by a "phone" reading, it would
+    // no longer read as typed, and an upheld itiraz would throw out the phone.
+    const typed = await post(harness, ali, challengeId, { dayKey: day, value: 60000, source: 'manual', clientTime: iso(harness) });
+    expect(typed.statusCode).toBe(201);
+    const entryId = typed.json<{ entry: Entry }>().entry.id;
+    const disputed = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'telefonu köpeğe bağlamış' },
+    });
+    expect(disputed.statusCode).toBe(201);
+    const relabel = await post(harness, ali, challengeId, { dayKey: day, value: 65000, source: 'pedometer', clientTime: iso(harness) });
+    expect(relabel.statusCode).toBe(200);
+    expect(relabel.json<{ entry: Entry }>().entry).toMatchObject({ id: entryId, value: 60000, source: 'manual', status: 'disputed' });
+    expect(row(ali.me.id)).toEqual({ value: 60000, source: 'manual', status: 'disputed' });
+
+    // a day's steps only grow, as through `/me/steps`
+    const synced = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: '/me/steps',
+      payload: { days: [{ dayKey: day, steps: 9000, source: 'health_connect' }] },
+    });
+    expect(synced.statusCode).toBe(200);
+    const lower = await post(harness, veli, challengeId, { dayKey: day, value: 100, source: 'pedometer', clientTime: iso(harness) });
+    expect(lower.statusCode).toBe(200);
+    expect(row(veli.me.id)).toEqual({ value: 9000, source: 'health_connect', status: 'ok' });
+    const higher = await post(harness, veli, challengeId, { dayKey: day, value: 9500, source: 'pedometer', clientTime: iso(harness) });
+    expect(higher.statusCode).toBe(200);
+    expect(row(veli.me.id)).toEqual({ value: 9500, source: 'pedometer', status: 'ok' });
   });
 
   it('rejects an impossible value and a wrong source', async () => {
