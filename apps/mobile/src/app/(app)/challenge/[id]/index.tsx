@@ -93,7 +93,7 @@ import {
   relativeTime,
 } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
-import { stillJoinable } from '@/utils/joinWindow';
+import { runningUnseen, stillJoinable } from '@/utils/joinWindow';
 import { dativeTr, upperTr } from '@/utils/turkish';
 import { resolveServerUrl } from '@/utils/url';
 
@@ -328,7 +328,7 @@ export default function ChallengeDetailScreen() {
    * right then, so it takes entries like a running one and parks them.
    */
   const startedUnseen = challenge.status === 'pending' && startPassed && accepted.length >= 2;
-  const overdueStart = startedUnseen && !(Number.isFinite(endsAtMs) && endsAtMs <= renderedAt);
+  const overdueStart = runningUnseen(challenge, accepted.length, renderedAt);
   const isCreator = challenge.creatorId === meId;
   // The last fetch is a fresh enough clock for an answer window counted in
   // hours, and unlike `Date.now()` it is a pure read.
@@ -422,7 +422,7 @@ export default function ChallengeDetailScreen() {
                   level,
                   'Başlama saati geçti, çelınc başlamış olmalı. Sunucuya ulaşınca burada da başlamış görünür.',
                   'Başlamış olmalı, sunucuya ulaşınca burada da görünür.',
-                  'Başladı bile lan, sunucu ya uyuyor ya sen çekmiyorsun. Bağlanınca burada da görünür.'
+                  'Başladı bile lan, sunucu ya uyuyor ya sende çekmiyor. Bağlanınca burada da görünür.'
                 )}
               </Text>
             </>

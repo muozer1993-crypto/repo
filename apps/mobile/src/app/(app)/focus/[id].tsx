@@ -40,6 +40,7 @@ import { safeDayKey, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { formatClock, formatMinutes } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
+import { runningUnseen } from '@/utils/joinWindow';
 
 const KEEP_AWAKE_TAG = 'koydum-focus';
 /**
@@ -316,7 +317,11 @@ export default function FocusScreen() {
   const minutesLeft = Math.floor((endsAtMs - now - END_MARGIN_MS) / 60_000);
   const tooLate = minutesLeft < LIMITS.FOCUS_MIN_MINUTES;
   const capped = dayLeft < LIMITS.FOCUS_MIN_MINUTES;
-  const blocked = detail.challenge.status !== 'active' || detail.me?.status !== 'accepted' || tooLate || capped;
+  // two yeses past the start: running, the server just has not said so yet
+  const notActive =
+    detail.challenge.status !== 'active' &&
+    !runningUnseen(detail.challenge, detail.participants.filter((p) => p.status === 'accepted').length, now);
+  const blocked = notActive || detail.me?.status !== 'accepted' || tooLate || capped;
   // on the çelınc's last day "Yarın devam" would promise a day it does not have
   const lastDay = safeDayKey(detail.challenge.endsAt, tz);
   const goesOn = lastDay === null || lastDay > safeTodayKey(tz, new Date(now));
@@ -362,7 +367,7 @@ export default function FocusScreen() {
         {blocked ? (
           <Card edgeColor={Colors.danger}>
             <Text variant="small">
-              {detail.challenge.status !== 'active'
+              {notActive
                 ? 'Çelınc aktif değil, seans süresi skora yazılmaz.'
                 : detail.me?.status !== 'accepted'
                   ? 'Bu çelıncta oyuncu değilsin. Önce daveti kabul et.'

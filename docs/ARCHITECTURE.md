@@ -723,7 +723,8 @@ sıraya girer. Kopya hesabındır: üstünde hangi hesabın okuduğu yazar, baş
 Aynı sabahın bir başka hali: başlangıç saati geçmiş, iki kişi kabul etmiş ama telefonun son gördüğü
 detay hâlâ `pending`, çünkü sunucu onu bir sonraki turunda başlatacaktı ve o sırada uyuyordu. Çelınc
 ekranı bunu "kabul bekleniyor" saymaz: bitişe kalan süreyi ve "Başlamış olmalı" satırını gösterir,
-girişi de çalışan çelınctaki gibi alır. Sunucu giriş gelince önce vadesi gelen çelıncları başlattığı
+girişi de çalışan çelınctaki gibi alır; açtığı giriş formu ve odak sayacı da aynı kuralla
+(`runningUnseen`) "aktif değil" demez. Sunucu giriş gelince önce vadesi gelen çelıncları başlattığı
 için (`activateDueChallenges`) giriş reddedilmez.
 
 Aşağı çekip yenilemenin çarkı yalnızca kullanıcı çektiğinde, o yenileme bitene kadar döner

@@ -25,3 +25,28 @@ export function joinClosesAt(challenge: Omit<JoinFields, 'status'>): number {
 export function stillJoinable(challenge: JoinFields, clock: number): boolean {
   return (challenge.status === 'pending' || challenge.status === 'active') && clock < joinClosesAt(challenge);
 }
+
+/**
+ * Whether a çelınc the phone last saw `pending` is in fact running at `clock`:
+ * past its start with two yeses, and not over. The server starts it on its
+ * next pass, or on the first entry that reaches it (`activateDueChallenges`);
+ * a detail read before that (the owner's PC asleep, no signal) still says
+ * pending. The çelınc screen, the entry form and the focus timer all take
+ * entries for it then, as for a running one, so none refuses what another
+ * offered. `clock` is a pure read, as for `stillJoinable`.
+ */
+export function runningUnseen(
+  challenge: Pick<Challenge, 'status' | 'startsAt' | 'endsAt'>,
+  acceptedCount: number,
+  clock: number
+): boolean {
+  const startsAt = Date.parse(challenge.startsAt);
+  const endsAt = Date.parse(challenge.endsAt);
+  return (
+    challenge.status === 'pending' &&
+    acceptedCount >= 2 &&
+    Number.isFinite(startsAt) &&
+    startsAt <= clock &&
+    !(Number.isFinite(endsAt) && endsAt <= clock)
+  );
+}

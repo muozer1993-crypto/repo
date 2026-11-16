@@ -25,6 +25,7 @@ import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { formatDayKeyFriendly, formatNumber } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
+import { runningUnseen } from '@/utils/joinWindow';
 import { resolveServerUrl } from '@/utils/url';
 
 /* ------------------------------------------------------------------ utils */
@@ -91,6 +92,8 @@ export default function EntryModalScreen() {
   // a photo picked with no connection: it goes up with the entry, now or from the queue
   const [proofLocalUri, setProofLocalUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // read on mount, not in render (impure for the React Compiler), as the çelınc screen does
+  const [openedAt] = useState(() => Date.now());
   const uploading = photo.uploading;
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)'));
@@ -146,7 +149,10 @@ export default function EntryModalScreen() {
   const emphasiseProof = proofRequired || params.proof === '1' || type.metricType === 'manual_lower_is_better';
   const value = parseValue(raw);
   const chips = quickAdds(type.maxPerEntry);
-  const notActive = challenge.status !== 'active';
+  // two yeses past the start: running, the server just has not said so yet
+  const notActive =
+    challenge.status !== 'active' &&
+    !runningUnseen(challenge, detail.participants.filter((p) => p.status === 'accepted').length, openedAt);
   const notPlaying = detail.me?.status !== 'accepted';
   const dayEntry = detail.myEntries.find((entry) => entry.dayKey === selectedDay);
   // the phone already reported this day: the server will answer 409 device_locked

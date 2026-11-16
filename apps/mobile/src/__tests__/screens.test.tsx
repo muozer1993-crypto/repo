@@ -2230,6 +2230,53 @@ describe('a morning check-in with the server out of reach', () => {
     expect(text).toContain('🚦 başlıyor');
     expect(text).not.toContain('kabul bekleniyor');
   });
+
+  // the çelınc screen's "+ Giriş" and "Odak seansı" open these: refusing there
+  // what the screen just offered left a typed count or a session nowhere to go
+  it('takes the entry form and the focus timer for it too, not only the check-in', async () => {
+    searchParams.id = 'c-1';
+    const counted = (options: { aliSaidYes?: boolean } = {}) => {
+      const detail = morning(options);
+      return {
+        ...detail,
+        challenge: {
+          ...detail.challenge,
+          typeKey: 'su_bardak',
+          metricType: 'manual_count' as const,
+          unit: 'bardak',
+          deadlineTime: null,
+          proofRequired: true,
+        },
+      };
+    };
+    api.challenge = jest.fn(async () => counted());
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const screen = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(findWith(screen, 'title', '+ Giriş', 'onPress')).toBeDefined();
+
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const entry = renderScreen(<EntryScreen />);
+    await settle();
+    expect(rendered(entry)).not.toContain('aktif değil');
+    expect(findWith(entry, 'title', 'Kaydet', 'onPress').props.disabled).toBe(false);
+
+    api.challenge = jest.fn(async () => counted({ aliSaidYes: false }));
+    const waiting = renderScreen(<EntryScreen />);
+    await settle();
+    expect(rendered(waiting)).toContain('Bu çelınc şu an aktif değil, giriş kabul edilmiyor.');
+
+    const detail = morning();
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge: { ...detail.challenge, typeKey: 'odak_seansi', metricType: 'focus_minutes' as const, unit: 'dk', deadlineTime: null },
+    }));
+    const FocusScreen = require('@/app/(app)/focus/[id]').default;
+    const focus = renderScreen(<FocusScreen />);
+    await settle();
+    expect(rendered(focus)).not.toContain('aktif değil');
+    expect(findWith(focus, 'title', 'Başlat', 'onPress').props.disabled).toBe(false);
+  });
 });
 
 describe('a yes/no day', () => {
