@@ -11,10 +11,11 @@ import {
   LIMITS,
   clampLevel,
   containsBanned,
-  containsBannedName,
   formatScore,
   getTaunt,
+  maskSparedSurnames,
   renderTaunt,
+  TAUNT_PLACEHOLDER,
   resolveTauntForRecipient,
   tauntContextForMargin,
   tauntsFor,
@@ -33,9 +34,31 @@ import { awardBadges } from './stats.js';
 import { computeStandings, typeForChallenge } from './challenges.js';
 import { levelOf } from './challengeViews.js';
 
-/** A display name for the finished-sentence check: a clean name becomes a neutral word. */
-function asNameForCheck(name: string): string {
-  return containsBannedName(name) ? name : 'Kanka';
+/**
+ * Text that runs into a placeholder ("ana{loser}", "x.{loser}") or out of one
+ * ("{winner}lar", "{winner}.ne"): the filter reads the name's word and those
+ * letters as one word. An apostrophe is how Turkish hangs a suffix on a name
+ * ("{loser}'a") and keeps the two apart.
+ */
+const GLUED_BEFORE = /[\p{L}\p{N}][^\s\p{L}\p{N}'\u2019]*$/u;
+const GLUED_AFTER = /^[^\s\p{L}\p{N}'\u2019]*[\p{L}\p{N}]/u;
+
+/**
+ * A custom laf as the filter reads it: every placeholder filled like
+ * `renderTaunt` does, the names and the title as they are, only their spared
+ * surnames ("Topal", "Kıroğlu") read as a neutral word, or "{loser}'a koydum"
+ * would refuse every laf to Veli Topal. Not the word letters are glued to:
+ * "{loser}lar" for a Topal is the slur again.
+ */
+function bodyForCheck(body: string, vars: TauntVars): string {
+  return body.replace(TAUNT_PLACEHOLDER, (match, key: keyof TauntVars, offset: number) => {
+    const value = vars[key];
+    if (key !== 'winner' && key !== 'loser' && key !== 'challenge') return value;
+    return maskSparedSurnames(value, {
+      keepFirst: GLUED_BEFORE.test(body.slice(0, offset)),
+      keepLast: GLUED_AFTER.test(body.slice(offset + match.length)),
+    });
+  });
 }
 
 /**
@@ -279,15 +302,12 @@ export function sendTaunt(db: Database, input: SendTauntInput): SendTauntResult 
     }
     level = clampLevel(levelOf(from), recipientMax);
     const rendered = renderTaunt({ title: customTitle(mode, level, from.display_name), body: customBody }, vars);
-    // the placeholders expand to names and titles other people typed; the
-    // finished sentence is what the recipient reads, so it is checked too. A name
-    // that passes as a name ("Mehmet Topal") stands in as a neutral word there, or
-    // "Topal'a koydum" would refuse every laf to that friend.
-    const checked = renderTaunt(
-      { title: customTitle(mode, level, asNameForCheck(from.display_name)), body: customBody },
-      { ...vars, winner: asNameForCheck(vars.winner), loser: asNameForCheck(vars.loser) },
-    );
-    if (containsBanned(checked.body) || containsBanned(checked.title)) {
+    // The placeholders expand to names and a title people typed, one of them
+    // the sender's own; the finished sentence is what the recipient reads, so it
+    // is checked with them in it ("Karını" + "{winner} sikerim"), see `bodyForCheck`.
+    // The title is the sender's name and a space, then words of ours.
+    const checkedTitle = customTitle(mode, level, maskSparedSurnames(from.display_name));
+    if (containsBanned(bodyForCheck(customBody, vars)) || containsBanned(checkedTitle)) {
       throw badRequest('banned_content', 'Bu laf fazla ağır. Aile, tehdit ve nefret içeren sözler yasak.');
     }
     title = rendered.title;

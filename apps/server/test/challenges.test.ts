@@ -1670,6 +1670,47 @@ describe('POST /challenges/:id/taunt', () => {
     expect(banned.json().error.code).toBe('banned_content');
   });
 
+  it("reads the sender's own name with the laf around it, so a threat cannot be split between them", async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await finishedChallenge(harness);
+    const send = (customBody: string) =>
+      authed(harness!.app, ali.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/taunt`,
+        payload: { toUserId: veli.me.id, customBody },
+      });
+    const rename = (displayName: string) =>
+      authed(harness!.app, ali.token)({ method: 'PATCH', url: '/me', payload: { displayName } });
+
+    // each name passes as a name, each laf passes on its own; together they do not
+    const cases: [string, string][] = [
+      ['Karını', '{winner} sikerim'],
+      ['Kafanı', '{winner} kırarım'],
+      ['Boğazını', '{winner} sıkarım'],
+      ['Canını', '{winner} alırım {loser}'],
+      ['İb', '{winner}ne {loser}'],
+      ['Topal', '{winner}lar gibi yürüdün'],
+      ['Ali Topal', '{winner}.lar gibi yürüdün'],
+    ];
+    for (const [displayName, customBody] of cases) {
+      expect((await rename(displayName)).statusCode, displayName).toBe(200);
+      const refused = await send(customBody);
+      expect(refused.statusCode, `${displayName} + ${customBody}`).toBe(400);
+      expect(refused.json().error.code).toBe('banned_content');
+    }
+    expect(harness.db.prepare('SELECT COUNT(*) AS n FROM taunts').get()).toEqual({ n: 0 });
+
+    // a real surname apart from the laf still goes, from the sender's side too,
+    // even with the laf glued onto the other end of the name
+    expect((await rename('Ali Topal')).statusCode).toBe(200);
+    const ok = await send("Bitti,{winner}'dan {loser}'a geçmiş olsun");
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json<{ taunt: { title: string; body: string } }>().taunt).toMatchObject({
+      title: 'Ali Topal laf soktu',
+      body: "Bitti,Ali Topal'dan Veli'a geçmiş olsun",
+    });
+  });
+
   it('prints a screen-time average with the digits the app previewed', async () => {
     harness = await makeApp({ now: NOW });
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });

@@ -106,6 +106,15 @@ describe('surnames that share a stem with a slur', () => {
     });
     expect(renamed.statusCode).toBe(200);
   });
+
+  it('lets the surname through with a number typed on, the way the sign-up form suggests', async () => {
+    harness = await makeApp();
+    for (const username of ['mehmet_topal35', 'ayse_kiroglu1']) {
+      const response = await register(harness, username, 'Mehmet');
+      expect(response.statusCode, username).toBe(201);
+    }
+    expect((await register(harness, 'fatma', 'Fatma Zencirci')).statusCode).toBe(201);
+  });
 });
 
 describe('PATCH /me', () => {
@@ -175,6 +184,8 @@ describe('POST /challenges', () => {
       [{ rewardText: 'Kazanan kaybedeni gebertir' }, BANNED_TEXT_MESSAGES.rewardText],
       [{ penaltyText: 'Kaybeden bacını getirir' }, BANNED_TEXT_MESSAGES.penaltyText],
       [{ title: 'Adım yarışı', penaltyText: 'ananı sikeyim' }, BANNED_TEXT_MESSAGES.penaltyText],
+      // the workout words aimed at someone are the threat again
+      [{ title: 'Seni keseceğim' }, BANNED_TEXT_MESSAGES.title],
     ];
     for (const [fields, message] of cases) {
       const response = await create(harness, ali.token, veli.me.id, fields);
@@ -208,6 +219,12 @@ describe('POST /challenges', () => {
       { title: 'Ekran süresi', penaltyText: 'Kaybeden bir hafta profil fotoğrafını değiştirir' },
       { title: 'Amasya yürüyüşü', rewardText: 'Kazanana ananaslı pizza' },
       { title: 'Can sıkıntısına son', penaltyText: 'Kaybeden gruba rezil bir fotoğrafını atar' },
+      // workout and quitting talk that only sounds like a threat, and real surnames
+      { title: 'Şekeri keseceğim', penaltyText: 'Kaybeden canını yakacak bir antrenman yapar' },
+      { title: 'Sigarayı kesicem', rewardText: 'Geberene kadar koşmayan kazanır' },
+      { title: 'Öldürücü 10K haftası' },
+      { title: 'Kafanı dağıt yürüyüşü' },
+      { title: 'Topal vs Kıroğlu' },
     ];
     for (const fields of cases) {
       const response = await create(harness, ali.token, veli.me.id, fields);

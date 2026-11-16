@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { BANNED_PATTERNS, containsBanned, containsBannedName, findBanned, normalizeForBanned } from '../banned';
+import {
+  BANNED_PATTERNS,
+  containsBanned,
+  containsBannedName,
+  containsBannedTitle,
+  findBanned,
+  maskSparedSurnames,
+  normalizeForBanned,
+} from '../banned';
 
 const SOFT_HYPHEN = String.fromCharCode(0xad);
 const ZWSP = String.fromCharCode(0x200b);
@@ -128,8 +136,79 @@ describe('containsBannedName', () => {
     }
   });
 
+  it('spares them with a number typed on, the way usernames are made', () => {
+    for (const name of ['mehmet_topal35', 'mehmet_topal34', 'mehmet_topal10', 'mehmet_topal1', 'mehmet_topal54', 'ayse_kiroglu1']) {
+      expect(containsBannedName(name), name).toBe(false);
+    }
+    // the number still reads as letters everywhere else
+    expect(containsBannedName('ibn3')).toBe(true);
+    expect(containsBannedName('topal35ibne')).toBe(true);
+  });
+
+  it('spares the common variants on the same stems', () => {
+    for (const name of ['Fatma Zencirci', 'Ali Zencirkıran', 'Topaloğulları', 'Kıroğulları']) {
+      expect(containsBannedName(name), name).toBe(false);
+    }
+  });
+
   it('leaves the taunt filter as strict as it was', () => {
     expect(containsBanned('Mehmet Topal')).toBe(true);
+  });
+});
+
+describe('containsBannedTitle', () => {
+  it('takes everyday workout and quitting talk that only sounds like a threat', () => {
+    for (const title of [
+      'Şekeri keseceğim',
+      'Sigarayı kesicem',
+      'Öldürücü 10K haftası',
+      'Kafanı dağıt yürüyüşü',
+      'Kaybeden canını yakacak bir antrenman yapar',
+      'Geberene kadar koş',
+    ]) {
+      expect(containsBannedTitle(title), title).toBe(false);
+      // a laf or a name is held to the whole list
+      expect(containsBanned(title), title).toBe(true);
+    }
+  });
+
+  it('still refuses those words aimed at someone, and every insult and slur', () => {
+    for (const title of [
+      'Seni keserim',
+      'seni öldürürüm',
+      'Kazanan kaybedeni öldürür',
+      'Kazanan kaybedeni gebertir',
+      'Kaybedeni keseceğim',
+      'Senin kafanı dağıtırım',
+      'ananı sikeyim',
+      'Kaybeden bacını getirir',
+      'kafanı kırarım',
+      'topallar gibi yürüyüş',
+      'ibne',
+    ]) {
+      expect(containsBannedTitle(title), title).toBe(true);
+    }
+  });
+
+  it('spares a real surname as it does in a name', () => {
+    for (const title of ['Topal vs Kıroğlu', "Mehmet Topal'ın çelıncı"]) {
+      expect(containsBannedTitle(title), title).toBe(false);
+    }
+  });
+});
+
+describe('maskSparedSurnames', () => {
+  it('swaps only the spared surnames and keeps every other word', () => {
+    expect(maskSparedSurnames('Veli Topal')).toBe('Veli Kanka');
+    expect(maskSparedSurnames('mehmet_topal35')).toBe('mehmet_Kanka');
+    expect(maskSparedSurnames('Karını')).toBe('Karını');
+    expect(maskSparedSurnames('Topal Karını')).toBe('Kanka Karını');
+  });
+
+  it('keeps the word a laf glues letters onto', () => {
+    expect(maskSparedSurnames('Veli Topal', { keepLast: true })).toBe('Veli Topal');
+    expect(maskSparedSurnames('Veli Topal', { keepFirst: true })).toBe('Veli Kanka');
+    expect(maskSparedSurnames('Topal', { keepFirst: true })).toBe('Topal');
   });
 });
 

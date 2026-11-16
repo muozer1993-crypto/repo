@@ -839,10 +839,12 @@ Ne yaparsan yap uygulamanın üretmediği şeyler: etnik, dini, cinsiyet, cinsel
 engellilik temelli hakaret; tehdit; aile fertlerine küfür. Kullanıcının kendi yazdıkları da bu
 filtreden geçer: özel laf, kullanıcı adı, görünen ad, çelınc başlığı, ödül ve ceza. Takılan yazı
 kaydedilmez, uygulama neyi değiştirmen gerektiğini söyler ("Bu ad olmaz… Adını değiştirip tekrar
-dene."). Filtre kelimeye bakar, niyete değil; yalnız adlarda, bir hakaretle aynı kökten gelen
-gerçek soyadları (Topal, Topaloğlu, Kıroğlu, Gavuroğlu, Kötüroğlu, Zencir, Irzık) takılmaz, böyle
-bir kankaya atılan laf da adı yüzünden geri çevrilmez. Bu kontrol gelmeden önce kaydedilmiş adlara
-ve başlıklara dokunulmaz.
+dene."). Filtre kelimeye bakar, niyete değil; yalnız bir hakaretle aynı kökten gelen gerçek
+soyadları (Topal, Topaloğlu, Kıroğlu, Gavuroğlu, Kötüroğlu, Zencir, Zencirci, Irzık) adlarda ve
+başlıklarda takılmaz, sonuna sayı eklenmiş kullanıcı adında da (`mehmet_topal35`); böyle bir kankaya
+atılan laf da adı yüzünden geri çevrilmez. Başlıkta, ödülde ve cezada spor ağzı serbest: "Şekeri
+keseceğim", "Öldürücü 10K haftası", "Kafanı dağıt yürüyüşü" geçer, "Seni keseceğim" geçmez. Bu
+kontrol gelmeden önce kaydedilmiş adlara ve başlıklara dokunulmaz.
 Ayrıca herkes birbirini engelleyebilir ve şikayet edebilir; şikayetler
 sunucuyu açana gider ([Yönetim komutları](#yönetim-komutları)). Engel kalıcı değil: fikri
 değişen **Ayarlar → Engellediklerin**'den kaldırır; kanka olmak için yeniden istek atmak gerekir.

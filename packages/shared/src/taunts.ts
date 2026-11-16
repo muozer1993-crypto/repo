@@ -140,7 +140,8 @@ export const TAGLINE = {
   level3: "Ya koyarsın ya yersin 🍆",
 } as const;
 
-const PLACEHOLDER = /\{(winner|loser|metric|winnerScore|loserScore|diff|unit|challenge)\}/g;
+/** Every placeholder a taunt's text may carry, the key captured. */
+export const TAUNT_PLACEHOLDER = /\{(winner|loser|metric|winnerScore|loserScore|diff|unit|challenge)\}/g;
 
 /** Fills {winner}, {loserScore}, ... leaving unknown placeholders untouched. */
 export function renderTaunt(
@@ -148,7 +149,7 @@ export function renderTaunt(
   vars: TauntVars
 ): { title: string; body: string } {
   const fill = (text: string): string =>
-    text.replace(PLACEHOLDER, (_match, key: keyof TauntVars) => vars[key] ?? _match);
+    text.replace(TAUNT_PLACEHOLDER, (_match, key: keyof TauntVars) => vars[key] ?? _match);
   return { title: fill(template.title), body: fill(template.body) };
 }
 

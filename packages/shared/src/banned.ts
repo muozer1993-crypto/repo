@@ -96,6 +96,20 @@ const SEX_VERB = '(?:sik|sok(?:ay|ar)|becer)';
 
 const ETHNIC_GROUP = '(?:kurt|kurd|ermeni|rum|yahudi|arap|arab|yunan|suriyeli|afgan|cingene|roman|alevi|sunni|zenci|laz|cerkez)';
 
+// Threats that are also everyday Turkish for a hard workout or a habit to quit:
+// "Şekeri keseceğim", "öldürücü antrenman", "geberene kadar koş", "kafa dağıtmak",
+// "canını yakacak bir antrenman". A çelınc's title and stakes take them unless
+// they also name someone (`containsBannedTitle`); a laf and a name never do.
+// "öldürürüm" and "gebertirim" (killing someone) are not among them.
+const OLDURUCU = /\boldurucu\w*/; // öldürücü: deadly, "öldürücü antrenman"
+const GEBER = /\bgeber(?!t)\w*/; // geber, geberene kadar, geberesice
+const KES = /\bkes(?:erim|ecegim|icem|cem|iyim|ecem)\b/;
+const KAFA_DAGIT = /\bkafa(?:ni|nizi|sini)\W*dagit\w*/;
+const CAN_YAK = /\bcan(?:ini|inizi)\W*yak(?:ir|ar|acag|acak|cam|cem|icam|icem|tir|sin)\w*/;
+const THREAT_IDIOMS: readonly RegExp[] = [OLDURUCU, GEBER, KES, KAFA_DAGIT, CAN_YAK];
+/** Someone a threat would be aimed at: "seni keserim", "kaybedeni keser". */
+const AIMED_AT_SOMEONE = /\b(?:seni|sizi|senin|sizin|onu|onlari|kaybedeni|kazanani|kaybedenleri|kazananlari)\b/;
+
 export const BANNED_PATTERNS: RegExp[] = [
   // --- family insults ------------------------------------------------------
   // "anane" (tradition) is excluded: the dative of "anan" is "anana" by vowel harmony.
@@ -115,9 +129,11 @@ export const BANNED_PATTERNS: RegExp[] = [
   /\bveled(?:i)?\W*zina\w*/,
 
   // --- threats of violence / sexual violence -------------------------------
-  /\boldur\w*/, // öldürürüm, öldüreceğim, öldürcem, öldürmek
-  /\bgeber\w*/, // geber, gebertirim, geberesice
-  /\bkes(?:erim|ecegim|icem|cem|iyim|ecem)\b/,
+  /\boldur(?!ucu)\w*/, // öldürürüm, öldüreceğim, öldürcem, öldürmek
+  OLDURUCU,
+  /\bgebert\w*/, // gebertirim, gebertecem
+  GEBER,
+  KES,
   /\bbogar(?:im|iz|cam|cem|acagim)\b/,
   // "boğazını sıkarım / keserim" — but not "boğazın(a) sıkıştı" (stuck in your throat)
   /\bbogazin\w*\W*(?:kes|s[iy]k(?!is))\w*/,
@@ -126,9 +142,11 @@ export const BANNED_PATTERNS: RegExp[] = [
   /\bseni\W+bicakla\w*/,
   /\bbicakla\w*\W+seni\b/,
   /\bkursun\w*\W*(?:s[iy]k|yersin|yiyeceksin|dizer|dizerim)\w*/,
-  /\bkafa(?:ni|nizi|sini)\W*(?:kir|kopar|ez|patlat|ucur|dagit|yar)\w*/,
+  /\bkafa(?:ni|nizi|sini)\W*(?:kir|kopar|ez|patlat|ucur|yar)\w*/,
+  KAFA_DAGIT,
   // Future/aorist threat forms only: "canını çıkardım koşarken" (wore you out) is an idiom
-  /\bcan(?:ini|inizi)\W*(?:al|yak|cikar)(?:ir|ar|acag|acak|cam|cem|icam|icem|tir|sin)\w*/,
+  /\bcan(?:ini|inizi)\W*(?:al|cikar)(?:ir|ar|acag|acak|cam|cem|icam|icem|tir|sin)\w*/,
+  CAN_YAK,
   /\bkan(?:ini|inizi)\W*(?:ic|akit|dok)\w*/,
   /\bmezar(?:ina|a)\W*(?:sok|gom|koy)\w*/,
   /\bgom(?:erim|ecegim|cem|icem|ecem)\W+seni\b/,
@@ -197,23 +215,71 @@ export function containsBanned(text: string): boolean {
 /**
  * Real Turkish surnames that share a stem with a slur above (`topal…`, `kiro…`,
  * `gavur…`, `kotur…`, `zenci…`, `irz…`). A name is not a taunt: "Mehmet Topal" or
- * "Ayşe Kıroğlu" must be able to sign up. Only these exact words, as
+ * "Ayşe Kıroğlu" must be able to sign up. Only these whole words, as
  * `normalizeForBanned` leaves them, are spared, so the slur inside a sentence
  * ("topallar", "kiro herif") still trips the filter.
  */
-const SURNAME_WORDS = new Set(['topal', 'topalli', 'topaloglu', 'kiroglu', 'gavuroglu', 'koturoglu', 'zencir', 'irzik']);
+const SPARED_SURNAME =
+  /^(?:topal(?:li|oglu|ogullari)?|kir(?:oglu|ogullari)|gavur(?:oglu|ogullari)|kotur(?:oglu|ogullari)|zencir(?:ci|kiran)?|irzik)$/;
+
+/** Where a name or a title breaks into words: spaces, and a username's underscores. */
+const WORD_BREAK = /[\s_]+/;
+
+/**
+ * One word of a name or a title is a spared surname, also with a number typed
+ * onto it ("mehmet_topal35": a leet 3 or 5 would otherwise glue a letter on) or
+ * a suffix after an apostrophe ("Topal'ın çelıncı"). The digits go only at the
+ * end and only for this test: "ibn3" still reads "ibne" everywhere else.
+ */
+function isSparedSurname(word: string): boolean {
+  const bare = word.replace(/['\u2019][a-zA-Zçğıöşüâîû]*$/, '').replace(/[0-9]+$/, '');
+  return bare.length > 0 && SPARED_SURNAME.test(normalizeForBanned(bare));
+}
+
+function withoutSparedSurnames(text: string): string {
+  return text
+    .split(WORD_BREAK)
+    .filter((word) => !isSparedSurname(word))
+    .join(' ');
+}
 
 /**
  * `containsBanned` for somebody's name (a display name or a username): the
- * surnames in SURNAME_WORDS are left out before the patterns run, everything else
- * in the name is checked as usual.
+ * spared surnames are left out before the patterns run, everything else in the
+ * name is checked as usual.
  */
 export function containsBannedName(text: string): boolean {
-  const normalized = normalizeForBanned(text);
+  return containsBanned(withoutSparedSurnames(text));
+}
+
+/**
+ * `containsBanned` for a çelınc's title, reward or penalty. The spared surnames
+ * pass as in a name ("Topal vs Kıroğlu"), and the threats that are everyday
+ * workout talk (`THREAT_IDIOMS`: "Sigarayı kesicem", "Öldürücü 10K haftası",
+ * "Kafanı dağıt yürüyüşü") count only when the text also names someone
+ * ("Seni keserim"). Every family insult and slur is checked as usual.
+ */
+export function containsBannedTitle(text: string): boolean {
+  const normalized = normalizeForBanned(withoutSparedSurnames(text));
   if (!normalized) return false;
-  const rest = normalized
-    .split(' ')
-    .filter((word) => !SURNAME_WORDS.has(word))
-    .join(' ');
-  return rest.length > 0 && BANNED_PATTERNS.some((p) => p.test(rest));
+  const aimed = AIMED_AT_SOMEONE.test(normalized);
+  return BANNED_PATTERNS.some((pattern) => (aimed || !THREAT_IDIOMS.includes(pattern)) && pattern.test(normalized));
+}
+
+/**
+ * `name` with its spared surnames swapped for "Kanka" and every other word kept:
+ * a laf's finished sentence is checked with this, so "{loser}'a koydum" goes to
+ * Veli Topal while the rest of a name ("Karını" + "{winner} sikerim") is read
+ * with the laf around it. `keepFirst` / `keepLast` leave the first or last word
+ * as it is, where the laf glues letters onto it ("{loser}lar" makes "Topallar").
+ */
+export function maskSparedSurnames(name: string, options: { keepFirst?: boolean; keepLast?: boolean } = {}): string {
+  const parts = name.split(/([\s_]+)/);
+  return parts
+    .map((part, index) => {
+      if (index % 2 === 1 || !isSparedSurname(part)) return part;
+      if ((options.keepFirst && index === 0) || (options.keepLast && index === parts.length - 1)) return part;
+      return 'Kanka';
+    })
+    .join('');
 }

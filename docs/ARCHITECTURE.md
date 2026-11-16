@@ -1214,7 +1214,7 @@ Adın kendisi de bir yoldu. "seni öldürürüm" adıyla açılan bir hesabın k
 ekranına "seni öldürürüm seni kanka listesine ekledi" diye düşüyordu; laf filtresi
 (`containsBanned`, `packages/shared/src/banned.ts`) yalnızca özel lafa bakıyordu. Artık kullanıcı
 adı ve görünen ad kayıtta, görünen ad `PATCH /me`'de, çelıncın başlığı, ödülü ve cezası da
-`POST /challenges`'ta aynı filtreden geçer (`assertClean`, `services/moderation.ts`). Ret 400
+`POST /challenges`'ta aynı filtreden geçer (`assertCleanName`, `assertCleanTitle`, `services/moderation.ts`). Ret 400
 `banned_content`'tir, mesajı hangi alanın değişeceğini söyler ("Bu ad olmaz. … Adını değiştirip
 tekrar dene."). Kontrol zod şemasına konmadı: şemanın 400'ü hep "Gönderdiğin bilgiler geçersiz."
 der, uygulama da yalnızca mesajı gösterir. Yalnızca yeni yazılan denetlenir: eski satırlara
@@ -1223,10 +1223,24 @@ kaydedemezdi), rövanş da eski başlığı ve cezayı olduğu gibi kopyalar.
 
 Adlar için filtrenin bir istisnası var (`containsBannedName`, `assertCleanName`): engellilik ve
 etnik köklü kalıplar kelimenin başına bakar, bu yüzden "Mehmet Topal", "Ayşe Kıroğlu", Zencir,
-Irzık gibi gerçek soyadları da takılıyordu; o kanka kendi adıyla kayıt olamıyordu. Bu birkaç soyadı,
-tam kelime olarak, adlarda serbest; cümle içindeki "topallar", "kiro herif" yine takılır. Özel
-lafın bitmiş cümlesi de denetlenirken, ad olarak temiz geçen adlar nötr bir kelimeyle okunur:
-yoksa "{loser}'a koydum" Veli Topal'a giden her lafı geri çevirirdi.
+Irzık gibi gerçek soyadları da takılıyordu; o kanka kendi adıyla kayıt olamıyordu. Bu birkaç soyadı
+(Zencirci, Topaloğulları gibi türevleriyle), tam kelime olarak, adlarda ve başlıklarda serbest;
+cümle içindeki "topallar", "kiro herif" yine takılır. Kelime ayrı ayrı bakılır, sondaki rakamlar
+yalnız bu soru için atılır: yoksa leet katlaması `mehmet_topal35`'i "topales" diye okuyordu, kayıt
+formunun kendi örneği (`mustafa_42`) gibi açılan kullanıcı adı geri dönüyordu.
+
+Başlık, ödül ve ceza bir kişiye değil çelınca yazılır; tehdit kalıplarından spor ağzıyla çakışanlar
+("Şekeri keseceğim", "Öldürücü 10K haftası", "geberene kadar koş", "Kafanı dağıt yürüyüşü",
+"canını yakacak bir antrenman") orada yalnızca birini de anıyorsa sayılır ("seni", "onu",
+"kaybedeni"…; `containsBannedTitle`). Şeker ve sigara bırakma katalogdaki iki çelıncın kendisi; o
+başlıklar tehdit diye geri çevriliyordu. "öldürürüm", "gebertirim" ve aile, nefret kalıpları her
+yerde aynı.
+
+Özel lafın bitmiş cümlesi gerçek adlarla denetlenir; yalnız o serbest soyadları nötr bir kelimeyle
+okunur (`maskSparedSurnames`), yoksa "{loser}'a koydum" Veli Topal'a giden her lafı geri çevirirdi.
+Önce her temiz ad bütünüyle nötr okunuyordu: gönderen adını "Karını" yapıp "{winner} sikerim"
+yazınca alıcıya "Karını sikerim" gidiyordu. Yer tutucu harflere yapışıksa ("{winner}lar",
+"{winner}.lar") adın o harflere değen kelimesi, soyadı olsa da, gerçek haliyle okunur.
 
 ## Sunucuyu açanın araçları
 
