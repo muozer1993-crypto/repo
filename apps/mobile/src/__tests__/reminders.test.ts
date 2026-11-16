@@ -467,3 +467,30 @@ describe('the "Saatli çelınc uyarıları" switch', () => {
     expect(mockScheduled).toEqual([]);
   });
 });
+
+describe('the check-in copies a cold morning opens on', () => {
+  const { savedChallengeDetail } = require('@/services/savedDetails') as typeof import('@/services/savedDetails');
+  const { setJson } = require('@/lib/storage') as typeof import('@/lib/storage');
+
+  it('reads the detail of a check-in said yes to on the home card, once, while setting its reminder', async () => {
+    await setJson(StorageKeys.me, { id: 'me-1', username: 'ali' });
+    const me = { user: { id: 'me-1' }, status: 'accepted', lastEntryAt: null };
+    const summary = {
+      ...checkinSummary({ challengeStatus: 'pending', startsAt: new Date(Date.now() + 2 * HOUR_MS) }),
+      participants: [me, { user: { id: 'u-2' }, status: 'accepted' }],
+      me,
+    } as unknown as ChallengeSummary;
+    const client = {
+      challenges: jest.fn(async () => [summary]),
+      challenge: jest.fn(async () => ({ ...summary, myEntries: [], feed: [] }) as never),
+    };
+
+    await refreshReminders(client, 2, TZ);
+    expect(client.challenge).toHaveBeenCalledWith('c1');
+    expect((await savedChallengeDetail('c1'))?.participants).toHaveLength(2);
+
+    // kept from then on by the list alone
+    await refreshReminders(client, 2, TZ);
+    expect(client.challenge).toHaveBeenCalledTimes(1);
+  });
+});

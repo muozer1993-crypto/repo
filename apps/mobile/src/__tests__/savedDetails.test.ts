@@ -7,6 +7,7 @@ import {
   forgetSavedChallengeDetails,
   saveChallengeDetail,
   savedChallengeDetail,
+  syncSavedWithList,
 } from '@/services/savedDetails';
 import { forgetStoredSession } from '@/services/session';
 
@@ -122,6 +123,34 @@ describe('saved check-in details', () => {
     await late;
 
     expect(await getItem(StorageKeys.savedDetails)).toBeNull();
+  });
+
+  it('follows the çelınc list the reminders are set from, and names the ones it has no copy of', async () => {
+    // saved the evening it was made: Ali had not said yes yet
+    const created = detail('c-1', { status: 'pending' });
+    const ali = { ...created.me!, user: { id: 'u-2', username: 'ali', displayName: 'Ali' }, status: 'invited' };
+    await saveChallengeDetail({ ...created, participants: [created.me!, ali] } as ChallengeDetail, NOW);
+
+    // the list after his yes, and a second check-in said yes to on the home card
+    const yes = { ...ali, status: 'accepted' };
+    const other = detail('c-2', { status: 'pending' });
+    const list = [
+      { challenge: created.challenge, participants: [created.me!, yes], me: created.me, unreadTaunts: 0 },
+      { challenge: other.challenge, participants: other.participants, me: other.me, unreadTaunts: 0 },
+      // neither a check-in nor mine: nothing to keep
+      { ...detail('steps', { metricType: 'auto_steps' }), unreadTaunts: 0 },
+    ] as unknown as ChallengeDetail[];
+
+    expect(await syncSavedWithList(list, NOW)).toEqual(['c-2']);
+    const kept = await savedChallengeDetail('c-1');
+    expect(kept?.participants.map((p) => p.status)).toEqual(['accepted', 'accepted']);
+    // the rest of the copy stays as the screen read it
+    expect(kept?.myTimezone).toBe('Europe/Istanbul');
+    expect(kept?.feed).toEqual([]);
+
+    // a row that says I left takes the copy with it
+    await syncSavedWithList([{ ...list[0]!, me: { ...created.me!, status: 'left' } }], NOW);
+    expect(await savedChallengeDetail('c-1')).toBeNull();
   });
 
   it('clears on its own too', async () => {

@@ -726,6 +726,14 @@ hali" satırıyla gösterir, dokunuş da basıldığı saatle ve çelıncın ken
 sıraya girer. Kopya hesabındır: üstünde hangi hesabın okuduğu yazar, başka hesaba gösterilmez;
 çıkışta, hesap silinince ve arka plan görevinin 401'inde `forgetStoredSession` onu da siler.
 
+Kopya önce yalnızca çelınc ekranı açılınca yazılıyordu. Çelıncı açan, ikinci "varım"dan sonra ekranı
+bir daha açmadıysa sabah kopyada "Kabul bekleniyor 1/2" görüyordu, **Geldim** yoktu; ana sayfadaki
+kartta "Kabul" diyenin hiç kopyası olmuyordu. Oysa telefon 06:30 hatırlatmasını çelınc listesinden
+kuruyordu. Şimdi kopya da aynı listeyi izler: her hatırlatma yenilemesinde (öne geliş, arka plan
+görevi, her kabul) listedeki satır kopyanın çelıncını, oyuncularını ve beni günceller
+(`syncSavedWithList`), kopyası olmayan check-in'in detayı bir kez okunur. Bir "evet" de sunucunun
+cevabındaki detayı hemen saklar.
+
 Aynı sabahın bir başka hali: başlangıç saati geçmiş, iki kişi kabul etmiş ama telefonun son gördüğü
 detay hâlâ `pending`, çünkü sunucu onu bir sonraki turunda başlatacaktı ve o sırada uyuyordu. Çelınc
 ekranı bunu "kabul bekleniyor" saymaz: bitişe kalan süreyi ve "Başlamış olmalı" satırını gösterir,

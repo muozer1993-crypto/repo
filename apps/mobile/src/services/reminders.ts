@@ -1,10 +1,11 @@
-import { addDays } from '@koydum/shared';
+import { addDays, type ChallengeSummary } from '@koydum/shared';
 import { Platform } from 'react-native';
 
 import type { ApiClient } from '@/lib/api';
 import { StorageKeys, getItem, removeItem, setItem } from '@/lib/storage';
 import { localNotifications, type LocalNotifications } from '@/services/expoNotifications';
 import { ANDROID_CHANNEL_ID, ensureAndroidChannel, installNotificationHandler } from '@/services/notifications';
+import { saveChallengeDetail, syncSavedWithList } from '@/services/savedDetails';
 import { resolveTimezone, safeDayKey, safeDayKeysBetween, safeTodayKey, zonedInstant } from '@/utils/datetime';
 
 /**
@@ -152,6 +153,9 @@ export async function setDeviceRemindersEnabled(enabled: boolean): Promise<void>
 
 let refreshQueue: Promise<unknown> = Promise.resolve();
 
+/** The list sets the reminders; a detail fills a check-in copy the phone does not have yet. */
+type ReminderClient = Pick<ApiClient, 'challenges'> & Partial<Pick<ApiClient, 'challenge'>>;
+
 /**
  * Asks the server for the reader's open çelınclar and schedules what they need,
  * or clears every reminder, without asking anything, when the alerts are off.
@@ -164,7 +168,7 @@ let refreshQueue: Promise<unknown> = Promise.resolve();
  * one pinned when the reader joined; `tz` is only for an older server's list.
  */
 export function refreshReminders(
-  client: Pick<ApiClient, 'challenges'>,
+  client: ReminderClient,
   level: 1 | 2 | 3,
   tz: string
 ): Promise<number> {
@@ -185,7 +189,23 @@ export function clearReminders(): Promise<void> {
   return run;
 }
 
-async function refresh(client: Pick<ApiClient, 'challenges'>, level: 1 | 2 | 3, tz: string): Promise<number> {
+/**
+ * The check-in copies kept for a cold morning (services/savedDetails) follow
+ * the same list the reminders were just set from, so the screen a reminder
+ * opens while the PC sleeps shows the yeses that set it. A çelınc with no copy
+ * yet (said yes to on the home card) is read once. Never in the reminders' way.
+ */
+async function keepSavedCopies(client: ReminderClient, summaries: ChallengeSummary[]): Promise<void> {
+  try {
+    const missing = await syncSavedWithList(summaries);
+    if (!client.challenge) return;
+    for (const id of missing) await saveChallengeDetail(await client.challenge(id));
+  } catch {
+    // the next refresh tries again; the screen saves its own read meanwhile
+  }
+}
+
+async function refresh(client: ReminderClient, level: 1 | 2 | 3, tz: string): Promise<number> {
   if (!(await deviceRemindersEnabled())) {
     await cancelAllReminders();
     return 0;
@@ -221,7 +241,9 @@ async function refresh(client: Pick<ApiClient, 'challenges'>, level: 1 | 2 | 3, 
         tz: zone,
       };
     });
-  return syncReminders(reminders, level);
+  const scheduled = await syncReminders(reminders, level);
+  await keepSavedCopies(client, summaries);
+  return scheduled;
 }
 
 /**

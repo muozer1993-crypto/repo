@@ -922,7 +922,8 @@ fotoğrafı gitmedi, bağlantı çok yavaştı" der). Sunucunun diski dolmak üz
 fotoğraf sınırı dolduysa fotoğraf girişiyle bir saat bekler, sonra giriş onsuz gider; fotoğraf
 zorunluysa uygulama sunucunun söylediğini iletir. Bağlantı
 koptuğunda açık olan çelınc ekranı kapanmaz, son bilinen hali gösterir; yazdığın sayı silinmez.
-Check-in çelınclarının son hali telefonda da saklanır: telefon uygulamayı gece kapatmış olsa bile
+Check-in çelınclarının son hali telefonda da saklanır (kabul ettiğin anda ve uygulama sabah
+hatırlatmalarını her kurduğunda güncellenir): telefon uygulamayı gece kapatmış olsa bile
 sabah hatırlatmaya dokununca, bilgisayar uyuyor ya da telefon çekmiyorsa ekran o hali gösterir ve
 **Geldim** sıraya girer. Bu kopya sadece o hesabındır; çıkış yapınca ya da hesabı silince telefondan
 silinir, aynı telefona giren başka bir hesap onu görmez.

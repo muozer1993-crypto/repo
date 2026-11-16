@@ -2267,6 +2267,41 @@ describe('a morning check-in with the server out of reach', () => {
     expect(text).not.toContain('Erken Kalkan Koyar');
   });
 
+  it('keeps a copy of a check-in said yes to on the home card, for the morning it opens cold', async () => {
+    const { getJson: readStored } = require('@/lib/storage') as typeof import('@/lib/storage');
+    // Mustafa's "Yarın 04:00", Ali already in, the reader still invited
+    const later = morning({ startsAgo: -5 * 3_600_000 });
+    const invited = { ...later.me, status: 'invited' as const, score: 0, rank: 0 };
+    const [, ali] = later.participants;
+    api.challenges = jest.fn(async () => [
+      { challenge: later.challenge, participants: [invited, ali], me: invited, unreadTaunts: 0 },
+    ]);
+    // the server answers a yes with the refreshed detail
+    api.acceptChallenge = jest.fn(async () => later);
+    api.challenge = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const home = renderScreen(<HomeScreen />);
+    await settle();
+
+    press(home, 'Kabul');
+    await settle();
+    expect(api.acceptChallenge).toHaveBeenCalledWith('c-1');
+    const stored = await readStored<{ details: { challenge: { id: string }; me: { status: string } }[] }>(
+      StorageKeys.savedDetails
+    );
+    expect(stored?.details.map((detail) => [detail.challenge.id, detail.me.status])).toEqual([['c-1', 'accepted']]);
+
+    // the next morning, the app killed in the night and the PC asleep
+    searchParams.id = 'c-1';
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const cold = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(rendered(cold)).toContain('Erken Kalkan Koyar');
+    expect(rendered(cold)).not.toContain('Çelınc gelmedi');
+  });
+
   it('home says a çelınc with its two yeses is starting, not waiting for one', async () => {
     const { challenge, participants, me } = morning();
     api.challenges = jest.fn(async () => [{ challenge, participants, me, unreadTaunts: 0 }]);

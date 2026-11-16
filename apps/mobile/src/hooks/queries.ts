@@ -380,6 +380,11 @@ export function useCreateChallenge() {
  * came up saw an invite, which gets no reminder: the first morning's 06:30
  * alarm was left to the background task, and the server says no "başladı"
  * before 07:00 to a çelınc that had its yeses before the start.
+ *
+ * A yes also keeps the detail the server answers it with, for the copy a cold
+ * morning opens on (services/savedDetails): said on the home card, nothing
+ * else read it, and the screen the reminder opened with the PC asleep had
+ * nothing to draw.
  */
 export function useChallengeAction(id: string) {
   const api = useApi();
@@ -393,11 +398,22 @@ export function useChallengeAction(id: string) {
       if (action === 'leave') return api.leaveChallenge(id);
       return api.cancelChallenge(id);
     },
-    onSuccess: () => {
+    onSuccess: (result, action) => {
       invalidate.challenge(id);
-      refreshReminders(api, level, tz).catch(() => {});
+      // the copy first, so the refresh finds it and does not read it again
+      const saved = action === 'accept' && isDetail(result) ? saveChallengeDetail(result) : Promise.resolve();
+      saved
+        .catch(() => {})
+        .then(() => refreshReminders(api, level, tz))
+        .catch(() => {});
     },
   });
+}
+
+/** A yes, a no and a walk-out answer with the refreshed detail (SPEC 2.2); checked, not assumed. */
+function isDetail(value: unknown): value is ChallengeDetail {
+  const detail = value as Partial<ChallengeDetail> | null;
+  return typeof detail?.challenge?.id === 'string' && Array.isArray(detail.participants);
 }
 
 /** "Kanka ekle": friends the creator calls into a çelınc that already exists. */

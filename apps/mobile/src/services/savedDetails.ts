@@ -1,4 +1,4 @@
-import type { ChallengeDetail } from '@koydum/shared';
+import type { ChallengeDetail, ChallengeSummary } from '@koydum/shared';
 
 import { StorageKeys, getJson, removeItem, setJson } from '@/lib/storage';
 import { currentOwnerId } from '@/services/offlineQueue';
@@ -17,6 +17,9 @@ import { currentOwnerId } from '@/services/offlineQueue';
  * type in later. Only running or about to start, only while I am in it, and
  * only for the account that read it: a second account on the phone must never
  * be shown the first one's çelınc. A logout takes it all (services/session).
+ *
+ * A copy is written when the çelınc's screen reads the detail, and kept up to
+ * date from the çelınc list the reminders are set from (`syncSavedWithList`).
  */
 
 /** A handful at once is plenty; each detail is a few tens of KB at most (60 days, 40 feed rows). */
@@ -43,7 +46,7 @@ function serially<T>(task: () => Promise<T>): Promise<T> {
 }
 
 /** Worth keeping for `ownerId`: a check-in çelınc they still play, before its end. */
-function keeps(detail: ChallengeDetail, ownerId: string, now: number): boolean {
+function keeps(detail: Pick<ChallengeSummary, 'challenge' | 'me'>, ownerId: string, now: number): boolean {
   const { challenge, me } = detail;
   return (
     challenge.metricType === 'checkin_deadline' &&
@@ -80,6 +83,48 @@ export function saveChallengeDetail(detail: ChallengeDetail, now: number = Date.
     if (!keep && others.length === saved.length) return;
     const next = keep ? [detail, ...others].slice(0, MAX_SAVED) : others;
     await setJson(StorageKeys.savedDetails, { ownerId, details: next } satisfies SavedDetails);
+  });
+}
+
+/**
+ * Brings the kept copies up to date with the çelınc list (`GET /challenges`)
+ * and answers which check-in çelınclar I play have no copy yet. The list is
+ * what the morning reminders are set from (services/reminders: every
+ * foreground, the background task, every yes on this phone); a copy written
+ * only when the screen was opened went stale. The creator who did not open
+ * the çelınc again after the second yes woke to "Kabul bekleniyor 1/2" from
+ * it and no Geldim, and a friend who said yes on the home card had no copy at
+ * all. A row brings the çelınc, the players and me; the rest of a copy (its
+ * feed, my entries) stays as the screen read it.
+ */
+export function syncSavedWithList(summaries: readonly ChallengeSummary[], now: number = Date.now()): Promise<string[]> {
+  return serially(async () => {
+    const ownerId = await currentOwnerId();
+    if (!ownerId) return [];
+    const saved = await readSaved(ownerId);
+    const rows = new Map(summaries.map((row) => [row.challenge.id, row]));
+    const next = saved
+      .map((detail): ChallengeDetail => {
+        const row = rows.get(detail.challenge.id);
+        if (!row) return detail;
+        return {
+          ...detail,
+          challenge: row.challenge,
+          participants: row.participants,
+          me: row.me,
+          unreadTaunts: row.unreadTaunts,
+          // an older server's list leaves it out; the detail had it
+          myTimezone: row.myTimezone ?? detail.myTimezone,
+        };
+      })
+      .filter((detail) => keeps(detail, ownerId, now));
+    if (JSON.stringify(next) !== JSON.stringify(saved)) {
+      await setJson(StorageKeys.savedDetails, { ownerId, details: next } satisfies SavedDetails);
+    }
+    return summaries
+      .filter((row) => keeps(row, ownerId, now) && !saved.some((detail) => detail.challenge.id === row.challenge.id))
+      .map((row) => row.challenge.id)
+      .slice(0, MAX_SAVED);
   });
 }
 
