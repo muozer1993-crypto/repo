@@ -111,11 +111,14 @@ export default function UserProfileScreen() {
   })();
 
   // a friend only asked so far is not in a first round with me yet, and with
-  // the invite out "Bir çelınc aç" would ask for a second one
+  // the invite out "Bir çelınc aç" would ask for a second one; one we are both
+  // in that waits for its start time is not running yet either
   const headLine =
     head.total === 0
       ? rivalry?.joined
-        ? 'Daha bitmiş bir çelıncınız yok, ilki sürüyor.'
+        ? rivalry.summary.challenge.status === 'active'
+          ? 'Daha bitmiş bir çelıncınız yok, ilki sürüyor.'
+          : 'Daha bitmiş bir çelıncınız yok, ilki başlamak üzere.'
         : rivalry
           ? 'Henüz karşı karşıya gelmediniz.'
           : 'Henüz karşı karşıya gelmediniz. Bir çelınc aç da görelim.'

@@ -826,6 +826,8 @@ export default function SettingsScreen() {
     });
   };
 
+  // A switch turned on over there (background reads, after the toast below)
+  // has to show here on return, as with the other system pages.
   const openHealthConnect = async () => {
     const opened = await openHealthConnectSettingsIfPossible();
     if (!opened) {
@@ -834,7 +836,13 @@ export default function SettingsScreen() {
         body: 'Google Play’den Health Connect’i kurman gerekebilir.',
         kind: 'danger',
       });
+      return;
     }
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      sub.remove();
+      void refreshSteps();
+    });
   };
 
   // Health Connect, like Android, stops showing its dialog after the second

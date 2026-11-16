@@ -3955,6 +3955,50 @@ describe('settings: Health Connect read in the background', () => {
     await settle();
     expect(steps().openHealthConnectSettingsIfPossible).toHaveBeenCalledTimes(1);
   });
+
+  // the toast sends them to Health Connect's own switch: on return the card
+  // must not go on saying it is read only while KOYDUM is open
+  it('looks again on the way back from Health Connect', async () => {
+    type AppStateListener = Parameters<(typeof import('react-native'))['AppState']['addEventListener']>[1];
+    const addEventListener = (require('react-native') as typeof import('react-native')).AppState
+      .addEventListener as unknown as jest.Mock;
+    const preset = addEventListener.getMockImplementation();
+    let listeners: AppStateListener[] = [];
+    addEventListener.mockImplementation((_event: string, handler: AppStateListener) => {
+      listeners.push(handler);
+      return { remove: () => (listeners = listeners.filter((candidate) => candidate !== handler)) };
+    });
+    try {
+      steps().getStepAvailability.mockResolvedValue(FROM_HEALTH_CONNECT);
+      steps().healthConnectBackgroundMissing.mockResolvedValue(true);
+      steps().openHealthConnectSettingsIfPossible.mockResolvedValue(true);
+      const tree = await renderSettings();
+
+      press(tree, 'Arka planda da okusun');
+      await settle();
+      const [toast] = tree.root.findAll(
+        (node) =>
+          node.props.accessibilityRole === 'button' &&
+          typeof node.props.onPress === 'function' &&
+          node.findAll((child) => child.props.children === REFUSED).length > 0
+      );
+      act(() => {
+        toast!.props.onPress();
+      });
+      await settle();
+
+      // switched on over there
+      steps().healthConnectBackgroundMissing.mockResolvedValue(false);
+      await act(async () => {
+        for (const listener of [...listeners]) listener('active');
+      });
+      await settle();
+      expect(offered(tree)).toBe(false);
+      expect(rendered(tree)).toContain('Health Connect’ten günlük adımların otomatik geliyor.');
+    } finally {
+      if (preset) addEventListener.mockImplementation(preset);
+    }
+  });
 });
 
 describe('the battery card on the home screen', () => {
@@ -5065,13 +5109,22 @@ describe('the whole çelınc history', () => {
     expect(router.push).toHaveBeenCalledWith({ pathname: '/history', params: { with: ALI.id } });
   });
 
-  /** Ali's profile while "Adım Savaşı" runs with me at `myRank` and him as `ali`. */
-  async function profileWhileRunning(ali: 'invited' | 'accepted', myRank: number): Promise<string> {
+  /** Ali's profile while "Adım Savaşı" runs (or waits for its start) with me at `myRank` and him as `ali`. */
+  async function profileWhileRunning(
+    ali: 'invited' | 'accepted',
+    myRank: number,
+    status: 'active' | 'pending' = 'active'
+  ): Promise<string> {
     const { challenge, participants } = challengeDetail();
     const me = { ...participants[0]!, rank: myRank };
     // the server lists an invitee at rank 0, ahead of anybody's 1
     const him = { ...me, user: ALI, status: ali, rank: ali === 'invited' ? 0 : 1 };
-    const running = { challenge: { ...challenge, title: 'Adım Savaşı' }, participants: [me, him], me, unreadTaunts: 0 };
+    const running = {
+      challenge: { ...challenge, title: 'Adım Savaşı', status },
+      participants: [me, him],
+      me,
+      unreadTaunts: 0,
+    };
     api.challenges = jest.fn(async (status?: string) => (status === 'active,pending' ? [running] : []));
     searchParams.id = ALI.id;
     api.userProfile = jest.fn(async () => ({
@@ -5102,6 +5155,14 @@ describe('the whole çelınc history', () => {
 
     expect(text).toContain('"Adım Savaşı" sürüyor, şu an geridesin.');
     expect(text).toContain('Daha bitmiş bir çelıncınız yok, ilki sürüyor.');
+  });
+
+  it('a çelınc we are both in that has not started yet is not "sürüyor" on either line', async () => {
+    const text = await profileWhileRunning('accepted', 1, 'pending');
+
+    expect(text).toContain('"Adım Savaşı" başlamak üzere, ikiniz de varsınız.');
+    expect(text).toContain('Daha bitmiş bir çelıncınız yok, ilki başlamak üzere.');
+    expect(text).not.toContain('sürüyor');
   });
 
   it('history `with` a rival keeps only the çelınclar the two of us played, until "Herkesle"', async () => {
