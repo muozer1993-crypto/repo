@@ -18,7 +18,7 @@ export const CHALLENGE_TYPES: readonly ChallengeType[] = [
     direction: "higher",
     descriptionTr: "Kim daha çok yürüdüyse o kazanır. Telefon cebinde durduğu sürece sayıyor.",
     descriptionPoliteTr: "Süre boyunca en çok adım atan kazanır. Telefonunuzu yanınızda taşımanız yeterli.",
-    howMeasuredTr: "iPhone'da telefonun kendi adım sayacından okunuyor, günde bir kere uygulamayı açman yeterli. Android'de Health Connect kuruluysa oradan alınıyor; kurulu değilse adımlar sadece uygulama açıkken sayılır, o günün gerçek sayısını elle de yazabilirsin. Elle yazdığın sayıyla telefonun saydığı sayıdan hangisi yüksekse o kalır. Günde en fazla 100.000 adım yazılır.",
+    howMeasuredTr: "iPhone'da telefonun kendi adım sayacından okunuyor ve uygulamayı açınca gidiyor (telefon son 7 günü tutar). Çelınc bitince bir saat içinde uygulamayı bir kez aç ki son adımların da sayılsın; sonra gelenler sonucu değiştirmez. Android'de Health Connect kuruluysa oradan alınıyor; kurulu değilse adımlar sadece uygulama açıkken sayılır, o günün gerçek sayısını elle de yazabilirsin. Elle yazdığın sayıyla telefonun saydığı sayıdan hangisi yüksekse o kalır. Günde en fazla 100.000 adım yazılır.",
     defaultDurationDays: 3,
     suggestedRewardTr: "Kaybeden herkese döner ısmarlar.",
     antiCheatTr: "Hile: telefonu çamaşır makinesine bantlamak, köpeğin tasmasına takmak, elle sallamak, Android'de hayalî bir sayı yazmak. Caydırma: günde en fazla 100.000 adım yazılır; arkadaşların her günün adımına itiraz açabilir, diğer oyuncuların çoğunluğu itiraz ederse o günün adımı silinir. Gerisini uygulama değil arkadaşların yakalar.",

@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_TIMEZONE, LIMITS, todayKey, type Challenge, type Entry } from '@koydum/shared';
+import { CHALLENGE_TYPES, DEFAULT_TIMEZONE, LIMITS, todayKey, type Challenge, type Entry } from '@koydum/shared';
 import { runSchedulerOnce } from '../src/services/challenges.js';
 import { challengeFeed, disputeUpheldCopy, entryReplacedCopy } from '../src/services/challengeViews.js';
 import { listByType } from '../src/services/notifications.js';
@@ -334,6 +334,39 @@ describe('scheduler: the hour the phones get after a step çelınc ends', () => 
     expect(tick(harness)).toMatchObject({ finalized: 1 });
     expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
     expect(participant(harness, challengeId, ali.me.id).final_score).toBe(10_200);
+  });
+
+  it('takes nothing from a phone first opened after the hour, and nothing tells an iPhone player otherwise', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+
+    // Ali's phone syncs in the evening; Veli's iPhone stays shut until the morning after.
+    at(harness, '2026-01-06T19:00:00.000Z');
+    await phoneSync(harness, ali, { '2026-01-05': 8_000, '2026-01-06': 10_000 });
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS);
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+
+    at(harness, MIDNIGHT_END, 9 * HOUR);
+    const late = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: '/me/steps',
+      payload: {
+        days: [
+          { dayKey: '2026-01-05', steps: 15_000, source: 'pedometer' },
+          { dayKey: '2026-01-06', steps: 17_000, source: 'pedometer' },
+        ],
+      },
+    });
+    expect(late.json<{ updated: number }>().updated).toBe(0);
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+
+    // "open it once a day / once a week" was all the rules and the README asked of him
+    const rules = CHALLENGE_TYPES.find((type) => type.key === 'adim_yarisi')?.howMeasuredTr ?? '';
+    expect(rules).not.toContain('günde bir kere uygulamayı açman yeterli');
+    expect(rules).toContain('Çelınc bitince bir saat içinde uygulamayı bir kez aç');
+    const readme = fs.readFileSync(new URL('../../../README.md', import.meta.url), 'utf8');
+    expect(readme).not.toContain('haftada bir açman yeter');
+    expect(readme).toContain('çelınc bitince o saat içinde uygulamayı bir kez aç');
   });
 
   it('starts the hour again from boot when the server was off at the end', async () => {

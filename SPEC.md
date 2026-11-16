@@ -986,7 +986,12 @@ of the app (home's greeting, the inbox, the wizard, the recap) keeps `me.timezon
 - The phone's own reminders (services/reminders.ts), only for çelınclar whose `me.status` is `accepted` (the list also
   returns invites), and not for a `pending` one with fewer than two accepted (it takes no entry and is cancelled at its
   end if nobody joins; the refresh after the second yes sets them, below): a check-in çelınc's slot 30 minutes before its
-  deadline and a "son 1 saat" warning before every end.
+  deadline and a "son 1 saat" warning before every end. On an `auto_steps` çelınc there is nothing to type, so that
+  warning says when to open the app instead ("Bitince uygulamayı bir kez aç…"), and a second one fires at
+  `endsAt + 2 min` ("… bitti. Bir saat içinde dokun…", `reminder: 'last_hour'`, a tap opens the çelınc, whose settling
+  effect syncs): an iPhone sends steps only while the app runs, and nothing after the settle hour moves the result.
+  When the end cuts the reader's last day in half (their `myTimezone` is not the one the end was snapped in), a sync
+  after the end cannot move that day (`dayOverByEnd`, POST /me/steps): the warning says "Bitmeden" and there is no second one.
   The check-in slot is one DATE trigger per remaining day of the window in the çelınc's `myTimezone` (`zonedInstant`; the
   account's zone, `refreshReminders`' `tz`, only when an older server leaves it out;
   identifier `koydum-checkin-<challengeId>-<dayKey>`; a deadline before 00:30 is poked the evening before), never a

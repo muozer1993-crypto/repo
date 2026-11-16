@@ -17,7 +17,9 @@ import { resolveTimezone, safeDayKey, safeDayKeysBetween, safeTodayKey, zonedIns
  *
  *  - a check-in challenge whose deadline is at 07:00 needs a poke at 06:30 on
  *    every day it still runs, and none once today's check-in is in;
- *  - a challenge that ends tonight needs a "son saat" warning.
+ *  - a challenge that ends tonight needs a "son saat" warning;
+ *  - a step challenge needs a poke right after its end, while the phones'
+ *    hour still takes the last day the phone has not sent yet.
  *
  * Only çelınclar the reader accepted get them: the list also carries the ones
  * they were merely invited to, and an unanswered invite has no deadline to miss.
@@ -118,6 +120,12 @@ const MINUTES_BEFORE_DEADLINE = 30;
 const CHECKIN_DAYS_AHEAD = 14;
 /** iOS keeps only an app's 64 soonest local notifications and drops the rest without a word. */
 const MAX_SCHEDULED = 60;
+/**
+ * How long after a step çelınc's end the "send your last steps" tap comes. Not
+ * on the dot: a reading the server gets before its own end does not tell it the
+ * last day is in, and a phone clock a minute fast would send just that.
+ */
+const STEPS_ENDED_PING_MS = 2 * 60_000;
 
 /** One per çelınc and check-in day, so a single day can be taken back. */
 function checkinIdentifier(challengeId: string, dayKey: string): string {
@@ -281,6 +289,12 @@ export async function syncReminders(
     }
 
     const endsIn = new Date(challenge.endsAt).getTime() - now.getTime();
+    // A step çelınc has nothing to type: what decides it is what the phones
+    // send by the end of the hour after it (LIMITS.DEVICE_SETTLE_MS), and an
+    // iPhone sends only while the app runs. One left shut lost its last
+    // evening, and with it the race, without a word.
+    const steps = challenge.metricType === 'auto_steps';
+    const afterEnd = steps && lastDayEndsWithIt(challenge);
     // one hour before the end, but only if that moment is still in the future
     const secondsUntilLastHour = Math.floor((endsIn - 60 * 60_000) / 1000);
     if (Number.isFinite(secondsUntilLastHour) && secondsUntilLastHour > 60) {
@@ -289,8 +303,9 @@ export async function syncReminders(
         request: {
           content: {
             title: level === 1 ? 'Son bir saat' : 'SON 1 SAAT ⏳',
-            body:
-              level === 1
+            body: steps
+              ? lastHourStepsBody(challenge.title, level, afterEnd ? 'Bitince' : 'Bitmeden')
+              : level === 1
                 ? `${challenge.title} bir saat sonra bitiyor. Girişlerini kontrol et.`
                 : `${challenge.title} bir saat sonra bitiyor. Skorunu girmediysen yersin.`,
             data: { kind: REMINDER_KIND, reminder: 'last_hour', challengeId: challenge.id, type: 'reminder' },
@@ -299,6 +314,35 @@ export async function syncReminders(
           trigger: {
             type: api.SchedulableTriggerInputTypes.TIME_INTERVAL,
             seconds: secondsUntilLastHour,
+            ...channel,
+          },
+        },
+      });
+    }
+
+    // Right after the end, the tap that sends the last day: it opens the
+    // çelınc, and the app syncs on the way to the front and again on that
+    // screen while the result waits. A refresh inside those two minutes sets
+    // it again rather than letting the clear before it swallow it.
+    const secondsUntilEnded = Math.floor((endsIn + STEPS_ENDED_PING_MS) / 1000);
+    if (afterEnd && Number.isFinite(secondsUntilEnded) && secondsUntilEnded > 0) {
+      planned.push({
+        at: now.getTime() + secondsUntilEnded * 1000,
+        request: {
+          content: {
+            title: level === 1 ? 'Son adımlarını gönder' : level === 2 ? 'Adımlarını yolla ⏳' : 'Adımları yolla 🍆',
+            body:
+              level === 1
+                ? `${challenge.title} bitti. Son adımlarının da sayılması için bir saat içinde dokun.`
+                : level === 2
+                  ? `${challenge.title} bitti. Bir saat içinde dokun, son adımların gitsin.`
+                  : `${challenge.title} bitti. Bir saat içinde dokun, yoksa son adımların yanar, yersin.`,
+            data: { kind: REMINDER_KIND, reminder: 'last_hour', challengeId: challenge.id, type: 'reminder' },
+            sound: true,
+          },
+          trigger: {
+            type: api.SchedulableTriggerInputTypes.TIME_INTERVAL,
+            seconds: secondsUntilEnded,
             ...channel,
           },
         },
@@ -347,6 +391,24 @@ function checkinSlots(challenge: ReminderChallenge, now: Date): { dayKey: string
     if (time > now.getTime() && time >= startsAt && time < endsAt) slots.push({ dayKey, at: slot });
   }
   return slots;
+}
+
+/**
+ * Whether the reader's last day of the çelınc is over when it ends. The app
+ * snaps an end to the last millisecond of a day in the creator's zone; a reader
+ * counted in another zone has that day cut in half, and the server keeps a cut
+ * day as it stood at the end (`dayOverByEnd`): only a sync before it counts.
+ */
+function lastDayEndsWithIt({ endsAt, tz }: ReminderChallenge): boolean {
+  const end = Date.parse(endsAt);
+  return safeDayKey(new Date(end), tz) !== safeDayKey(new Date(end + 1), tz);
+}
+
+/** "Son 1 saat" for a step çelınc: when to open the app, since there is no score to type. */
+function lastHourStepsBody(title: string, level: 1 | 2 | 3, when: 'Bitince' | 'Bitmeden'): string {
+  if (level === 1) return `${title} bir saat sonra bitiyor. ${when} uygulamayı bir kez aç, son adımların da sayılsın.`;
+  if (level === 2) return `${title} bir saat sonra bitiyor. ${when} uygulamayı bir aç, son adımların gitsin.`;
+  return `${title} bir saat sonra bitiyor. ${when} uygulamayı açmazsan son adımların yanar, yersin.`;
 }
 
 async function schedule(api: LocalNotifications, request: NotificationRequest): Promise<boolean> {

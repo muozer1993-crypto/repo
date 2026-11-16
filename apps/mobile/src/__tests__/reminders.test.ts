@@ -9,7 +9,7 @@ import type { ChallengeSummary } from '@koydum/shared';
 
 interface MockRequest {
   identifier?: string;
-  content: { data: Record<string, unknown> };
+  content: { title?: string; body?: string; data: Record<string, unknown> };
   trigger: { type: string; date?: Date; seconds?: number };
 }
 
@@ -311,6 +311,88 @@ describe('which days get a check-in poke', () => {
     await refreshReminders(client, 2, TZ);
     expect(mockScheduled.map((item) => item.identifier)).not.toContain('koydum-checkin-c9-2026-10-05');
     expect(mockScheduled.map((item) => item.identifier)).toContain('koydum-checkin-c9-2026-10-06');
+  });
+});
+
+/** 23:59:59.999 tonight in Istanbul, where the app snaps an end. */
+const TONIGHT_END = new Date('2026-10-05T20:59:59.999Z');
+
+/** An Adım Yarışı the reader is in, ending at midnight tonight in Istanbul unless told otherwise. */
+function stepsSummary(overrides: { endsAt?: Date; myTimezone?: string } = {}): ChallengeSummary {
+  const summary = checkinSummary({ id: 's1', endsAt: overrides.endsAt ?? TONIGHT_END, myTimezone: overrides.myTimezone });
+  summary.challenge = { ...summary.challenge, title: 'Ofis Ligi', metricType: 'auto_steps', deadlineTime: null };
+  return summary;
+}
+
+/** The "son 1 saat" warning and the tap after a step çelınc's end, in the order they were asked for. */
+function endRequests(): MockRequest[] {
+  return mockSchedule.mock.calls.map(([request]) => request).filter((request) => request.content.data.reminder === 'last_hour');
+}
+
+describe('the end of a step çelınc', () => {
+  it('tells a step player to open the app once it is over, and taps them two minutes after the end', async () => {
+    expect(await refreshReminders(listOf(stepsSummary()), 1, TZ)).toBe(2);
+
+    const [lastHour, ended] = endRequests();
+    // nothing to type in a step race: the steps only count if the phone sends them
+    expect(lastHour?.content.body).toBe('Ofis Ligi bir saat sonra bitiyor. Bitince uygulamayı bir kez aç, son adımların da sayılsın.');
+    expect(lastHour?.trigger.seconds).toBe(Math.floor((TONIGHT_END.getTime() - HOUR_MS - NOW.getTime()) / 1000));
+    // the tap opens the çelınc, whose settling screen syncs the last day
+    expect(ended?.content.data).toEqual({ kind: REMINDER_KIND, reminder: 'last_hour', challengeId: 's1', type: 'reminder' });
+    expect(ended?.content.body).toContain('Ofis Ligi bitti.');
+    expect(ended?.trigger).toMatchObject({
+      type: 'timeInterval',
+      seconds: Math.floor((TONIGHT_END.getTime() + 2 * 60_000 - NOW.getTime()) / 1000),
+    });
+  });
+
+  it('says it at every level, none of them "Skorunu girmediysen"', async () => {
+    const bodies: string[] = [];
+    for (const level of [1, 2, 3] as const) {
+      mockSchedule.mockClear();
+      await refreshReminders(listOf(stepsSummary()), level, TZ);
+      const requests = endRequests();
+      expect(requests).toHaveLength(2);
+      bodies.push(...requests.map((request) => `${request.content.title} | ${request.content.body}`));
+    }
+    expect(new Set(bodies).size).toBe(6);
+    for (const body of bodies) expect(body).not.toContain('Skorunu');
+  });
+
+  it('sets the tap again when a refresh lands between the end and two minutes after it', async () => {
+    jest.setSystemTime(new Date(TONIGHT_END.getTime() + 60_000));
+    try {
+      await refreshReminders(listOf(stepsSummary()), 2, TZ);
+      // every refresh clears first: the tap has to be set again for the minute left
+      const requests = endRequests();
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.content.body).toContain('bitti');
+      expect(requests[0]?.trigger.seconds).toBe(60);
+
+      mockSchedule.mockClear();
+      jest.setSystemTime(new Date(TONIGHT_END.getTime() + 3 * 60_000));
+      await refreshReminders(listOf(stepsSummary()), 2, TZ);
+      expect(mockSchedule).not.toHaveBeenCalled();
+    } finally {
+      jest.setSystemTime(NOW);
+    }
+  });
+
+  it('tells a reader whose last day the end cuts in half to open the app before it, and does not tap after', async () => {
+    // snapped to midnight in Istanbul, 22:00 in London: that evening after the end never counts
+    expect(await refreshReminders(listOf(stepsSummary({ myTimezone: 'Europe/London' })), 1, TZ)).toBe(1);
+
+    const requests = endRequests();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.content.body).toBe('Ofis Ligi bir saat sonra bitiyor. Bitmeden uygulamayı bir kez aç, son adımların da sayılsın.');
+  });
+
+  it('keeps "Skorunu girmediysen yersin" for a çelınc the reader types into, with no tap after the end', async () => {
+    await refreshReminders(listOf(checkinSummary()), 2, TZ);
+
+    const requests = endRequests();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.content.body).toBe('Sabah Kalkma bir saat sonra bitiyor. Skorunu girmediysen yersin.');
   });
 });
 
