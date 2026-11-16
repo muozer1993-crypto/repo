@@ -315,6 +315,29 @@ describe('a notification about the çelınc on screen', () => {
   });
 });
 
+describe('a notification tapped over the welcome slides', () => {
+  it('opens nothing and leaves the row unread, from the push or either toast', async () => {
+    useAuth.setState({ onboarding: true });
+    mockDelivery.items = [
+      { id: 'n1', type: 'challenge_invite', title: 'Çelınc daveti', body: 'Ali seni çağırdı.', data: { challengeId: 'c-1' }, readAt: null, createdAt: '2026-10-18T10:00:00.000Z', pushed: false },
+    ];
+    const tree = renderBridge();
+    await settle();
+
+    // the poll's toast for the inviter's call
+    pressToast(tree, 'Çelınc daveti');
+    tapPush({ type: 'friend_request', notificationId: 'n2' });
+    act(() => {
+      mockListeners.received!('Dürtüldün', 'Ali seni dürttü.', { type: 'poke', challengeId: 'c-1', notificationId: 'n3' });
+    });
+    pressToast(tree, 'Dürtüldün');
+
+    // nothing stacked over the slides; every row still waits in Gelen
+    expect(stack()).toEqual(['(tabs) /']);
+    expect(markRead).not.toHaveBeenCalled();
+  });
+});
+
 describe('a notification that opens a tab', () => {
   it('lands a kanka request tapped on a çelınc on the friends tab, without a second tab bar', async () => {
     startOn('/', '/challenge/c-1', '/challenge/c-1/results');

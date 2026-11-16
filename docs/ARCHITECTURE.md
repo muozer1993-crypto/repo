@@ -437,7 +437,11 @@ dışında, kök yığında açılır: uygulama açıkken gelen bağlantı onun 
 "Kankalara git" ve "Vazgeç" `leaveForTab` ile çıkar: önce bağlantıdan inilir (`dismissAll`), bir
 sonraki turda `goToTab`. `replace` bağlantının yerine ikinci bir uygulama koyuyordu; iki sekme
 çubuğu, iki ana ekran, geri tuşu da önceden açık çelınca dönüyordu. Uygulama kapalıyken
-bağlantıdan açılışta altında bir şey yoktur, orada `replace` uygulamayı kurar.
+bağlantıdan açılışta altında bir şey yoktur, orada `replace` uygulamayı kurar. Karşılama
+slaytları açıkken (`onboarding`) dokunuş hiçbir şey açmaz, satırı da okunmuş saymaz; satır Gelen'de
+bekler. Slaytların üstüne açılan uygulama onları yığında bırakıyordu: slaytlar kapanmadığı için
+karşılama bitmiş sayılmıyor, push kaydı, adım ve hatırlatmalar uygulama yeniden açılana kadar
+kapalı kalıyordu.
 
 Push kuyruğu ayrı bir tablo değil, gelen kutusunun `pushed_at` ve `push_error`'u boş satırlarıdır;
 neyin hiç gitmeyeceği de orada yazılır. Bir telefon tek hesaba aittir: `POST /me/push-token` aynı

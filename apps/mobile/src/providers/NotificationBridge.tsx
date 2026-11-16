@@ -189,7 +189,10 @@ export function NotificationBridge() {
   useEffect(() => {
     if (!signedIn) return;
     const go = (route: NotificationRoute) => {
-      if (!route) return;
+      // Over the welcome slides a tap stacked the app on them: the slides
+      // stayed mounted, their cleanup never ended onboarding, and push, steps
+      // and reminders stayed off until a restart. The row waits in Gelen.
+      if (!route || useAuth.getState().onboarding) return;
       if (route.notificationId) {
         // opening it is reading it, as a tap on the row in Gelen is; without
         // this the badge kept counting a laf the loser had already opened
@@ -257,6 +260,8 @@ export function NotificationBridge() {
           body: more > 0 ? `${newest.body}\nGelen kutunda ${more} bildirim daha var.` : newest.body,
           kind: newest.type === 'taunt' ? 'taunt' : 'info',
           onPress: () => {
+            // the poll runs over the welcome slides too: see `go` above
+            if (useAuth.getState().onboarding) return;
             if (!route) {
               goToTab('/(app)/(tabs)/inbox');
               return;

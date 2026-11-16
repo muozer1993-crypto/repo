@@ -1021,6 +1021,9 @@ of the app (home's greeting, the inbox, the wizard, the recap) keeps `me.timezon
   inbox and friends tabs go through `goToTab` (utils/navigation.ts): `dismissAll` down to the tab bar when something is
   stacked over it (`canDismiss`), then `navigate`. A tab route pushed or navigated to from a çelınc stacked a second
   tab bar over it. The çelınc screen's "Kankalara git" and the wizard's button under "Kanka yok" use it too.
+- While the welcome slides are up (`onboarding`), a tap on a push, its toast or the poll's toast opens nothing and marks
+  nothing read; the row waits in Gelen. Opened over the slides, the app stacked on them: they stayed mounted, their
+  cleanup never ended onboarding, and push registration, steps and reminders stayed off until a restart.
 - A tap also marks its inbox row read: the server's push and `fireLocal` both put `notificationId` in the data, the route keeps
   it, and the bridge sends `POST /me/inbox/read { ids: [id] }` (then refreshes unread + inbox) before navigating. The phone's own
   reminders carry no id.
