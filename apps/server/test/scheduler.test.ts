@@ -1533,9 +1533,30 @@ describe('scheduler: the finish news across a block placed mid-race', () => {
     const [lost] = listByType(harness.db, veli.me.id, 'challenge_finished');
     expect(lost!.body).toContain('senin skorun 4 bardak');
     expect(lost!.body).not.toContain('Ali');
+    // nor the winner's laf: the block refuses it ("Kazanan ağzını açarsa telefonun öter.")
+    expect(lost!.body).toBe('Su Bardağı Yarışı bitti, senin skorun 4 bardak.');
     expectClean(lost!.body);
     // nothing between Can and Ali: his still says who won
     expect(listByType(harness.db, can.me.id, 'challenge_finished')[0]!.body).toContain('Kazanan Ali (10 bardak)');
+  });
+
+  it('promises no rematch to a 1v1 loser who has a block with the winner', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId, endsAt } = await waterRace(harness, [
+      { username: 'ali', displayName: 'Ali', glasses: 5 },
+      { username: 'veli', displayName: 'Veli', vulgarityMax: 1, glasses: 3 },
+    ]);
+    const [ali, veli] = players as [RegisteredUser, RegisteredUser];
+    await block(harness, veli, ali);
+
+    at(harness, endsAt, 1);
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+    const [lost] = listByType(harness.db, veli.me.id, 'challenge_finished');
+    expect(lost!.title).toBe('Bu tur bitti');
+    // "Rövanş isteyebilirsin." would be answered "Rövanş için davet edilecek kimse kalmadı."
+    expect(lost!.body).toBe('Su Bardağı Yarışı bitti, senin skorun 3 bardak.');
+    const rematch = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(rematch.statusCode).toBe(400);
   });
 
   it('names neither co-leader to somebody behind a tie who has a block with one of them', async () => {

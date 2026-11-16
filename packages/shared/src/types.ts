@@ -532,7 +532,18 @@ export interface ChallengeDetail extends ChallengeSummary {
   feed: FeedItem[];
   disputes: Dispute[];
   taunts: Taunt[];
+  /**
+   * Who the reader may still have a word with once the çelınc is finished:
+   * the losers for the winner, the other co-leaders for a player sharing first
+   * place in a tie, never anybody across a block. `done` = already sent.
+   */
   canTaunt: CanTaunt[];
+  /**
+   * True when `canTaunt` lists a tie's co-leaders too. Older servers leave it
+   * out and list nobody for a tie, so the app cannot tell a co-leader behind a
+   * block from that and offers every co-leader as before.
+   */
+  canTauntCoversTie?: boolean;
   canPoke: boolean;
   /**
    * While a çelınc is still running, talking is a privilege: only whoever is

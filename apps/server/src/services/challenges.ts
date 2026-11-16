@@ -992,15 +992,20 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
 
       const winnerScore = winnerId ? scoreLabel(type, scoreById.get(winnerId)?.score ?? 0) : '';
       // a block placed mid-race keeps both in it, but the lock screen does not
-      // spell out the name the reader blocked (or was blocked by)
-      const named = winnerUser && !isBlockedBetween(db, user.id, winnerUser.id) ? winnerUser : undefined;
+      // spell out the name the reader blocked (or was blocked by), nor open with
+      // `challenge_finished_lost`: its "Rövanş isteyebilirsin." / "Kazanan ağzını
+      // açarsa telefonun öter." promise a rematch and a laf the block refuses
+      const acrossBlock = !!winnerUser && isBlockedBetween(db, user.id, winnerUser.id);
+      const named = winnerUser && !acrossBlock ? winnerUser : undefined;
       notify(db, {
         userId: user.id,
         type: 'challenge_finished',
         title: finishedTitle(level, 'loser'),
         body: named
           ? `${t('challenge_finished_lost', level)} ${challenge.title} bitti. Kazanan ${named.display_name} (${winnerScore}), senin skorun ${myScore}.`
-          : `${t('challenge_finished_lost', level)} ${challenge.title} bitti, senin skorun ${myScore}.`,
+          : acrossBlock
+            ? `${challenge.title} bitti, senin skorun ${myScore}.`
+            : `${t('challenge_finished_lost', level)} ${challenge.title} bitti, senin skorun ${myScore}.`,
         data: { challengeId: challenge.id, role: 'loser', winnerId },
         createdAt: iso,
       });

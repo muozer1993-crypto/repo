@@ -256,20 +256,39 @@ export function tauntsForUser(db: Database, challengeId: string, userId: string)
 }
 
 /**
- * One row per loser when the caller is the winner of a finished challenge.
- * A loser with a block between the two (either way) is left out: the taunt
- * route refuses them with 403 `blocked`, and the follow-up reminder does not
- * count them (`sendTauntFollowups`).
+ * Who the caller may still have a word with after the whistle: one row per
+ * loser when the caller is the winner of a finished challenge, and in a tie,
+ * for a player sharing first place, one per other co-leader (the taunt route's
+ * 'tie' mode). Anybody with a block between the two (either way) is left out:
+ * the taunt route refuses them with 403 `blocked`, and the follow-up reminder
+ * does not count them (`sendTauntFollowups`).
  */
 export function canTauntList(db: Database, challenge: ChallengeRow, userId: string): CanTaunt[] {
-  if (challenge.status !== 'finished' || challenge.winner_id !== userId) return [];
-  const losers = db
-    .prepare(
-      `SELECT user_id FROM challenge_participants
-        WHERE challenge_id = ? AND status = 'accepted' AND user_id <> ?
-        ORDER BY user_id ASC`,
-    )
-    .all(challenge.id, userId) as { user_id: string }[];
+  if (challenge.status !== 'finished') return [];
+  let targets: { user_id: string }[];
+  if (challenge.winner_id !== null && challenge.winner_id === userId) {
+    targets = db
+      .prepare(
+        `SELECT user_id FROM challenge_participants
+          WHERE challenge_id = ? AND status = 'accepted' AND user_id <> ?
+          ORDER BY user_id ASC`,
+      )
+      .all(challenge.id, userId) as { user_id: string }[];
+  } else if (challenge.is_tie) {
+    const mine = db
+      .prepare('SELECT status, final_rank FROM challenge_participants WHERE challenge_id = ? AND user_id = ?')
+      .get(challenge.id, userId) as Pick<ParticipantRow, 'status' | 'final_rank'> | undefined;
+    if (mine?.status !== 'accepted' || mine.final_rank !== 1) return [];
+    targets = db
+      .prepare(
+        `SELECT user_id FROM challenge_participants
+          WHERE challenge_id = ? AND status = 'accepted' AND final_rank = 1 AND user_id <> ?
+          ORDER BY user_id ASC`,
+      )
+      .all(challenge.id, userId) as { user_id: string }[];
+  } else {
+    return [];
+  }
   const done = new Set(
     (
       db
@@ -277,7 +296,7 @@ export function canTauntList(db: Database, challenge: ChallengeRow, userId: stri
         .all(challenge.id, userId) as { to_user_id: string }[]
     ).map((row) => row.to_user_id),
   );
-  return losers
+  return targets
     .filter((row) => !isBlockedBetween(db, userId, row.user_id))
     .map((row) => ({ toUserId: row.user_id, done: done.has(row.user_id) }));
 }
@@ -384,6 +403,7 @@ export function buildDetail(
     disputes: challengeDisputes(db, challenge.id),
     taunts: tauntsForUser(db, challenge.id, userId),
     canTaunt: canTauntList(db, challenge, userId),
+    canTauntCoversTie: true,
     pokeTargets,
     // the button only lights up when there is somebody to talk to right now
     canPoke: pokeTargets.some((target) => !target.done),

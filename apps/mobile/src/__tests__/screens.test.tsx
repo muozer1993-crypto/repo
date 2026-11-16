@@ -3195,6 +3195,108 @@ describe('a loser the winner has a block with', () => {
     expect(text).not.toContain('Veli');
     expect(text).not.toContain('HEPSİ (');
   });
+
+  // "Kaybedene bir laf gönder." and "Kime koyacağını seç" over a row with nothing to press
+  it('tells a 1v1 winner the laf cannot go, instead of asking whom to send it to', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    const challenge = { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: 'me-1' };
+    const standings = [
+      { ...detail.me!, isWinner: true },
+      { ...detail.me!, user: VELI, score: 4000, rank: 2 },
+    ];
+    api.challenge = jest.fn(async () => ({ ...detail, challenge, participants: standings, me: standings[0], canTaunt: [] }));
+    api.results = jest.fn(async () => ({ challenge, standings, taunts: [] }));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Aranızda engel var, laf gitmez.');
+    expect(text).toContain('Bu çelınc senin, keyfini çıkar.');
+    expect(text).not.toContain('Kime koyacağını seç');
+    expect(text).not.toContain('Kaybedene bir laf gönder.');
+    expect(tree.root.findAll((node) => node.props.title === 'KOYDUM MU?' && typeof node.props.onPress === 'function')).toHaveLength(0);
+  });
+
+  it('still asks whom to send it to while one loser can be reached', async () => {
+    searchParams.id = 'c-1';
+    wonOverBoth();
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Kime koyacağını seç');
+    expect(text).toContain('Kaybedene bir laf gönder.');
+    expect(text).not.toContain('Aranızda engel var');
+  });
+});
+
+describe('a tie shared with somebody across a block', () => {
+  const VELI = { id: 'u-3', username: 'veli', displayName: 'Veli', avatarEmoji: '🦊', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** The reader and Veli both finished first; `canTaunt` from a server that lists a tie's co-leaders. */
+  function tiedWithVeli(canTaunt: { toUserId: string; done: boolean }[], coversTie: boolean | undefined) {
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    const challenge = { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: null, isTie: true };
+    const standings = [
+      { ...detail.me!, score: 5000, rank: 1, isWinner: false },
+      { ...detail.me!, user: VELI, score: 5000, rank: 1, isWinner: false },
+    ];
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge,
+      participants: standings,
+      me: standings[0],
+      canTaunt,
+      ...(coversTie === undefined ? {} : { canTauntCoversTie: coversTie }),
+    }));
+    api.results = jest.fn(async () => ({ challenge, standings, taunts: [] }));
+  }
+
+  const lafAt = (tree: ReactTestRenderer) =>
+    tree.root.findAll((node) => node.props.title === 'Laf at' && typeof node.props.onPress === 'function');
+
+  it('offers no "Laf at" when the server leaves the co-leader out', async () => {
+    searchParams.id = 'c-1';
+    tiedWithVeli([], true);
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('BERABERE LAN');
+    expect(lafAt(tree)).toHaveLength(0);
+  });
+
+  it('keeps him out of the picker, which then has nobody to offer', async () => {
+    searchParams.id = 'c-1';
+    tiedWithVeli([], true);
+    const TauntScreen = require('@/app/(app)/challenge/[id]/taunt').default;
+    const tree = renderScreen(<TauntScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Berabere kalan yok');
+    expect(text).not.toContain('Veli');
+  });
+
+  it('offers "Laf at" to a co-leader the server lists, and to every one from an older server', async () => {
+    searchParams.id = 'c-1';
+    tiedWithVeli([{ toUserId: VELI.id, done: false }], true);
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const listed = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(lafAt(listed)).toHaveLength(1);
+
+    // an older server lists nobody for a tie and says nothing about it
+    tiedWithVeli([], undefined);
+    const older = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(lafAt(older)).toHaveLength(1);
+  });
 });
 
 describe('a group rival who is not a friend', () => {

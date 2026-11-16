@@ -934,10 +934,12 @@ rakibini engelleyen, kimsenin sorgulayamayacağı bir sayıyla kazanırdı. Böy
 kimin itiraz ettiğini yazmaz, "Bir rakibin" der. Çelınctan ayrılmış biriyle arasında engel olan
 onun girişine itiraz edemez. Engelli ikili sunucunun kendi bildirimlerinde de birbirinin adını
 görmez, bildirimler yine gelir: gün ortası dürtme "Bir rakibin" der, bitişte kaybedene "Kazanan
-Ali" yerine sadece kendi skoru yazar, beraberliğin arkasında kalan da birincilerden biriyle arasında
-engel varsa "Birinciler berabere kaldı" okur. Başlamamış bir çelıncı aranızda engel olan kişi
-iptal ederse bildirim kimin iptal ettiğini yazmaz. Aranızda engel olan rakip için çelınc sürerken
-"Laf sok", bitince de "KOYDUM MU?" düğmesi çıkmaz; sunucu zaten ikisini de geri çevirir.
+Ali" yerine sadece kendi skoru yazar (rövanş ve laf sözü de vermez, ikisi de olmaz), beraberliğin
+arkasında kalan da birincilerden biriyle arasında engel varsa "Birinciler berabere kaldı" okur.
+Başlamamış bir çelıncı aranızda engel olan kişi iptal ederse bildirim kimin iptal ettiğini yazmaz.
+Aranızda engel olan rakip için çelınc sürerken "Laf sok", bitince de "KOYDUM MU?" düğmesi, berabere
+bittiyse "Laf at" çıkmaz; sunucu zaten hepsini geri çevirir. Kaybedenlerin hepsiyle aranızda engel
+varsa sonuç ekranı kime laf atacağını sormaz, "Aranızda engel var, laf gitmez." der.
 
 ### Çelınc sürerken kanka ekleme
 

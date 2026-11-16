@@ -49,6 +49,24 @@ const TAUNT_PROMPT: Record<VulgarityLevel, string> = {
   3: 'Kime saplayacağını seç. Lafı biz yazdık 🍆',
 };
 
+/**
+ * In place of TAUNT_PROMPT when every loser is behind a block (either way):
+ * `canTaunt` lists none of them, no row has a button, and the server would
+ * answer a laf with 403 `blocked` anyway, which already says as much.
+ */
+const BLOCKED_TAUNT: Record<VulgarityLevel, string> = {
+  1: 'Aranızda engel olduğu için mesaj gönderilemiyor.',
+  2: 'Aranızda engel var, laf gitmez.',
+  3: 'Aranızda engel var, bu sefer laf yok 🍆',
+};
+
+/** The winner's line under the title when no laf can go out (BLOCKED_TAUNT). */
+const WIN_SUB_NO_TAUNT: Record<VulgarityLevel, string> = {
+  1: 'Tebrikler, bu çelınc senin.',
+  2: 'Bu çelınc senin, keyfini çıkar.',
+  3: 'Bu çelınc senin, keyfini çıkar 🍆',
+};
+
 const WIN_TITLE: Record<VulgarityLevel, string> = {
   1: 'KAZANDIN',
   2: 'KOYDUN LAN',
@@ -397,10 +415,16 @@ export default function ResultsScreen() {
   for (const sent of taunts) if (sent.fromUserId === meId) taunted.add(sent.toUserId);
   // The finished detail's `canTaunt` is who the winner can still reach: a loser
   // with a block between us is not in it, and a laf at them only earns 403
-  // `blocked`. Until that detail is here, everybody is offered as before.
-  const tauntable = detail.data?.challenge.status === 'finished' ? detail.data.canTaunt : undefined;
+  // `blocked`. Until that detail is here, everybody is offered as before. In a
+  // tie it lists the other co-leaders the same way, but only a server that says
+  // so (`canTauntCoversTie`): an older one lists nobody for a tie.
+  const finished = detail.data?.challenge.status === 'finished' ? detail.data : undefined;
+  const tauntable = finished && (!tieAtTop || finished.canTauntCoversTie) ? finished.canTaunt : undefined;
   const reachable = (userId: string) => !tauntable || tauntable.some((row) => row.toUserId === userId);
   const pendingLosers = losers.filter((l) => !taunted.has(l.user.id) && reachable(l.user.id));
+  // every loser behind a block: "Kime koyacağını seç" over rows without a button
+  const noneReachable =
+    iWon && losers.length > 0 && !losers.some((l) => reachable(l.user.id) || taunted.has(l.user.id));
 
   // the winner's laf to me; replies and a tie's lafs travel the other ways
   const received: Taunt | undefined =
@@ -417,10 +441,12 @@ export default function ResultsScreen() {
   if (iWon) for (const x of taunts) if (x.toUserId === meId) replies.set(x.fromUserId, x);
   // A tie gives nobody "KOYDUM MU?", but whoever shares first place may have a
   // go at the others who do; somebody behind them has nothing to talk about.
-  const coLeaders =
+  const sharingFirst =
     tieAtTop && isPlayer && mine?.rank === 1 ? ranked.filter((p) => p.user.id !== meId && p.rank === 1) : [];
+  // and not across a block, either way: "Laf at" would only earn 403 `blocked`
+  const coLeaders = sharingFirst.filter((p) => reachable(p.user.id));
   const tiePending = coLeaders.filter((p) => !taunted.has(p.user.id));
-  const tieReceived = coLeaders.length > 0 ? taunts.filter((x) => x.toUserId === meId) : [];
+  const tieReceived = sharingFirst.length > 0 ? taunts.filter((x) => x.toUserId === meId) : [];
   // every co-leader already had their one go at me: it is nobody's turn
   const tieAnswered =
     coLeaders.length > 0 &&
@@ -492,7 +518,7 @@ export default function ResultsScreen() {
       <Header onBack={back} title={challenge.title || type?.nameTr || 'Sonuç'} />
 
       {iWon ? (
-        <WinnerHeader level={level} />
+        <WinnerHeader level={level} noTaunt={noneReachable} />
       ) : isTie && isPlayer ? (
         <NeutralHeader title={TIE_TITLE[level]} subtitle={tieSub} emoji="🤝" />
       ) : behindTie ? (
@@ -601,7 +627,7 @@ export default function ResultsScreen() {
             Laf hakkı senin
           </Text>
           <Text variant="small" muted>
-            {TAUNT_PROMPT[level]}
+            {noneReachable ? BLOCKED_TAUNT[level] : TAUNT_PROMPT[level]}
           </Text>
 
           <View style={styles.prize}>
@@ -828,7 +854,7 @@ function Header({ onBack, title }: { onBack: () => void; title: string }) {
   );
 }
 
-function WinnerHeader({ level }: { level: VulgarityLevel }) {
+function WinnerHeader({ level, noTaunt }: { level: VulgarityLevel; noTaunt: boolean }) {
   const rise = useRise(0);
 
   useEffect(() => {
@@ -842,7 +868,8 @@ function WinnerHeader({ level }: { level: VulgarityLevel }) {
         {WIN_TITLE[level]}
       </Text>
       <Text variant="lead" muted center>
-        {t('challenge_finished_won', level)}
+        {/* its lines tell the winner to send a laf */}
+        {noTaunt ? WIN_SUB_NO_TAUNT[level] : t('challenge_finished_won', level)}
       </Text>
     </Animated.View>
   );

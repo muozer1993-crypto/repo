@@ -1802,9 +1802,29 @@ describe('POST /challenges/:id/taunt', () => {
     expect(atBehind.json().error.code).toBe('not_winner');
     expect(listByType(harness.db, cem.me.id, 'taunt')).toHaveLength(0);
 
-    // nobody won: the winner-only lists stay empty for the co-leaders
+    // nobody won: each co-leader's list is the other one, already done; nobody behind them
     const detail = await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` });
-    expect(detail.json<ChallengeDetail>().canTaunt).toEqual([]);
+    expect(detail.json<ChallengeDetail>().canTaunt).toEqual([{ toUserId: veli.me.id, done: true }]);
+    expect(detail.json<ChallengeDetail>().canTauntCoversTie).toBe(true);
+    const behind = await authed(harness.app, cem.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+    expect(behind.json<ChallengeDetail>().canTaunt).toEqual([]);
+  });
+
+  // The app's "Laf at" goes by this list; it offered Veli and the send earned 403 `blocked`.
+  it('leaves a co-leader behind a block out of a tie\'s list', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await threeWay(harness, true);
+    const listOf = async (user: RegisteredUser) =>
+      (await authed(harness!.app, user.token)({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>()
+        .canTaunt;
+    expect(await listOf(ali)).toEqual([{ toUserId: veli.me.id, done: false }]);
+
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/users/${ali.me.id}/block` });
+    expect(await listOf(ali)).toEqual([]);
+    expect(await listOf(veli)).toEqual([]);
+    const refused = await tauntAs(ali, challengeId, { toUserId: veli.me.id, templateId: 'l2_tie_01' });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error.code).toBe('blocked');
   });
 });
 

@@ -237,7 +237,7 @@ ChallengeSummary { challenge: Challenge, participants: ParticipantView[], me: Pa
      (the login after travel, "Cihazdan güncelle") does not move it, so the app counts this çelınc's "today" with it:
      an app counting in the new zone sends a day the server refuses (`day_in_future`, `checkin_too_early`). Older
      servers leave it out; the app uses `me.timezone` then
-ChallengeDetail extends ChallengeSummary { myEntries: Entry[], feed: FeedItem[], disputes: Dispute[], taunts: Taunt[], canTaunt: { toUserId: string; done: boolean }[], canPoke: boolean, pokeTargets: { toUserId: string; done: boolean }[], disputesCloseAt?: string | null, feedCursor?: FeedCursor | null }
+ChallengeDetail extends ChallengeSummary { myEntries: Entry[], feed: FeedItem[], disputes: Dispute[], taunts: Taunt[], canTaunt: { toUserId: string; done: boolean }[], canTauntCoversTie?: boolean, canPoke: boolean, pokeTargets: { toUserId: string; done: boolean }[], disputesCloseAt?: string | null, feedCursor?: FeedCursor | null }
   -- disputesCloseAt: until when an itiraz may be filed (`disputesOpenUntil`, 2.3), the instant the app hides its itiraz chip from; an older server leaves it out and the app uses endsAt (+ DEVICE_SETTLE_MS on a phone-counted type)
   -- pokeTargets: while a çelınc runs, talking is earned. Only whoever is AHEAD gets entries,
      and only for the rivals they are strictly ahead of (a tie earns nothing). On
@@ -245,10 +245,13 @@ ChallengeDetail extends ChallengeSummary { myEntries: Entry[], feed: FeedItem[],
      score is only the missing-day penalty, the same rule as the mid-day nudge. Nor is a rival with a
      block between the two, either way (a block mid-race leaves both in; the poke route's 403 `blocked`
      stays as the backstop). `done` = still inside the 2h cooldown, so canPoke = pokeTargets.some(t => !t.done).
-  -- canTaunt: for the winner of a finished çelınc only, one row per accepted loser (`done` = already
-     taunted), leaving out a loser with a block between the two, either way (POST …/taunt answers 403
-     `blocked` there). The results screen and the picker offer the winner's laf only to these once the
-     finished detail is loaded; empty for everybody else
+  -- canTaunt: for the winner of a finished çelınc, one row per accepted loser (`done` = already
+     taunted); for an accepted player with `final_rank` 1 in a finished tie, one row per other accepted
+     rank-1 player (the 'tie' mode of POST …/taunt); either leaving out anybody with a block between the
+     two, either way (POST …/taunt answers 403 `blocked` there). The results screen and the picker offer
+     the winner's laf and a tie's "Laf at" only to these once the finished detail is loaded; empty for
+     everybody else. `canTauntCoversTie: true` says the tie rows are there: an older server leaves it out
+     and lists nobody for a tie, and the app then offers every co-leader as before
 Entry { id, challengeId, userId, dayKey, value, source, note, proofUrl, status, createdAt, late?: boolean }
 FeedItem { id, userId, displayName, dayKey, value, source, status, createdAt, updatedAt?: string, proofUrl, note?: string | null, answerBy?: string | null, disputeVotes?: { open: number; needed: number } | null }
   -- updatedAt: the entry's `updated_at`, when the row last changed. A phone's row is created at the day's first
@@ -538,7 +541,9 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    waiting for proof. Finalize: accepted participants with `rankParticipants`; write final_score/rank,
    winner_id/is_tie, `finished`, `finalized_at`; notifications: winner → `challenge_finished` with data
    `{ role: 'winner' }`, losers → `{ role: 'loser', winnerId }` ("… bitti. Kazanan Ali (10 bardak), senin skorun 4
-   bardak."; never naming a winner the loser has a block with, either way: "… bitti, senin skorun 4 bardak."), a
+   bardak."; never naming a winner the loser has a block with, either way: "… bitti, senin skorun 4 bardak.", nor
+   opening with the `challenge_finished_lost` sentence then: its "Rövanş isteyebilirsin." / "Kazanan ağzını açarsa
+   telefonun öter." promise a rematch and a laf the block refuses), a
    tie → `{ role: 'tie' }` to the players sharing first place ("… berabere bitti. Senin skorun … İsteyen rövanş açsın."). Whoever finished behind a tie lost:
    `{ role: 'loser', winnerId: null }`, the loser title, and a body naming the co-leaders (in the final table's order, `participantRows`, never by user id), the shared top score and
    their own place, and the penalty only when the çelınc has one ("Sosyal Medya Orucu bitti. Ali ve Veli berabere kaldı
@@ -549,7 +554,7 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    never the `challenge_finished_lost` sentence, which promises a laf no co-leader may send them. The TITLE is a short
    lock-screen phrase per level ("Kazandın 🏆" / "KOYDUN! 👑" / "KOYDUN! 👑🍆", and "Bu tur bitti" / "Yedin lan" /
    "YEDİN 🍆"); the `challenge_finished_won` / `_lost` sentence opens the BODY, because a phone truncates a long
-   title to nothing useful. Award badges (stats recompute) for all participants.
+   title to nothing useful (the loser's, but for that block). Award badges (stats recompute) for all participants.
 3. Reminders: for each user with `reminder_hour` not null and an active challenge whose `ends_at` is still ahead (a settling one has nothing left to type), when `localHour(now, tz) === reminder_hour`
    and no `reminders_sent` row for today → `reminder` notification with copy `notification_daily_reminder`.
 3b. Taunt follow-up (`sendTauntFollowups`): a `finished` çelınc with a winner (not a tie), finalized between 48 h and
@@ -838,7 +843,7 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             a failed refetch keeps the last detail with a faint "Sunucuya ulaşamıyorum, gördüğün son bilinen hali."
                             line ("Girişin sıraya alınır…" while I can enter); "Çelınc gelmedi" is only for a çelınc never loaded,
                             and a 404 still shows "Bu çelınc sende yok"
-(app)/challenge/[id]/results.tsx   winner view: podium + "KOYDUM MU?" CTA per loser in `canTaunt` (or "Hepsine koy"; a loser behind a block keeps the row, without a button) → taunt picker; loser view: shame screen
+(app)/challenge/[id]/results.tsx   winner view: podium + "KOYDUM MU?" CTA per loser in `canTaunt` (or "Hepsine koy"; a loser behind a block keeps the row, without a button; with every loser behind one, "Aranızda engel var, laf gitmez." (L1 "Aranızda engel olduğu için mesaj gönderilemiyor.", L3 "…, bu sefer laf yok 🍆") in place of "Kime koyacağını seç…" and "Bu çelınc senin, keyfini çıkar." (L1 "Tebrikler, bu çelınc senin.") under the title in place of `challenge_finished_won`) → taunt picker; loser view: shame screen
                             (big TauntBubble if received, else "bekliyor..." — and 24 h after `finalizedAt`, counted from the
                             last fetch, "unuttu galiba, rövanş aç, bu sefer sen koy" instead; the header only says the laf is
                             "aşağıda" once there is one; under a received laf "Cevap ver" (L1 "Cevap yaz", L3 "Lafı geri sok 🍆") →
@@ -856,12 +861,14 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             "rövanş aç" line above (the tie's, the one behind a tie, "unuttu galiba") points to it instead:
                             "Rövanşı aşağıda" (L2/L3 "…, oraya bak."); tie view
                             (a rank-1 player sees the lafs the other co-leaders sent them and "Laf at" (L1 "Mesaj bırak") → picker,
-                            `to` the one other co-leader or, with more, no `to`; then "Lafını attın, sıra onda.", or "Lafını attın, ödeştiniz." once every co-leader has written to me too);
+                            `to` the one other co-leader or, with more, no `to`; only co-leaders in `canTaunt` when the
+                            server says `canTauntCoversTie`, so none behind a block; then "Lafını attın, sıra onda.", or "Lafını attın, ödeştiniz." once every co-leader has written to me too);
                             a player behind a tie gets the loser view without a laf: the shame header with "Laf hakkı berabere
                             kalanlarda, sen arkada kaldın. Rövanş aç." (L1 "Mesaj hakkı…", L3 "…öndekilerde…"), no "bekliyor" card
                             and no answer button, "Öndekilerle aranda … fark var." against the shared top score, the Ceza card
                             ("Öndekilerin ödülü: …", no `challenge_finished_lost` line) and the loser's rematch label;
-                            anybody else (outside a tie) gets "ÇELINC BİTTİ": "Sen bu çelınca girmedin, sadece izledin." for
+                            anybody else gets "ÇELINC BİTTİ" 🏁, or in a tie the tie's title ("BERABERE" / "BERABERE LAN" /
+                            "KİMSE KOYAMADI") with 🤝 but never its rematch line, under it "Sen bu çelınca girmedin, sadece izledin." for
                             somebody who never said yes (invited, declined, not in it), "Sen ayrılmıştın zaten, sonuç bu." for whoever is `left`
                             (a player who walked out, whose entries the detail still shows, or an invitee's "Ayrıl");
                             every player (not a watcher) also gets "Gruba at" (level 1 "Sonucu paylaş"): resultShareText
@@ -874,7 +881,8 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
 (app)/challenge/[id]/taunt.tsx     picker: target chip(s), a context chip per loser from `tauntContexts` (RÖVANŞ / SERİ / EZİCİ FARK / NORMAL FARK / KIL PAYI;
                             without the field, the margin); a loser answering gets the winner as the only target and the CEVAP
                             (`reply`) pool ("Önce o konuşsun" before the winner's laf, "Cevabını verdin" after the answer), a
-                            co-leader of a tie the other rank-1 players and the BERABERE pool; list of templates of that context rendered with real names/scores (levels ≤ target max; higher ones shown locked with
+                            co-leader of a tie the other rank-1 players and the BERABERE pool (the winner's targets, and with
+                            `canTauntCoversTie` a co-leader's, only those in `canTaunt`); list of templates of that context rendered with real names/scores (levels ≤ target max; higher ones shown locked with
                             "X bunu kaldıramaz" note), custom text field (banned-word check client side), preview, "GÖNDER" → success animation
 (app)/challenge/[id]/entry.tsx     modal: log manual value (numeric pad, quick +1/+5 chips per unit), note, proof photo (camera/gallery → /uploads), day selector
                             (today/yesterday, `LIMITS.MANUAL_PICKER_DAYS`, which also starts a late joiner's screen-time window, 2.3; a manual_lower_is_better çelınc offers back to MANUAL_BACKFILL_DAYS so that first day can still be typed the day after; an auto_steps çelınc offers every window day back to STEPS_BACKFILL_DAYS as chips
