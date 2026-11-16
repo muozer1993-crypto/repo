@@ -235,8 +235,15 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
 
       const entry = getEntryRow(db, entryId);
       if (!entry || entry.challenge_id !== challenge.id) throw notFound('entry_not_found', 'Böyle bir giriş yok.');
-      // a blocked pair must not reach each other through an old participant list
-      assertNotBlocked(db, me.id, entry.user_id);
+      // A block placed mid-race takes neither player out (`upsertBlock` never
+      // touches the participant rows), so between two players still in it the
+      // itiraz stays open: otherwise "type 99.000, then block" makes a number
+      // nobody may question. An owner who is out is only an old participant
+      // list, and a blocked pair must not reach each other through it.
+      // `requireAcceptedMembership` above already holds me to `accepted`.
+      const ownerIn = getParticipant(db, challenge.id, entry.user_id)?.status === 'accepted';
+      if (!ownerIn) assertNotBlocked(db, me.id, entry.user_id);
+      const acrossBlock = isBlockedBetween(db, me.id, entry.user_id);
 
       // The owner is looked up BEFORE the write: `recordDispute` commits its own
       // transaction, so a throw afterwards (an owner who deleted their account) would
@@ -249,7 +256,9 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       const outcome = recordDispute(db, { challenge, entry, byUserId: me.id, reason: body.reason, now });
 
       if (notifyOwner) {
-        const copy = disputeCopy(levelOf(owner), me.row.display_name, challenge.title, entry.day_key, outcome.reachedThreshold);
+        // across a block the owner learns of the itiraz, not who filed it
+        const by = acrossBlock ? null : me.row.display_name;
+        const copy = disputeCopy(levelOf(owner), by, challenge.title, entry.day_key, outcome.reachedThreshold);
         notify(db, {
           userId: owner.id,
           type: 'dispute',
@@ -264,7 +273,6 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       // it, so the first one an entry ever gets calls them (`callTheOthers`).
       // An entry of somebody who left counts for nothing: nobody is called.
       const firstEver = countOf(db, 'SELECT COUNT(*) AS n FROM disputes WHERE entry_id = ?', entry.id) === 1;
-      const ownerIn = getParticipant(db, challenge.id, owner.id)?.status === 'accepted';
       const othersCalled =
         outcome.answerBy === null && outcome.threshold >= 2 && firstEver && ownerIn
           ? callTheOthers(me.row, owner, challenge, entry, outcome.threshold, now)

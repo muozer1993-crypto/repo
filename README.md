@@ -912,7 +912,11 @@ bekleniyor, 1/2 kişi" der: ikinci kişi kabul edince başlar ama bitiş tarihi 
 çelıncında telefonların saydığı adımlar o arada da yazılır; başka çelınclarda giriş, başlayana kadar
 açılmaz. Kimse katılmazsa çelınc bitişte iptal olur. Çelıncta kabul etmiş biriyle
 arasında engel olan (kim kimi engellemiş olursa olsun) kabul edemez, "Bu çelınca katılamazsın."
-görür: engelli iki kişi aynı çelıncta oynamaz.
+görür: engelli iki kişi aynı çelıncta oynamaz. Çelınc sürerken konan engel ise iki oyuncuyu da
+çelınctan çıkarmaz, birbirlerinin girişine yine itiraz edebilirler: yoksa elle 99.000 adım yazıp
+rakibini engelleyen, kimsenin sorgulayamayacağı bir sayıyla kazanırdı. Böyle bir itirazın bildirimi
+kimin itiraz ettiğini yazmaz, "Bir rakibin" der. Çelınctan ayrılmış biriyle arasında engel olan
+onun girişine itiraz edemez.
 
 ### Çelınc sürerken kanka ekleme
 

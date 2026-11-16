@@ -472,29 +472,32 @@ function proofWhere(level: VulgarityLevel): string {
  * To the owner of a disputed entry. `onTheClock` is the itiraz that made it a
  * majority: from now on the entry goes unless a photo comes in, so the copy
  * says so. Before that (or after, from yet another friend) it only asks.
+ * `by` is null across a block: the owner hears that an itiraz came, which
+ * the race needs, but not who filed it, which the block was there to stop.
  */
-export function disputeCopy(level: VulgarityLevel, by: string, title: string, dayKey: string, onTheClock = false): CopyText {
+export function disputeCopy(level: VulgarityLevel, by: string | null, title: string, dayKey: string, onTheClock = false): CopyText {
+  const who = by ?? 'Bir rakibin';
   if (level === 1) {
     return {
       title: 'Girişine itiraz var',
       body: onTheClock
-        ? `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine itiraz etti. ${ANSWER_HOURS} içinde fotoğraf eklersen giriş kalır, eklemezsen iptal olur. ${proofWhere(level)}`
-        : `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine itiraz etti. Kanıtını paylaşabilirsin.`,
+        ? `${who}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine itiraz etti. ${ANSWER_HOURS} içinde fotoğraf eklersen giriş kalır, eklemezsen iptal olur. ${proofWhere(level)}`
+        : `${who}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine itiraz etti. Kanıtını paylaşabilirsin.`,
     };
   }
   if (level === 3) {
     return {
       title: 'PALAVRA DEDİ 🍆',
       body: onTheClock
-        ? `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine palavra dedi. ${ANSWER_HOURS} içinde fotoğrafı koy, yoksa o gün yanar. ${proofWhere(level)}`
-        : `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine palavra dedi. Kanıtlayamazsan o gün gider.`,
+        ? `${who}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine palavra dedi. ${ANSWER_HOURS} içinde fotoğrafı koy, yoksa o gün yanar. ${proofWhere(level)}`
+        : `${who}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine palavra dedi. Kanıtlayamazsan o gün gider.`,
     };
   }
   return {
     title: 'İtiraz yedin',
     body: onTheClock
-      ? `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine yalan dedi. ${ANSWER_HOURS} içinde fotoğraf ekle, yoksa bu giriş yanar. ${proofWhere(level)}`
-      : `${by}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine yalan dedi. Kanıtını göster.`,
+      ? `${who}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine yalan dedi. ${ANSWER_HOURS} içinde fotoğraf ekle, yoksa bu giriş yanar. ${proofWhere(level)}`
+      : `${who}, "${title}" çelıncında ${dayWord(dayKey)} günkü girişine yalan dedi. Kanıtını göster.`,
   };
 }
 

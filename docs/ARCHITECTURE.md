@@ -153,7 +153,13 @@ edemez (403 `blocked`). Kabul etmiş başka bir oyuncuyla arasında engel varsa 
 değiştiren de o arada gelmiş engellisinin yanına oturamaz. Engelli iki kişi, hangisi ikinci kabul
 ederse etsin, aynı çelıncta asla birlikte `accepted` olmaz. Çelıncı açan çıkıp gitmiş olsa da
 sayılır: onun engellediği biri çağrılmaz, "kanka oldunuz" haberi de onu o çelınca yönlendirmez
-(`invitableFor`), çünkü kabul kuralı açanla arasındaki engele hep bakar.
+(`invitableFor`), çünkü kabul kuralı açanla arasındaki engele hep bakar. Çelınc sürerken konan
+engel ise kimseyi çıkarmaz (`upsertBlock` katılımcı satırlarına dokunmaz), bu yüzden iki oyuncu da
+içerideyken itiraz kapısı açık kalır: kapansaydı elle 99.000 yazıp rakibini engelleyen,
+sorgulanamayan bir sayıyla kazanırdı. Girişin sahibine giden bildirim o zaman itiraz edenin adını
+yazmaz ("Bir rakibin"); diğer oyuncuları çağıran bildirim ve itiraz edene giden kanıt ve karar
+haberleri engelli ikiliyi yine atlar. Çelınctan çıkmış biriyle aradaki engel kapıyı kapalı tutar
+(403 `blocked`).
 
 Rövanş, eskisi kaç yerel gün sürdüyse o kadar gün sürer ve sihirbaz gibi açanın saat diliminde bir
 günün son milisaniyesinde biter. Önceden "şimdi + eski süre" ile düğmeye basılan saatte bitiyordu;

@@ -4,7 +4,8 @@
  * a proof-required yes/no çelınc nobody could mark, a "yattım" at 02:00 counting
  * as an early night, nudges to people who never joined, reminders telling a
  * player who logged that their score is zero, disputes after the whistle, a
- * blocked pair reaching each other, a rematch winner "avenging" a win, a rival
+ * blocked pair reaching each other (or a block mid-race putting a typed number
+ * past any itiraz), a rematch winner "avenging" a win, a rival
  * they had beaten or a friend who never played the first one (and the picker
  * never hearing of a real rövanş or a third win in a row), a rematch
  * silently dropping a group rival, a partial step count shaving a typed
@@ -234,11 +235,11 @@ describe('disputes and blocks', () => {
     expect(results.json<ChallengeResults>().standings[0]?.user.id).toBe(ali.me.id);
   });
 
-  it('a block also closes the dispute and accept doors', async () => {
+  it('a block mid-race keeps the itiraz open between players still in it, and still closes the accept door', async () => {
     harness = await makeApp({ now: NOW });
-    const ali = await registerUser(harness.app, 'ali');
-    const veli = await registerUser(harness.app, 'veli');
-    const can = await registerUser(harness.app, 'can');
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const can = await registerUser(harness.app, 'can', { displayName: 'Can' });
     befriend(harness.app, ali.me.id, veli.me.id);
     befriend(harness.app, ali.me.id, can.me.id);
     const created = await authed(harness.app, ali.token)({
@@ -259,18 +260,143 @@ describe('disputes and blocks', () => {
     expect((await authed(harness.app, ali.token)({ method: 'POST', url: `/users/${veli.me.id}/block` })).statusCode).toBeLessThan(300);
     expect((await authed(harness.app, ali.token)({ method: 'POST', url: `/users/${can.me.id}/block` })).statusCode).toBeLessThan(300);
 
+    // Veli is still in, and the itiraz is the only check on a typed number
     const dispute = await authed(harness.app, veli.token)({
       method: 'POST',
       url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
       payload: { reason: 'inanmıyorum' },
     });
-    expect(dispute.statusCode).toBe(403);
-    expect(errorCode(dispute)).toBe('blocked');
-    expect(notificationsOf(harness, ali.me.id, 'dispute')).toHaveLength(0);
+    expect(dispute.statusCode).toBe(201);
+    // Ali hears that it came, not from whom
+    const told = notificationsOf(harness, ali.me.id, 'dispute');
+    expect(told).toHaveLength(1);
+    expect(told[0]?.body).toContain('Bir rakibin');
+    expect(told[0]?.body).not.toContain('Veli');
+    // and Ali's photo is no news to Veli across the block
+    const answered = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/proof`,
+      payload: { proofUrl: '/uploads/bardak.jpg' },
+    });
+    expect(answered.statusCode).toBe(200);
+    expect(notificationsOf(harness, veli.me.id, 'dispute')).toHaveLength(0);
 
     const accept = await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
     expect(accept.statusCode).toBe(403);
     expect(errorCode(accept)).toBe('blocked');
+  });
+
+  it('a typed number does not win by blocking the only one who could dispute it', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const endsAt = harness.now().getTime() + 2 * DAY_MS;
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'adim_yarisi', startsAt: iso(harness), endsAt: new Date(endsAt).toISOString(), participantIds: [veli.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    expect((await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+
+    // Ali's phone counts 9.000; Veli types 99.000 and blocks Ali
+    const synced = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/me/steps',
+      payload: { days: [{ dayKey: today(harness), steps: 9000, source: 'health_connect' }] },
+    });
+    expect(synced.statusCode).toBe(200);
+    const typed = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: today(harness), value: 99000, source: 'manual', clientTime: iso(harness) },
+    });
+    expect(typed.statusCode).toBe(201);
+    const entryId = typed.json<{ entry: { id: string } }>().entry.id;
+    expect((await authed(harness.app, veli.token)({ method: 'POST', url: `/users/${ali.me.id}/block` })).statusCode).toBe(200);
+
+    const dispute = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'Yalan, bütün gün evdeydi' },
+    });
+    expect(dispute.statusCode).toBe(201);
+    expect(dispute.json<{ answerBy: string | null }>().answerBy).not.toBeNull();
+
+    // no photo in 12 hours: the typed day goes
+    harness.advance(LIMITS.DISPUTE_ANSWER_MS + 60_000);
+    runSchedulerOnce(harness.db, harness.now());
+    const row = harness.db.prepare('SELECT status FROM entries WHERE id = ?').get(entryId) as { status: string };
+    expect(row.status).toBe('rejected');
+
+    harness.setNow(new Date(endsAt + LIMITS.DEVICE_SETTLE_MS + 60_000));
+    runSchedulerOnce(harness.db, harness.now());
+    const finished = harness.db.prepare('SELECT status, winner_id FROM challenges WHERE id = ?').get(challengeId) as {
+      status: string;
+      winner_id: string | null;
+    };
+    expect(finished).toEqual({ status: 'finished', winner_id: ali.me.id });
+  });
+
+  it('keeps the door shut to an owner who is out of the çelınc', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const can = await registerUser(harness.app, 'can', { displayName: 'Can' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, can.me.id);
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'su_bardak', startsAt: iso(harness), endsAt: iso(harness, 3 * DAY_MS), participantIds: [veli.me.id, can.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    for (const friend of [veli, can]) {
+      expect((await authed(harness.app, friend.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    }
+    const logged = await authed(harness.app, can.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: today(harness), value: 4, source: 'manual', clientTime: iso(harness) },
+    });
+    const entryId = logged.json<{ entry: { id: string } }>().entry.id;
+
+    // Can walks out, then blocks Ali: an old participant list is no way back to him
+    expect((await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${challengeId}/leave` })).statusCode).toBe(200);
+    expect((await authed(harness.app, can.token)({ method: 'POST', url: `/users/${ali.me.id}/block` })).statusCode).toBeLessThan(300);
+
+    const dispute = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'dört bardak mı' },
+    });
+    expect(dispute.statusCode).toBe(403);
+    expect(errorCode(dispute)).toBe('blocked');
+    expect(notificationsOf(harness, can.me.id, 'dispute')).toHaveLength(0);
+  });
+
+  it('lets a disputer who blocked the owner take the itiraz back', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await livePair(harness, 'su_bardak');
+    const logged = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: today(harness), value: 6, source: 'manual', clientTime: iso(harness) },
+    });
+    const url = `/challenges/${challengeId}/entries/${logged.json<{ entry: { id: string } }>().entry.id}/dispute`;
+
+    expect((await authed(harness.app, ali.token)({ method: 'POST', url: `/users/${veli.me.id}/block` })).statusCode).toBeLessThan(300);
+    const dispute = await authed(harness.app, ali.token)({ method: 'POST', url, payload: { reason: 'altı bardak mı' } });
+    expect(dispute.statusCode).toBe(201);
+    const told = notificationsOf(harness, veli.me.id, 'dispute');
+    expect(told).toHaveLength(1);
+    expect(told[0]?.body).toContain('Bir rakibin');
+    expect(told[0]?.body).not.toContain('Ali');
+
+    const withdrawn = await authed(harness.app, ali.token)({ method: 'DELETE', url });
+    expect(withdrawn.statusCode).toBe(200);
+    expect(withdrawn.json<{ entry: { status: string } }>().entry.status).toBe('ok');
   });
 });
 
