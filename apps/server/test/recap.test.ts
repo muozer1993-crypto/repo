@@ -520,6 +520,64 @@ describe('weekly recap steps typed with "Beyan et"', () => {
     expect(forCan.body).toContain('3.000 adım yürümüşsün, en iyi günün Çarşamba (3.000).');
   });
 
+  /** Veli's itiraz against a typed day, through the route the app uses. */
+  async function dispute(app: FastifyInstance, by: RegisteredUser, challengeId: string, entry: Entry): Promise<{ answerBy: string | null }> {
+    const disputed = await authed(app, by.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entry.id}/dispute`,
+      payload: { reason: 'yüz bin adım mı, hadi oradan' },
+    });
+    expect(disputed.statusCode).toBe(201);
+    return disputed.json<{ answerBy: string | null }>();
+  }
+
+  it('leaves out what a player typed before walking out of a 1v1 mid-itiraz, which called the race off', async () => {
+    const { app, ali, veli, can } = await gang(MONDAY_NOON);
+    befriend(app, veli.me.id, can.me.id);
+    const race = await stepRace(app, veli, [can]);
+
+    const typed = [
+      await typeSteps(app, can, race, '2026-01-06', 100_000),
+      await typeSteps(app, can, race, '2026-01-07', 100_000),
+    ];
+    await syncSteps(app, veli, { '2026-01-06': 6_000, '2026-01-07': 6_000 });
+    await syncSteps(app, ali, { '2026-01-07': 5_000 });
+    for (const entry of typed) await dispute(app, veli, race, entry);
+    // Can walks out before answering: alone, Veli's race is called off
+    expect((await authed(app, can.token)({ method: 'POST', url: `/challenges/${race}/leave` })).statusCode).toBe(200);
+    expect(app.db.prepare('SELECT status FROM challenges WHERE id = ?').get(race)).toEqual({ status: 'cancelled' });
+    harness!.advance(2 * LIMITS.DISPUTE_ANSWER_MS);
+    runSchedulerOnce(app.db, app.now());
+
+    sundayRecaps(app);
+
+    expect(recapsOf(ali.me.id)[0].body).toContain('🚶 En çok Veli yürüdü: 12.000 adım.');
+    expect(recapsOf(veli.me.id)[0].body).toContain('🚶 Kankalar arasında en çok sen yürüdün');
+    expect(recapsOf(can.me.id).map((row) => dataOf(row).steps)).not.toContain(200_000);
+    for (const row of [...recapsOf(ali.me.id), ...recapsOf(veli.me.id), ...recapsOf(can.me.id)]) {
+      expect(row.body).not.toContain('200.000');
+    }
+  });
+
+  it('leaves out what a player typed into a race he then left, while the race goes on without him', async () => {
+    const { app, ali, veli, can } = await gang(MONDAY_NOON);
+    befriend(app, veli.me.id, can.me.id);
+    const race = await stepRace(app, ali, [veli, can]);
+
+    const typed = await typeSteps(app, can, race, '2026-01-06', 100_000);
+    await syncSteps(app, veli, { '2026-01-06': 12_000 });
+    await syncSteps(app, ali, { '2026-01-06': 5_000 });
+    expect((await authed(app, can.token)({ method: 'POST', url: `/challenges/${race}/leave` })).statusCode).toBe(200);
+    expect(app.db.prepare('SELECT status FROM challenges WHERE id = ?').get(race)).toEqual({ status: 'active' });
+    // an itiraz after he left gets no clock, so nothing ever settles it
+    expect((await dispute(app, veli, race, typed)).answerBy).toBeNull();
+
+    sundayRecaps(app);
+
+    expect(recapsOf(ali.me.id)[0].body).toContain('🚶 En çok Veli yürüdü: 12.000 adım.');
+    expect(recapsOf(veli.me.id)[0].body).toContain('🚶 Kankalar arasında en çok sen yürüdün');
+  });
+
   it('takes each day once, at the larger of the phone and the typed number', async () => {
     const { app, ali, veli, can } = await gang(MONDAY_NOON);
     const withVeli = await stepRace(app, ali, [veli]);

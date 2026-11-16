@@ -75,6 +75,11 @@ interface StepDay {
  * mirrored into every step çelınc as an entry of the same day, and two
  * çelınclar hold the same walk twice. A typed day friends threw out by itiraz
  * (`rejected`) does not count; the phone's own reading of it still does.
+ * Nor does one the çelınc itself no longer counts: typed by a player who left
+ * it, or in one called off for want of players (`cancelled`). Neither scores
+ * there, and an itiraz against it is never settled: the dispute clock runs
+ * only for an accepted owner in an active çelınc, so a quitter's 100.000
+ * stayed `disputed` and was named the week's walk.
  *
  * The step badges (stats.ts) keep reading the phone alone: a badge is never
  * taken back, and a typed day can still be thrown out after it.
@@ -86,8 +91,10 @@ function stepDayReader(db: Database): (userId: string, from: string, to: string)
        UNION ALL
        SELECT e.day_key, CAST(ROUND(e.value) AS INTEGER) AS steps FROM entries e
          JOIN challenges c ON c.id = e.challenge_id
+         JOIN challenge_participants p
+           ON p.challenge_id = e.challenge_id AND p.user_id = e.user_id AND p.status = 'accepted'
         WHERE e.user_id = @userId AND e.day_key >= @from AND e.day_key <= @to
-          AND c.metric_type = 'auto_steps' AND e.status <> 'rejected'
+          AND c.metric_type = 'auto_steps' AND c.status IN ('active', 'finished') AND e.status <> 'rejected'
      ) GROUP BY day_key ORDER BY day_key`,
   );
   return (userId, from, to) => statement.all({ userId, from, to }) as StepDay[];

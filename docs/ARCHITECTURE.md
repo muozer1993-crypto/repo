@@ -544,9 +544,13 @@ pazartesi sabahki laf atışmasını pazar akşamı başlatan kısım.
   baksaydı ona haftasının küçük bir parçasını gösterir, en çok yürüyen diye de başkasının adını
   verirdi. Toplanmaz, büyüğü alınır: elle yazılan sayı o günün tamamıdır, telefonun okuduğu sayı her
   adım çelıncına aynı günün girişi olarak da yazılır, iki çelınc da aynı yürüyüşü iki kere tutar.
-  İtirazla atılan (`rejected`) elle yazılmış gün sayılmaz, telefonun o gün okuduğu sayılır. Adım
-  rozetleri yine sadece telefona bakar: rozet geri alınmaz, elle yazılan gün ise sonradan itirazla
-  atılabilir.
+  İtirazla atılan (`rejected`) elle yazılmış gün sayılmaz, telefonun o gün okuduğu sayılır.
+  Çelıncın kendisinin artık saymadığı elle yazılmış gün de sayılmaz: çelınctan çıkan oyuncunun
+  yazdığı ya da oyuncu kalmadığı için iptal olan (`cancelled`) çelınca yazılan gün. Orada puan
+  getirmez, itirazı da hiç sonuçlanmaz (itiraz saati yalnız aktif çelınctaki kabul etmiş oyuncu
+  için işler): çıkıp gidenin yazdığı 100.000 `disputed` kalıyor, haftanın en çok yürüyeni diye onun
+  adı veriliyordu. Adım rozetleri yine sadece telefona bakar: rozet geri alınmaz, elle yazılan gün
+  ise sonradan itirazla atılabilir.
 * Kral önce galibiyete, eşitse haftalık adıma bakar; ikisi de birebir eşitse taht paylaşılır.
   En çok yürüyen ise sadece tek başına öndeyse söylenir. Kral o hafta yediyse ya da berabere
   kaldıysa 3. seviye ona "hepsine koydun" demez, "N kere koydun" der: bir üst satır "1 kere
