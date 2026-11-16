@@ -129,9 +129,15 @@ function hextets(ip: string): number[] {
   return [...front, ...new Array<number>(Math.max(0, 8 - front.length - back.length)).fill(0), ...back];
 }
 
-/** Turkish wait text for a 429 (`tooMany`), rounded up to whole seconds. */
+/**
+ * Turkish wait text for a 429 (`tooMany`), rounded up to whole seconds. Past an
+ * hour and a half it is hours: the server's day of photos (routes/uploads.ts)
+ * waits up to 24 of them, and "1440 dakika" is nobody's way of saying a day.
+ */
 export function retryAfterText(ms: number): string {
   const seconds = Math.max(1, Math.ceil(ms / 1000));
   if (seconds < 60) return `${seconds} saniye sonra tekrar dene.`;
-  return `${Math.ceil(seconds / 60)} dakika sonra tekrar dene.`;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes <= 90) return `${minutes} dakika sonra tekrar dene.`;
+  return `${Math.ceil(minutes / 60)} saat sonra tekrar dene.`;
 }

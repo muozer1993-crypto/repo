@@ -1115,6 +1115,38 @@ yarım dakikalık 5.000 uydurma deneme kilitli bir hesabı açıyordu. Şimdi en
 onlardan da en uzun süredir dokunulmayanı atar: saldırı altındaki bir anahtarı silmek için her biri
 onun kadar denemesi olan 5.000 anahtar gerekir.
 
+## Fotoğraflar ve disk
+
+Kanıt fotoğrafları veritabanıyla aynı diske yazılır (`UPLOAD_DIR`, varsayılan `data/uploads`) ve
+hesap açmak için sunucuya ulaşmak yeter. Hesap başına saatte 60 fotoğraf tek başına yetmiyordu:
+aynı adresten açılmış iki yeni hesap 3,3 saniyede 600 MB yazdı, hiçbir girişin göstermediği bir
+fotoğraf da ancak bir hafta sonra silinir. Disk dolunca zarar fotoğraflarda kalmıyordu: bir
+kankanın adımları üç kez 500 aldı ("database or disk is full"), yeni hesap açılmadı, günün yedeği
+yazılamadı.
+
+Şimdi `POST /uploads` (`routes/uploads.ts`) dört yerde durur. Saatte 60 fotoğraf hem hesap hem
+istemci başına sayılır (`clientKey`: IPv4 adresi ya da IPv6 /64'ü), ikinci hesap açmak bir şey
+kazandırmaz. Bütün sunucu 24 saatte en fazla 2 GB fotoğraf alır (`uploadDailyBudgetBytes`); adres
+ve hesap çoğaltana karşı tek sınır budur. Baytlar dakika dakika toplanır, liste 1.440 kayıttan
+uzamaz. Yazmadan önce ayrılırlar ki aynı anda gelen fotoğraflar hep birlikte sınırın altından
+kaçmasın; yazma başarısız olursa geri verilirler. Gövde okunmadan önce de diskte
+`UPLOAD_MIN_FREE_MB` (varsayılan 2048) kadar boş yer olup olmadığına bakılır
+(`fs.promises.statfs`, Windows'ta NTFS'te de çalışır; sistem söyleyemezse bu kontrol atlanır).
+Altındaysa 507 `disk_full`: kalan yer veritabanının, adımların ve yedeğindir. Yazarken disk dolarsa
+(`ENOSPC`, `EDQUOT`) yarım dosya silinir, cevap yine 507'dir. Sayaçlar giriş sayaçları gibi
+süreçtedir, yeniden başlatma onları sıfırlar.
+
+Sunucuyu açan durumu pencerede okur: dolmak üzere olan disk için de dolan gün için de saatte bir
+`warn` satırı. Bir 507 ayrıca "istek patladı" diye yazılmaz, yoksa reddedilen her fotoğraf bir
+satır olurdu. Uygulamada değişiklik gerekmedi: 507 bizim zarfımızla gelir, `useProofPhoto`
+mesajı olduğu gibi gösterir, çevrimdışı kuyruk onu her 5xx gibi sonra yine dener.
+
+Arkadaşı olmayanı fotoğraftan men etmek işe yaramazdı: yeni bir hesap iletilmiş bir davet
+bağlantısıyla hemen arkadaş olur. Fotoğrafın içine de bakılmaz: başı JPG, PNG ya da WEBP gibi
+başlıyorsa gerisi çözülmeden saklanır (`services/images.ts` yalnızca üst veriyi atar). Başlığın
+arkasındaki çöp `nosniff` ve `sandbox`'lı CSP ile sunulur, resimden başka bir şey olarak açılamaz;
+asıl tehlike diskin dolmasıydı.
+
 ## Sunucuyu açanın araçları
 
 E-posta yok, şifre sıfırlama bağlantısı da yok: bu bir arkadaş grubu, herkes sunucuyu açanı

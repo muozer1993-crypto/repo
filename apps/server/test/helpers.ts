@@ -58,6 +58,8 @@ export async function makeApp(overrides: MakeAppOptions = {}): Promise<TestApp> 
       logLevel: 'silent',
       publicUrl: 'http://test.local',
       enableDevRoutes: true,
+      // how full the test machine's disk is must not decide whether a photo goes up
+      uploadMinFreeBytes: 0,
       ...overrides.config,
     },
   });

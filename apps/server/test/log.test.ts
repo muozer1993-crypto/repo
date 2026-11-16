@@ -155,6 +155,26 @@ describe('ownerLogStream', () => {
     ]);
   });
 
+  it('says why photos are turned away: a nearly full disk, a full one, a spent day', () => {
+    const { stream, lines } = capture();
+    const dir = 'C:\\koydum\\apps\\server\\data\\uploads';
+    stream.write(pino({ level: 40, freeMb: 1834, uploadDir: dir, msg: 'disk almost full, uploads refused' }));
+    stream.write(
+      pino({
+        level: 40,
+        uploadDir: dir,
+        err: { message: 'ENOSPC: no space left on device, write' },
+        msg: 'disk almost full, uploads refused',
+      }),
+    );
+    stream.write(pino({ level: 40, mb: 2048, msg: 'daily upload budget used up' }));
+    expect(lines().slice(1)).toEqual([
+      `21:03:12 ! diskte 1.834 MB boş yer kaldı; veritabanı ve yedekler yazılabilsin diye kanıt fotoğrafı almıyorum, diskte yer aç (fotoğraflar: ${dir})`,
+      `21:03:12 ! disk doldu; veritabanı ve yedekler yazılabilsin diye kanıt fotoğrafı almıyorum, diskte yer aç (fotoğraflar: ${dir}): ENOSPC: no space left on device, write`,
+      '21:03:12 ! son 24 saatte 2.048 MB fotoğraf geldi, günlük sınır doldu; bir süre kanıt fotoğrafı almıyorum (kankalar bu kadar yüklemediyse biri diski doldurmaya çalışıyor)',
+    ]);
+  });
+
   it('marks a failed request and a slow one as warnings', () => {
     const { stream, lines } = capture();
     stream.write(pino({ level: 40, reqId: 'req-7', method: 'POST', url: '/challenges', statusCode: 500, ms: 812, msg: 'request failed' }));

@@ -25,6 +25,19 @@ export interface Config {
   dataDir: string;
   /** Directory holding uploaded proof images (served at /uploads). */
   uploadDir: string;
+  /**
+   * POST /uploads stores nothing while the upload folder's disk has less free
+   * than this (507 `disk_full`): what is left belongs to the database, the step
+   * syncs and the daily backup, which all fail once the disk is full.
+   * UPLOAD_MIN_FREE_MB, default 2 GiB.
+   */
+  uploadMinFreeBytes: number;
+  /**
+   * The most photo bytes the whole server stores in 24 hours, whoever sends
+   * them; more is 429 `upload_limit` until the oldest fall out of the window.
+   * Friends send a few MB a day; this only stops a flood. Default 2 GiB.
+   */
+  uploadDailyBudgetBytes: number;
   /** SQLite database file, or ':memory:'. */
   dbPath: string;
   /** Absolute base URL the phones use (PUBLIC_URL). */
@@ -83,6 +96,8 @@ const DEFAULTS = {
   port: 4000,
   host: '0.0.0.0',
   dataDir: './data',
+  uploadMinFreeMb: 2048,
+  uploadDailyBudgetBytes: 2 * 1024 * 1024 * 1024,
   logLevel: 'info',
   version: '1.0.0',
 } as const;
@@ -149,6 +164,10 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
         ? path.join(os.tmpdir(), 'koydum-test-uploads')
         : path.join(dataDir, 'uploads'));
 
+  const uploadMinFreeBytes =
+    overrides.uploadMinFreeBytes ?? Math.max(0, readInt(env.UPLOAD_MIN_FREE_MB, DEFAULTS.uploadMinFreeMb)) * 1024 * 1024;
+  const uploadDailyBudgetBytes = overrides.uploadDailyBudgetBytes ?? DEFAULTS.uploadDailyBudgetBytes;
+
   const dbPath = overrides.dbPath ?? (memory ? MEMORY : path.join(dataDir, 'koydum.db'));
 
   const publicUrlExplicit =
@@ -203,6 +222,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     host,
     dataDir,
     uploadDir,
+    uploadMinFreeBytes,
+    uploadDailyBudgetBytes,
     dbPath,
     publicUrl,
     publicUrlExplicit,

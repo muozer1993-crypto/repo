@@ -209,6 +209,13 @@ const MESSAGES: Record<string, (entry: Entry) => string | null> = {
   'proof photo sweep failed': () => 'kullanılmayan kanıt fotoğrafları silinemedi, yarın yine denerim',
   'deleted accounts cleared': (e) => `silinen hesaplardan kalan ${count(e, 'entries')} girişin notu ve kanıt fotoğrafı silindi`,
   'clearing deleted accounts failed': () => 'silinen hesapların notları ve fotoğrafları silinemedi, bir sonraki turda yine denerim',
+  'disk almost full, uploads refused': (e) => {
+    const free = typeof e.freeMb === 'number' ? `diskte ${formatNumberTr(e.freeMb)} MB boş yer kaldı` : 'disk doldu';
+    return `${free}; veritabanı ve yedekler yazılabilsin diye kanıt fotoğrafı almıyorum, diskte yer aç (fotoğraflar: ${text(e.uploadDir)})`;
+  },
+  'daily upload budget used up': (e) =>
+    `son 24 saatte ${formatNumberTr(count(e, 'mb'))} MB fotoğraf geldi, günlük sınır doldu; bir süre kanıt fotoğrafı almıyorum` +
+    ' (kankalar bu kadar yüklemediyse biri diski doldurmaya çalışıyor)',
   'upload directory unavailable, /uploads is not served': (e) =>
     `fotoğraf klasörü açılamadı, kanıt fotoğrafları bu açılışta çalışmaz (${text(e.uploadDir)})`,
   'request failed': (e) => `istek patladı: ${requestLine(e)}`,

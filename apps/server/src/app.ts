@@ -113,7 +113,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
   // A failed or slow request, one line. The query string stays out: an invite
   // code or a search for a friend's name has no business in the owner's window.
   app.addHook('onResponse', async (request, reply) => {
-    const failed = reply.statusCode >= 500;
+    // 507 is POST /uploads turning a photo away on a nearly full disk on purpose;
+    // it tells the owner itself, once an hour rather than once a photo.
+    const failed = reply.statusCode >= 500 && reply.statusCode !== 507;
     if (!failed && reply.elapsedTime < SLOW_REQUEST_MS) return;
     request.log.warn(
       {

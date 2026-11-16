@@ -627,6 +627,7 @@ Docker'da bu dosya okunmaz (imaja hiç girmez): orada ayarları `docker-compose.
 | `HOST` | `0.0.0.0` | Yerel ağdan erişim için böyle bırak |
 | `DATA_DIR` | `./data` | SQLite veritabanı ve JWT anahtarı |
 | `UPLOAD_DIR` | `<DATA_DIR>/uploads` | Kanıt fotoğrafları |
+| `UPLOAD_MIN_FREE_MB` | `2048` | Fotoğraf klasörünün diskinde bundan az boş yer (MB) kalınca sunucu kanıt fotoğrafı almaz; kalan yer veritabanına, adımlara ve yedeğe lazım ([Sık karşılaşılan sorunlar](#sık-karşılaşılan-sorunlar)). |
 | `BACKUP_DIR` | boş | Günlük yedeklerin ikinci kopyası buraya da gider. OneDrive ya da Google Drive'daki bir klasörü yaz, PC bozulsa da yedekler kalır ([Yedekler](#yedekler)). |
 | `PUBLIC_URL` | boş | Sunucunun internetteki adresi. Boşsa davet sayfası bağlantıları gelen isteğin adresinden kurar, evde de tünelde de doğru çıkar. |
 | `JWT_SECRET` | otomatik üretilir | Elle vermek istersen |
@@ -1265,6 +1266,32 @@ Yeni saat dilimi sadece bundan sonra katıldığın çelınclarda geçerli. Deva
 katıldığın andaki saat diliminde sayılmaya devam eder: İstanbul'da katıldığın "Erken Yatma Sözü"
 çelıncında Tokyo'dayken de İstanbul saatiyle 23:00'ten önce "Geldim" demen gerekir. Uygulama o
 çelıncın gününü ve hatırlatmasını buna göre hesaplar, senin bir şey yapmana gerek yok.
+
+**Uygulama "Sunucunun diski dolmak üzere" diyor.**
+Sunucunun çalıştığı bilgisayarda, fotoğraf klasörünün olduğu diskte 2 GB'tan az boş yer kalmış.
+Sunucu o zaman kanıt fotoğrafı almaz, çünkü disk tamamen dolarsa kankaların adımları da gitmez,
+yeni hesap açılmaz, günün yedeği de yazılmaz. Pencerede saatte bir "diskte … MB boş yer kaldı"
+satırı çıkar. Ne kadar yer kaldığına PowerShell'de bak (sunucu klasörü başka diskteyse `C` yerine
+onun harfini yaz):
+
+```powershell
+Get-PSDrive C
+```
+
+`Free (GB)` sütunu boş yerdir. Geri Dönüşüm Kutusu'nu boşalt, İndirilenler'i temizle, büyük
+dosyaları başka bir diske taşı. Yer açılınca fotoğraflar hemen yine gider, sunucuyu yeniden
+başlatman gerekmez. Sınırı değiştirmek istersen `apps\server\.env` dosyasına
+`UPLOAD_MIN_FREE_MB=1024` gibi bir satır ekle (MB cinsinden) ve sunucuyu yeniden başlat; çok
+düşürme, disk dolunca adımlar da kaydedilemez.
+
+**Uygulama "Bu ağdan bir saatte çok fazla fotoğraf yüklendi" ya da "Sunucu bugün çok fazla fotoğraf aldı" diyor.**
+Fotoğraflar diski doldurmasın diye sunucu bir hesaptan da bir internet bağlantısından da saatte en
+fazla 60 fotoğraf alır (aynı Wi-Fi'daki telefonlar çoğu zaman birlikte sayılır), hepsinden toplam
+da 24 saatte en fazla 2 GB. Bir fotoğraf 1,5-2,5 MB, yani arkadaş grubunun bir günde bu kadar
+yüklemesi pek olmaz: pencerede "günlük sınır doldu" satırı varsa büyük ihtimalle biri diski
+doldurmaya çalışıyordur. Sınır, en eski fotoğraflar 24 saati doldurdukça kendiliğinden açılır.
+Sunucuyu yeniden başlatmak sayaçları sıfırlar, ama doldurmaya çalışan biri varsa o da kaldığı
+yerden devam eder.
 
 **Uygulama "Saatler tutmuyor" ya da "Başlangıç sunucunun saatine göre geçmişte kalıyor" diyor.**
 Sunucu her şeye kendi saatiyle karar verir: çelıncın ne zaman başlayıp biteceğine, check-in'in
