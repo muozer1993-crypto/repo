@@ -109,6 +109,27 @@ async function writeQueue(items: PendingEntry[]): Promise<void> {
   await setJson(QUEUE_KEY, items.slice(-MAX_QUEUE));
 }
 
+let chain: Promise<unknown> = Promise.resolve();
+
+/**
+ * One read-modify-write of the stored list at a time, resolving with the list
+ * `change` made. AsyncStorage answers every call from its own native thread,
+ * so a tap parking its entry and a flush storing what it sent each read the
+ * list before the other wrote: the second write put back a list without the
+ * first one's change, and a glass told "Sıraya alındı" was gone. Reads take
+ * no turn, and nothing holds one across a request. Never call it from inside
+ * `change`: that turn would wait for itself.
+ */
+function mutateQueue(change: (queue: PendingEntry[]) => PendingEntry[]): Promise<PendingEntry[]> {
+  const run = chain.then(async () => {
+    const next = change(await readQueue());
+    await writeQueue(next);
+    return next;
+  });
+  chain = run.catch(() => {});
+  return run;
+}
+
 export async function enqueueEntry(
   challengeId: string,
   body: PendingEntry['body'],
@@ -116,7 +137,7 @@ export async function enqueueEntry(
   proofLocalUri?: string,
   challengeTitle?: string
 ): Promise<PendingEntry> {
-  const [queue, ownerId] = await Promise.all([readQueue(), currentOwnerId()]);
+  const ownerId = await currentOwnerId();
   // two accounts on one phone in the same çelınc build the same id for a day
   const key = ownerId ? `${ownerId}/${id}` : id;
   const item: PendingEntry = {
@@ -134,14 +155,12 @@ export async function enqueueEntry(
   // corrected value supersedes the first), for append metrics (manual_count) it
   // also carries the client time, because two glasses of water on one day are
   // two entries, not a correction.
-  const deduped = queue.filter((existing) => existing.id !== key);
-  await writeQueue([...deduped, item]);
+  await mutateQueue((queue) => [...queue.filter((existing) => existing.id !== key), item]);
   return item;
 }
 
 export async function removeFromQueue(id: string): Promise<void> {
-  const queue = await readQueue();
-  await writeQueue(queue.filter((item) => item.id !== id));
+  await mutateQueue((queue) => queue.filter((item) => item.id !== id));
 }
 
 /**
@@ -166,8 +185,7 @@ function sameParking(a: PendingEntry, b: PendingEntry): boolean {
 
 /** Stores what a flush learned about one item (its uploaded photo) before going on. */
 async function replaceInQueue(next: PendingEntry): Promise<void> {
-  const queue = await readQueue();
-  await writeQueue(queue.map((item) => (sameParking(item, next) ? next : item)));
+  await mutateQueue((queue) => queue.map((item) => (sameParking(item, next) ? next : item)));
 }
 
 /**
@@ -182,8 +200,7 @@ async function stillParked(item: PendingEntry): Promise<boolean> {
 
 /** Removes `item` once it landed, but not a re-park that took its id meanwhile. */
 async function removeDelivered(item: PendingEntry): Promise<void> {
-  const queue = await readQueue();
-  await writeQueue(queue.filter((stored) => !sameParking(stored, item)));
+  await mutateQueue((queue) => queue.filter((stored) => !sameParking(stored, item)));
 }
 
 /**
@@ -442,14 +459,14 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
 
   // re-read so anything queued while we were sending survives, then write back
   // the attempt counters and failure reasons this pass produced
-  const current = await readQueue();
-  const keep = current
-    .filter((item) => !delivered.some((sent) => sameParking(sent, item)))
-    .map((item) => {
-      const next = touched.get(item.id);
-      return next && sameParking(next, item) ? next : item;
-    });
-  await writeQueue(keep);
+  const keep = await mutateQueue((current) =>
+    current
+      .filter((item) => !delivered.some((sent) => sameParking(sent, item)))
+      .map((item) => {
+        const next = touched.get(item.id);
+        return next && sameParking(next, item) ? next : item;
+      })
+  );
   return { sent, dropped, remaining: keep.filter((item) => mine(item) && !item.failedReason).length };
 }
 
@@ -460,8 +477,7 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
  */
 export async function clearFailed(ids?: readonly string[]): Promise<void> {
   const told = ids ? new Set(ids) : null;
-  const queue = await readQueue();
-  await writeQueue(queue.filter((item) => !item.failedReason || (told !== null && !told.has(item.id))));
+  await mutateQueue((queue) => queue.filter((item) => !item.failedReason || (told !== null && !told.has(item.id))));
 }
 
 export const OfflineQueueKeys = { queue: QUEUE_KEY, storage: StorageKeys };

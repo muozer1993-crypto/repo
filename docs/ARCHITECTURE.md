@@ -682,6 +682,14 @@ aynı anahtarla yeniden girmişse (`queuedAt` farklı) dokunmaz, yenisi sonraki 
 Sunucunun zaten yazdığı bir check-in'in tekrarı (409 `already_checked_in`) reddedilmiş değil,
 gitmiş sayılır: ilk gönderim varmış, sadece cevabı kaybolmuştu.
 
+Kuyruğa her dokunuş listenin tamamını okuyup geri yazar; AsyncStorage de her çağrıyı kendi yerel
+iş parçacığında, sırayla cevaplar. Bağlantı gidince kuyruğun gönderdiği bardak da kankanın tam o
+sırada bastığı "+1" de aynı anda hata alır. İkisi de listeyi öbürü yazmadan okuyordu, sonra yazan
+da listeyi öbürünün değişikliği olmadan geri yazıyordu: kankaya "Sıraya alındı" denen bardak yok
+oluyordu. Şimdi listeyi değiştiren her iş (kuyruğa alma, gidenin silinmesi, turun sonundaki
+birleştirme, söylenen retlerin temizlenmesi) bir öncekinin bitmesini bekler (`mutateQueue`);
+okumalar ve istekler beklemez.
+
 Kanıt fotoğrafı da bu yoldan gider. Bağlantı yokken seçilen fotoğraf yüklenemez; giriş ekranı onu
 telefonda tutar, "Kaydet"e izin verir ve giriş fotoğrafın telefondaki yeriyle (`proofLocalUri`)
 kuyruğa girer. Kuyruk önce fotoğrafı yükler ve dönen adresi girişe yazıp saklar (giriş yarıda
