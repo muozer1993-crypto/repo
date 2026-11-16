@@ -1091,6 +1091,30 @@ cevap döndürüyordu. Bu yüzden sınırı olan listeler (`days`, `participantI
 elemanlarına hiç bakılmaz. 400 `validation` cevabı da en fazla 20 hata listeler; uygulama zaten
 yalnızca mesajı gösterir.
 
+## Şifre tahmini
+
+Giriş her denemede bir scrypt harcar ve üç sayaçtan geçer (`routes/auth.ts`, süreç içi
+`AttemptLimiter`): bir istemciden 15 dakikada 40 yanlış, bir istemciden aynı kullanıcı adına 15
+dakikada 8 yanlış, bir hesaba her yerden toplam bir saatte 30 yanlış. Her deneme scrypt'ten önce
+sayılır, doğru şifre sayaçları sıfırlar. İlk ikisi tek başına yetmiyordu: tünelin arkasında
+istemci `X-Forwarded-For`'dan okunur ve bir IPv6 kullanıcısının elinde koca bir /64 vardır. Her
+denemeyi yeni bir adresten gönderen biri bir hesaba saniyede 62 şifre deneyip sonunda doğrusuyla
+giriyordu. Artık bir IPv6 istemci kendi /64'üdür, `::ffff:` ile yazılmış bir IPv4 de düz IPv4
+(`clientKey`, `services/throttle.ts`; kayıt ve davet sorguları da aynı anahtarla sayılır). Adres
+değiştireni hiçbir adres sayacı durduramayacağı için üçüncü sayaç hesabındır.
+
+Bunun bedeli, bir yabancının bir kankanın girişini saatte 30 yanlış şifreyle kapalı
+tutabilmesidir. Girmiş telefonlar etkilenmez (oturum `/auth/refresh` ile tazelenir, girişten
+geçmez), 429 da çıkış yolunu söyler: sunucuyu açan `npm run yonet -- sifre` ile yeni şifre verir.
+Sayaç hesabın kimliğine ve `token_version`'ına bağlı olduğu için yeni şifre, Ayarlar'dan
+değiştirilen de, kilidi hemen açar. Olmayan bir kullanıcı adı kendi yazımıyla aynı sayaca girer;
+ikisi aynı kilitlenir, 429 kimin var olduğunu söylemez.
+
+Sayaç tablosu en fazla 5.000 anahtar tutar. Dolunca eskiden ilk gördüğü anahtarı atıyordu, yani
+yarım dakikalık 5.000 uydurma deneme kilitli bir hesabı açıyordu. Şimdi en az denemesi olanı,
+onlardan da en uzun süredir dokunulmayanı atar: saldırı altındaki bir anahtarı silmek için her biri
+onun kadar denemesi olan 5.000 anahtar gerekir.
+
 ## Sunucuyu açanın araçları
 
 E-posta yok, şifre sıfırlama bağlantısı da yok: bu bir arkadaş grubu, herkes sunucuyu açanı

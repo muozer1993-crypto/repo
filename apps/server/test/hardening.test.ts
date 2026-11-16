@@ -31,7 +31,8 @@ import { loadConfig } from '../src/config.js';
 import { runSchedulerOnce } from '../src/services/challenges.js';
 import { notify } from '../src/services/notifications.js';
 import { computeUserStats } from '../src/services/stats.js';
-import { AttemptLimiter } from '../src/services/throttle.js';
+import { resetPassword } from '../src/services/admin.js';
+import { AttemptLimiter, clientKey } from '../src/services/throttle.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
@@ -1026,6 +1027,87 @@ describe('POST /auth/login', () => {
   });
 });
 
+describe('login guessing across addresses', () => {
+  const login = (h: TestApp, password: string, remoteAddress: string, username = 'ali') =>
+    h.app.inject({ method: 'POST', url: '/auth/login', payload: { username, password }, remoteAddress });
+  const message = (response: { json: () => unknown }): string =>
+    (response.json() as { error: { message: string } }).error.message;
+
+  it('counts every address of one IPv6 /64 as one client', async () => {
+    harness = await makeApp({ now: NOW });
+    await registerUser(harness.app, 'ali', { password: 'dogrusifre' });
+
+    for (let i = 1; i <= 8; i++) expect((await login(harness, 'yanlis', `2001:db8:1:2::${i}`)).statusCode).toBe(401);
+    const blocked = await login(harness, 'yanlis', '2001:db8:1:2::9');
+    expect(blocked.statusCode).toBe(429);
+    expect(errorCode(blocked)).toBe('too_many_attempts');
+    expect(message(blocked)).toMatch(/^Çok fazla deneme yaptın\./);
+  });
+
+  it('gives one account 30 wrong passwords an hour from all addresses together', async () => {
+    harness = await makeApp({ now: NOW });
+    await registerUser(harness.app, 'ali', { password: 'dogrusifre' });
+    let net = 0;
+    const fresh = (): string => `2001:db8:${(++net).toString(16)}::1`;
+
+    for (let i = 0; i < 30; i++) expect((await login(harness, 'yanlis', fresh())).statusCode).toBe(401);
+    const blocked = await login(harness, 'yanlis', fresh());
+    expect(blocked.statusCode).toBe(429);
+    expect(errorCode(blocked)).toBe('too_many_attempts');
+    expect(message(blocked)).toContain('Bu hesaba çok fazla yanlış şifre denendi. 60 dakika sonra tekrar dene.');
+    expect(message(blocked)).toContain('npm run yonet -- sifre ali');
+    // the right password waits too, or the 31st guess would simply be let through
+    expect((await login(harness, 'dogrusifre', fresh())).statusCode).toBe(429);
+
+    harness.advance(61 * 60_000);
+    expect((await login(harness, 'dogrusifre', fresh())).statusCode).toBe(200);
+    // ...and a success starts the budget over
+    for (let i = 0; i < 30; i++) expect((await login(harness, 'yanlis', fresh())).statusCode).toBe(401);
+    expect((await login(harness, 'yanlis', fresh())).statusCode).toBe(429);
+  });
+
+  it("opens again at once with the owner's new password", async () => {
+    harness = await makeApp({ now: NOW });
+    await registerUser(harness.app, 'ali', { password: 'dogrusifre' });
+    let net = 0;
+    const fresh = (): string => `2001:db8:${(++net).toString(16)}::1`;
+    for (let i = 0; i < 30; i++) await login(harness, 'yanlis', fresh());
+    expect((await login(harness, 'dogrusifre', fresh())).statusCode).toBe(429);
+
+    const reset = await resetPassword(harness.db, 'ali');
+    expect((await login(harness, reset.password, fresh())).statusCode).toBe(200);
+  });
+
+  it('locks an unknown name the same way, so the 429 does not tell who exists', async () => {
+    harness = await makeApp({ now: NOW });
+    let net = 0;
+    const fresh = (): string => `2001:db8:${(++net).toString(16)}::1`;
+    for (let i = 0; i < 30; i++) expect((await login(harness, 'yanlis', fresh(), 'kimseyok')).statusCode).toBe(401);
+    const blocked = await login(harness, 'yanlis', fresh(), 'kimseyok');
+    expect(blocked.statusCode).toBe(429);
+    expect(message(blocked)).toContain('Bu hesaba çok fazla yanlış şifre denendi');
+  });
+
+  it('keys a forwarded client behind the tunnel, IPv4 written as IPv6 included', async () => {
+    harness = await makeApp({ now: NOW });
+    await registerUser(harness.app, 'ali', { password: 'dogrusifre' });
+    // cloudflared connects from 127.0.0.1 (inject's default) and forwards the
+    // client, sometimes in its IPv4-mapped form
+    const forwarded = (ip: string) =>
+      harness!.app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { username: 'ali', password: 'yanlis' },
+        headers: { 'x-forwarded-for': ip },
+      });
+    for (let i = 0; i < 4; i++) expect((await forwarded('::ffff:203.0.113.7')).statusCode).toBe(401);
+    for (let i = 0; i < 4; i++) expect((await forwarded('203.0.113.7')).statusCode).toBe(401);
+    expect((await forwarded('::ffff:203.0.113.7')).statusCode).toBe(429);
+    // somebody else through the same tunnel still gets an answer
+    expect((await forwarded('198.51.100.9')).statusCode).toBe(401);
+  });
+});
+
 describe('AttemptLimiter', () => {
   it('counts inside a sliding window and forgets what falls out of it', () => {
     const limiter = new AttemptLimiter(2, 1000);
@@ -1043,6 +1125,45 @@ describe('AttemptLimiter', () => {
     expect(limiter.retryAfterMs('other', at(0))).toBeGreaterThan(0);
     limiter.reset('other');
     expect(limiter.retryAfterMs('other', at(0))).toBe(0);
+  });
+
+  it('keeps a locked key when a flood of fresh keys fills the table', () => {
+    const limiter = new AttemptLimiter(30, 60 * 60 * 1000);
+    const at = new Date(1_000_000);
+    for (let i = 0; i < 30; i++) limiter.record('ali', at);
+    // The table holds 5,000 keys. It used to drop the one it saw first, so 5,000
+    // throwaway guesses unlocked the account under attack.
+    for (let i = 0; i < 5_001; i++) {
+      limiter.record(`decoy${i}`, at);
+      if (i % 1_000 === 0) expect(limiter.retryAfterMs('ali', at)).toBeGreaterThan(0);
+    }
+    expect(limiter.retryAfterMs('ali', at)).toBeGreaterThan(0);
+  });
+
+  it('keeps a key that is being guessed at, short of its budget too', () => {
+    const limiter = new AttemptLimiter(3, 60 * 60 * 1000);
+    const at = new Date(1_000_000);
+    limiter.record('ali', at);
+    limiter.record('ali', at);
+    for (let i = 0; i < 5_001; i++) limiter.record(`decoy${i}`, at);
+    limiter.record('ali', at);
+    expect(limiter.retryAfterMs('ali', at)).toBeGreaterThan(0);
+  });
+});
+
+describe('clientKey', () => {
+  it('counts an IPv6 client as its /64 and an IPv4-mapped one as plain IPv4', () => {
+    expect(clientKey('::1')).toBe('0:0:0:0::/64');
+    expect(clientKey('2001:db8::5')).toBe('2001:db8:0:0::/64');
+    expect(clientKey('2001:DB8:0:0:1::5%eth0')).toBe('2001:db8:0:0::/64');
+    expect(clientKey('2001:0db8:0000:0000:ffff:1:2:3')).toBe('2001:db8:0:0::/64');
+    expect(clientKey('2001:db8:1:2:3:4:5:6')).toBe(clientKey('2001:db8:1:2::9'));
+    expect(clientKey('2001:db8:1:2::9')).not.toBe(clientKey('2001:db8:1:3::9'));
+    expect(clientKey('::ffff:1.2.3.4')).toBe('1.2.3.4');
+    expect(clientKey('::ffff:102:304')).toBe('1.2.3.4');
+    expect(clientKey('64:ff9b::1.2.3.4')).toBe('64:ff9b:0:0::/64');
+    expect(clientKey('1.2.3.4')).toBe('1.2.3.4');
+    expect(clientKey('bilinmiyor')).toBe('bilinmiyor');
   });
 });
 

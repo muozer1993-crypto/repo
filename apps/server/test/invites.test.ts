@@ -245,6 +245,15 @@ describe('the review round', () => {
     // somebody else coming through the same tunnel is unaffected
     expect((await from('198.51.100.9')).statusCode).toBe(404);
   });
+
+  it('counts an IPv6 client as its whole /64, so fresh addresses buy no fresh lookups', async () => {
+    harness = await appWith(tempAppDir());
+    const from = (ip: string) =>
+      harness!.app.inject({ method: 'GET', url: '/invites/ZZZZZZ', headers: { 'x-forwarded-for': ip } });
+    for (let i = 1; i <= 120; i += 1) await from(`2001:db8:5:6::${i.toString(16)}`);
+    expect((await from('2001:db8:5:6:ffff::1')).statusCode).toBe(429);
+    expect((await from('2001:db8:5:7::1')).statusCode).toBe(404);
+  });
 });
 
 describe('GET /invites/:code', () => {

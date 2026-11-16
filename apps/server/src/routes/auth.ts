@@ -24,22 +24,34 @@ import { requireUser } from '../plugins/auth.js';
 import { toMe } from '../serialize.js';
 import { createUser, usernameTaken } from '../services/accounts.js';
 import { publicOrigin } from '../services/origin.js';
-import { AttemptLimiter, retryAfterText } from '../services/throttle.js';
+import { AttemptLimiter, clientKey, retryAfterText } from '../services/throttle.js';
 
 /**
  * Budgets for the two unauthenticated endpoints. They are generous enough that a
  * group of friends sharing one NAT never notices, and small enough that neither
- * password guessing nor scrypt flooding is free.
+ * password guessing nor scrypt flooding is free. "IP" is `clientKey`: an IPv6
+ * client's whole /64.
  */
 export const LOGIN_FAILURES_PER_ACCOUNT = { max: 8, windowMs: 15 * 60 * 1000 };
 const LOGIN_FAILURES_PER_IP = { max: 40, windowMs: 15 * 60 * 1000 };
 const REGISTRATIONS_PER_IP = { max: 120, windowMs: 10 * 60 * 1000 };
+/**
+ * One account's attempts from every address together. The two budgets above are
+ * per address, and addresses are cheap (a rented /48 holds 65,536 /64s), so one
+ * account took 62 guesses a second with no 429: some five million a day, now 720.
+ * The price is that a stranger can keep the account's login shut, so the 429
+ * points at the owner's `npm run yonet -- sifre`, whose new password opens it at
+ * once (the budget is per password, see `usernameKey`). A phone already signed
+ * in never notices: its session renews through /auth/refresh, not here.
+ */
+export const LOGIN_FAILURES_PER_USERNAME = { max: 30, windowMs: 60 * 60 * 1000 };
 
 export default async function authRoutes(app: FastifyInstance): Promise<void> {
   const { db, config } = app;
 
   const loginByAccount = new AttemptLimiter(LOGIN_FAILURES_PER_ACCOUNT.max, LOGIN_FAILURES_PER_ACCOUNT.windowMs);
   const loginByIp = new AttemptLimiter(LOGIN_FAILURES_PER_IP.max, LOGIN_FAILURES_PER_IP.windowMs);
+  const loginByUsername = new AttemptLimiter(LOGIN_FAILURES_PER_USERNAME.max, LOGIN_FAILURES_PER_USERNAME.windowMs);
   const registerByIp = new AttemptLimiter(REGISTRATIONS_PER_IP.max, REGISTRATIONS_PER_IP.windowMs);
 
   /**
@@ -57,12 +69,12 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/auth/register', async (request, reply) => {
     const now = app.now();
-    const ip = request.ip;
-    const waitMs = registerByIp.retryAfterMs(ip, now);
+    const client = clientKey(request.ip);
+    const waitMs = registerByIp.retryAfterMs(client, now);
     if (waitMs > 0) {
       throw tooMany('too_many_attempts', `Çok fazla hesap açtın. ${retryAfterText(waitMs)}`);
     }
-    registerByIp.record(ip, now);
+    registerByIp.record(client, now);
 
     const body = parseBody(RegisterBodySchema, request.body);
 
@@ -91,28 +103,44 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/auth/login', async (request) => {
     const now = app.now();
-    const ip = request.ip;
+    const client = clientKey(request.ip);
     const body = parseBody(LoginBodySchema, request.body);
-    const accountKey = `${ip}|${body.username}`;
+    const accountKey = `${client}|${body.username}`;
+    const row = getUserByUsername(db, body.username);
+    // Keyed on the account's current password (its token version moves with every
+    // change), so the owner's reset reopens a login a stranger has kept shut. An
+    // unknown name gets the same budget under its own spelling: both lock alike,
+    // and the 429 does not say who exists.
+    const usernameKey = row ? `${row.id}:${row.token_version}` : body.username;
 
     // Only FAILURES are counted, so somebody who knows their password is never
     // locked out by a neighbour on the same IP guessing theirs.
-    const waitMs = Math.max(loginByIp.retryAfterMs(ip, now), loginByAccount.retryAfterMs(accountKey, now));
-    if (waitMs > 0) {
-      throw tooMany('too_many_attempts', `Çok fazla deneme yaptın. ${retryAfterText(waitMs)}`);
+    const addressWaitMs = Math.max(loginByIp.retryAfterMs(client, now), loginByAccount.retryAfterMs(accountKey, now));
+    const accountWaitMs = loginByUsername.retryAfterMs(usernameKey, now);
+    if (accountWaitMs > 0) {
+      // not "you tried too often": the guesses may all be somebody else's
+      throw tooMany(
+        'too_many_attempts',
+        `Bu hesaba çok fazla yanlış şifre denendi. ${retryAfterText(Math.max(accountWaitMs, addressWaitMs))}` +
+          ` Şifreni unuttuysan sunucuyu açan kankana söyle, npm run yonet -- sifre ${body.username} ile sıfırlasın;` +
+          ' yeni şifreyle beklemeden girersin.',
+      );
+    }
+    if (addressWaitMs > 0) {
+      throw tooMany('too_many_attempts', `Çok fazla deneme yaptın. ${retryAfterText(addressWaitMs)}`);
     }
     // Every attempt is counted BEFORE the (async) scrypt and a success wipes it
     // again: recording only after a failure let a burst of guesses sent at once
     // all pass the check above before the first one was written down.
-    loginByIp.record(ip, now);
+    loginByIp.record(client, now);
     loginByAccount.record(accountKey, now);
+    loginByUsername.record(usernameKey, now);
 
     const badCredentials = unauthorized('bad_credentials', 'Kullanıcı adı ya da şifre yanlış.');
     const fail = (): never => {
       throw badCredentials;
     };
 
-    const row = getUserByUsername(db, body.username);
     // Verify against a real hash for unknown users so the answer takes the same
     // time and timing does not leak who exists.
     if (!row) {
@@ -121,8 +149,9 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     }
     if (!(await verifyPassword(body.password, row.password_hash))) return fail();
 
-    loginByIp.reset(ip);
+    loginByIp.reset(client);
     loginByAccount.reset(accountKey);
+    loginByUsername.reset(usernameKey);
 
     db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').run(now.toISOString(), row.id);
     row.last_seen_at = now.toISOString();

@@ -29,7 +29,7 @@ import { notFound, tooMany } from '../errors.js';
 import { asVulgarityLevel } from '../serialize.js';
 import { APK_FILE, apkPath, currentRelease, type AppRelease } from '../services/appRelease.js';
 import { publicOrigin } from '../services/origin.js';
-import { AttemptLimiter } from '../services/throttle.js';
+import { AttemptLimiter, clientKey } from '../services/throttle.js';
 
 export const INVITE_LOOKUPS_PER_IP = { max: 120, windowMs: 10 * 60 * 1000 } as const;
 
@@ -297,12 +297,13 @@ export default async function inviteRoutes(app: FastifyInstance): Promise<void> 
 
   const throttle = (request: FastifyRequest): void => {
     const now = app.now();
-    const wait = lookups.retryAfterMs(request.ip, now);
+    const client = clientKey(request.ip);
+    const wait = lookups.retryAfterMs(client, now);
     if (wait > 0) {
       const minutes = Math.max(1, Math.ceil(wait / 60_000));
       throw tooMany('too_many_lookups', `Çok fazla davet denedin. ${minutes} dakika sonra tekrar dene.`);
     }
-    lookups.record(request.ip, now);
+    lookups.record(client, now);
   };
 
   const findInviter = (code: string): UserRow | undefined => {

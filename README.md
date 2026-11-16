@@ -677,6 +677,11 @@ verdiğin şifreyle kalır.
   eder. (Güncellemeyi almamış 1.1.0 uygulama hangi telefonun bildirim aldığını söylemez; orada
   bildirim, en son hangi telefon kaydolduysa onda kalır.)
 * Çok yanlış deneme yaptıysa uygulama "Çok fazla deneme yaptın" der; yazdığı süre kadar beklesin.
+* Bir hesaba bir saat içinde 30 yanlış şifre denenirse, nereden gelirse gelsin, o hesaba girişler
+  bir saate kadar kapanır; uygulama "Bu hesaba çok fazla yanlış şifre denendi" der. O hesapla zaten
+  girmiş telefonlar bir şey fark etmez. Kanka beklemek istemezse `npm run yonet -- sifre ali` ile
+  yeni şifre ver, onunla hemen girer. Kendisi o kadar denemediyse biri şifresini tahmin etmeye
+  çalışıyordur; yeni şifre onu da boşa çıkarır.
 
 **Şikayetler.** Uygulamada biri birini şikayet edince sunucu penceresine `YENİ ŞİKAYET` diye bir
 satır düşer, `npm run yonet -- sikayetler` de hepsini listeler. Gerisi sana kalmış: konuşursunuz,
