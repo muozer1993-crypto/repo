@@ -534,9 +534,11 @@ function cancelledCopy(
 /**
  * What to actually do about being behind. "Kalk da iki dolaş" is the line the
  * app was designed around, but it is nonsense on a focus çelınc, so the tail
- * follows the metric.
+ * follows the metric. `logged` is whether the reader already has an entry today:
+ * on a count çelınc "girişini yapmayı unutma" to somebody who typed three
+ * glasses this morning reads like the app did not see them.
  */
-function nudgeAction(metricType: MetricType, level: VulgarityLevel): string {
+function nudgeAction(metricType: MetricType, level: VulgarityLevel, logged: boolean): string {
   const polite = level === 1;
   switch (metricType) {
     case 'auto_steps':
@@ -548,6 +550,10 @@ function nudgeAction(metricType: MetricType, level: VulgarityLevel): string {
     case 'daily_boolean':
       return polite ? 'Bugünü işaretlemeyi unutma.' : 'Bugünü kaçırma.';
     default:
+      if (logged) {
+        if (polite) return 'Biraz daha eklersen fark kapanır.';
+        return level === 3 ? 'Bu kadarla olmaz, biraz daha koy.' : 'Biraz daha yap da gir şuraya.';
+      }
       return polite ? 'Bugünkü girişini yapmayı unutma.' : 'Bir şeyler yap da gir şuraya.';
   }
 }
@@ -567,10 +573,11 @@ function nudgeCopy(
   unit: string,
   metricType: MetricType,
   others: number,
+  logged: boolean,
 ): { title: string; body: string } {
   const leader = ahead ?? 'Bir rakibin';
   const fark = `${formatScore(gap)} ${unit}`;
-  const action = nudgeAction(metricType, level);
+  const action = nudgeAction(metricType, level, logged);
   const count = others === 1 ? 'bir' : String(others);
   if (level === 1) {
     const more = others > 0 ? ` Başka ${count} çelıncta da gerideysin.` : '';
@@ -1238,6 +1245,8 @@ interface NudgeCandidate {
   /** The gap next to the bigger of the two scores: 0..1 in either direction. */
   ratio: number;
   dayKey: string;
+  /** The reader has a non-rejected entry in this çelınc today. */
+  logged: boolean;
 }
 
 /**
@@ -1256,7 +1265,7 @@ interface NudgeCandidate {
  * deadline reminder and "you are behind" means nothing there. And somebody who
  * switched it off (`users.nudges_enabled`) gets none at all, nor does a
  * screen-time player with nothing reported yet: their gap is the missing-day
- * penalty.
+ * penalty. A yes/no çelınc the reader has already marked today is left out too.
  *
  * The one nudge names the çelınc with the biggest gap for its size and counts
  * the others. All of them are claimed in `nudges_sent`, and any row of the
@@ -1274,6 +1283,9 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
   const active = db.prepare(`SELECT * FROM challenges WHERE status = 'active'`).all() as ChallengeRow[];
 
   const candidates = new Map<string, NudgeCandidate[]>();
+  const loggedOn = db.prepare(
+    `SELECT 1 FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ? AND status <> 'rejected' LIMIT 1`,
+  );
 
   for (const challenge of active) {
     if (challenge.metric_type === 'checkin_deadline') continue;
@@ -1327,6 +1339,13 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
         continue;
       }
       if (hour < NUDGE_FROM_HOUR || hour >= NUDGE_UNTIL_HOUR) continue;
+      const logged = loggedOn.get(challenge.id, user.id, dayKey) !== undefined;
+      // A marked day is all a yes/no çelınc takes from today: nothing the reader
+      // does this afternoon moves that gap, and "Bugünü işaretlemeyi unutma" at
+      // noon to somebody who marked it at breakfast only teaches the switch in
+      // Ayarlar. Before the claim, so the day stays free for a çelınc they can
+      // still do something about.
+      if (challenge.metric_type === 'daily_boolean' && logged) continue;
 
       const mine = candidates.get(user.id) ?? [];
       mine.push({
@@ -1340,6 +1359,7 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
         // beating 0 steps against 10.000 (1.0) every time.
         ratio: gap / Math.max(Math.abs(ahead.score), Math.abs(view.score)),
         dayKey,
+        logged,
       });
       candidates.set(user.id, mine);
     }
@@ -1364,6 +1384,7 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
       best.challenge.unit,
       best.challenge.metric_type as MetricType,
       mine.length - 1,
+      best.logged,
     );
     notify(db, {
       userId: best.user.id,

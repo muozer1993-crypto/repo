@@ -409,6 +409,107 @@ describe('mid-day nudges', () => {
   });
 });
 
+describe('mid-day nudges on a day the reader already logged', () => {
+  /** Tuesday 12:00 in Istanbul: the first pass inside the nudge hours. */
+  const NOON = '2026-01-06T09:00:30.000Z';
+  const MONDAY = TODAY;
+  const TUESDAY = '2026-01-06';
+  const week = { startsAt: '2026-01-04T21:00:00.000Z', endsAt: '2026-01-11T21:00:00.000Z' };
+  const coldShower = { typeKey: 'soguk_dus', metricType: 'daily_boolean', unit: 'gün' };
+  const water = { typeKey: 'su_bardak', metricType: 'manual_count', unit: 'bardak' };
+
+  function claimedBy(app: FastifyInstance, userId: string) {
+    return app.db.prepare('SELECT challenge_id FROM nudges_sent WHERE user_id = ?').all(userId);
+  }
+
+  it('leaves a yes/no player alone once today is marked, either way', async () => {
+    harness = await makeApp({ now: NOON });
+    const app = harness.app;
+    const tz = { timezone: 'Europe/Istanbul' };
+    const ilker = await registerUser(app, 'ilker', { displayName: 'İlker', ...tz });
+    const gokce = await registerUser(app, 'gokce', { displayName: 'Gökçe', vulgarityMax: 1, ...tz });
+    const eda = await registerUser(app, 'eda', { displayName: 'Eda', ...tz });
+    const ufuk = await registerUser(app, 'ufuk', { displayName: 'Ufuk', vulgarityMax: 1, ...tz });
+    const id = seedActive(app, {
+      creatorId: ilker.me.id,
+      accepted: [ilker.me.id, gokce.me.id, eda.me.id, ufuk.me.id],
+      ...week,
+      ...coldShower,
+    });
+    addSteps(app, id, ilker.me.id, MONDAY, 1, 'manual');
+    addSteps(app, id, ilker.me.id, TUESDAY, 1, 'manual');
+    // Gökçe forgot Monday and said yes this morning: nothing today moves that gap
+    addSteps(app, id, gokce.me.id, TUESDAY, 1, 'manual');
+    // Eda said no this morning, which is just as marked
+    addSteps(app, id, eda.me.id, MONDAY, 1, 'manual');
+    addSteps(app, id, eda.me.id, TUESDAY, 0, 'manual');
+    // Ufuk has not marked today yet, and is the one still told to
+    addSteps(app, id, ufuk.me.id, MONDAY, 1, 'manual');
+
+    expect(sendNudges(app.db, app.now())).toBe(1);
+    expect(nudgesOf(harness, gokce.me.id)).toHaveLength(0);
+    expect(nudgesOf(harness, eda.me.id)).toHaveLength(0);
+    expect(nudgesOf(harness, ufuk.me.id).map((row) => row.body)).toEqual([
+      'İlker önde, aradaki fark 1 gün. Bugünü işaretlemeyi unutma.',
+    ]);
+    // skipped before the claim, so their day is still free for another çelınc
+    expect(claimedBy(app, gokce.me.id)).toEqual([]);
+    expect(claimedBy(app, eda.me.id)).toEqual([]);
+  });
+
+  it('asks somebody who already typed today’s glasses for more, not for today’s entry', async () => {
+    harness = await makeApp({ now: NOON });
+    const app = harness.app;
+    const tz = { timezone: 'Europe/Istanbul' };
+    const ayse = await registerUser(app, 'ayse', { displayName: 'Ayşe', ...tz });
+    const mert = await registerUser(app, 'mert', { displayName: 'Mert', vulgarityMax: 1, ...tz });
+    const deniz = await registerUser(app, 'deniz', { displayName: 'Deniz', vulgarityMax: 1, ...tz });
+    const id = seedActive(app, {
+      creatorId: ayse.me.id,
+      accepted: [ayse.me.id, mert.me.id, deniz.me.id],
+      ...week,
+      ...water,
+    });
+    addSteps(app, id, ayse.me.id, MONDAY, 6, 'manual');
+    addSteps(app, id, mert.me.id, MONDAY, 2, 'manual');
+    addSteps(app, id, deniz.me.id, MONDAY, 2, 'manual');
+    // Mert had three glasses this morning; Deniz typed four that an itiraz threw out
+    addSteps(app, id, mert.me.id, TUESDAY, 3, 'manual');
+    addSteps(app, id, deniz.me.id, TUESDAY, 4, 'manual');
+    app.db.prepare(`UPDATE entries SET status = 'rejected' WHERE user_id = ? AND day_key = ?`).run(deniz.me.id, TUESDAY);
+
+    expect(sendNudges(app.db, app.now())).toBe(2);
+    expect(nudgesOf(harness, mert.me.id)[0].body).toBe(
+      'Ayşe önde, aradaki fark 1 bardak. Biraz daha eklersen fark kapanır.',
+    );
+    expect(nudgesOf(harness, deniz.me.id)[0].body).toBe(
+      'Ayşe önde, aradaki fark 4 bardak. Bugünkü girişini yapmayı unutma.',
+    );
+  });
+
+  it('names the çelınc the reader can still do something about, and does not count the marked one', async () => {
+    harness = await makeApp({ now: NOON });
+    const app = harness.app;
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali', timezone: 'Europe/Istanbul' });
+    const veli = await registerUser(app, 'veli', { displayName: 'Veli', timezone: 'Europe/Istanbul' });
+    const shower = seedActive(app, { creatorId: ali.me.id, accepted: [ali.me.id, veli.me.id], ...week, ...coldShower });
+    const glasses = seedActive(app, { creatorId: ali.me.id, accepted: [ali.me.id, veli.me.id], ...week, ...water });
+    // half of the shower days is the bigger gap, but Veli has marked today
+    addSteps(app, shower, ali.me.id, MONDAY, 1, 'manual');
+    addSteps(app, shower, ali.me.id, TUESDAY, 1, 'manual');
+    addSteps(app, shower, veli.me.id, TUESDAY, 1, 'manual');
+    addSteps(app, glasses, ali.me.id, MONDAY, 10, 'manual');
+    addSteps(app, glasses, veli.me.id, MONDAY, 7, 'manual');
+
+    expect(sendNudges(app.db, app.now())).toBe(1);
+    const [nudge, ...more] = nudgesOf(harness, veli.me.id);
+    expect(more).toHaveLength(0);
+    expect(nudge!.body).toBe('Ali sana 3 bardak fark koymuş. Bir şeyler yap da gir şuraya.');
+    expect(JSON.parse(nudge!.data!)).toEqual({ challengeId: glasses, fromUserId: ali.me.id, dayKey: TUESDAY });
+    expect(claimedBy(app, veli.me.id)).toEqual([{ challenge_id: glasses }]);
+  });
+});
+
 describe('mid-day nudges across a block', () => {
   /** A water çelınc through the real routes; `bardaks` is what each one typed today. */
   async function waterRace(players: { user: RegisteredUser; bardaks: number }[]): Promise<string> {
@@ -476,7 +577,7 @@ describe('mid-day nudges across a block', () => {
 
     const [nudge, ...more] = nudgesOf(harness, ali.me.id);
     expect(more).toHaveLength(0);
-    expect(nudge!.body).toBe('Bir rakibin sana 9 bardak fark koymuş. Bir şeyler yap da gir şuraya.');
+    expect(nudge!.body).toBe('Bir rakibin sana 9 bardak fark koymuş. Biraz daha yap da gir şuraya.');
     expectClean(nudge!.title);
     // no id of the one blocked rides along either
     expect(JSON.parse(nudge!.data)).toEqual({ challengeId: id, dayKey: TODAY });
@@ -498,10 +599,11 @@ describe('mid-day nudges across a block', () => {
     runSchedulerOnce(harness.db, harness.now());
 
     const bodies = behind.map((user) => nudgesOf(harness!, user.me.id)[0]?.body ?? '');
+    // each of them typed a glass this morning, so it asks for more, not for today's entry
     expect(bodies).toEqual([
-      'Bir rakibin önde, aradaki fark 9 bardak. Bugünkü girişini yapmayı unutma.',
-      'Bir rakibin sana 9 bardak fark koymuş. Bir şeyler yap da gir şuraya.',
-      'Bir rakibin sana 9 bardak fark koymuş 🍆 Bir şeyler yap da gir şuraya.',
+      'Bir rakibin önde, aradaki fark 9 bardak. Biraz daha eklersen fark kapanır.',
+      'Bir rakibin sana 9 bardak fark koymuş. Biraz daha yap da gir şuraya.',
+      'Bir rakibin sana 9 bardak fark koymuş 🍆 Bu kadarla olmaz, biraz daha koy.',
     ]);
     for (const body of bodies) {
       expect(body).not.toContain('Veli');
@@ -525,7 +627,7 @@ describe('mid-day nudges across a block', () => {
     runSchedulerOnce(harness.db, harness.now());
 
     const [nudge] = nudgesOf(harness, veli.me.id);
-    expect(nudge!.body).toBe('Can sana 5 bardak fark koymuş. Bir şeyler yap da gir şuraya.');
+    expect(nudge!.body).toBe('Can sana 5 bardak fark koymuş. Biraz daha yap da gir şuraya.');
     expect(JSON.parse(nudge!.data)).toEqual({ challengeId: id, fromUserId: can.me.id, dayKey: TODAY });
     // Can still hears about Ali, with whom nothing is wrong
     expect(nudgesOf(harness, can.me.id)[0]!.body).toContain('Ali sana 4 bardak');

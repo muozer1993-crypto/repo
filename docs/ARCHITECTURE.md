@@ -500,8 +500,17 @@ bir değer girip gerçekten geride kalan o günün dürtmesini alır. Kankanın 
 kurala uyar (`pokeTargetList`): "Ali 180 dk, sen 1.440" onun hiç yazmadığı bir sayıyı okurdu.
 Çelınc ekranındaki "Laf sok" kartı o kankayı göstermez, rota da 403 `not_ahead` döner.
 
+Evet/hayır çelıncında (`daily_boolean`) o günü işaretlemiş olan, cevabı evet de olsa hayır da
+olsa, o çelınc için dürtülmez: günün tek işi işaretlemekti, öğleden sonra yapacağı hiçbir şey farkı
+kapatmaz. Sabah işaretleyene öğlen "Bugünü işaretlemeyi unutma" gitmesi, dürtmeyi Ayarlar'dan
+kapattırmanın en kısa yoluydu; geride kalınan bir gün de günlerce %10'un üstünde kaldığı için bu
+her gün tekrarlanıyordu. Kontrol kayıttan önce yapılır: o gün başka bir çelıncta geride kalırsa
+dürtme oradan gelir, işaretlenmiş çelınc "bir çelıncta daha" diye sayılmaz.
+
 Kapanış cümlesi metriğe göre değişir: "kalk da iki dolaş" odak çelıncında saçmadır, orada
-"telefonu bırak da bir seans yap" der.
+"telefonu bırak da bir seans yap" der. Sayı çelıncında (`manual_count`) bugün girişi olana
+"Bugünkü girişini yapmayı unutma" denmez, daha fazlası istenir: "Biraz daha eklersen fark
+kapanır." / "Biraz daha yap da gir şuraya." / "Bu kadarla olmaz, biraz daha koy."
 
 ## Haftanın hesabı
 
