@@ -16,6 +16,7 @@ import {
   compareDayKeys,
   diffDayKeys,
   effectiveDeadline,
+  formatDayKeyTr,
   formatNumberTr,
   isBeforeOrEqualHHmm,
   localTimeHHmm,
@@ -515,9 +516,14 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
         body.dayKey,
       );
       if (sum + body.value > type.maxPerDay) {
+        // An earlier day gets here from the phone's queue: sets parked one night
+        // each passed the form's cap, the one over it is refused next morning.
+        // The day is named, not "dün": the queue's toast can come a day later.
         throw badRequest(
           'daily_cap',
-          `Günlük sınır ${unitLabel(type, type.maxPerDay)}. Bugün zaten ${unitLabel(type, sum)} girdin.`,
+          body.dayKey !== todayKey(tz, now)
+            ? `Günlük sınır ${unitLabel(type, type.maxPerDay)}. ${formatDayKeyTr(body.dayKey, { withWeekday: true })} için zaten ${unitLabel(type, sum)} girmiştin.`
+            : `Günlük sınır ${unitLabel(type, type.maxPerDay)}. Bugün zaten ${unitLabel(type, sum)} girdin.`,
         );
       }
       return { entry: insertEntry(db, input, body.value, false, sessionId), created: true };

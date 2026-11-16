@@ -909,6 +909,39 @@ describe('manual_count entries', () => {
     });
     expect(errorCode(perEntry)).toBe('value_too_large');
   });
+
+  it('tells today\'s total in the present tense', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await liveChallenge(harness, 'sinav_sayisi', { proofRequired: false }); // 150 per set, 300 per day
+    const day = today(harness);
+    for (const value of [150, 120]) {
+      expect((await post(harness, ali, challengeId, { dayKey: day, value, source: 'manual', clientTime: iso(harness) })).statusCode).toBe(201);
+    }
+
+    const over = await post(harness, ali, challengeId, { dayKey: day, value: 100, source: 'manual', clientTime: iso(harness) });
+    expect(over.statusCode).toBe(400);
+    expect(errorCode(over)).toBe('daily_cap');
+    expect((over.json() as { error: { message: string } }).error.message).toBe('Günlük sınır 300 tekrar. Bugün zaten 270 tekrar girdin.');
+  });
+
+  it('names the day, in the past tense, for sets of an earlier day', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await liveChallenge(harness, 'sinav_sayisi', { proofRequired: false });
+    const monday = today(harness);
+
+    // sets parked on the phone Monday night, the queue drains Tuesday 08:00
+    harness.setNow('2026-01-06T05:00:00.000Z');
+    for (const value of [150, 120]) {
+      expect((await post(harness, ali, challengeId, { dayKey: monday, value, source: 'manual', clientTime: iso(harness) })).statusCode).toBe(201);
+    }
+    const over = await post(harness, ali, challengeId, { dayKey: monday, value: 100, source: 'manual', clientTime: iso(harness) });
+    expect(over.statusCode).toBe(400);
+    expect(errorCode(over)).toBe('daily_cap');
+    // Tuesday holds nothing yet: "Bugün zaten 270" was false
+    expect((over.json() as { error: { message: string } }).error.message).toBe(
+      'Günlük sınır 300 tekrar. 5 Ocak Pazartesi için zaten 270 tekrar girmiştin.',
+    );
+  });
 });
 
 describe('manual_lower_is_better entries', () => {
