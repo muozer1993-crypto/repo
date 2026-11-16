@@ -599,7 +599,7 @@ Merdivenin kendi adı da öyle: "Nazik" okuyan profilde "KOYUŞ" ve "YİYİŞ" d
 Adım merdiveni (`stepsSingleDayMax`) yalnızca telefonun saydığına (`steps_daily`) bakar: **Beyan et**
 ile elle yazılan bir gün itirazla düşebilir, rozet ise bir kere verilince geri alınmaz. Haftalık özet
 elle yazılan günü sayar, merdiven saymaz; o yüzden kilitli basamak bunu kendisi söyler ("Tek günde
-7.500 adım at (telefonun saydığı)"), yoksa elle 25.000 yazan kanka neden 0/15.000'de kaldığını
+7.500 adım at (telefonun saydığı)"), yoksa elle 25.000 yazan kanka neden 0/7.500'de kaldığını
 anlamazdı. Odak merdiveni dakika sayar, kilitli basamağı da rozetin kendisi gibi dakikayla yazar
 ("Toplam 3.000 dakika odaklan", altında 1.280/3.000). Hedef saatle ("50sa"), ilerleme dakikayla
 yazılınca okuyan 3.000 dakikanın 50 saat olduğunu kafadan hesaplıyordu.

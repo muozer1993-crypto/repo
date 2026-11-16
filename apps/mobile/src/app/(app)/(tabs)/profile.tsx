@@ -69,7 +69,7 @@ const RULE_TEXT: Record<string, (n: number) => string> = {
   ties: (n) => `${formatNumber(n)} kez berabere kal`,
   // the ladder reads the phone's count alone (a day typed with "Beyan et" can
   // still fall to an itiraz, a badge never goes back): somebody who typed
-  // 25.000 sat at 0/15.000 with nothing saying why
+  // 25.000 sat at 0/7.500 with nothing saying why
   stepsSingleDayMax: (n) => `Tek günde ${formatNumber(n)} adım at (telefonun saydığı)`,
   // minutes, like the progress under it and the badge itself: "50sa" over
   // "1.280/3.000" left the reader to work out that 3.000 was the 50 hours

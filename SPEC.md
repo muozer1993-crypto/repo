@@ -848,8 +848,9 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             countdown, no action area, "böyle devam" verdict, "laf sok" or "Ayrıl", one device sync on open
                             (the list card says "Sonuç bekleniyor" and drops its verdict line too),
                             "laf sok" per rival you lead, before `endsAt` — its note says "Öndesin" only to the sole leader (the
-                            verdict's rule); one in the middle, or level at the top, is told whom they are ahead of ("Bunların
-                            önündesin") — opens a sheet of rendered `poke` lines to choose from,
+                            verdict's rule); one in the middle, or level at the top, is told whom they are ahead of ("Bunun
+                            önündesin" over one name, "Bunların önündesin" over more) — opens a sheet of rendered `poke`
+                            lines to choose from,
                             titled with dativeTr ("Mehmet'e ne diyelim?", "🔥 için ne diyelim?" when it gives null),
                             running (before `endsAt`) with fewer than two accepted → "Rakip bekleniyor / 1/2 kişi" hero
                             (the clock runs; nobody in by the end → cancelled) with a small end countdown, no

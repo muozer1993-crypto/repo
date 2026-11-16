@@ -628,21 +628,41 @@ describe('the "laf sok" note in a group çelınc', () => {
     // second of three: behind Ali, ahead of Veli, so Veli is the only one on the list
     const text = await noteFor(threeWay([12430, 2], [15000, 1], [4201, 3], ['u-3']));
     expect(text).toContain('Geridesin');
-    expect(text).toContain('Bunların önündesin, laf sokma hakkı sende.');
+    // one name under it: "bunun", not "bunların"
+    expect(text).toContain('Bunun önündesin, laf sokma hakkı sende.');
     expect(text).toContain('Veli');
     expect(text).not.toContain('Öndesin');
+    expect(text).not.toContain('Bunların');
+  });
+
+  it('says "bunların" when there is more than one name under it', async () => {
+    // second of four: behind Ali, ahead of Veli and Can
+    const four = threeWay([12430, 2], [15000, 1], [4201, 3], ['u-3', 'u-4']);
+    const veli = four.participants[2]!;
+    four.participants.push({ ...veli, user: { ...veli.user, id: 'u-4', username: 'can', displayName: 'Can' }, score: 3000, rank: 4 });
+    let text = await noteFor(four);
+    expect(text).toContain('Bunların önündesin, laf sokma hakkı sende.');
+    expect(text).not.toContain('Öndesin');
+
+    mockLevel.value = 1;
+    text = await noteFor(four);
+    expect(text).toContain('Aşağıdakilerin önündesin, onlara bir mesaj gönderebilirsin.');
+
+    mockLevel.value = 3;
+    text = await noteFor(four);
+    expect(text).toContain('Bunlara koyuyorsun. Laf sokma hakkı senin 🍆');
   });
 
   it('says it at every level', async () => {
     const middle = threeWay([12430, 2], [15000, 1], [4201, 3], ['u-3']);
     mockLevel.value = 1;
     let text = await noteFor(middle);
-    expect(text).toContain('Aşağıdakilerin önündesin, onlara bir mesaj gönderebilirsin.');
+    expect(text).toContain('Aşağıdakinin önündesin, ona bir mesaj gönderebilirsin.');
     expect(text).not.toContain('Öndesin');
 
     mockLevel.value = 3;
     text = await noteFor(middle);
-    expect(text).toContain('Bunlara koyuyorsun. Laf sokma hakkı senin 🍆');
+    expect(text).toContain('Buna koyuyorsun. Laf sokma hakkı senin 🍆');
     expect(text).not.toContain('Öndesin');
   });
 
@@ -650,7 +670,7 @@ describe('the "laf sok" note in a group çelınc', () => {
     // level with Ali at the top, both ahead of Veli
     const text = await noteFor(threeWay([12430, 1], [12430, 1], [4201, 3], ['u-3']));
     expect(text).toContain('Başa baş');
-    expect(text).toContain('Bunların önündesin, laf sokma hakkı sende.');
+    expect(text).toContain('Bunun önündesin, laf sokma hakkı sende.');
     expect(text).not.toContain('Öndesin');
   });
 
@@ -658,7 +678,7 @@ describe('the "laf sok" note in a group çelınc', () => {
     const text = await noteFor(threeWay([15000, 1], [12430, 2], [4201, 3], ['u-2', 'u-3']));
     expect(text).toContain('Aferin lan koçum');
     expect(text).toContain('Öndesin, laf sokma hakkı sende.');
-    expect(text).not.toContain('Bunların önündesin');
+    expect(text).not.toContain('önündesin');
   });
 });
 

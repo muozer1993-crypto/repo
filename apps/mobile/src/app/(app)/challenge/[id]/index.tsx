@@ -2327,7 +2327,9 @@ function FeedRow({
  * Being ahead of somebody is not being in front: with three or more players
  * the one in the middle gets this card too, right under a verdict that says
  * "Geridesin", and a co-leader under "Başa baş". So only the sole leader is
- * told "Öndesin"; everyone else is told whom they are ahead of.
+ * told "Öndesin"; everyone else is told whom they are ahead of. The one in the
+ * middle of three has a single name under the note, and "bunların" over one
+ * name reads like a form, so the note counts the list.
  */
 function PokeSection({
   id,
@@ -2427,12 +2429,19 @@ function PokeSection({
               'Öndesin, laf sokma hakkı sende.',
               'Öndesin. Laf sokma hakkı senin 🍆'
             )
-          : byLevel(
-              level,
-              'Aşağıdakilerin önündesin, onlara bir mesaj gönderebilirsin.',
-              'Bunların önündesin, laf sokma hakkı sende.',
-              'Bunlara koyuyorsun. Laf sokma hakkı senin 🍆'
-            )}
+          : rivals.length === 1
+            ? byLevel(
+                level,
+                'Aşağıdakinin önündesin, ona bir mesaj gönderebilirsin.',
+                'Bunun önündesin, laf sokma hakkı sende.',
+                'Buna koyuyorsun. Laf sokma hakkı senin 🍆'
+              )
+            : byLevel(
+                level,
+                'Aşağıdakilerin önündesin, onlara bir mesaj gönderebilirsin.',
+                'Bunların önündesin, laf sokma hakkı sende.',
+                'Bunlara koyuyorsun. Laf sokma hakkı senin 🍆'
+              )}
       </Text>
       <View style={styles.pokeList}>
         {rivals.map((rival) => {
