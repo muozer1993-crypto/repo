@@ -513,7 +513,7 @@ export default function ResultsScreen() {
               body={received.body}
               fromName={senderOf(received)?.user.displayName ?? winner?.user.displayName}
               fromEmoji={senderOf(received)?.user.avatarEmoji ?? winner?.user.avatarEmoji}
-              timeLabel={relativeTime(received.createdAt)}
+              timeLabel={relativeTime(received.createdAt, undefined, tz)}
             />
             {myReply ? (
               <TauntBubble
@@ -521,7 +521,7 @@ export default function ResultsScreen() {
                 body={myReply.body}
                 fromName={mine?.user.displayName ?? me?.displayName}
                 fromEmoji={mine?.user.avatarEmoji ?? me?.avatarEmoji}
-                timeLabel={relativeTime(myReply.createdAt)}
+                timeLabel={relativeTime(myReply.createdAt, undefined, tz)}
                 style={styles.replyBubble}
               />
             ) : (
@@ -553,7 +553,7 @@ export default function ResultsScreen() {
           body={taunt.body}
           fromName={senderOf(taunt)?.user.displayName}
           fromEmoji={senderOf(taunt)?.user.avatarEmoji}
-          timeLabel={relativeTime(taunt.createdAt)}
+          timeLabel={relativeTime(taunt.createdAt, undefined, tz)}
         />
       ))}
 
@@ -727,7 +727,7 @@ export default function ResultsScreen() {
             </Text>
             {challenge.finalizedAt ? (
               <Text variant="tiny" faint numberOfLines={1}>
-                Kapanış: {relativeTime(challenge.finalizedAt)}
+                Kapanış: {relativeTime(challenge.finalizedAt, undefined, tz)}
               </Text>
             ) : null}
           </View>

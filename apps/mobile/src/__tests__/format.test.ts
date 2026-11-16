@@ -91,6 +91,32 @@ describe('Turkish formatting', () => {
     expect(relativeTime('bozuk', now)).toBe('');
   });
 
+  it('counts days on the calendar of the zone the date beside it is in', () => {
+    const tz = 'Europe/Istanbul';
+    // 09:00 on 31 Aralık read at 21:00 on 1 Ocak: 36 hours, but the row says "Dün"
+    expect(relativeTime('2026-12-31T06:00:00Z', new Date('2027-01-01T18:00:00Z'), tz)).toBe('dün');
+    expect(relativeTime('2026-12-31T06:00:00Z', new Date('2027-01-01T18:00:00Z'))).toBe('2 gün önce');
+    // 22:00 on 31 Aralık read at 08:00 on 2 Ocak: 34 hours under a "31 Aralık"
+    expect(relativeTime('2026-12-31T19:00:00Z', new Date('2027-01-02T05:00:00Z'), tz)).toBe('2 gün önce');
+    expect(relativeTime('2026-12-31T19:00:00Z', new Date('2027-01-02T05:00:00Z'))).toBe('dün');
+    // a çelınc closed at 00:10 on 31 Aralık is "dün" all of 1 Ocak, late or early
+    expect(relativeTime('2026-12-30T21:10:00Z', new Date('2027-01-01T20:00:00Z'), tz)).toBe('dün');
+    expect(relativeTime('2026-12-30T21:10:00Z', new Date('2027-01-01T06:00:00Z'), tz)).toBe('dün');
+    // late last evening is two days back once midnight has passed here, though
+    // in UTC both moments still sit a day apart
+    expect(relativeTime('2026-12-31T20:50:00Z', new Date('2027-01-01T21:10:00Z'), tz)).toBe('2 gün önce');
+    expect(relativeTime('2026-12-31T20:50:00Z', new Date('2027-01-01T21:10:00Z'), 'UTC')).toBe('dün');
+    // under a day it stays hours, whichever days the two ends fall on
+    expect(relativeTime('2026-12-31T20:50:00Z', new Date('2027-01-01T06:00:00Z'), tz)).toBe('9 saat önce');
+    // ahead too: 07:00 on 3 Ocak seen at 21:00 on 1 Ocak is 34 hours away
+    expect(relativeTime('2027-01-03T04:00:00Z', new Date('2027-01-01T18:00:00Z'), tz)).toBe('2 gün sonra');
+    expect(relativeTime('2027-01-03T04:00:00Z', new Date('2027-01-01T18:00:00Z'))).toBe('yarın');
+    // the night the clocks go back has 25 hours: 00:10 to 23:50 is the same day
+    expect(relativeTime('2026-10-24T22:10:00Z', new Date('2026-10-25T22:50:00Z'), 'Europe/Berlin')).toBe(
+      '25 saat önce'
+    );
+  });
+
   it('counts how long a phone has been quiet, the way people say it', () => {
     const now = Date.parse('2026-09-08T12:00:00Z');
     expect(hoursSince('2026-09-08T08:59:00Z', now)).toBe(3);

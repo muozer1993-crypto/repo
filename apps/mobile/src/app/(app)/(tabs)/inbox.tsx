@@ -375,6 +375,7 @@ export default function InboxScreen() {
         renderItem={({ item }) => (
           <InboxRow
             item={item}
+            tz={tz}
             onPress={open}
             context={item.type === 'taunt' ? tauntContext(item) : undefined}
           />
@@ -386,15 +387,18 @@ export default function InboxScreen() {
 
 function InboxRow({
   item,
+  tz,
   onPress,
   context,
 }: {
   item: Notification;
+  /** the zone of the day headers, so a row under "Dün" never reads "2 gün önce" */
+  tz: string;
   onPress: (item: Notification) => void;
   context?: TauntContextInfo;
 }) {
   const unread = !item.readAt;
-  const time = relativeTime(item.createdAt);
+  const time = relativeTime(item.createdAt, undefined, tz);
 
   if (item.type === 'taunt') {
     return (

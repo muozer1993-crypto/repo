@@ -453,7 +453,7 @@ export default function ChallengeDetailScreen() {
             <>
               <Text variant="label">Kapandı</Text>
               <Text variant="big">
-                {relativeTime(challenge.finalizedAt ?? challenge.endsAt) || 'Bitti'}
+                {relativeTime(challenge.finalizedAt ?? challenge.endsAt, new Date(clock), tz) || 'Bitti'}
               </Text>
             </>
           )}
@@ -555,6 +555,7 @@ export default function ChallengeDetailScreen() {
         meId={meId}
         today={today}
         yesterday={yesterday}
+        tz={tz}
         level={level}
         baseUrl={serverUrl}
         challengeId={id}
@@ -1751,6 +1752,7 @@ function Feed({
   meId,
   today,
   yesterday,
+  tz,
   level,
   baseUrl,
   challengeId,
@@ -1762,6 +1764,8 @@ function Feed({
   meId: string | null;
   today: string;
   yesterday: string;
+  /** the zone `today` is in, so a row's "dün" is the day its date says */
+  tz: string;
   level: VulgarityLevel;
   baseUrl: string;
   challengeId: string;
@@ -1970,6 +1974,7 @@ function Feed({
                 canDispute={canDispute && inRace.has(item.userId)}
                 today={today}
                 yesterday={yesterday}
+                tz={tz}
                 level={level}
                 baseUrl={baseUrl}
                 onProof={onProof}
@@ -2113,6 +2118,7 @@ function FeedRow({
   canDispute,
   today,
   yesterday,
+  tz,
   level,
   baseUrl,
   onProof,
@@ -2143,6 +2149,7 @@ function FeedRow({
   canDispute: boolean;
   today: string;
   yesterday: string;
+  tz: string;
   level: VulgarityLevel;
   baseUrl: string;
   onProof: (url: string) => void;
@@ -2226,7 +2233,7 @@ function FeedRow({
         </View>
         <Text variant="tiny" faint numberOfLines={1}>
           {formatDayKeyFriendly(item.dayKey, today, yesterday)} · {SOURCE_ICON[item.source] ?? '•'}{' '}
-          {SOURCE_LABEL[item.source] ?? item.source} · {relativeTime(feedTime(item), new Date(now))}
+          {SOURCE_LABEL[item.source] ?? item.source} · {relativeTime(feedTime(item), new Date(now), tz)}
         </Text>
         {/* the owner's word on it is what a friend weighs before an itiraz; a
             note keeps its line breaks, so two lines bound it */}

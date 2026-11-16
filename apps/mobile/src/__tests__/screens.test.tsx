@@ -733,6 +733,48 @@ describe('how fresh a phone\'s count is', () => {
       jest.useRealTimers();
     }
   });
+
+  it('dates a feed row and times it by the same calendar', async () => {
+    searchParams.id = 'c-1';
+    // 08:00 on 2 Ocak in Istanbul, the zone the çelınc is read in
+    jest.useFakeTimers({
+      now: new Date('2027-01-02T05:00:00.000Z').getTime(),
+      doNotFake: [
+        'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',
+        'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval',
+        'clearInterval', 'setTimeout', 'clearTimeout',
+      ],
+    });
+    try {
+      const detail = { ...challengeDetail(), myTimezone: 'Europe/Istanbul' };
+      // typed at 22:00 on 31 Aralık: 34 hours ago, which rounded to "dün"
+      const typedAt = '2026-12-31T19:00:00.000Z';
+      detail.feed = [
+        {
+          id: 'e-1',
+          userId: ALI.id,
+          displayName: ALI.displayName,
+          dayKey: '2026-12-31',
+          value: 9000,
+          source: 'manual',
+          status: 'ok',
+          createdAt: typedAt,
+          updatedAt: typedAt,
+          proofUrl: null,
+        } as (typeof detail.feed)[number],
+      ];
+      api.challenge = jest.fn(async () => structuredClone(detail));
+      const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+      const tree = renderScreen(<ChallengeScreen />);
+      await settle();
+
+      const text = rendered(tree).replace(/\s+/g, ' ');
+      expect(text).toContain('31 Aralık · ✍️ beyan · 2 gün önce');
+      expect(text).not.toContain('beyan · dün');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
 
 describe('a "Hemen" çelınc nobody else has joined yet', () => {

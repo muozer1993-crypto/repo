@@ -1,4 +1,4 @@
-import { formatDayKeyTr } from '@koydum/shared';
+import { diffDayKeys, formatDayKeyTr } from '@koydum/shared';
 
 import { safeDayKey } from '@/utils/datetime';
 
@@ -47,17 +47,38 @@ const RELATIVE_STEPS: [limitSeconds: number, divisor: number, unitTr: string][] 
   [Infinity, 31557600, 'yıl'],
 ];
 
-export function relativeTime(iso: string, now: Date = new Date()): string {
+function relativePhrase(count: number, unit: string, past: boolean): string {
+  if (count === 1 && unit === 'gün') return past ? 'dün' : 'yarın';
+  return past ? `${count} ${unit} önce` : `${count} ${unit} sonra`;
+}
+
+/**
+ * Pass the zone the date beside it is written in (the feed's "Dün", the
+ * inbox's day header, the results' range) and a gap of a day or more counts
+ * the calendar days there instead of rounding hours: 22:00 on 31 Aralık read
+ * at 08:00 on 2 Ocak is 34 hours, which rounded to "dün" under "31 Aralık",
+ * and 09:00 the day before read at 21:00 was "2 gün önce" under "Dün".
+ */
+export function relativeTime(iso: string, now: Date = new Date(), tz?: string): string {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return '';
   const deltaSeconds = (then - now.getTime()) / 1000;
+  const past = deltaSeconds < 0;
   const abs = Math.abs(deltaSeconds);
   if (abs < 45) return 'az önce';
   const step = RELATIVE_STEPS.find(([limit]) => abs < limit) ?? RELATIVE_STEPS[RELATIVE_STEPS.length - 1];
   const [, divisor, unit] = step;
-  const count = Math.max(1, Math.round(abs / divisor));
-  if (count === 1 && unit === 'gün') return deltaSeconds < 0 ? 'dün' : 'yarın';
-  return deltaSeconds < 0 ? `${count} ${unit} önce` : `${count} ${unit} sonra`;
+  if (unit === 'gün' && tz) {
+    const thenKey = safeDayKey(iso, tz);
+    const nowKey = safeDayKey(now, tz);
+    if (thenKey && nowKey) {
+      const days = Math.abs(diffDayKeys(thenKey, nowKey));
+      // the 25-hour day the clocks go back on holds two instants a day apart
+      if (days === 0) return relativePhrase(Math.round(abs / 3600), 'saat', past);
+      return relativePhrase(days, 'gün', past);
+    }
+  }
+  return relativePhrase(Math.max(1, Math.round(abs / divisor)), unit, past);
 }
 
 /**
