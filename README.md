@@ -313,15 +313,17 @@ sonraki açılışta çalıştırır. Kanal, `eas.json`'daki profilde yazıyor; 
 Hangi APK'nın hangi güncellemeyi alacağını `app.json`'daki `runtimeVersion` söyler, `version`
 değil. `version` APK'nın sürümüdür (Ayarlar'ın en altında ve indirme sayfasında görünen) ve her
 yeni APK'da yükselir. `runtimeVersion` şu an `"1.1.0"`: 1.1.0 ve 1.1.1 APK'ları aynı
-`eas update`'i alır. 1.1.1'in getirdiği düzeltme (ekran süresine ana ekranın girmemesi) tamamen
-telefonun yerel kodunda, JavaScript ondan habersiz; aynı güncelleme 1.1.0'da da sorunsuz çalışır.
+`eas update`'i alır. 1.1.1'in getirdikleri telefonun yerel tarafında: ekran süresine ana ekranın
+girmemesi ve manifestteki Health Connect arka plan izni. JavaScript o izni yalnızca sürümü 1.1.1
+ya da üstü olan APK'da ister, 1.1.0'da hiç sormaz; aynı güncelleme 1.1.0'da da sorunsuz çalışır.
 Böylece 1.1.1'i henüz kurmamış kankaların da düzeltmeleri almaya devam eder.
 
-`runtimeVersion`'ı ancak JavaScript, eski APK'da olmayan yerel koda seslenmeye başladığında
-değiştir, o zaman da yeni APK'nın sürümüne çek (`"runtimeVersion": "1.2.0"` gibi). Değiştirdiğin
-an eski APK'lar güncelleme almayı bırakır: bekleyen düzeltmeleri önce eski numarayla
-`eas update` ile yayınla, sonra değiştir. Ekran süresi modülü böyle bir değişiklikti: 1.1.0 yeni
-bir APK istedi, `eas update` 1.0.0 kurulumlarına gitmedi.
+`runtimeVersion`'ı ancak JavaScript, eski APK'da olmayan yerel koda APK'nın sürümüne bakmadan
+seslenmeye başladığında değiştir, o zaman da yeni APK'nın sürümüne çek
+(`"runtimeVersion": "1.2.0"` gibi). Değiştirdiğin an eski APK'lar güncelleme almayı bırakır:
+bekleyen düzeltmeleri önce eski numarayla `eas update` ile yayınla, sonra değiştir. Ekran
+süresi modülü böyle bir değişiklikti: 1.1.0 yeni bir APK istedi, `eas update` 1.0.0 kurulumlarına
+gitmedi.
 
 Depoyu çekip (`git pull`) sunucuyu yeni kodla açtığında
 ([Sunucuyu güncellemek](#sunucuyu-güncellemek)) `apps/mobile` da değiştiyse `eas update`'i
@@ -952,7 +954,7 @@ grubu bölmen gerekmez.
 | Platform | Kaynak | Not |
 |---|---|---|
 | **iOS** | Core Motion (`Pedometer.getStepCountAsync`) | Son 7 günün geçmişi cihazda durur. Uygulamayı hiç açmasan da adımların sayılır; haftada bir açman yeter. |
-| **Android + Health Connect** | `react-native-health-connect` | Sadece içine adım yazan bir uygulama (Samsung Health, Google Fit, Fitbit) varsa işe yarar. Android 14 ve üstünde Health Connect telefonla birlikte gelir ama çoğu zaman boştur; son 7 günde içinde adım yoksa uygulama onu kaynak saymaz, telefonun kendi sayımına bakar. Geliştirme derlemesi gerekir. |
+| **Android + Health Connect** | `react-native-health-connect` | Sadece içine adım yazan bir uygulama (Samsung Health, Google Fit, Fitbit) varsa işe yarar. Android 14 ve üstünde Health Connect telefonla birlikte gelir ama çoğu zaman boştur; son 7 günde içinde adım yoksa uygulama onu kaynak saymaz, telefonun kendi sayımına bakar. Geliştirme derlemesi gerekir. 1.1.1'den itibaren uygulama Health Connect'ten arka planda okuma izni de ister: verilirse saatin yazdığı adımlar uygulama kapalıyken de 15 dakikalık arka plan göreviyle gider, verilmezse ancak KOYDUM açılınca. Bu izni olmayanlara (1.1.1'den önce Health Connect'e izin verenler gibi) **Ayarlar → Adım sayacı**'nda **Arka planda da okusun** düğmesi çıkar. |
 | **Android, her telefonda** | Google Play hizmetlerinin **Recording API**'si (`modules/koydum-steps`) | Telefon adımları uygulama kapalıyken de sayar ve 10 gün saklar, iPhone'daki gibi. Hesap ya da internet gerekmez, sadece Fiziksel Aktivite izni. Kayıt, izin verildiği andan itibaren tutulur. Health Connect varken de çalışır. |
 | **Android, eski Play hizmetleri** | `Pedometer.watchStepCount` | Sadece uygulama açıkken sayar, cihazda birikir. Uygulama bunu "yaklaşık" diye işaretler ve Play hizmetlerini güncellemeyi önerir. |
 | **Web** | yok | Web derlemesi test amaçlıdır; adım gösterilmez. |
@@ -969,8 +971,9 @@ istendiğini okuyarak verir. O sayfayı izin düğmelerine basmadan geçerse uyg
 başlamadan önce ana sayfada sorar. Orada "izin verme" dediyse aynı açılışta bir daha sormaz,
 uygulama bir sonraki açılışta sorar. Reddederse ayarlar ekranı "izin verilmedi" der, çıkan
 uyarıya dokununca da telefonun ayarları açılır. Telefonda Health Connect varsa **İzin ver**
-önce Health Connect'in izin ekranını, hemen ardından Fiziksel Aktivite iznini açar: Health
-Connect boş çıkabilir, telefonun kendi sayımı bu ikinci izinle başlar.
+önce Health Connect'in izin ekranını (içinde adım varsa bir de arka planda okuma iznini), hemen
+ardından Fiziksel Aktivite iznini açar: Health Connect boş çıkabilir, telefonun kendi sayımı bu
+son izinle başlar.
 İzni sormadan saymaya kalkan bir uygulama sıfır sayar ve bozuk görünür.
 
 Adımlar sunucuya günlük özet olarak gider (`POST /me/steps`), ham konum veya sensör verisi

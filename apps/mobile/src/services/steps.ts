@@ -47,6 +47,16 @@ export async function getTodaySteps(): Promise<number | null> {
   return null;
 }
 
+/** Android-only: Health Connect is read for steps, but not while the app is closed. */
+export async function healthConnectBackgroundMissing(): Promise<boolean> {
+  return false;
+}
+
+/** Android-only: asks Health Connect to let the background task read steps too. */
+export async function requestHealthConnectBackground(): Promise<boolean> {
+  return false;
+}
+
 /** Android-only: opens the Health Connect app so the user can grant access. */
 export async function openHealthConnectSettingsIfPossible(): Promise<boolean> {
   return false;

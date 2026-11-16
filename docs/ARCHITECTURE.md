@@ -748,6 +748,16 @@ gönderilmez, son 7 günde adım görmeyen bir Health Connect de kaynak sayılma
 "yaklaşık" etiketini ve "Beyan et"i ona göre gösterir. İzin düğmesi Health Connect'in izninden
 sonra Fiziksel Aktivite iznini de ister; telefonun kendi sayımı bu izinle başlar.
 
+Health Connect, ekranda olmayan bir uygulamaya ancak `READ_HEALTH_DATA_IN_BACKGROUND` izniyle
+cevap verir. O izin yokken 15 dakikalık arka plan görevindeki her okuma sessizce düşüyor, yalnızca
+telefonun kendi sayımı artıyordu: saatin yazdığı akşam koşusu, uygulama açılana kadar çelınca
+gitmiyordu. İzin 1.1.1'in manifestinde. 1.1.0 aynı güncellemeyi aldığı için JavaScript onu
+yalnızca `Application.nativeApplicationVersion` 1.1.1 ya da üstüyse ister. İzin düğmesi bunu,
+içinde adım olan bir Health Connect'in Steps izninden sonra, ayrı ve kendi `try`'ıyla sorar: bu
+özelliği tanımayan bir Health Connect isteği bütünüyle reddedebilir, birlikte sorulsa Steps izni
+de giderdi. Daha önce izin vermiş olanlar için Ayarlar → Adım sayacı "Arka planda da okusun"
+düğmesini gösterir.
+
 Ekran süresinin Android tarafı `apps/mobile/modules/koydum-screen-time/` altında yerel bir Expo
 modülüdür (Kotlin, `UsageStatsManager.queryEvents`). Uygulama onu adıyla arar
 (`requireOptionalNativeModule('KoydumScreenTime')`), yoksa ya da izin verilmemişse sebebiyle

@@ -61,15 +61,28 @@ describe('the Android permissions in app.json', () => {
   it('does not ask for the alarm-clock-only USE_EXACT_ALARM', () => {
     expect(permissions).not.toContain('android.permission.USE_EXACT_ALARM');
   });
+
+  // Health Connect grants nothing the manifest lacks, and without this one the
+  // 15-minute task cannot read it: a watch's steps waited for the app to open.
+  it('lets the background task read Health Connect', () => {
+    expect(permissions).toEqual(
+      expect.arrayContaining([
+        'android.permission.health.READ_STEPS',
+        'android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND',
+      ])
+    );
+  });
 });
 
 /**
- * 1.1.1 is a new APK whose changes are all native (the screen-time module
- * below), so it stays on 1.1.0's update stream: `eas update` keeps reaching the
- * 1.1.0 phones that have not installed it yet. Back on `policy: appVersion`,
- * every 1.1.0 phone would stop getting fixes the day 1.1.1 is built. The pin
- * moves only when the JS starts calling native code an older APK lacks
- * (README 1b), and it can never be ahead of the APK's own version.
+ * 1.1.1 is a new APK whose changes are native (the screen-time module below,
+ * Health Connect's background permission), so it stays on 1.1.0's update
+ * stream: `eas update` keeps reaching the 1.1.0 phones that have not installed
+ * it yet; the JS asks for that permission only on an APK that reports 1.1.1
+ * or later (services/steps.native.ts). Back on `policy: appVersion`, every
+ * 1.1.0 phone would stop getting fixes the day 1.1.1 is built. The pin moves
+ * only when the JS starts calling native code an older APK lacks without
+ * checking first (README 1b), and it can never be ahead of the APK's own version.
  */
 describe('the update runtime in app.json', () => {
   const expo: { version: string; runtimeVersion: unknown } = require('../../app.json').expo;

@@ -62,7 +62,9 @@ import {
 import { moveSession } from '@/services/serverMove';
 import {
   getStepAvailability,
+  healthConnectBackgroundMissing,
   openHealthConnectSettingsIfPossible,
+  requestHealthConnectBackground,
   requestStepPermission,
   type StepAvailability,
 } from '@/services/steps';
@@ -555,6 +557,9 @@ export default function SettingsScreen() {
   const [pushBusy, setPushBusy] = useState(false);
   const [steps, setSteps] = useState<StepAvailability | null>(null);
   const [stepsBusy, setStepsBusy] = useState(false);
+  /** Health Connect is read for steps, but not by the background task */
+  const [hcBackgroundMissing, setHcBackgroundMissing] = useState(false);
+  const [hcBackgroundBusy, setHcBackgroundBusy] = useState(false);
   const [screenTime, setScreenTime] = useState<ScreenTimeAvailability | null>(null);
   /** Android's battery and alarm switches; null where there are none (iOS, web, Expo Go) */
   const [background, setBackground] = useState<BackgroundHealth | null>(null);
@@ -591,6 +596,7 @@ export default function SettingsScreen() {
   const refreshSteps = async () => {
     const next = await getStepAvailability();
     setSteps(next);
+    setHcBackgroundMissing(await healthConnectBackgroundMissing());
   };
 
   // Read on mount. Inlined rather than calling the two helpers so nothing sets
@@ -601,16 +607,19 @@ export default function SettingsScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [pushResult, stepResult, screenTimeResult, alertsOn, backgroundResult] = await Promise.all([
-        registerForPush({ askAgain: false }),
-        getStepAvailability(),
-        getScreenTimeAvailability(),
-        deviceRemindersEnabled(),
-        getBackgroundHealth(),
-      ]);
+      const [pushResult, stepResult, hcBackgroundResult, screenTimeResult, alertsOn, backgroundResult] =
+        await Promise.all([
+          registerForPush({ askAgain: false }),
+          getStepAvailability(),
+          healthConnectBackgroundMissing(),
+          getScreenTimeAvailability(),
+          deviceRemindersEnabled(),
+          getBackgroundHealth(),
+        ]);
       if (cancelled) return;
       setPush(pushResult);
       setSteps(stepResult);
+      setHcBackgroundMissing(hcBackgroundResult);
       setScreenTime(screenTimeResult);
       setDeviceAlerts(alertsOn);
       setBackground(backgroundResult);
@@ -825,6 +834,33 @@ export default function SettingsScreen() {
         body: 'Google Play’den Health Connect’i kurman gerekebilir.',
         kind: 'danger',
       });
+    }
+  };
+
+  // Health Connect, like Android, stops showing its dialog after the second
+  // no; the switch is then only in its own app, which the toast opens
+  const askHealthConnectBackground = async () => {
+    setHcBackgroundBusy(true);
+    try {
+      const granted = await requestHealthConnectBackground();
+      await refreshSteps();
+      if (granted) {
+        toast({
+          title: 'İzin alındı',
+          body: 'Health Connect’teki adımların artık uygulama kapalıyken de gelir.',
+          kind: 'success',
+        });
+      } else {
+        toast({
+          title: 'İzin verilmedi',
+          body: 'Dokun, Health Connect’i açayım: KOYDUM’un izinlerinden arka plan erişimini aç. Orada yoksa telefonun bunu desteklemiyor.',
+          kind: 'danger',
+          durationMs: 8000,
+          onPress: () => void openHealthConnect(),
+        });
+      }
+    } finally {
+      setHcBackgroundBusy(false);
     }
   };
 
@@ -1128,7 +1164,9 @@ export default function SettingsScreen() {
             ? 'Sensöre bakıyorum…'
             : steps.available
               ? steps.source === 'health_connect'
-                ? 'Health Connect’ten günlük adımların otomatik geliyor.'
+                ? hcBackgroundMissing
+                  ? 'Health Connect’teki adımların şimdilik sadece KOYDUM açıkken okunuyor. Kapalıyken de okunsun diye “Arka planda da okusun”a bas.'
+                  : 'Health Connect’ten günlük adımların otomatik geliyor.'
                 : steps.hcEmpty && steps.upgrade !== 'play-services'
                   ? 'Health Connect’e adım yazan bir uygulama yok; adımlarını telefonun kendisi sayıyor.'
                   : steps.approximate
@@ -1146,6 +1184,15 @@ export default function SettingsScreen() {
             loading={stepsBusy}
             onPress={() => void askStepPermission()}
           />
+          {steps?.available && steps.source === 'health_connect' && hcBackgroundMissing ? (
+            <Button
+              title="Arka planda da okusun"
+              variant="secondary"
+              size="sm"
+              loading={hcBackgroundBusy}
+              onPress={() => void askHealthConnectBackground()}
+            />
+          ) : null}
           {Platform.OS === 'android' &&
           steps &&
           (steps.available ? steps.approximate : steps.reason === 'health-connect-missing') ? (

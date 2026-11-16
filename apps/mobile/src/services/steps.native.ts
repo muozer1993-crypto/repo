@@ -1,9 +1,11 @@
+import * as Application from 'expo-application';
 import { Pedometer } from 'expo-sensors';
 import { Platform } from 'react-native';
 
 import { StorageKeys, getJson, setJson } from '@/lib/storage';
 import { ensureRecording, recordedDailySteps, recordingStartedToday, recordingStatus } from '@/services/recordingSteps';
 import type { DailySteps, StepAvailability, StepSource } from '@/services/steps';
+import { compareVersions } from '@/utils/url';
 
 /**
  * Step counting on device.
@@ -27,6 +29,14 @@ import type { DailySteps, StepAvailability, StepSource } from '@/services/steps'
 export type { DailySteps, StepAvailability, StepSource } from '@/services/steps';
 
 const HC_PERMISSIONS = [{ accessType: 'read' as const, recordType: 'Steps' as const }];
+
+/**
+ * Health Connect answers reads only while KOYDUM is on screen unless this one
+ * is granted too (READ_HEALTH_DATA_IN_BACKGROUND). Without it every read in the
+ * 15-minute background task fails and only the phone's own count goes up, so a
+ * watch's evening run reached the çelınc only once the app was opened.
+ */
+const HC_BACKGROUND = [{ accessType: 'read' as const, recordType: 'BackgroundAccessPermission' as const }];
 
 /** Local-midnight boundaries for the day that contains `date`. */
 function dayBounds(date: Date): { start: Date; end: Date } {
@@ -144,6 +154,33 @@ async function healthConnectHasSteps(hc: HealthConnect): Promise<boolean> {
       timeRangeFilter: { operator: 'between', startTime: start.toISOString(), endTime: now.toISOString() },
     });
     return Math.round(result.COUNT_TOTAL ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The manifest declares the background permission from 1.1.1 on, and Health
+ * Connect never grants one the manifest lacks. 1.1.0 runs this same JS (both
+ * APKs share the 1.1.0 update runtime), so the APK's own version decides.
+ */
+function apkDeclaresBackgroundRead(): boolean {
+  return compareVersions(Application.nativeApplicationVersion ?? '0', '1.1.1') >= 0;
+}
+
+function hasBackgroundRead(granted: readonly object[]): boolean {
+  return granted.some((p) => 'recordType' in p && p.recordType === 'BackgroundAccessPermission');
+}
+
+/**
+ * Its own request, after the Steps one has come back: a Health Connect too old
+ * for background reads may refuse the whole request, and asked together that
+ * would cost the Steps grant too. Never throws.
+ */
+async function askHealthConnectBackground(hc: HealthConnect): Promise<boolean> {
+  if (!apkDeclaresBackgroundRead()) return false;
+  try {
+    return hasBackgroundRead(await hc.requestPermission(HC_BACKGROUND));
   } catch {
     return false;
   }
@@ -405,7 +442,9 @@ export async function getStepAvailability(): Promise<StepAvailability> {
  * so the physical activity permission is asked for right after it, which is
  * what lets the phone count by itself. A no to that one with an empty Health
  * Connect is a no: nothing would be counted, and the callers only show the
- * way to the phone's settings when this answers false.
+ * way to the phone's settings when this answers false. A Health Connect with
+ * steps in it is also asked to be read in the background, on a 1.1.1+ APK;
+ * whatever that answers, the result stays the Steps one.
  */
 export async function requestStepPermission(): Promise<boolean> {
   try {
@@ -419,6 +458,9 @@ export async function requestStepPermission(): Promise<boolean> {
             await hc.initialize();
             const granted = await hc.requestPermission(HC_PERMISSIONS);
             hcGranted = granted.length > 0;
+            // an empty one has nothing to read while the app is closed either,
+            // so it is spared the extra dialog (Ayarlar offers it later)
+            if (hcGranted && (await healthConnectHasSteps(hc))) await askHealthConnectBackground(hc);
           }
         } catch {
           // the sensor permission below still counts
@@ -437,6 +479,29 @@ export async function requestStepPermission(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Ayarlar's "Arka planda da okusun": Health Connect is read for steps but not
+ * while the app is closed. Phones that granted Steps before 1.1.1 were never
+ * asked, and İzin ver leaves out an empty Health Connect. False on a 1.1.0 APK,
+ * where the permission cannot be granted, and whenever anything throws.
+ */
+export async function healthConnectBackgroundMissing(): Promise<boolean> {
+  if (!apkDeclaresBackgroundRead()) return false;
+  const hc = await healthConnectReady();
+  if (!hc) return false;
+  try {
+    return !hasBackgroundRead(await hc.getGrantedPermissions());
+  } catch {
+    return false;
+  }
+}
+
+/** Asks Health Connect for background reads alone; true once they are granted. Never throws. */
+export async function requestHealthConnectBackground(): Promise<boolean> {
+  const hc = await healthConnectReady();
+  return hc ? askHealthConnectBackground(hc) : false;
 }
 
 export async function getDailySteps(days: number): Promise<DailySteps[]> {

@@ -126,6 +126,8 @@ jest.mock('@/services/steps', () => ({
   getTodaySteps: jest.fn(async () => 0),
   getStepAvailability: jest.fn(async () => ({ available: false, reason: 'web' })),
   requestStepPermission: jest.fn(async () => false),
+  healthConnectBackgroundMissing: jest.fn(async () => false),
+  requestHealthConnectBackground: jest.fn(async () => false),
   openHealthConnectSettingsIfPossible: jest.fn(async () => false),
   startForegroundStepTracking: () => () => {},
 }));
@@ -3848,6 +3850,110 @@ describe('settings: what Android does in the background', () => {
     const tree = renderSettings();
     await settle();
     expect(rendered(tree)).toContain('“Otomatik başlatma”yı aç');
+  });
+});
+
+/*
+ * Health Connect answers a closed app only with its background permission, so
+ * the 15-minute task never read it and a watch's steps waited for the app to
+ * open. Phones that granted Steps before 1.1.1 were never asked.
+ */
+describe('settings: Health Connect read in the background', () => {
+  const steps = () =>
+    require('@/services/steps') as {
+      getStepAvailability: jest.Mock;
+      healthConnectBackgroundMissing: jest.Mock;
+      requestHealthConnectBackground: jest.Mock;
+      openHealthConnectSettingsIfPossible: jest.Mock;
+    };
+  const FROM_HEALTH_CONNECT = { available: true, source: 'health_connect', approximate: false };
+  const REFUSED =
+    'Dokun, Health Connect’i açayım: KOYDUM’un izinlerinden arka plan erişimini aç. Orada yoksa telefonun bunu desteklemiyor.';
+
+  beforeEach(() => {
+    steps().requestHealthConnectBackground.mockClear();
+    steps().openHealthConnectSettingsIfPossible.mockClear();
+  });
+
+  afterEach(() => {
+    steps().getStepAvailability.mockResolvedValue({ available: false, reason: 'web' });
+    steps().healthConnectBackgroundMissing.mockResolvedValue(false);
+    steps().requestHealthConnectBackground.mockResolvedValue(false);
+    steps().openHealthConnectSettingsIfPossible.mockResolvedValue(false);
+  });
+
+  async function renderSettings(): Promise<ReactTestRenderer> {
+    const SettingsScreen = require('@/app/(app)/settings').default;
+    const tree = renderScreen(<SettingsScreen />);
+    await settle();
+    return tree;
+  }
+
+  const offered = (tree: ReactTestRenderer) => {
+    try {
+      findWith(tree, 'title', 'Arka planda da okusun', 'onPress');
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  it('is offered only while Health Connect is the source and the background task cannot read it', async () => {
+    steps().getStepAvailability.mockResolvedValue(FROM_HEALTH_CONNECT);
+    steps().healthConnectBackgroundMissing.mockResolvedValue(true);
+    let tree = await renderSettings();
+    expect(offered(tree)).toBe(true);
+    expect(rendered(tree)).toContain('Health Connect’teki adımların şimdilik sadece KOYDUM açıkken okunuyor.');
+
+    // the phone's own count is the source: Health Connect has nothing to read
+    steps().getStepAvailability.mockResolvedValue({ available: true, source: 'pedometer', approximate: false, hcEmpty: true });
+    tree = await renderSettings();
+    expect(offered(tree)).toBe(false);
+
+    steps().getStepAvailability.mockResolvedValue(FROM_HEALTH_CONNECT);
+    steps().healthConnectBackgroundMissing.mockResolvedValue(false);
+    tree = await renderSettings();
+    expect(offered(tree)).toBe(false);
+    expect(rendered(tree)).toContain('Health Connect’ten günlük adımların otomatik geliyor.');
+  });
+
+  it('asks Health Connect, reads the state again and goes once it is granted', async () => {
+    steps().getStepAvailability.mockResolvedValue(FROM_HEALTH_CONNECT);
+    steps().healthConnectBackgroundMissing.mockResolvedValue(true);
+    const tree = await renderSettings();
+
+    steps().requestHealthConnectBackground.mockResolvedValueOnce(true);
+    steps().healthConnectBackgroundMissing.mockResolvedValue(false);
+    press(tree, 'Arka planda da okusun');
+    await settle();
+
+    expect(steps().requestHealthConnectBackground).toHaveBeenCalledTimes(1);
+    expect(offered(tree)).toBe(false);
+    expect(rendered(tree)).toContain('Health Connect’teki adımların artık uygulama kapalıyken de gelir.');
+  });
+
+  it('a refusal stays offered, with a toast that opens Health Connect', async () => {
+    steps().getStepAvailability.mockResolvedValue(FROM_HEALTH_CONNECT);
+    steps().healthConnectBackgroundMissing.mockResolvedValue(true);
+    const tree = await renderSettings();
+
+    press(tree, 'Arka planda da okusun');
+    await settle();
+    expect(offered(tree)).toBe(true);
+    expect(rendered(tree)).toContain('İzin verilmedi');
+
+    const [toast] = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityRole === 'button' &&
+        typeof node.props.onPress === 'function' &&
+        node.findAll((child) => child.props.children === REFUSED).length > 0
+    );
+    expect(toast).toBeDefined();
+    act(() => {
+      toast!.props.onPress();
+    });
+    await settle();
+    expect(steps().openHealthConnectSettingsIfPossible).toHaveBeenCalledTimes(1);
   });
 });
 

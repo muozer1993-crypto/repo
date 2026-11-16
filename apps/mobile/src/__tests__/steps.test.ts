@@ -35,10 +35,21 @@ jest.mock('react-native-health-connect', () => ({
   openHealthConnectSettings: jest.fn(),
 }));
 
+// The APK's own version, which decides whether Health Connect may be asked to
+// read in the background (1.1.0 runs the same JS without the permission).
+jest.mock('expo-application', () => ({ __esModule: true, nativeApplicationVersion: '1.1.1' }));
+
+import * as Application from 'expo-application';
 import { Pedometer } from 'expo-sensors';
 import * as HealthConnect from 'react-native-health-connect';
 
-import { getStepAvailability, startForegroundStepTracking } from '@/services/steps.native';
+import {
+  getStepAvailability,
+  healthConnectBackgroundMissing,
+  requestHealthConnectBackground,
+  requestStepPermission,
+  startForegroundStepTracking,
+} from '@/services/steps.native';
 
 /** Lets the tracker's async permission dance settle. */
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -59,6 +70,7 @@ const healthConnect = HealthConnect as unknown as {
   requestPermission: jest.Mock<Promise<typeof STEPS_READ>, [unknown]>;
   aggregateRecord: jest.Mock<Promise<Aggregate>, [unknown]>;
 };
+const application = Application as unknown as { nativeApplicationVersion: string | null };
 
 /** The subscription handed back by the last watchStepCount call, if any. */
 function lastSubscription(): { remove: jest.Mock } | undefined {
@@ -75,6 +87,7 @@ beforeEach(() => {
   healthConnect.getGrantedPermissions.mockResolvedValue([]);
   healthConnect.requestPermission.mockResolvedValue([]);
   healthConnect.aggregateRecord.mockResolvedValue({ COUNT_TOTAL: 0, dataOrigins: [] });
+  application.nativeApplicationVersion = '1.1.1';
 });
 
 describe('Android step tracking', () => {
@@ -479,5 +492,76 @@ describe('Android steps recorded while the app is closed', () => {
         approximate: false,
       });
     });
+  });
+});
+
+/*
+ * Health Connect answers a closed app only with READ_HEALTH_DATA_IN_BACKGROUND,
+ * so the 15-minute task read nothing from it: a watch's evening run reached the
+ * çelınc only once KOYDUM was opened, sometimes after the deadline.
+ */
+describe('Health Connect read while the app is closed', () => {
+  const BACKGROUND_READ = [{ recordType: 'BackgroundAccessPermission', accessType: 'read' }];
+
+  beforeEach(() => {
+    // a watch writes into it, and every dialog says yes
+    healthConnect.getSdkStatus.mockResolvedValue(3);
+    healthConnect.getGrantedPermissions.mockResolvedValue(STEPS_READ);
+    healthConnect.requestPermission.mockImplementation(async (asked) => asked as typeof STEPS_READ);
+    healthConnect.aggregateRecord.mockResolvedValue({ COUNT_TOTAL: 8000, dataOrigins: ['com.google.android.apps.fitness'] });
+  });
+
+  it('asks for it in a request of its own, after the Steps one', async () => {
+    expect(await requestStepPermission()).toBe(true);
+    expect(healthConnect.requestPermission.mock.calls).toEqual([[STEPS_READ], [BACKGROUND_READ]]);
+  });
+
+  it('keeps the Steps yes when Health Connect throws at the background request', async () => {
+    // no physical activity either: the answer rests on Health Connect alone
+    pedometer.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false });
+    healthConnect.requestPermission
+      .mockResolvedValueOnce(STEPS_READ)
+      .mockRejectedValueOnce(new Error('Unsupported permission'));
+    expect(await requestStepPermission()).toBe(true);
+    expect(healthConnect.requestPermission).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks only for Steps on a 1.1.0 APK, whose manifest lacks the permission', async () => {
+    application.nativeApplicationVersion = '1.1.0';
+    expect(await requestStepPermission()).toBe(true);
+    expect(healthConnect.requestPermission.mock.calls).toEqual([[STEPS_READ]]);
+  });
+
+  it('spares an empty Health Connect the extra dialog', async () => {
+    healthConnect.aggregateRecord.mockResolvedValue({ COUNT_TOTAL: 0, dataOrigins: [] });
+    await requestStepPermission();
+    expect(healthConnect.requestPermission.mock.calls).toEqual([[STEPS_READ]]);
+  });
+
+  it('is missing while Health Connect is read for steps alone', async () => {
+    expect(await healthConnectBackgroundMissing()).toBe(true);
+    healthConnect.getGrantedPermissions.mockResolvedValue([...STEPS_READ, ...BACKGROUND_READ]);
+    expect(await healthConnectBackgroundMissing()).toBe(false);
+  });
+
+  it('is never missing where it cannot be granted: a 1.1.0 APK, or no Steps grant to go with it', async () => {
+    application.nativeApplicationVersion = '1.1.0';
+    expect(await healthConnectBackgroundMissing()).toBe(false);
+    application.nativeApplicationVersion = null;
+    expect(await healthConnectBackgroundMissing()).toBe(false);
+    application.nativeApplicationVersion = '1.1.1';
+    healthConnect.getGrantedPermissions.mockResolvedValue([]);
+    expect(await healthConnectBackgroundMissing()).toBe(false);
+  });
+
+  it('asks for the background read alone from Ayarlar and says whether it was granted', async () => {
+    expect(await requestHealthConnectBackground()).toBe(true);
+    expect(healthConnect.requestPermission.mock.calls).toEqual([[BACKGROUND_READ]]);
+
+    healthConnect.requestPermission.mockResolvedValue([]);
+    expect(await requestHealthConnectBackground()).toBe(false);
+    application.nativeApplicationVersion = '1.1.0';
+    expect(await requestHealthConnectBackground()).toBe(false);
+    expect(healthConnect.requestPermission).toHaveBeenCalledTimes(2);
   });
 });
