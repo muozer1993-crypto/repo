@@ -14,6 +14,7 @@ import { Chip } from '@/components/Chip';
 import { ClockSkewCard } from '@/components/ClockSkewCard';
 import { EmptyState } from '@/components/EmptyState';
 import { Skeleton } from '@/components/Loading';
+import { OtaReadyCard } from '@/components/OtaReadyCard';
 import { PermissionBanner } from '@/components/PermissionBanner';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
@@ -117,6 +118,7 @@ export default function HomeScreen() {
         </View>
 
         <UpdateBanner />
+        <OtaReadyCard />
         <PermissionBanner />
         <BatteryBanner />
         <ClockSkewCard style={styles.banner} />

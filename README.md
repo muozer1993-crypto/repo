@@ -300,8 +300,14 @@ cd apps/mobile
 eas update --channel preview --message "berabere metni düzeldi"
 ```
 
-Bir dakika sürer. `preview` kanalındaki her kurulu uygulama (APK ya da Play iç testi) bir sonraki
-açılışta yeni sürümü alır. Kanal, `eas.json`'daki profilde yazıyor; `play-internal` profili de
+Bir dakika sürer. `preview` kanalındaki her kurulu uygulama (APK ya da Play iç testi) güncellemeyi
+açılışta, bir de arka plandan öne her gelişinde (en fazla yarım saatte bir) arar ve bulursa arka
+planda indirir. İndirme bitse de o an eski kodla çalışmayı sürdürür, ana ekranda sarı bir
+güncelleme kartı çıkar. Arkadaşın **Yenile**'ye basarsa uygulama bir an kapanıp yeni hâliyle
+açılır, **Sonra** derse uygulamayı tamamen kapatıp açtığında kendiliğinden güncellenir. Uygulama
+kendi kendine yenilenmez: bildirimden açılan ekranı ya da süren bir odak seansını yarıda kesmesin
+diye. Bu kart da bir güncellemeyle geldi; onu henüz almamış telefonlar güncellemeyi bulduktan
+sonraki açılışta çalıştırır. Kanal, `eas.json`'daki profilde yazıyor; `play-internal` profili de
 `preview` kanalını dinler, yani tek komut ikisine birden gider.
 
 Kural: `app.json`'daki `version` değeri, uygulamanın "çalışma zamanı"dır (`runtimeVersion:
