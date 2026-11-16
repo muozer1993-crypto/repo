@@ -66,8 +66,9 @@ interface StepDay {
 /**
  * Reads somebody's step days between two day keys: per day the larger of what
  * the phone read (`steps_daily`) and what they typed into a step çelınc with
- * "Beyan et". An Android without Health Connect only counts while KOYDUM is
- * open, and the çelınc tells that friend to type the day's real number; read
+ * "Beyan et". An Android with neither Health Connect nor the Recording API
+ * (old Play services) only counts while KOYDUM is open, and the çelınc tells
+ * that friend to type the day's real number; read
  * from the phone alone, the recap gave them a sliver of their week and named
  * the wrong walker while the çelınc itself had them first.
  *

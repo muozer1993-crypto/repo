@@ -160,6 +160,15 @@ describe('challenge catalog', () => {
     }
   });
 
+  it('tells a step çelınc that an Android counts with the app closed, unless its Play services are old', () => {
+    // the Recording API counts on every phone with current Play services; only
+    // the oldest count just while KOYDUM is open (README, "Adım sayımı")
+    const rules = getChallengeType('adim_yarisi')?.howMeasuredTr ?? '';
+    expect(rules).not.toContain('kurulu değilse adımlar sadece uygulama açıkken');
+    expect(rules).toContain('uygulama kapalıyken de sayar');
+    expect(rules).toContain('Play hizmetleri eski bir telefonda adımlar sadece uygulama açıkken sayılır');
+  });
+
   it('looks types up by key', () => {
     const first = CHALLENGE_TYPES[0];
     expect(getChallengeType(first.key)).toEqual(first);
