@@ -857,7 +857,9 @@ kaç itiraz olduğu görünür. "Kanıt ekle" 1.1 sürümüyle geldi; 1.0'daki
 kanka o günü giriş ekranından fotoğrafıyla yeniden gönderince de itiraz kapanır (adım ve ekran
 süresi gibi günde tek sayı yazılan türlerde; diğerlerinde önce güncellemesi gerekir, bildirim de
 bunu söyler). 12 saat, çoğunluk oluştuğu anda başlar: biri çelınctan ayrılıp çoğunluk küçülünce de
-o andan başlar ve girişin sahibine haber gider. Ayrılanın itirazı sayılmaz. 12 saat dolana kadar
+o andan başlar ve girişin sahibine haber gider. Ayrılanın itirazı sayılmaz, girişleri de: o
+girişlerde itiraz düğmesi çıkmaz, ayrılana itiraz bildirimi de gitmez. Daveti henüz kabul etmemiş
+ya da çelınctan ayrılmış biri akışı görür ama itiraz edemez, kendi girişini de silemez. 12 saat dolana kadar
 giriş sayılır, yani teke tek çelıncta rakip tek dokunuşla senin gününü silemez. İtiraz eden fikrini
 değiştirirse "Geri çek" ile itirazını kaldırır (aynı girişe bir daha itiraz edemez; giriş sonradan
 sayısını ya da fotoğrafını değiştirirse edebilir). Bitişe yakın gelen bir itiraz yüzünden sonuç

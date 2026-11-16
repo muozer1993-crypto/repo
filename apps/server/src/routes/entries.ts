@@ -248,10 +248,12 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       // The owner is looked up BEFORE the write: `recordDispute` commits its own
       // transaction, so a throw afterwards (an owner who deleted their account) would
       // report a failure for a dispute that actually landed. A soft-deleted owner is
-      // simply not notified — the dispute itself still counts.
+      // simply not notified — the dispute itself still counts. Neither is one who
+      // left: their rows count for nothing now, and "Kanıtını göster" about a
+      // çelınc they quit is only noise.
       const owner = getUserRow(db, entry.user_id);
       if (!owner) throw notFound('entry_not_found', 'Böyle bir giriş yok.');
-      const notifyOwner = owner.deleted_at === null;
+      const notifyOwner = owner.deleted_at === null && ownerIn;
 
       const outcome = recordDispute(db, { challenge, entry, byUserId: me.id, reason: body.reason, now });
 

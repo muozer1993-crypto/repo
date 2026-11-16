@@ -1815,10 +1815,17 @@ function Feed({
   const disputesCloseAt = Number.isFinite(sentClose)
     ? sentClose
     : Date.parse(detail.challenge.endsAt) + (type?.deviceMetric ? LIMITS.DEVICE_SETTLE_MS : 0);
+  // Filing an itiraz and deleting a row are a player's (the server answers
+  // anybody else "Bu çelınca katılmadın."): an invitee looking before "Varım"
+  // and a player who left read the feed, nothing more. Taking an itiraz back
+  // and answering one with a photo stay open to them.
+  const playing = detail.me?.status === 'accepted';
   // a malformed end date leaves the call to the server rather than hiding the chip
-  const canDispute = active && (!Number.isFinite(disputesCloseAt) || now < disputesCloseAt);
+  const canDispute = playing && active && (!Number.isFinite(disputesCloseAt) || now < disputesCloseAt);
   const canDelete = (item: FeedItem) =>
-    active && item.userId === meId && item.source === 'manual' && item.status !== 'rejected';
+    playing && active && item.userId === meId && item.source === 'manual' && item.status !== 'rejected';
+  // the row of somebody who left counts for nothing, so there is nothing to question
+  const inRace = new Set(detail.participants.filter((p) => p.status === 'accepted').map((p) => p.user.id));
 
   const remove = async (item: FeedItem) => {
     const label = type ? scoreLabel(type, item.value) : formatNumber(item.value);
@@ -1959,7 +1966,7 @@ function Feed({
                 statusText={item.status === 'disputed' ? disputeStatusText(item, isMine, active, now) : null}
                 active={active}
                 now={now}
-                canDispute={canDispute}
+                canDispute={canDispute && inRace.has(item.userId)}
                 today={today}
                 yesterday={yesterday}
                 level={level}
@@ -2131,7 +2138,7 @@ function FeedRow({
    * önce" stood for hours under a standings line saying the phone went quiet.
    */
   now: number;
-  /** whether the server still takes a new itiraz (see Feed) */
+  /** whether the reader may still file a new itiraz on this row (see Feed) */
   canDispute: boolean;
   today: string;
   yesterday: string;

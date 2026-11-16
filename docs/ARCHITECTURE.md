@@ -225,7 +225,12 @@ Sunucu kapalıyken ya da uyurken dolan bir süreye, sunucu dönünce bir saat da
 (`bootAt + DEVICE_SETTLE_MS`, yine `answer_by`'a yazılır): sahibinin son saatlerde gönderdiği
 fotoğraf uyuyan sunucuya hiç ulaşmadı. Saatin başladığı an ayrıca durur (`answer_from`), yoksa
 uzayan süreyle birlikte kayar ve arada katılan bir kankayı içeride sayardı.
-Ayrılan birinin itirazı sayılmaz. İşleyen bir saat, başladığı anda içeride olan oyunculara göre
+Ayrılan birinin itirazı sayılmaz, girişi de: girişine açılan itiraz kaydedilir ama kimseye haber
+vermez (bıraktığı bir çelınc için "Kanıtını göster" gürültüden ibaret), uygulama da o satırda
+itiraz düğmesi göstermez. İtiraz açmak ve kendi girişini silmek yalnız `accepted` oyuncunun işidir;
+daveti bekleyen ya da ayrılmış okuyucu akışı görür ama iki düğme de ona çıkmaz (sunucu "Bu çelınca
+katılmadın." derdi). İtirazını geri çekmek ve kanıt eklemek ayrılana da açık kalır. İşleyen bir
+saat, başladığı anda içeride olan oyunculara göre
 ölçülür (`joined_at`): sonradan çağrılan bir kanka (**Kanka ekle**) oy vermedi, çoğunluğu
 büyütüp saati durduramaz; yoksa itiraz edilen kurucu iki kanka ekleyip itirazı sessizce
 boşa çıkarabilirdi. Eski uygulamada "Kanıt ekle" yoktur: günü fotoğrafla yeniden

@@ -1277,6 +1277,53 @@ describe('POST /challenges/:id/entries/:entryId/dispute', () => {
     expect(listByType(harness.db, ali.me.id, 'dispute').filter((row) => row.data.includes('"call"'))).toHaveLength(0);
   });
 
+  it('does not push an itiraz at somebody who left, and takes none from an invitee or a leaver', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const ayse = await registerUser(harness.app, 'ayse', { displayName: 'Ayşe' });
+    const can = await registerUser(harness.app, 'can', { displayName: 'Can' });
+    for (const friend of [veli, ayse, can]) befriend(harness.app, ali.me.id, friend.me.id);
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'su_bardak', startsAt: iso(harness), endsAt: iso(harness, 3 * DAY_MS), participantIds: [veli.me.id, ayse.me.id, can.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    // Ayşe only looks before "Varım"
+    for (const friend of [veli, can]) {
+      expect((await authed(harness.app, friend.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    }
+    const write = async (user: RegisteredUser, value: number) =>
+      (await post(harness!, user, challengeId, { dayKey: today(harness!), value, source: 'manual', clientTime: iso(harness!) })).json<{ entry: Entry }>().entry.id;
+    const alis = await write(ali, 3);
+    const cans = await write(can, 2);
+    expect((await authed(harness.app, can.token)({ method: 'POST', url: `/challenges/${challengeId}/leave` })).statusCode).toBe(200);
+
+    // his two glasses count for nothing now: the itiraz lands, nobody hears of it
+    const onLeaver = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${cans}/dispute`,
+      payload: { reason: 'iki bardak mı' },
+    });
+    expect(onLeaver.statusCode).toBe(201);
+    expect(onLeaver.json<{ othersCalled: number }>().othersCalled).toBe(0);
+    expect(listByType(harness.db, can.me.id, 'dispute')).toHaveLength(0);
+
+    // what the app no longer offers them: the server never took it
+    const dispute = (user: RegisteredUser) =>
+      authed(harness!.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/entries/${alis}/dispute`, payload: { reason: 'yalan bu' } });
+    for (const outsider of [ayse, can]) {
+      const refused = await dispute(outsider);
+      expect(refused.statusCode).toBe(403);
+      expect(errorCode(refused)).toBe('not_participant');
+    }
+    const ownDelete = await authed(harness.app, can.token)({ method: 'DELETE', url: `/challenges/${challengeId}/entries/${cans}` });
+    expect(ownDelete.statusCode).toBe(403);
+    expect(errorCode(ownDelete)).toBe('not_participant');
+    expect(listByType(harness.db, ali.me.id, 'dispute')).toHaveLength(0);
+  });
+
   it('needs an existing entry, a reason and membership', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await liveChallenge(harness, 'adim_yarisi');

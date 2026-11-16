@@ -2251,6 +2251,88 @@ describe('an itiraz on the feed', () => {
     expect(text).not.toContain('haber gitti');
   });
 
+  const CAN = { id: 'u-3', username: 'can', displayName: 'Can', avatarEmoji: '🦉', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** One plain typed row each from Ali (in), Mustafa (the reader, `mine`) and Can (`his`). */
+  function withThreeRows(mine: 'accepted' | 'invited' | 'left', his: 'accepted' | 'left') {
+    const detail = challengeDetail();
+    const reader = { ...detail.me!, status: mine };
+    const rival = { ...detail.me!, user: ALI, score: 9000, rank: 2 };
+    const can = { ...detail.me!, user: CAN, status: his, score: 0, rank: 0 };
+    const row = (id: string, user: typeof ALI, value: number) => ({
+      id,
+      userId: user.id,
+      displayName: user.displayName,
+      dayKey: '2026-09-08',
+      value,
+      source: 'manual' as const,
+      status: 'ok' as const,
+      createdAt: new Date(Date.now() - 3_600_000).toISOString(),
+      proofUrl: null,
+    });
+    return {
+      ...detail,
+      participants: [reader, rival, can],
+      me: reader,
+      feed: [row('e-1', ALI, 11111), row('e-2', detail.me!.user, 22222), row('e-3', CAN, 33333)],
+    };
+  }
+
+  /** The pressable chips labelled `label` ("Yalan Bu" is level 2's itiraz). */
+  function chips(tree: ReactTestRenderer, label: string) {
+    return tree.root.findAll((node) => node.props.label === label && typeof node.props.onPress === 'function');
+  }
+
+  it.each(['invited', 'left'] as const)(
+    'offers an "%s" reader neither an itiraz nor "Sil": the server would answer both "Bu çelınca katılmadın."',
+    async (mine) => {
+      searchParams.id = 'c-1';
+      api.challenge = jest.fn(async () => withThreeRows(mine, 'accepted'));
+      const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+      const tree = renderScreen(<ChallengeScreen />);
+      await settle();
+
+      // the rows are all there to look at
+      const text = rendered(tree);
+      expect(text).toContain('11.111 adım');
+      expect(text).toContain('22.222 adım');
+      expect(chips(tree, 'Yalan Bu')).toHaveLength(0);
+      expect(chips(tree, 'Sil')).toHaveLength(0);
+    }
+  );
+
+  it('offers no itiraz on the row of a player who left, and still one on a rival\'s', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => withThreeRows('accepted', 'left'));
+    api.disputeEntry = jest.fn(async () => ({ entry: {}, answerBy: null, othersCalled: 0, standings: [] }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('33.333 adım');
+    expect(chips(tree, 'Yalan Bu')).toHaveLength(1);
+    expect(chips(tree, 'Sil')).toHaveLength(1);
+    act(() => {
+      chips(tree, 'Yalan Bu')[0]!.props.onPress();
+    });
+    typeInto(tree, 'Neden yalan?', 'on bir bin mi');
+    await act(async () => {
+      await findWith(tree, 'title', 'İtirazı gönder', 'onPress').props.onPress();
+    });
+    expect(api.disputeEntry).toHaveBeenCalledWith('c-1', 'e-1', 'on bir bin mi');
+  });
+
+  it('keeps a player\'s chips on every rival still in', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => withThreeRows('accepted', 'accepted'));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    expect(chips(tree, 'Yalan Bu')).toHaveLength(2);
+    expect(chips(tree, 'Sil')).toHaveLength(1);
+  });
+
   /** A detail whose feed stops at two rows with older ones on the server, Ali's and mine taking turns. */
   function withOlderEntries() {
     const detail = challengeDetail();
