@@ -3543,6 +3543,43 @@ describe('the results of a çelınc the reader walked out of', () => {
   });
 });
 
+describe('a tie at the top, read by somebody who was not in it', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const VELI = { id: 'u-3', username: 'veli', displayName: 'Veli', avatarEmoji: '🦊', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** Ali and Veli tied for first; the reader `left` or was never in it. */
+  function tied(reader: 'left' | null) {
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    return {
+      challenge: { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: null, isTie: true },
+      standings: [
+        { ...detail.me!, user: ALI, score: 15000, rank: 1 },
+        { ...detail.me!, user: VELI, score: 15000, rank: 1 },
+        ...(reader ? [{ ...detail.me!, status: reader, score: 0, days: 0, rank: 0 }] : []),
+      ],
+      taunts: [],
+    };
+  }
+
+  it('shows the tie without offering a rematch they cannot open', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => tied('left'));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const left = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(rendered(left)).toContain('BERABERE');
+    expect(rendered(left)).toContain('Sen ayrılmıştın zaten, sonuç bu.');
+    expect(rendered(left)).not.toContain('Rövanş aç');
+
+    api.results = jest.fn(async () => tied(null));
+    const outsider = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(rendered(outsider)).toContain('Sen bu çelınca girmedin, sadece izledin.');
+    expect(rendered(outsider)).not.toContain('Rövanş aç');
+  });
+});
+
 describe('the itiraz chip once the çelınc is over', () => {
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
 

@@ -493,7 +493,7 @@ export default function ResultsScreen() {
 
       {iWon ? (
         <WinnerHeader level={level} />
-      ) : isTie ? (
+      ) : isTie && isPlayer ? (
         <NeutralHeader title={TIE_TITLE[level]} subtitle={tieSub} emoji="🤝" />
       ) : behindTie ? (
         <ShameHeader
@@ -504,10 +504,12 @@ export default function ResultsScreen() {
       ) : isPlayer ? (
         <ShameHeader level={level} waiting={!received} />
       ) : (
+        // a tie is still news to somebody who left or watched, but the rematch
+        // TIE_SUB offers is for the players only
         <NeutralHeader
-          title="ÇELINC BİTTİ"
+          title={tieAtTop ? TIE_TITLE[level] : 'ÇELINC BİTTİ'}
           subtitle={mine?.status === 'left' ? LEFT_SUB[level] : WATCHER_SUB[level]}
-          emoji="🏁"
+          emoji={tieAtTop ? '🤝' : '🏁'}
         />
       )}
 
