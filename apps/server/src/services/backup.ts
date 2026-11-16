@@ -60,7 +60,7 @@ async function trim(dir: string): Promise<void> {
 /**
  * Writes today's copy if there is none yet and trims to the last
  * `BACKUPS_KEPT`. Returns the path written, or null when nothing was due (or the
- * database lives in memory).
+ * database lives in memory, or has no account yet).
  */
 export async function backupIfDue(
   db: Database,
@@ -68,6 +68,11 @@ export async function backupIfDue(
   now: Date,
 ): Promise<string | null> {
   if (config.dbPath === MEMORY || config.dataDir === MEMORY) return null;
+  // Nobody has signed up yet: the server started on an empty data folder, the
+  // very first thing a dead PC's owner does before geri-yukle. A copy of that
+  // would become the newest backup geri-yukle picks, and a week of them would
+  // trim the real ones out of BACKUP_DIR.
+  if (db.prepare('SELECT 1 FROM users LIMIT 1').get() === undefined) return null;
   const dir = backupDir(config);
   fs.mkdirSync(dir, { recursive: true });
   const target = path.join(dir, backupName(now));
@@ -190,27 +195,39 @@ export function findBackup(
   return null;
 }
 
-/** Null when `file` is a healthy KOYDUM database, else the reason it is not, for the owner. */
-function verdict(file: string): string | null {
+/**
+ * `problem` is null when `file` is a healthy KOYDUM database, else the reason it
+ * is not, for the owner. `accounts` counts the open ones in a healthy file: an
+ * earlier version backed up a server started on an empty folder, and the owner
+ * should hear it was such a copy before the friends do.
+ */
+function verdict(file: string): { problem: string | null; accounts: number } {
   let db: BetterSqlite3.Database;
   try {
     db = new BetterSqlite3(file, { fileMustExist: true });
   } catch {
-    return BROKEN;
+    return { problem: BROKEN, accounts: 0 };
   }
   try {
     try {
-      if (db.pragma('integrity_check', { simple: true }) !== 'ok') return BROKEN;
+      if (db.pragma('integrity_check', { simple: true }) !== 'ok') return { problem: BROKEN, accounts: 0 };
     } catch {
       // not a database at all
-      return BROKEN;
+      return { problem: BROKEN, accounts: 0 };
     }
     try {
       const row = db.prepare('SELECT count(*) AS n FROM _migrations').get() as { n: number };
-      return row.n > 0 ? null : NOT_OURS;
+      if (row.n === 0) return { problem: NOT_OURS, accounts: 0 };
     } catch {
       // a database, but some other program's
-      return NOT_OURS;
+      return { problem: NOT_OURS, accounts: 0 };
+    }
+    try {
+      const row = db.prepare('SELECT count(*) AS n FROM users WHERE deleted_at IS NULL').get() as { n: number };
+      return { problem: null, accounts: row.n };
+    } catch {
+      // ours but with no account table to read: nobody to bring back either
+      return { problem: null, accounts: 0 };
     }
   } finally {
     db.close();
@@ -257,9 +274,14 @@ function removeWithCompanions(file: string): void {
  * Puts the backup `file` in place of the database, only with the server closed.
  * Nothing is deleted: the database that was there moves aside to
  * `koydum-onceki-<time>.db` next to it, so a wrong pick is undone by restoring
- * that file. Throws with a Turkish reason the CLI prints as is.
+ * that file. `accounts` is how many open accounts the restored file holds.
+ * Throws with a Turkish reason the CLI prints as is.
  */
-export function restoreBackup(config: Pick<Config, 'dbPath'>, file: string, now: Date): { previous: string | null } {
+export function restoreBackup(
+  config: Pick<Config, 'dbPath'>,
+  file: string,
+  now: Date,
+): { previous: string | null; accounts: number } {
   if (config.dbPath === MEMORY) throw new Error('Bellekteki veritabanına yedek yüklenmez.');
   const dbPath = path.resolve(config.dbPath);
   const wal = `${dbPath}-wal`;
@@ -272,7 +294,7 @@ export function restoreBackup(config: Pick<Config, 'dbPath'>, file: string, now:
   removeWithCompanions(incoming);
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   fs.copyFileSync(path.resolve(file), incoming);
-  const problem = verdict(incoming);
+  const { problem, accounts } = verdict(incoming);
   if (problem) {
     removeWithCompanions(incoming);
     throw new Error(problem);
@@ -298,5 +320,5 @@ export function restoreBackup(config: Pick<Config, 'dbPath'>, file: string, now:
     }
     throw err;
   }
-  return { previous };
+  return { previous, accounts };
 }

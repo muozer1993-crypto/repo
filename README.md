@@ -738,7 +738,8 @@ değiştirdiysen.
 
 Hesaplar, kankalıklar, çelınclar, atılan bütün KOYDUM'lar tek bir dosyada:
 `apps/server/data/koydum.db`. Sunucu her gün ilk açıldığında ve gün dönünce bunun bir kopyasını
-`apps/server/data/backups/koydum-YYYY-AA-GG.db` olarak yazar, son 7 günü tutar.
+`apps/server/data/backups/koydum-YYYY-AA-GG.db` olarak yazar, son 7 günü tutar. Henüz kimse
+kaydolmadıysa yedek almaz.
 
 **Bilgisayar bozulsa da kalsın: `BACKUP_DIR`.** O klasör veritabanıyla aynı diskte. Disk giderse
 ya da `data` klasörünü yanlışlıkla silersen yedekler de onunla gider. `apps/server/.env`
@@ -767,17 +768,22 @@ uyarı düşer ve saatte bir yeniden dener; o günün yedeği yine `data\backups
 3. Sunucuyu aç.
 
 Komut yedeği yüklemeden önce sağlam mı diye bakar; bozuksa ya da KOYDUM'un değilse dokunmaz.
-Eski veritabanını silmez, `data\koydum-onceki-<tarih-saat>.db` diye kenara koyar ve yanlış
-yedeği seçtiysen onu nasıl geri koyacağını ekrana yazar. Eski `koydum.db-wal` ve `koydum.db-shm`
-dosyalarını kendisi halleder, elle bir şey silme. Kenara konan dosyalar birikir; işin bitince
-silebilirsin. Kenarda durdukça içlerindeki girişlerin kanıt fotoğrafları da silinmez (aşağıda
-"Kullanılmayan kanıt fotoğrafları"): yanlış yedeği geri alınca fotoğraflar da yerinde olur.
+Yüklediği yedekte kaç hesap olduğunu da yazar. "Bu yedekte hiç hesap yok" derse sunucuyu açma:
+eski bir sürüm boş sunucunun da yedeğini alıyordu, `npm run yonet -- yedekler` ile bak ve başka
+bir günü yükle (`npm run yonet -- geri-yukle 2026-10-03` gibi). Eski veritabanını silmez,
+`data\koydum-onceki-<tarih-saat>.db` diye kenara koyar ve yanlış yedeği seçtiysen onu nasıl geri
+koyacağını ekrana yazar. Eski `koydum.db-wal` ve `koydum.db-shm` dosyalarını kendisi halleder,
+elle bir şey silme. Kenara konan dosyalar birikir; işin bitince silebilirsin. Kenarda durdukça
+içlerindeki girişlerin kanıt fotoğrafları da silinmez (aşağıda "Kullanılmayan kanıt
+fotoğrafları"): yanlış yedeği geri alınca fotoğraflar da yerinde olur.
 
 **Yeni bilgisayarda:** depoyu indirip `npm install` yap, `apps/server/.env` dosyasına aynı
 `BACKUP_DIR` satırını yaz, OneDrive klasörü inene kadar bekle, sonra `npm run yonet -- geri-yukle`
-ve sunucuyu aç. Herkes uygulamaya bir kez yeniden giriş yapar (kullanıcı adı ve şifresiyle), çünkü
-oturum anahtarı (`data\secret`) yedeğe girmez; eski bilgisayardan o dosyayı kurtardıysan yeni
-`data` klasörüne koy, kimse çıkış yapmaz. Kanıt fotoğrafları (`data\uploads`) da yedeğe girmez.
+ve sunucuyu aç. Yedeği geri yüklemeden önce sunucuyu açtıysan sorun değil: boş veritabanının
+yedeği alınmaz, `geri-yukle` yine son gerçek yedeği bulur. Herkes uygulamaya bir kez yeniden giriş
+yapar (kullanıcı adı ve şifresiyle), çünkü oturum anahtarı (`data\secret`) yedeğe girmez; eski
+bilgisayardan o dosyayı kurtardıysan yeni `data` klasörüne koy, kimse çıkış yapmaz. Kanıt
+fotoğrafları (`data\uploads`) da yedeğe girmez.
 
 Docker'da önce sunucuyu durdur, yedeği öyle yükle: `docker compose stop`, sonra
 `docker compose run --rm koydum npm run yonet -- geri-yukle`, sonra `docker compose start`.

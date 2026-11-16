@@ -157,6 +157,7 @@ describe('BACKUP_DIR', () => {
     const blocked = path.join(config.dataDir, 'D-surucusu');
     fs.writeFileSync(blocked, '');
     harness = await makeApp({ now: day(22), config: { ...config, backupCopyDir: path.join(blocked, 'yedek') } });
+    addUser(harness.db, 'ali');
     const warn = vi.spyOn(harness.app.log, 'warn');
     // an hour between two beats also reads as a sleep, and says so: count only the copy's lines
     const copyWarnings = () => warn.mock.calls.filter((call) => String(call[1]).includes('BACKUP_DIR')).length;
@@ -196,6 +197,7 @@ describe('listing and picking a backup', () => {
   it('lists newest first, ignores what is not a backup, and picks across both folders', async () => {
     const config = tempData();
     const db = openDb(config.dbPath);
+    addUser(db, 'ali');
     for (const n of [20, 21]) await backupIfDue(db, config, day(n));
     await copyBackupIfDue(config, day(21));
     db.close();
@@ -316,5 +318,91 @@ describe('restoring a backup', () => {
     } finally {
       server.close();
     }
+  });
+});
+
+describe('a database with no accounts is never backed up', () => {
+  /** A real day's backup with `users` in it, written straight to `file`, the way it lies in BACKUP_DIR. */
+  async function backupWith(file: string, users: string[]): Promise<void> {
+    const source = tempData();
+    const db = openDb(source.dbPath);
+    for (const user of users) addUser(db, user);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    await db.backup(file);
+    db.close();
+  }
+
+  const nov = (n: number): Date => new Date(Date.UTC(2026, 10, n, 12));
+
+  it('waits for the first account, then backs up as usual', async () => {
+    const config = tempData();
+    const db = openDb(config.dbPath);
+    expect(await backupIfDue(db, config, nov(16))).toBeNull();
+    expect(await copyBackupIfDue(config, nov(16))).toBeNull();
+    expect(listBackups(backupDir(config))).toEqual([]);
+    expect(listBackups(config.backupCopyDir)).toEqual([]);
+
+    // the first friend signs up: the same day gets its backup on the next pass
+    addUser(db, 'ali');
+    expect(await backupIfDue(db, config, nov(16))).toBe(path.join(backupDir(config), 'koydum-2026-11-16.db'));
+    expect(await copyBackupIfDue(config, nov(16))).toBe(path.join(config.backupCopyDir, 'koydum-2026-11-16.db'));
+    db.close();
+  });
+
+  it('a week of an empty server on a new PC leaves the real backup in BACKUP_DIR, and geri-yukle finds it', async () => {
+    const config = tempData();
+    const real = path.join(config.backupCopyDir, 'koydum-2026-11-14.db');
+    await backupWith(real, ['seyma', 'ali']);
+    // the owner followed Hızlı başlangıç before he remembered the backup
+    const empty = openDb(config.dbPath);
+    for (let n = 16; n <= 23; n += 1) {
+      await backupIfDue(empty, config, nov(n));
+      await copyBackupIfDue(config, nov(n));
+    }
+    empty.close();
+    expect(fs.readdirSync(config.backupCopyDir)).toEqual(['koydum-2026-11-14.db']);
+    expect(listBackups(backupDir(config))).toEqual([]);
+
+    expect(findBackup(config)?.file).toBe(real);
+    const { previous, accounts } = restoreBackup(config, real, nov(23));
+    expect(accounts).toBe(2);
+    expect(usernames(config.dbPath)).toEqual(['ali', 'seyma']);
+    expect(usernames(previous!)).toEqual([]);
+    // checked next to the database, never opened where it lies: OneDrive gets no -wal/-shm
+    expect(fs.readdirSync(config.backupCopyDir)).toEqual(['koydum-2026-11-14.db']);
+  });
+
+  it('an empty server started the same day does not shadow that day’s real backup', async () => {
+    const config = tempData();
+    const real = path.join(config.backupCopyDir, 'koydum-2026-11-16.db');
+    await backupWith(real, ['seyma', 'ali']);
+    const empty = openDb(config.dbPath);
+    await backupIfDue(empty, config, nov(16));
+    await copyBackupIfDue(config, nov(16));
+    empty.close();
+
+    expect(fs.readdirSync(config.backupCopyDir)).toEqual(['koydum-2026-11-16.db']);
+    expect(findBackup(config, 'koydum-2026-11-16.db')?.file).toBe(real);
+    expect(findBackup(config)?.file).toBe(real);
+  });
+
+  it('counts the open accounts in what it restores, none in an empty server’s copy', async () => {
+    const config = tempData();
+    // what an earlier version wrote for a server nobody had signed up to yet
+    const empty = path.join(config.backupCopyDir, 'koydum-2026-11-16.db');
+    await backupWith(empty, []);
+    expect(restoreBackup(config, empty, nov(17)).accounts).toBe(0);
+    expect(usernames(config.dbPath)).toEqual([]);
+
+    // an account closed with `sil` brings nobody back either
+    const closed = path.join(config.backupCopyDir, 'koydum-2026-11-15.db');
+    const source = tempData();
+    const db = openDb(source.dbPath);
+    addUser(db, 'ali');
+    addUser(db, 'veli');
+    db.prepare("UPDATE users SET deleted_at = '2026-11-15T09:00:00.000Z' WHERE username = 'veli'").run();
+    await db.backup(closed);
+    db.close();
+    expect(restoreBackup(config, closed, nov(17)).accounts).toBe(1);
   });
 });

@@ -402,6 +402,37 @@ describe('npm run yonet', () => {
     expect(usersIn(path.join(dataDir, aside[0]!)).sort()).toEqual(['ali', 'veli']);
   }, 60_000);
 
+  it('says how many accounts geri-yukle brought back, and warns when it brought none', async () => {
+    const dataDir = tempDataDir();
+    const dbPath = path.join(dataDir, 'koydum.db');
+    // an earlier version's copy of a server nobody had signed up to yet, and a real day
+    const empty = path.join(tempDataDir(), 'koydum-2026-11-16.db');
+    const real = path.join(tempDataDir(), 'koydum-2026-11-14.db');
+    const db = openDb(path.join(tempDataDir(), 'koydum.db'));
+    await db.backup(empty);
+    for (const username of ['ali', 'veli']) {
+      createUser(db, { username, displayName: username, passwordHash: 'x', timezone: 'Europe/Istanbul' });
+    }
+    await db.backup(real);
+    db.close();
+    const env = { PORT: String(await freePort()) };
+
+    const wrong = await run(dataDir, ['geri-yukle', empty], env);
+    expect(wrong.err).toBe('');
+    expect(wrong.code).toBe(0);
+    expect(wrong.out).toContain(', 0 hesap)');
+    expect(wrong.out).toContain('Bu yedekte hiç hesap yok');
+    expect(wrong.out).not.toContain('Şimdi sunucuyu aç.');
+
+    const right = await run(dataDir, ['geri-yukle', real], env);
+    expect(right.err).toBe('');
+    expect(right.code).toBe(0);
+    expect(right.out).toContain(', 2 hesap)');
+    expect(right.out).not.toContain('hiç hesap yok');
+    expect(right.out).toContain('Şimdi sunucuyu aç.');
+    expect(usersIn(dbPath).sort()).toEqual(['ali', 'veli']);
+  }, 60_000);
+
   it('refuses geri-yukle while the server answers on its port', async () => {
     const { dataDir, dbPath } = await withBackups();
     const stub = http.createServer((_request, response) => {

@@ -239,12 +239,20 @@ async function restore(config: Config, wanted: string | undefined): Promise<numb
     return 1;
   }
 
-  const { previous } = restoreBackup(config, backup.file, new Date());
-  console.log(`Yüklenen yedek: ${backup.file} (${when(backup.modifiedAt.toISOString())})`);
+  const { previous, accounts } = restoreBackup(config, backup.file, new Date());
+  console.log(`Yüklenen yedek: ${backup.file} (${when(backup.modifiedAt.toISOString())}, ${accounts} hesap)`);
   console.log(`Yerine kondu:   ${path.resolve(config.dbPath)}`);
   if (previous) {
     console.log(`\nEskisi silinmedi, şurada duruyor: ${previous}`);
     console.log(`Yanlış yedeği seçtiysen onu geri koy: npm run yonet -- geri-yukle "${previous}"`);
+  }
+  // An empty server's copy, which earlier versions wrote: served as it is, every
+  // friend's login gets "Kullanıcı adı ya da şifre yanlış." Loaded all the same,
+  // the old database aside as always, but no "open the server" under it.
+  if (accounts === 0) {
+    console.log('\n! Bu yedekte hiç hesap yok. Sunucuyu açmadan önce başka bir günün yedeğini yükle.');
+    console.log('  Hangileri var: npm run yonet -- yedekler');
+    return 0;
   }
   console.log('\nŞimdi sunucuyu aç.');
   return 0;

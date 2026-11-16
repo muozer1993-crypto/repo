@@ -1097,3 +1097,10 @@ açıkken çalışmaz: önce `/health`'e sorar, sonra canlı dosyayı bir an aç
 hâlâ durup durmadığına bakar (SQLite WAL dosyasını son bağlantı kapanırken siler; duruyorsa dosyayı
 başka biri tutuyordur). Yedeği veritabanının yanına kopyalayıp orada sınar, eskisini
 `koydum-onceki-*.db` diye kenara koyar; hiçbir şey silinmez.
+
+`users` tablosu boşken yedek alınmaz. Bilgisayarı ölen sahip yenisinde çoğu zaman önce sunucuyu
+boş klasörle açar, ancak sonra `geri-yukle`'yi hatırlar. O boş veritabanının kopyası
+`geri-yukle`'nin seçtiği en yeni gün olurdu, bir hafta açık kalınca da gerçek yedekleri
+`BACKUP_DIR`'dan budardı. Eski sürümlerin yazdığı boş kopyalar için `geri-yukle` yüklediği
+dosyadaki açık hesapları da sayar (yine veritabanının yanındaki kopyada, OneDrive'daki dosya hiç
+açılmaz) ve sıfırsa "sunucuyu aç" yerine başka bir gün seçmesini söyler.
