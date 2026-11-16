@@ -14,7 +14,8 @@ import { ToastProvider } from '@/components/Toast';
 import { useAddEntry, type AddEntryResult } from '@/hooks/queries';
 import { ApiClient, ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
-import { enqueueEntry, readQueue } from '@/services/offlineQueue';
+import { StorageKeys, setJson } from '@/lib/storage';
+import { enqueueEntry, flushQueue, readQueue } from '@/services/offlineQueue';
 import { useAuth } from '@/store/auth';
 import { safeTodayKey } from '@/utils/datetime';
 
@@ -186,6 +187,56 @@ describe('a parked entry the server refuses for good', () => {
     await settle();
 
     expect(texts(tree)).toContain('“Su içme” · 8 Eylül: Süre bitti, artık giriş yok.');
+  });
+});
+
+describe('a refusal parked by one account on a shared phone', () => {
+  const AYSE = { ...ME, id: 'u1', username: 'ayse', displayName: 'Ayşe' } as Me;
+  const MEHMET = { ...ME, id: 'u2', username: 'mehmet', displayName: 'Mehmet' } as Me;
+
+  async function signIn(token: string, me: Me): Promise<void> {
+    await act(async () => {
+      await useAuth.getState().logout();
+    });
+    await act(async () => {
+      await useAuth.getState().setSession(token, me);
+    });
+    await settle();
+  }
+
+  it('is told only to its owner, and kept for her until then', async () => {
+    appState.currentState = 'active';
+    useAuth.setState({ token: 'tok1', me: AYSE });
+    await setJson(StorageKeys.me, AYSE);
+    const tree = render();
+    await settle();
+
+    // refused by the flush after one of her writes, which tells nobody
+    const yesterday = addDays(safeTodayKey('Europe/Istanbul'), -1);
+    await enqueueEntry(
+      'c1',
+      { dayKey: yesterday, value: 3, source: 'manual', clientTime: new Date().toISOString() },
+      'c1:gun',
+      undefined,
+      'Ayşe ile Selin sigarayı bırakıyor'
+    );
+    await act(async () => {
+      await flushQueue(useAuth.getState().client());
+    });
+    expect(addEntry).toHaveBeenCalledTimes(1);
+
+    // she hands the phone over without leaving the app
+    await signIn('tok2', MEHMET);
+    expect(texts(tree).filter((text) => text.includes('gönderilemedi') || text.includes('Ayşe ile Selin'))).toEqual([]);
+    expect((await readQueue()).map((item) => [item.id, item.failedReason])).toEqual([
+      ['u1/c1:gun', 'Süre bitti, artık giriş yok.'],
+    ]);
+
+    // back on her own account: told by name, then let go
+    await signIn('tok1', AYSE);
+    expect(texts(tree)).toContain('Bir giriş gönderilemedi');
+    expect(texts(tree)).toContain('“Ayşe ile Selin sigarayı bırakıyor” · Dün: Süre bitti, artık giriş yok.');
+    expect(await readQueue()).toEqual([]);
   });
 });
 

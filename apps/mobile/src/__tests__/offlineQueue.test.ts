@@ -452,6 +452,22 @@ describe('two accounts on one phone', () => {
     expect(addEntry).toHaveBeenLastCalledWith('c1', { ...body('2026-09-08', 30000), proofUrl: '/uploads/p1.jpg' });
     expect(await readQueue()).toEqual([]);
   });
+
+  it("never hands the previous account's parked check-in to the next one as its own tap", async () => {
+    const checkin = { dayKey: '2026-09-08', value: 1, source: 'checkin', clientTime: '2026-09-08T20:10:00.000Z' };
+    // parked before entries carried an owner: it goes with whoever is logged in
+    await enqueueEntry('c1', { ...checkin, dayKey: '2026-09-07' }, 'c1:2026-09-07:checkin:');
+    await setJson(StorageKeys.me, { id: 'ali' });
+    await enqueueEntry('c1', checkin, 'c1:2026-09-08:checkin:');
+    await setJson(StorageKeys.me, { id: 'veli' });
+
+    expect((await pendingForChallenge('c1')).map((item) => item.id)).toEqual(['c1:2026-09-07:checkin:']);
+    await setJson(StorageKeys.me, { id: 'ali' });
+    expect((await pendingForChallenge('c1')).map((item) => item.id)).toEqual([
+      'c1:2026-09-07:checkin:',
+      'ali/c1:2026-09-08:checkin:',
+    ]);
+  });
 });
 
 describe('a reply that is not from our server', () => {

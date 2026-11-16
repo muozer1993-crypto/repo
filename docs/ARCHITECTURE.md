@@ -708,7 +708,11 @@ diye duyar. React Native okuyamadığı dosyayı bağlantı yokmuş gibi bildiri
 Kuyruktaki her giriş, kuyruğa girdiği anda telefonda oturum açmış hesabı taşır (`ownerId`). Aynı
 telefonda başka bir hesap açılınca kuyruk onun girişlerini gönderir, öncekinin girişine ve
 fotoğrafına dokunmaz: yoksa Ali'nin günü ve fotoğrafı Veli'nin anahtarıyla, Veli'nin girişi olarak
-giderdi. Ali geri girince onunkiler gider.
+giderdi. Ali geri girince onunkiler gider. Reddedilen girişin haberi de sahibine gider: Ali'nin
+reddedilen girişi Veli'ye söylenmez, Ali geri girene kadar kuyrukta bekler. Eskiden telefona sonra
+giren hesaba söylenip siliniyordu: Veli Ali'nin çelıncını görüyor, Ali hiç duymuyordu. Sıradaki
+bir "Geldim"in üstüne basılan ikincisi ilk basışın saatini korur (`pendingForChallenge`); başka
+hesabın bekleyen "Geldim"inin saatini almaz.
 
 Yavaş bağlantı, bağlantısızlıkla karışmamalı. Eskiden fotoğraf da her istek gibi 15 saniyede
 kesiliyordu. Kameradan 0,6 kaliteyle gelen 1,5-3 MB'lık bir fotoğraf, evdeki ADSL'in 1 Mbit

@@ -17,7 +17,7 @@ import {
   routeForNotificationData,
   type NotificationRoute,
 } from '@/services/notifications';
-import { clearFailed, flushQueue, readQueue } from '@/services/offlineQueue';
+import { clearFailed, currentOwnerId, flushQueue, readQueue } from '@/services/offlineQueue';
 import { refreshReminders } from '@/services/reminders';
 import { startForegroundStepTracking } from '@/services/steps';
 import { syncStepsNow } from '@/services/stepSync';
@@ -320,7 +320,13 @@ export function NotificationBridge() {
         // Read the queue, not this pass's counter: an entry can be refused by a
         // flush this code did not start (the one after a successful write, or the
         // headless background task), and the user still has to hear about it.
-        const failed = (await readQueue()).filter((item) => item.failedReason);
+        // Only this account's: another account's refusal waits, failed, for its
+        // owner. Told to whoever had the phone next, it showed them somebody
+        // else's çelınc and was cleared before its owner ever heard.
+        const owner = await currentOwnerId();
+        const failed = (await readQueue()).filter(
+          (item) => item.failedReason && (!item.ownerId || item.ownerId === owner)
+        );
         const [first] = failed;
         if (first) {
           // the server refused these for good; say so once, then stop holding them

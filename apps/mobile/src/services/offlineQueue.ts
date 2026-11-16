@@ -322,8 +322,12 @@ async function sendQueuedPhoto(client: ApiClient, uri: string): Promise<PhotoOut
 }
 
 export async function pendingForChallenge(challengeId: string): Promise<PendingEntry[]> {
-  const queue = await readQueue();
-  return queue.filter((item) => item.challengeId === challengeId && !item.failedReason);
+  const [queue, owner] = await Promise.all([readQueue(), currentOwnerId()]);
+  // another account's entries wait for it: its parked "Geldim" is not this account's tap
+  return queue.filter(
+    (item) =>
+      item.challengeId === challengeId && !item.failedReason && (!item.ownerId || item.ownerId === owner)
+  );
 }
 
 export interface FlushResult {
