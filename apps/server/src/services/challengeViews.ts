@@ -491,7 +491,9 @@ function proofWhere(level: VulgarityLevel): string {
  * majority: from now on the entry goes unless a photo comes in, so the copy
  * says so. Before that (or after, from yet another friend) it only asks.
  * `by` is null across a block: the owner hears that an itiraz came, which
- * the race needs, but not who filed it, which the block was there to stop.
+ * the race needs, but the lock screen does not spell out the name they
+ * blocked (or were blocked by). The çelınc's own screen still shows who said
+ * what under the row, as its standings show both of them.
  */
 export function disputeCopy(level: VulgarityLevel, by: string | null, title: string, dayKey: string, onTheClock = false): CopyText {
   const who = by ?? 'Bir rakibin';

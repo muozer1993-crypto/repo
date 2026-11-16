@@ -258,7 +258,8 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       const outcome = recordDispute(db, { challenge, entry, byUserId: me.id, reason: body.reason, now });
 
       if (notifyOwner) {
-        // across a block the owner learns of the itiraz, not who filed it
+        // across a block the push says an itiraz came, without the name
+        // (the çelınc's screen still shows who said what, as it shows both)
         const by = acrossBlock ? null : me.row.display_name;
         const copy = disputeCopy(levelOf(owner), by, challenge.title, entry.day_key, outcome.reachedThreshold);
         notify(db, {
