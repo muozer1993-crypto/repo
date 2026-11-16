@@ -2123,6 +2123,21 @@ describe('a morning check-in with the server out of reach', () => {
     expect(rendered(tree)).toContain('Check-in gitmedi, sırada');
   });
 
+  it('does not blame the server or the signal when its fresh answer was only a few seconds early', async () => {
+    searchParams.id = 'c-1';
+    // the phone's clock a little ahead of the server's: its "pending" was right when it left
+    api.challenge = jest.fn(async () => morning({ startsAgo: 5_000 }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Başlamış olmalı, birazdan burada da görünür.');
+    expect(text).not.toContain('sunucuya ulaşınca');
+    expect(text).not.toContain('Sunucuya ulaşamıyorum');
+    expect(geldim(tree)).toHaveLength(1);
+  });
+
   it('still waits for a second yes when nobody else said one', async () => {
     searchParams.id = 'c-1';
     api.challenge = jest.fn(async () => morning({ aliSaidYes: false }));

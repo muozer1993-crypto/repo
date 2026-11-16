@@ -328,6 +328,13 @@ export default function ChallengeDetailScreen() {
    * right then, so it takes entries like a running one and parks them.
    */
   const startedUnseen = challenge.status === 'pending' && startPassed && accepted.length >= 2;
+  /**
+   * Whether what is drawn is the server's latest word: not when its last fetch
+   * failed, or while it is still the copy kept on the phone (`updatedAt: 0`,
+   * hooks/queries). Only then is it the server or the signal that keeps a
+   * started çelınc "pending" here; a fresh answer was only a few seconds early.
+   */
+  const unreachable = query.isRefetchError || query.dataUpdatedAt === 0;
   const overdueStart = runningUnseen(challenge, accepted.length, renderedAt);
   const isCreator = challenge.creatorId === meId;
   // The last fetch is a fresh enough clock for an answer window counted in
@@ -418,12 +425,19 @@ export default function ChallengeDetailScreen() {
                 }}
               />
               <Text variant="tiny" faint>
-                {byLevel(
-                  level,
-                  'Başlama saati geçti, çelınc başlamış olmalı. Sunucuya ulaşınca burada da başlamış görünür.',
-                  'Başlamış olmalı, sunucuya ulaşınca burada da görünür.',
-                  'Başladı bile lan, sunucu ya uyuyor ya sende çekmiyor. Bağlanınca burada da görünür.'
-                )}
+                {unreachable
+                  ? byLevel(
+                      level,
+                      'Başlama saati geçti, çelınc başlamış olmalı. Sunucuya ulaşınca burada da başlamış görünür.',
+                      'Başlamış olmalı, sunucuya ulaşınca burada da görünür.',
+                      'Başladı bile lan, sunucu ya uyuyor ya sende çekmiyor. Bağlanınca burada da görünür.'
+                    )
+                  : byLevel(
+                      level,
+                      'Başlama saati geçti, çelınc başlamış olmalı. Birazdan burada da başlamış görünür.',
+                      'Başlamış olmalı, birazdan burada da görünür.',
+                      'Başladı bile lan, birazdan burada da görünür.'
+                    )}
               </Text>
             </>
           ) : challenge.status === 'pending' ? (

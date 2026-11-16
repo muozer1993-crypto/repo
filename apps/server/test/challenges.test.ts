@@ -701,6 +701,27 @@ describe('accept / decline / leave / cancel', () => {
     expect(response.json().error.code).toBe('challenge_started');
   });
 
+  it('reads as started the moment its start passes with two yeses, before the scheduler gets to it', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const created = await createChallenge(harness, ali, {
+      participantIds: [veli.me.id],
+      startsAt: iso(harness, 2 * 60 * 60 * 1000),
+      endsAt: iso(harness, 48 * 60 * 60 * 1000),
+    });
+    const id = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    // the screen's countdown ran out and it asked at once; the scheduler's beat is up to 30 s off
+    harness.advance(2 * 60 * 60 * 1000 + 2_000);
+
+    const detail = await authed(harness.app, veli.token)({ method: 'GET', url: `/challenges/${id}` });
+    expect(detail.json<ChallengeDetail>().challenge.status).toBe('active');
+    const list = await authed(harness.app, ali.token)({ method: 'GET', url: '/challenges' });
+    expect(list.json<{ challenge: Challenge }[]>().find((row) => row.challenge.id === id)?.challenge.status).toBe('active');
+  });
+
   it('refuses to cancel a started challenge', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await twoPlayerChallenge(harness);

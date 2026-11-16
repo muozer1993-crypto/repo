@@ -95,7 +95,9 @@ Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
   istekle zamanlayıcıdan hangisi ikinci gelirse boşluk bulmaz, süren bir turun üstüne ikincisi de
   başlamaz. Uykudan önceki tur bir push gönderiminde asılı kaldıysa uyanışın vuruşu tur başlatmaz;
   "Yarın 04:00" çelıncına gelen "Geldim" yine "aktif değil" almasın diye giriş rotası da başlama
-  vakti gelmiş çelıncları başlatır (`activateDueChallenges`).
+  vakti gelmiş çelıncları başlatır (`activateDueChallenges`). İptal, liste ve detay okuması da aynısını
+  yapar: ekran geri sayımı bittiği anda detayı yeniden ister, vuruş 30 saniye sonra gelebilir; o
+  arada dönen `pending` uygulamaya "sunucuya ulaşamadım" dedirtiyordu.
 * Sunucu çelınc bittikten sonra odak dakikası almaz. Odak ekranı seansı kalan süreye sığdırır,
   molalarla uzayan seansı da bitişe 30 saniye kala kapatıp tam dakikalarını gönderir.
 * Geçmiş güne giriş penceresi (manuel 2 gün, adım 7 gün) sunucunun "şimdi"sine göredir.
@@ -725,7 +727,9 @@ detay hâlâ `pending`, çünkü sunucu onu bir sonraki turunda başlatacaktı v
 ekranı bunu "kabul bekleniyor" saymaz: bitişe kalan süreyi ve "Başlamış olmalı" satırını gösterir,
 girişi de çalışan çelınctaki gibi alır; açtığı giriş formu ve odak sayacı da aynı kuralla
 (`runningUnseen`) "aktif değil" demez. Sunucu giriş gelince önce vadesi gelen çelıncları başlattığı
-için (`activateDueChallenges`) giriş reddedilmez.
+için (`activateDueChallenges`) giriş reddedilmez. O satır sunucuyu ya da bağlantıyı yalnızca son
+okuma başarısızsa ya da ekran telefondaki kopyadaysa suçlar ("sunucuya ulaşınca…"); sunucudan taze
+gelen bir `pending` (telefonun saati birkaç saniye ileri) "birazdan burada da görünür" der.
 
 Aşağı çekip yenilemenin çarkı yalnızca kullanıcı çektiğinde, o yenileme bitene kadar döner
 (`hooks/usePullRefresh.ts`). TanStack Query'nin `isRefetching`'i 45 ve 60 saniyelik yoklamalarda,

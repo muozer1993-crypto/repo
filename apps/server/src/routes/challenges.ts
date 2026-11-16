@@ -237,6 +237,8 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
   app.get('/challenges', { preHandler: app.authenticate }, async (request): Promise<ChallengeSummary[]> => {
     const me = request.user;
     const query = parseQuery(ChallengeListQuerySchema, request.query ?? {});
+    // started by rule is started on every read too (see GET /challenges/:id)
+    activateDueChallenges(db, app.now());
 
     const filters: string[] = [];
     const params: unknown[] = [me.id];
@@ -388,6 +390,12 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
   app.get('/challenges/:id', { preHandler: app.authenticate }, async (request): Promise<ChallengeDetail> => {
     const me = request.user;
     const { id } = request.params as IdParams;
+    // A çelınc past its start with two yeses has started by rule; the scheduler
+    // gets to it on its next beat, up to 30 s on. The screen refetches the moment
+    // its countdown runs out, and a "pending" read then had the app say the
+    // server could not be reached, to a phone that had just reached it. As in the
+    // entry and cancel routes: an indexed lookup that almost always finds nothing.
+    activateDueChallenges(db, app.now());
     const challenge = requireChallengeRow(db, id);
     requireMembership(db, challenge, me.id);
     return buildDetail(db, challenge, me.id, app.now(), app.schedulerBootAt.at);
