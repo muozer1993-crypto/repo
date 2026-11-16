@@ -159,7 +159,11 @@ içerideyken itiraz kapısı açık kalır: kapansaydı elle 99.000 yazıp rakib
 sorgulanamayan bir sayıyla kazanırdı. Girişin sahibine giden bildirim o zaman itiraz edenin adını
 yazmaz ("Bir rakibin"); diğer oyuncuları çağıran bildirim ve itiraz edene giden kanıt ve karar
 haberleri engelli ikiliyi yine atlar. Çelınctan çıkmış biriyle aradaki engel kapıyı kapalı tutar
-(403 `blocked`).
+(403 `blocked`). Sunucunun kendi bildirimleri de engelli ikiliye birbirinin adını söylemez ama
+gitmeye devam eder: gün ortası dürtme ("Bir rakibin…", aşağıda), bitiş haberi (kaybedene
+"Kazanan Ali" yerine yalnız kendi skoru; beraberliğin arkasında kalana, birincilerden biriyle
+engeli varsa hiçbir isim, "Birinciler berabere kaldı") ve çelıncı açanın başlamadan iptali
+(yalnız çelıncın adı, kimin iptal ettiği yok).
 
 Rövanş, eskisi kaç yerel gün sürdüyse o kadar gün sürer ve sihirbaz gibi açanın saat diliminde bir
 günün son milisaniyesinde biter. Önceden "şimdi + eski süre" ile düğmeye basılan saatte bitiyordu;
@@ -428,6 +432,14 @@ Spam olmaması dört kurala bağlı:
 
 Bunlardan ayrı, dürtmeyi kapatan (`users.nudges_enabled = 0`) hiç almaz. Bu kontrol `nudges_sent`
 kaydından **önce** yapılır: kapatıp aynı öğleden sonra yeniden açan o günün dürtmesini kaçırmaz.
+
+Dürtme engelin öbür tarafındakinin adını taşımaz. Fark, okuyanla arasında (kim kimi engellemiş
+olursa olsun) engel olmayan, önündeki en iyi oyuncuya göre ölçülür; adı yazılan ve `fromUserId`
+olan odur. Önceden hep lidere bakılıyordu: Ali'nin engellediği Veli'nin elle dürtmesi 403
+`blocked` alırken sunucu her öğleden sonra Ali'ye "Veli sana 9 bardak fark koymuş" diyordu.
+Öndekilerin hepsiyle arasında engel varsa yarış yine de sürüyor, dürtme de gelir: liderin farkı
+sayılır ama bildirim kimseyi anmaz ("Bir rakibin sana 9 bardak fark koymuş"), `fromUserId` de
+taşımaz.
 
 Ekran süresinde henüz hiçbir gün girmemiş olan da dürtülmez: onun "farkı" girilmeyen günün
 1440 dakikalık cezasıdır, kimsenin öne geçtiği yok. Bu kontrol de kayıttan önce yapılır; aynı gün

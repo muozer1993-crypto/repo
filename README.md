@@ -487,7 +487,8 @@ kod istediği için yeni APK ile gelir; eski APK'da Ayarlar'da hiç görünmez.
 
 Gün ortası dürtme kişi başına günde en fazla bir kere gelir: birkaç çelıncta birden geride
 kalan, en çok geride olduğu çelıncı duyar, gerisi aynı bildirimde sayılır ("2 çelıncta daha
-gerideysin").
+gerideysin"). Dürtme, önündekilerden arana engel girmemiş en iyisini söyler; önündekilerin
+hepsiyle aranda engel varsa yine gelir ama isim vermez ("Bir rakibin sana 9 bardak fark koymuş").
 
 Bazı bildirimler fazla geliyorsa kanalı kapatma, uygulamada **Ayarlar → Bildirim tercihleri**'ne
 gir: gün ortası dürtmeyi ("sana fark koymuş"), pazar akşamı haftalık özeti ve telefonun kendi
@@ -918,7 +919,11 @@ görür: engelli iki kişi aynı çelıncta oynamaz. Çelınc sürerken konan en
 çelınctan çıkarmaz, birbirlerinin girişine yine itiraz edebilirler: yoksa elle 99.000 adım yazıp
 rakibini engelleyen, kimsenin sorgulayamayacağı bir sayıyla kazanırdı. Böyle bir itirazın bildirimi
 kimin itiraz ettiğini yazmaz, "Bir rakibin" der. Çelınctan ayrılmış biriyle arasında engel olan
-onun girişine itiraz edemez.
+onun girişine itiraz edemez. Engelli ikili sunucunun kendi bildirimlerinde de birbirinin adını
+görmez, bildirimler yine gelir: gün ortası dürtme "Bir rakibin" der, bitişte kaybedene "Kazanan
+Ali" yerine sadece kendi skoru yazar, beraberliğin arkasında kalan da birincilerden biriyle arasında
+engel varsa "Birinciler berabere kaldı" okur. Başlamamış bir çelıncı aranızda engel olan kişi
+iptal ederse bildirim kimin iptal ettiğini yazmaz.
 
 ### Çelınc sürerken kanka ekleme
 

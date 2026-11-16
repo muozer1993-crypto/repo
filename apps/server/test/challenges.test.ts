@@ -543,6 +543,46 @@ describe('accept / decline / leave / cancel', () => {
     expect(again.json().error.code).toBe('challenge_started');
   });
 
+  it('tells an invitee who blocked the creator that it is off, without the creator\'s name', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const invitees = await Promise.all(
+      ([1, 2, 3] as const).map((level) =>
+        registerUser(harness!.app, `davetli${level}`, { displayName: `Davetli${level}`, vulgarityMax: level }),
+      ),
+    );
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    for (const friend of [...invitees, veli]) befriend(harness.app, ali.me.id, friend.me.id);
+    const created = await createChallenge(harness, ali, {
+      title: 'Pazar Yürüyüşü',
+      participantIds: [...invitees, veli].map((friend) => friend.me.id),
+      startsAt: iso(harness, 2 * 60 * 60 * 1000),
+      endsAt: iso(harness, 48 * 60 * 60 * 1000),
+    });
+    const id = created.json<Challenge>().id;
+    for (const invitee of invitees) {
+      const blocked = await authed(harness.app, invitee.token)({ method: 'POST', url: `/users/${ali.me.id}/block` });
+      expect(blocked.statusCode).toBe(200);
+    }
+
+    const cancelled = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${id}/cancel` });
+    expect(cancelled.statusCode).toBe(200);
+
+    const bodies = invitees.map((invitee) => listByType(harness!.db, invitee.me.id, 'challenge_cancelled')[0]?.body);
+    expect(bodies).toEqual([
+      '"Pazar Yürüyüşü" çelıncı iptal edildi.',
+      '"Pazar Yürüyüşü" çelıncı iptal oldu.',
+      '"Pazar Yürüyüşü" çelıncı yattı, iptal 🍆',
+    ]);
+    for (const body of bodies) {
+      for (const junk of ['Ali', 'undefined', 'null', 'NaN', '[object', '{']) expect(body).not.toContain(junk);
+    }
+    // nothing between Veli and Ali: he hears who called it off
+    expect(listByType(harness.db, veli.me.id, 'challenge_cancelled')[0]?.body).toBe(
+      'Ali "Pazar Yürüyüşü" çelıncını iptal etti.',
+    );
+  });
+
   it('refuses to cancel a started challenge', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await twoPlayerChallenge(harness);

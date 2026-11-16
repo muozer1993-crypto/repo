@@ -411,10 +411,28 @@ export function inviteCopy(level: VulgarityLevel, creator: string, title: string
   };
 }
 
-export function cancelledByCreatorCopy(level: VulgarityLevel, creator: string, title: string): CopyText {
-  if (level === 1) return { title: 'Çelınc iptal edildi', body: `${creator}, "${title}" çelıncını iptal etti.` };
-  if (level === 3) return { title: 'Çelınc iptal 🍆', body: `${creator} "${title}" çelıncını iptal etti. Ödü koptu herhalde.` };
-  return { title: 'Çelınc iptal oldu', body: `${creator} "${title}" çelıncını iptal etti.` };
+/**
+ * To the players and invitees of a çelınc its creator called off before the
+ * start. `creator` is null across a block: the çelınc is gone either way, the
+ * name the reader blocked (or was blocked by) does not need to come with it.
+ */
+export function cancelledByCreatorCopy(level: VulgarityLevel, creator: string | null, title: string): CopyText {
+  if (level === 1) {
+    return {
+      title: 'Çelınc iptal edildi',
+      body: creator ? `${creator}, "${title}" çelıncını iptal etti.` : `"${title}" çelıncı iptal edildi.`,
+    };
+  }
+  if (level === 3) {
+    return {
+      title: 'Çelınc iptal 🍆',
+      body: creator ? `${creator} "${title}" çelıncını iptal etti. Ödü koptu herhalde.` : `"${title}" çelıncı yattı, iptal 🍆`,
+    };
+  }
+  return {
+    title: 'Çelınc iptal oldu',
+    body: creator ? `${creator} "${title}" çelıncını iptal etti.` : `"${title}" çelıncı iptal oldu.`,
+  };
 }
 
 /**

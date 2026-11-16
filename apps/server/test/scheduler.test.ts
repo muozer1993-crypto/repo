@@ -1471,6 +1471,112 @@ describe('scheduler: a winner who never says "KOYDUM MU?"', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The finish across a block
+// ---------------------------------------------------------------------------
+
+describe('scheduler: the finish news across a block placed mid-race', () => {
+  /**
+   * A water çelınc that ends in two hours, everybody in from the start and
+   * friends with everybody; each one logs `glasses` before the end.
+   */
+  async function waterRace(
+    h: TestApp,
+    people: { username: string; displayName: string; vulgarityMax?: 1 | 2 | 3; glasses: number }[],
+  ): Promise<{ players: RegisteredUser[]; challengeId: string; endsAt: string }> {
+    const players: RegisteredUser[] = [];
+    for (const { username, displayName, vulgarityMax } of people) {
+      players.push(await registerUser(h.app, username, { displayName, vulgarityMax }));
+    }
+    for (const [i, a] of players.entries()) for (const b of players.slice(i + 1)) befriend(h.app, a.me.id, b.me.id);
+    const [creator, ...friends] = players as [RegisteredUser, ...RegisteredUser[]];
+    const endsAt = iso(h, 2 * HOUR);
+    const created = await authed(h.app, creator.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'su_bardak', startsAt: iso(h), endsAt, participantIds: friends.map((f) => f.me.id) },
+    });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    for (const friend of friends) {
+      const accepted = await authed(h.app, friend.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+      expect(accepted.statusCode).toBe(200);
+    }
+    tick(h);
+    for (const [index, player] of players.entries()) await logWater(h, player, challengeId, people[index]!.glasses);
+    return { players, challengeId, endsAt };
+  }
+
+  async function block(h: TestApp, blocker: RegisteredUser, blocked: RegisteredUser) {
+    const response = await authed(h.app, blocker.token)({ method: 'POST', url: `/users/${blocked.me.id}/block` });
+    expect(response.statusCode).toBe(200);
+  }
+
+  /** No leftovers of a template or a missing value in what the reader sees. */
+  function expectClean(text: string) {
+    for (const junk of ['undefined', 'null', 'NaN', '[object', '{', '  ']) expect(text).not.toContain(junk);
+  }
+
+  it('tells the loser who blocked the winner how it ended, without the winner\'s name', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, challengeId, endsAt } = await waterRace(harness, [
+      { username: 'ali', displayName: 'Ali', glasses: 10 },
+      { username: 'veli', displayName: 'Veli', glasses: 4 },
+      { username: 'can', displayName: 'Can', glasses: 2 },
+    ]);
+    const [ali, veli, can] = players as [RegisteredUser, RegisteredUser, RegisteredUser];
+    await block(harness, veli, ali);
+
+    at(harness, endsAt, 1);
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+    expect(challengeRow(harness, challengeId).winner_id).toBe(ali.me.id);
+
+    const [lost] = listByType(harness.db, veli.me.id, 'challenge_finished');
+    expect(lost!.body).toContain('senin skorun 4 bardak');
+    expect(lost!.body).not.toContain('Ali');
+    expectClean(lost!.body);
+    // nothing between Can and Ali: his still says who won
+    expect(listByType(harness.db, can.me.id, 'challenge_finished')[0]!.body).toContain('Kazanan Ali (10 bardak)');
+  });
+
+  it('names neither co-leader to somebody behind a tie who has a block with one of them', async () => {
+    harness = await makeApp({ now: NOW });
+    const { players, endsAt } = await waterRace(harness, [
+      { username: 'ali', displayName: 'Ali', glasses: 8 },
+      { username: 'can', displayName: 'Can', glasses: 8 },
+      { username: 'veli', displayName: 'Veli', vulgarityMax: 1, glasses: 3 },
+      { username: 'deniz', displayName: 'Deniz', vulgarityMax: 2, glasses: 3 },
+      { username: 'ece', displayName: 'Ece', vulgarityMax: 3, glasses: 3 },
+      { username: 'oya', displayName: 'Oya', glasses: 3 },
+    ]);
+    const [, can, veli, deniz, ece, oya] = players as RegisteredUser[];
+    await block(harness, veli!, can!);
+    await block(harness, can!, deniz!);
+    await block(harness, ece!, can!);
+
+    at(harness, endsAt, 1);
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+
+    const bodyOf = (user: RegisteredUser) => listByType(harness!.db, user.me.id, 'challenge_finished')[0]!.body;
+    expect(bodyOf(veli!)).toBe(
+      'Su Bardağı Yarışı bitti. Birincilik paylaşıldı (8 bardak), sen 3. oldun (3 bardak). İstersen rövanş aç.',
+    );
+    expect(bodyOf(deniz!)).toBe(
+      'Su Bardağı Yarışı bitti. Birinciler berabere kaldı (8 bardak), sen 3. oldun (3 bardak). Yine de yedin, rövanş aç.',
+    );
+    expect(bodyOf(ece!)).toBe(
+      'Su Bardağı Yarışı bitti. Birinciler berabere kaldı (8 bardak), sen 3. oldun (3 bardak). Yedin 🍆 Rövanşı aç da görelim.',
+    );
+    for (const reader of [veli!, deniz!, ece!]) {
+      expect(bodyOf(reader)).not.toContain('Ali');
+      expect(bodyOf(reader)).not.toContain('Can');
+      expectClean(bodyOf(reader));
+    }
+    // Oya has no block with either of them
+    expect(bodyOf(oya!)).toContain('Ali ve Can berabere kaldı');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Cancellation
 // ---------------------------------------------------------------------------
 

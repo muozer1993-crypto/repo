@@ -670,7 +670,9 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       );
       for (const row of others) {
         const user = requireUserRow(db, row.user_id);
-        const copy = cancelledByCreatorCopy(levelOf(user), me.row.display_name, challenge.title);
+        // still told, since the invite or the race is gone, but not by name
+        const creator = isBlockedBetween(db, user.id, me.id) ? null : me.row.display_name;
+        const copy = cancelledByCreatorCopy(levelOf(user), creator, challenge.title);
         notify(db, {
           userId: user.id,
           type: 'challenge_cancelled',

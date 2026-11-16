@@ -9,8 +9,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { newId, nowIso } from '../src/db/index.js';
 import { listInbox } from '../src/services/notifications.js';
-import { sendNudges } from '../src/services/challenges.js';
-import { authed, makeApp, registerUser, type TestApp } from './helpers.js';
+import { runSchedulerOnce, sendNudges } from '../src/services/challenges.js';
+import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 import type { FastifyInstance } from 'fastify';
 import type { Me } from '@koydum/shared';
 
@@ -406,5 +406,128 @@ describe('mid-day nudges', () => {
     addSteps(app, id, veli.me.id, TODAY, 2_000);
 
     expect(sendNudges(app.db, app.now())).toBe(0);
+  });
+});
+
+describe('mid-day nudges across a block', () => {
+  /** A water çelınc through the real routes; `bardaks` is what each one typed today. */
+  async function waterRace(players: { user: RegisteredUser; bardaks: number }[]): Promise<string> {
+    const h = harness!;
+    const [creator, ...rest] = players;
+    for (const [i, a] of players.entries()) {
+      for (const b of players.slice(i + 1)) befriend(h.app, a.user.me.id, b.user.me.id);
+    }
+    const created = await authed(h.app, creator!.user.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: {
+        typeKey: 'su_bardak',
+        startsAt: h.now().toISOString(),
+        endsAt: new Date(h.now().getTime() + 3 * 86_400_000).toISOString(),
+        participantIds: rest.map((p) => p.user.me.id),
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json<{ id: string }>().id;
+    for (const p of rest) {
+      const accepted = await authed(h.app, p.user.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+      expect(accepted.statusCode).toBe(200);
+    }
+    for (const p of players) {
+      const typed = await authed(h.app, p.user.token)({
+        method: 'POST',
+        url: `/challenges/${id}/entries`,
+        payload: { dayKey: TODAY, value: p.bardaks, source: 'manual', clientTime: h.now().toISOString() },
+      });
+      expect(typed.statusCode).toBe(201);
+    }
+    return id;
+  }
+
+  function block(blocker: RegisteredUser, blocked: RegisteredUser) {
+    return authed(harness!.app, blocker.token)({ method: 'POST', url: `/users/${blocked.me.id}/block` });
+  }
+
+  /** No leftovers of a template or a missing value in what the reader sees. */
+  function expectClean(text: string) {
+    for (const junk of ['undefined', 'null', 'NaN', '[object', '{']) expect(text).not.toContain(junk);
+  }
+
+  it('still tells the one who blocked the leader, without the name the poke route refuses', async () => {
+    harness = await makeApp(); // 12:00 Istanbul
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const id = await waterRace([
+      { user: ali, bardaks: 1 },
+      { user: veli, bardaks: 10 },
+    ]);
+
+    expect((await block(ali, veli)).statusCode).toBe(200);
+    const poke = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${id}/poke`,
+      payload: { toUserId: ali.me.id },
+    });
+    expect(poke.statusCode).toBe(403);
+    expect(poke.json().error.code).toBe('blocked');
+
+    harness.advance(60 * 60_000); // 13:00 Istanbul, inside the nudge hours
+    runSchedulerOnce(harness.db, harness.now());
+
+    const [nudge, ...more] = nudgesOf(harness, ali.me.id);
+    expect(more).toHaveLength(0);
+    expect(nudge!.body).toBe('Bir rakibin sana 9 bardak fark koymuş. Bir şeyler yap da gir şuraya.');
+    expectClean(nudge!.title);
+    // no id of the one blocked rides along either
+    expect(JSON.parse(nudge!.data)).toEqual({ challengeId: id, dayKey: TODAY });
+  });
+
+  it('works the same the other way round, at every level', async () => {
+    harness = await makeApp();
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const behind = await Promise.all(
+      ([1, 2, 3] as const).map((level) =>
+        registerUser(harness!.app, `geride${level}`, { displayName: `Geride${level}`, vulgarityMax: level }),
+      ),
+    );
+    await waterRace([{ user: veli, bardaks: 10 }, ...behind.map((user) => ({ user, bardaks: 1 }))]);
+    // the ones behind block the leader, not the other way round
+    for (const user of behind) expect((await block(user, veli)).statusCode).toBe(200);
+
+    harness.advance(60 * 60_000);
+    runSchedulerOnce(harness.db, harness.now());
+
+    const bodies = behind.map((user) => nudgesOf(harness!, user.me.id)[0]?.body ?? '');
+    expect(bodies).toEqual([
+      'Bir rakibin önde, aradaki fark 9 bardak. Bugünkü girişini yapmayı unutma.',
+      'Bir rakibin sana 9 bardak fark koymuş. Bir şeyler yap da gir şuraya.',
+      'Bir rakibin sana 9 bardak fark koymuş 🍆 Bir şeyler yap da gir şuraya.',
+    ]);
+    for (const body of bodies) {
+      expect(body).not.toContain('Veli');
+      expectClean(body);
+    }
+  });
+
+  it('names the best one ahead the reader has no block with, and measures to them', async () => {
+    harness = await makeApp();
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const can = await registerUser(harness.app, 'can', { displayName: 'Can' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const id = await waterRace([
+      { user: ali, bardaks: 10 },
+      { user: can, bardaks: 6 },
+      { user: veli, bardaks: 1 },
+    ]);
+    expect((await block(veli, ali)).statusCode).toBe(200);
+
+    harness.advance(60 * 60_000);
+    runSchedulerOnce(harness.db, harness.now());
+
+    const [nudge] = nudgesOf(harness, veli.me.id);
+    expect(nudge!.body).toBe('Can sana 5 bardak fark koymuş. Bir şeyler yap da gir şuraya.');
+    expect(JSON.parse(nudge!.data)).toEqual({ challengeId: id, fromUserId: can.me.id, dayKey: TODAY });
+    // Can still hears about Ali, with whom nothing is wrong
+    expect(nudgesOf(harness, can.me.id)[0]!.body).toContain('Ali sana 4 bardak');
   });
 });

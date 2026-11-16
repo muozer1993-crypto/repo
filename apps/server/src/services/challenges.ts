@@ -484,6 +484,7 @@ function finishedTitle(level: VulgarityLevel, role: 'winner' | 'loser'): string 
  * with each other, not with them: no winner to name and no laf on its way, but
  * the penalty is still theirs. Named when the çelınc has one; most have a
  * reward instead, and the results screen this opens says "Ceza yazılmamış".
+ * No `leaders` (a block with one of them) says the same without a name.
  */
 function behindTieBody(
   level: VulgarityLevel,
@@ -492,9 +493,11 @@ function behindTieBody(
   const { title, leaderScore, rank, myScore } = vars;
   const leaders = joinNames(vars.leaders);
   if (level === 1) {
-    return `${title} bitti. ${leaders} birinciliği paylaştı (${leaderScore}), sen ${rank}. oldun (${myScore}). İstersen rövanş aç.`;
+    const top = leaders ? `${leaders} birinciliği paylaştı` : 'Birincilik paylaşıldı';
+    return `${title} bitti. ${top} (${leaderScore}), sen ${rank}. oldun (${myScore}). İstersen rövanş aç.`;
   }
-  const head = `${title} bitti. ${leaders} berabere kaldı (${leaderScore}), sen ${rank}. oldun (${myScore}).`;
+  const top = leaders ? `${leaders} berabere kaldı` : 'Birinciler berabere kaldı';
+  const head = `${title} bitti. ${top} (${leaderScore}), sen ${rank}. oldun (${myScore}).`;
   // "Bulaşık sende." + "." would end it twice
   const penalty = vars.penalty?.trim().replace(/[.!…]+$/u, '') || null;
   if (level === 3) {
@@ -548,16 +551,19 @@ function nudgeAction(metricType: MetricType, level: VulgarityLevel): string {
  * The mid-day "somebody is ahead of you" notification the server sends by
  * itself, once per person per local day. `others` is how many more çelınclar
  * they are behind in today: the one buzz names the worst and counts the rest,
- * so a number never needs a suffix ("Başka 2 çelıncta da…").
+ * so a number never needs a suffix ("Başka 2 çelıncta da…"). `ahead` is null
+ * when everybody ahead has a block with the reader: the gap still stands, the
+ * name does not.
  */
 function nudgeCopy(
   level: VulgarityLevel,
-  leader: string,
+  ahead: string | null,
   gap: number,
   unit: string,
   metricType: MetricType,
   others: number,
 ): { title: string; body: string } {
+  const leader = ahead ?? 'Bir rakibin';
   const fark = `${formatScore(gap)} ${unit}`;
   const action = nudgeAction(metricType, level);
   const count = others === 1 ? 'bir' : String(others);
@@ -843,12 +849,13 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
   // in the final table's order (`participantRows`): the ranking breaks an equal
   // score by user id, a random UUID, so "Ali ve Veli" would read "Veli ve Ali"
   // on the next çelınc and disagree with the results screen and the share text
-  const leaders = isTie
+  const leaderUsers = isTie
     ? participantRows(db, challenge.id)
         .filter((p) => scoreById.get(p.user_id)?.rank === 1)
-        .map((p) => users.get(p.user_id)?.display_name)
-        .filter((name): name is string => !!name)
+        .map((p) => users.get(p.user_id))
+        .filter((leader): leader is UserRow => !!leader)
     : [];
+  const leaders = leaderUsers.map((leader) => leader.display_name);
   const leaderScore = scoreLabel(type, ranking.results[0]?.score ?? 0);
 
   const run = db.transaction(() => {
@@ -886,13 +893,16 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
         // Behind a shared first place is a loss like any other: the penalty is
         // this player's. Not `challenge_finished_lost`, whose lines promise a
         // winner's laf that no co-leader may send to somebody behind them.
+        // A block with any of the co-leaders names none of them: "Ali ve bir
+        // rakibin" would only point at the other one.
+        const acrossBlock = leaderUsers.some((leader) => isBlockedBetween(db, user.id, leader.id));
         notify(db, {
           userId: user.id,
           type: 'challenge_finished',
           title: finishedTitle(level, 'loser'),
           body: behindTieBody(level, {
             title: challenge.title,
-            leaders,
+            leaders: acrossBlock ? [] : leaders,
             leaderScore,
             rank: myRank,
             myScore,
@@ -917,12 +927,15 @@ export function finalizeChallenge(db: Database, challenge: ChallengeRow, now: Da
       }
 
       const winnerScore = winnerId ? scoreLabel(type, scoreById.get(winnerId)?.score ?? 0) : '';
+      // a block placed mid-race keeps both in it, but the lock screen does not
+      // spell out the name the reader blocked (or was blocked by)
+      const named = winnerUser && !isBlockedBetween(db, user.id, winnerUser.id) ? winnerUser : undefined;
       notify(db, {
         userId: user.id,
         type: 'challenge_finished',
         title: finishedTitle(level, 'loser'),
-        body: winnerUser
-          ? `${t('challenge_finished_lost', level)} ${challenge.title} bitti. Kazanan ${winnerUser.display_name} (${winnerScore}), senin skorun ${myScore}.`
+        body: named
+          ? `${t('challenge_finished_lost', level)} ${challenge.title} bitti. Kazanan ${named.display_name} (${winnerScore}), senin skorun ${myScore}.`
           : `${t('challenge_finished_lost', level)} ${challenge.title} bitti, senin skorun ${myScore}.`,
         data: { challengeId: challenge.id, role: 'loser', winnerId },
         createdAt: iso,
@@ -1123,8 +1136,9 @@ const NUDGE_MIN_RELATIVE_GAP = 0.1;
 interface NudgeCandidate {
   challenge: ChallengeRow;
   user: UserRow;
-  leaderId: string;
-  leaderName: string;
+  /** Who the nudge is about; both null when everybody ahead has a block with the reader. */
+  aheadId: string | null;
+  aheadName: string | null;
   gap: number;
   /** The gap next to the bigger of the two scores: 0..1 in either direction. */
   ratio: number;
@@ -1153,6 +1167,12 @@ interface NudgeCandidate {
  * the others. All of them are claimed in `nudges_sent`, and any row of the
  * person's day means the day is used up, so a çelınc that falls behind later in
  * the afternoon does not buzz again. Returns the number of notifications sent.
+ *
+ * It is measured against the best player ahead whom the reader has no block
+ * with: "Veli sana 9 bardak fark koymuş" in the name of somebody Ali blocked is
+ * the poke the route refuses (403 blocked), arriving every afternoon anyway.
+ * When everybody ahead is blocked the leader's gap still counts, the race is
+ * still on, but the nudge names nobody ("Bir rakibin").
  */
 export function sendNudges(db: Database, now: Date = new Date()): number {
   const iso = nowIso(now);
@@ -1175,17 +1195,25 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
     const users = userMap(db, standings.map((view) => view.user.id));
 
     for (const view of standings) {
-      if (view.user.id === leader.user.id) continue;
       // invited / declined / left rows ride along at rank 0 — not players to nudge
       if (view.status !== 'accepted') continue;
+      // the leader, and whoever shares first place with them, has nobody ahead
+      if (leader.rank >= view.rank) continue;
       // On screen time a player with nothing reported sits at the missing-day
       // penalty: that says "you have not entered anything yet", not "1.380 dk
       // fark koymuş".
       if (challenge.metric_type === 'manual_lower_is_better' && view.days === 0) continue;
-      const gap = Math.abs(leader.score - view.score);
+      // standings run best first, so this is the best one ahead the reader may
+      // still hear named; with none, the leader's gap goes out without a name
+      const named = standings.find(
+        (other) =>
+          other.status === 'accepted' && other.rank < view.rank && !isBlockedBetween(db, view.user.id, other.user.id),
+      );
+      const ahead = named ?? leader;
+      const gap = Math.abs(ahead.score - view.score);
       if (gap <= 0) continue;
-      // a gap only counts when it is big next to what the leader has
-      const reference = Math.abs(leader.score) || Math.abs(view.score);
+      // a gap only counts when it is big next to what the one ahead has
+      const reference = Math.abs(ahead.score) || Math.abs(view.score);
       if (reference > 0 && gap / reference < NUDGE_MIN_RELATIVE_GAP) continue;
 
       const user = users.get(view.user.id);
@@ -1209,13 +1237,13 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
       mine.push({
         challenge,
         user,
-        leaderId: leader.user.id,
-        leaderName: leader.user.displayName,
+        aheadId: named ? named.user.id : null,
+        aheadName: named ? named.user.displayName : null,
         gap,
         // Against the bigger score, not the leader's: on screen time the leader
         // has the SMALLER number, and 400 dk against their 60 would weigh 5.7,
         // beating 0 steps against 10.000 (1.0) every time.
-        ratio: gap / Math.max(Math.abs(leader.score), Math.abs(view.score)),
+        ratio: gap / Math.max(Math.abs(ahead.score), Math.abs(view.score)),
         dayKey,
       });
       candidates.set(user.id, mine);
@@ -1236,7 +1264,7 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
 
     const copy = nudgeCopy(
       levelOf(best.user),
-      best.leaderName,
+      best.aheadName,
       best.gap,
       best.challenge.unit,
       best.challenge.metric_type as MetricType,
@@ -1247,7 +1275,10 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
       type: 'nudge',
       title: copy.title,
       body: copy.body,
-      data: { challengeId: best.challenge.id, fromUserId: best.leaderId, dayKey: best.dayKey },
+      // nobody's id where the body names nobody
+      data: best.aheadId
+        ? { challengeId: best.challenge.id, fromUserId: best.aheadId, dayKey: best.dayKey }
+        : { challengeId: best.challenge.id, dayKey: best.dayKey },
       createdAt: iso,
     });
     return true;
