@@ -552,8 +552,8 @@ pazartesi sabahki laf atışmasını pazar akşamı başlatan kısım.
 * Pazartesi sabahı giden telafi özeti yeni haftada okunur, o yüzden "bu hafta" yerine "geçen
   hafta", "haftaya rövanş" yerine "bu hafta rövanş" der.
 * Haftalık adımda pazartesiden pazara her gün, telefonun okuduğu sayıyla o gün adım çelıncına elle
-  yazılan ("Beyan et") sayıdan büyük olanı sayılır. Health Connect'i olmayan Android sadece uygulama
-  açıkken sayar, çelınc da ona günün gerçek sayısını yazmasını söyler; özet yalnız telefona
+  yazılan ("Beyan et") sayıdan büyük olanı sayılır. Health Connect'i de Recording API'si de olmayan
+  (Play hizmetleri eski) Android sadece uygulama açıkken sayar, çelınc da ona günün gerçek sayısını yazmasını söyler; özet yalnız telefona
   baksaydı ona haftasının küçük bir parçasını gösterir, en çok yürüyen diye de başkasının adını
   verirdi. Toplanmaz, büyüğü alınır: elle yazılan sayı o günün tamamıdır, telefonun okuduğu sayı her
   adım çelıncına aynı günün girişi olarak da yazılır, iki çelınc da aynı yürüyüşü iki kere tutar.

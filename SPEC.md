@@ -576,8 +576,10 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    lock-screen phrase per level ("Kazandın 🏆" / "KOYDUN! 👑" / "KOYDUN! 👑🍆", and "Bu tur bitti" / "Yedin lan" /
    "YEDİN 🍆"); the `challenge_finished_won` / `_lost` sentence opens the BODY, because a phone truncates a long
    title to nothing useful (the loser's, but for that block). Award badges (stats recompute) for all participants.
-3. Reminders: for each user with `reminder_hour` not null and an active challenge whose `ends_at` is still ahead (a settling one has nothing left to type), when `localHour(now, tz) === reminder_hour`
-   and no `reminders_sent` row for today → `reminder` notification with copy `notification_daily_reminder`. Only when
+3. Reminders: for each user with `reminder_hour` not null and an active challenge whose `ends_at` is still ahead (a settling one has nothing left to type), when `localHour(now, tz) >= reminder_hour`
+   (not equality: a DST spring-forward hour or a scheduler outage would swallow it; the `reminders_sent` claim keeps it
+   to one per local day), no non-rejected entry today in any active challenge and no `reminders_sent` row for today →
+   `reminder` notification with copy `notification_daily_reminder`. Only when
    at least one of those live çelınclar can still take an entry today: a check-in çelınc only until its
    `effectiveDeadline` in the zone pinned at join time (an erken_kus sleeper is not told at 20:00 to tap a "Geldim" that
    scores 0; erken_yat's 23:00 still is), checked before the claim, so a çelınc joined later that evening still gets
