@@ -30,6 +30,7 @@ import {
   getTodayScreenMinutes,
   requestScreenTimePermission,
   resetScreenTimeProvider,
+  usageAccessMayBeRestricted,
 } from '@/services/screenTime';
 
 const lookup = requireOptionalNativeModule as unknown as jest.Mock;
@@ -48,6 +49,7 @@ beforeEach(() => {
   lookup.mockReturnValue(null);
   resetScreenTimeProvider();
   (Platform as { OS: string }).OS = 'android';
+  (Platform as { Version?: unknown }).Version = 34;
 });
 
 describe('screen time', () => {
@@ -117,6 +119,21 @@ describe('screen time', () => {
     expect(dailyMinutes).toHaveBeenCalledWith(14);
     await getDailyScreenMinutes(0);
     expect(dailyMinutes).toHaveBeenLastCalledWith(1);
+  });
+
+  it('expects the grey "Kısıtlanmış ayar" switch from Android 15 on, and nowhere else', () => {
+    expect(usageAccessMayBeRestricted()).toBe(false);
+    (Platform as { Version: unknown }).Version = 35;
+    expect(usageAccessMayBeRestricted()).toBe(true);
+    (Platform as { Version: unknown }).Version = 36;
+    expect(usageAccessMayBeRestricted()).toBe(true);
+    // an iPhone's Version is its iOS version, a string, and means nothing here
+    (Platform as { OS: string; Version: unknown }).OS = 'ios';
+    (Platform as { Version: unknown }).Version = '18.2';
+    expect(usageAccessMayBeRestricted()).toBe(false);
+    (Platform as { OS: string }).OS = 'web';
+    (Platform as { Version: unknown }).Version = 99;
+    expect(usageAccessMayBeRestricted()).toBe(false);
   });
 
   it('looks the module up once and remembers the answer', async () => {

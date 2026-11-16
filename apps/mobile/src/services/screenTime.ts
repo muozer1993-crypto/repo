@@ -93,6 +93,25 @@ export async function requestScreenTimePermission(): Promise<boolean> {
   }
 }
 
+/**
+ * Android 15 (API 35) counts usage access among its "restricted settings" for
+ * an app that did not come from a store, which is every KOYDUM installed from
+ * /indir: the switch on the usage-access page stays grey and says "Kısıtlanmış
+ * ayar". Nothing in the app can tell, short of a new native call, so from that
+ * Android on the screens show the way out to everyone still without access.
+ */
+export function usageAccessMayBeRestricted(): boolean {
+  return Platform.OS === 'android' && Number(Platform.Version) >= 35;
+}
+
+/**
+ * The way out, only in Settings and only by hand: the ⋮ item turns up on
+ * KOYDUM's App info page after the switch has been refused once, and its
+ * wording moves with the Android version and the brand.
+ */
+export const USAGE_ACCESS_RESTRICTED_HINT =
+  'Kullanım erişimindeki anahtar gri kalıp “Kısıtlanmış ayar” diyorsa: Android 15 ve sonrası, Play Store dışından kurulan uygulamaya bu izni hemen açtırmıyor. Gri anahtara bir kere dokun, sonra Ayarlar → Uygulamalar → KOYDUM → sağ üstteki ⋮ → “Kısıtlanmış ayarlara izin ver”. Ardından kullanım erişimini yeniden aç. Bazı telefonlarda menünün yeri ya da adı biraz farklıdır.';
+
 export interface DailyScreenTime {
   /** YYYY-MM-DD in the device's local timezone */
   dayKey: string;

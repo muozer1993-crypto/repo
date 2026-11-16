@@ -175,6 +175,9 @@ describe('GET /davet/:code', () => {
     expect(page.body).toContain('<b>Yine de indir</b>');
     expect(page.body).toContain('<b>Yine de yükle</b>');
     expect(page.body).toContain('Uygulama yüklenmedi');
+    // and past the usage access Android 15 greys out for an app from a link
+    expect(page.body).toContain('"Kısıtlanmış ayar"');
+    expect(page.body).toContain('KOYDUM → sağ üstteki ⋮ → <b>Kısıtlanmış ayarlara izin ver</b>');
 
     // a <details> needs no code: the policy is the one it was, the copy script's hash alone
     const scripts = [...page.body.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
@@ -187,6 +190,7 @@ describe('GET /davet/:code', () => {
     // whoever came without an inviter installs the same APK
     const bare = await harness.app.inject({ method: 'GET', url: '/indir', headers: { host: 'x.test' } });
     expect(bare.body).toContain('Kurulmuyor mu?');
+    expect(bare.body).toContain('"Kısıtlanmış ayar"');
   });
 
   it("goes on in the inviter's register under their name", async () => {

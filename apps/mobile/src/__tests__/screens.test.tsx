@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '@/components/Toast';
 import { ApiClient, ApiError } from '@/lib/api';
 import { clearPendingInvite, readPendingInvite, savePendingInvite } from '@/services/invite';
+import type { ScreenTimeAvailability } from '@/services/screenTime';
 import { Colors, Spacing } from '@/theme';
 
 /**
@@ -176,6 +177,22 @@ jest.mock('@/services/deviceHealth', () => ({
   openExactAlarmSettings: () => mockDeviceHealth.openAlarms(),
   openAppSettings: () => mockDeviceHealth.openSettings(),
 }));
+
+/**
+ * What the phone says about usage access (services/screenTime has its own
+ * test); null leaves the answer to the real service, which on this platform
+ * has no module to ask. The rest of the service stays real, so the Android
+ * version check is the one the screens run.
+ */
+const mockScreenTime: { availability: ScreenTimeAvailability | null } = { availability: null };
+
+jest.mock('@/services/screenTime', () => {
+  const actual = jest.requireActual('@/services/screenTime') as typeof import('@/services/screenTime');
+  return {
+    ...actual,
+    getScreenTimeAvailability: async () => mockScreenTime.availability ?? actual.getScreenTimeAvailability(),
+  };
+});
 
 /** The photo the picker hands back, from the camera or the gallery alike (its cache file on a phone). */
 const mockPickedPhoto: { uri: string; fileSize?: number } = {
@@ -3985,6 +4002,107 @@ describe('a permission the phone said no to', () => {
     } finally {
       stepsModule.getStepAvailability.mockResolvedValue({ available: false, reason: 'web' });
     }
+  });
+});
+
+describe('usage access Android greys out as "Kısıtlanmış ayar"', () => {
+  const { Platform } = require('react-native') as typeof import('react-native');
+  let os: { restore: () => void } | null = null;
+  let version: jest.SpyInstance | null = null;
+
+  /** An Android phone on API `api`, without usage access unless a test says otherwise. */
+  function android(api: number): void {
+    os = jest.replaceProperty(Platform, 'OS', 'android');
+    // a getter on the preset's Platform, so a spy rather than replaceProperty
+    version = jest.spyOn(Platform, 'Version', 'get').mockReturnValue(api);
+  }
+
+  beforeEach(() => {
+    mockScreenTime.availability = { available: false, reason: 'permission' };
+    mockDeviceHealth.openSettings.mockClear();
+  });
+
+  afterEach(() => {
+    mockScreenTime.availability = null;
+    version?.mockRestore();
+    version = null;
+    os?.restore();
+    os = null;
+  });
+
+  async function renderSettings(): Promise<ReactTestRenderer> {
+    const SettingsScreen = require('@/app/(app)/settings').default;
+    const tree = renderScreen(<SettingsScreen />);
+    await settle();
+    return tree;
+  }
+
+  it('Ayarlar says where the unlock is on Android 15 and opens KOYDUM’s App info page', async () => {
+    android(35);
+    const tree = await renderSettings();
+
+    const text = rendered(tree);
+    expect(text).toContain('Kullanım erişimi ver');
+    expect(text).toContain('“Kısıtlanmış ayar”');
+    expect(text).toContain('KOYDUM → sağ üstteki ⋮ → “Kısıtlanmış ayarlara izin ver”');
+    expect(text).toContain('Bazı telefonlarda');
+
+    // services/deviceHealth's own test checks this is Linking.openSettings, KOYDUM's App info
+    press(tree, 'Uygulama bilgilerini aç');
+    await settle();
+    expect(mockDeviceHealth.openSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('says where to go by hand when that page will not open', async () => {
+    android(35);
+    mockDeviceHealth.openSettings.mockResolvedValueOnce(false);
+    const tree = await renderSettings();
+    press(tree, 'Uygulama bilgilerini aç');
+    await settle();
+    expect(rendered(tree)).toContain('Ayarlar açılamadı');
+    expect(rendered(tree)).toContain('Ayarlar → Uygulamalar → KOYDUM yolundan gir, sağ üstteki ⋮ menüsüne bak.');
+  });
+
+  it('stays out of the way before Android 15, and once access is given', async () => {
+    android(34);
+    let tree = await renderSettings();
+    expect(rendered(tree)).toContain('Kullanım erişimi ver');
+    expect(rendered(tree)).not.toContain('Kısıtlanmış ayar');
+    expect(() => findWith(tree, 'title', 'Uygulama bilgilerini aç', 'onPress')).toThrow();
+
+    version?.mockReturnValue(36);
+    mockScreenTime.availability = { available: true, source: 'usage_stats' };
+    tree = await renderSettings();
+    expect(rendered(tree)).not.toContain('Kısıtlanmış ayar');
+    expect(() => findWith(tree, 'title', 'Uygulama bilgilerini aç', 'onPress')).toThrow();
+  });
+
+  it('the screen-time çelınc says it under its own permission button', async () => {
+    android(35);
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        typeKey: 'ekran_suresi_beyani',
+        metricType: 'manual_lower_is_better' as const,
+        direction: 'lower' as const,
+        unit: 'dk',
+      },
+    }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    // the button titles render in capitals here, so they are found by title
+    findWith(tree, 'title', 'Kullanım erişimi ver', 'onPress');
+    expect(rendered(tree)).toContain('“Kısıtlanmış ayarlara izin ver”');
+    press(tree, 'Uygulama bilgilerini aç');
+    await settle();
+    expect(mockDeviceHealth.openSettings).toHaveBeenCalledTimes(1);
+    // the typed fallback is still there for whoever gives up on Settings
+    findWith(tree, 'title', 'Şimdilik elle gir', 'onPress');
   });
 });
 

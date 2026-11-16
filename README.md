@@ -263,6 +263,10 @@ sayfasındaki **Kurulmuyor mu?**'ya dokununca arkadaşın da şunları okur:
 * "Uygulama yüklenmedi" derse telefonda çoğu zaman başka yerden (Play dahili testinden ya da başka
   bir derlemeden) kurulmuş eski bir KOYDUM vardır: onu kaldırıp tekrar kurar. Hesabı sunucuda
   durur, kullanıcı adı ve şifresiyle girer.
+* Kurduktan sonra Android 15 ve sonrası ekran süresi için gereken **Kullanım erişimi** anahtarını
+  gri bırakıp "Kısıtlanmış ayar" diyebilir: anahtara bir kere dokunur, sonra Ayarlar → Uygulamalar
+  → KOYDUM → sağ üstteki ⋮ → **Kısıtlanmış ayarlara izin ver**, ardından anahtarı yeniden açar
+  (ayrıntısı [Ekran süresi nereden geliyor?](#ekran-süresi-nereden-geliyor) bölümünde).
 
 `preview` profili bilerek **uygulama içi sunucu adresi ekranını açık bırakır** — arkadaşın
 uygulamayı açtığında adresi kendisi yazabilir. Henüz sunucu seçilmemişse giriş ve kayıt ekranları
@@ -361,8 +365,8 @@ Arkadaşın bağlantıya dokununca sunucunun kendi sayfası açılır:
   "kazanan koyar, kaybeden yer", "Ağır Abi"de "kazanan saplar, kaybeden yer 🍆"),
 * **KOYDUM'da aç** uygulamayı açar ve sunucu adresini uygulamaya kendisi verir; arkadaşın IP yazmaz,
 * uygulama yoksa aynı sayfadan APK indirilir; Chrome, Play Protect ya da Xiaomi uyarı verirse
-  sayfadaki **Kurulmuyor mu?** neye basılacağını söyler (yukarıdaki [1. bölümdeki](#1-apk) dört
-  madde),
+  sayfadaki **Kurulmuyor mu?** neye basılacağını söyler (yukarıdaki [1. bölümdeki](#1-apk)
+  maddeler; sonuncusu kurulumdan sonra gri kalan **Kullanım erişimi** anahtarı için),
 * kurulum bitince Android'in kendi **Aç** düğmesine basan arkadaşın uygulamayı bağlantısız açar;
   sayfadaki **Bağlantıyı kopyala** bunun için var. Uygulama giriş ekranında **Önce sunucuyu seç**
   der, arkadaşın kopyaladığı bağlantıyı (ya da WhatsApp mesajının tamamını) oraya yapıştırır;
@@ -990,12 +994,21 @@ Günlük dakikaları `queryEvents` üzerinden hesaplıyor: her uygulamanın ön 
 yerel gece yarısına göre gün gün toplanıyor. Dijital Denge'nin gösterdiği "ekran süresi" de aynı
 şekilde çıkıyor. Modülün `app.plugin.js` dosyası manifeste `PACKAGE_USAGE_STATS` iznini ekler.
 
-İki şey bilinsin:
+Üç şey bilinsin:
 
 * **Kullanım erişimi çalışma zamanında istenmez.** Android bu izni sistem ayarlarından açtırır:
   Ayarlar → Uygulamalar → Özel uygulama erişimi → Kullanım erişimi → KOYDUM. Uygulamadaki
   "Kullanım erişimi ver" düğmesi seni doğrudan o sayfaya götürür, geri geldiğinde durumu yeniden
   okur.
+* **Android 15 ve sonrasında anahtar gri kalabilir.** APK'yı Play Store dışından (`/indir`'den,
+  WhatsApp'tan) kuran telefonda Android bu izni "kısıtlanmış ayar" sayar: KOYDUM'un yanındaki
+  anahtar gri durur, dokununca **Kısıtlanmış ayar** der. Çıkış yolu şu: anahtara bir kere dokun
+  (aşağıdaki seçenek ancak ondan sonra çıkar), sonra Ayarlar → Uygulamalar → KOYDUM → sağ üstteki
+  **⋮** → **Kısıtlanmış ayarlara izin ver**, ardından kullanım erişimini yeniden aç. Bazı
+  telefonlarda menünün yeri ya da adı biraz farklıdır. Uygulama bunu Android 15 ve sonrasında, izin
+  yokken Ayarlar'daki ekran süresi kartında ve Ekran Süresi çelıncının "Kullanım erişimi ver"
+  düğmesinin altında anlatır; **Uygulama bilgilerini aç** düğmesi KOYDUM'un o sayfasını açar. Davet
+  sayfasındaki **Kurulmuyor mu?** da aynısını söyler.
 * **Google Play'e yüklerken** bu izin için Console'da bir açıklama formu çıkar (kullanım erişimi
   "hassas izin" sayılır). "Ekran süresi yarışması için kullanıcının kendi ekran süresini okur"
   demek yeterli; dahili test sürümünde bu form engel değildir.

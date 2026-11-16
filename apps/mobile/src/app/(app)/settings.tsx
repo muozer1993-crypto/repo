@@ -53,8 +53,10 @@ import { serverFromInviteLink } from '@/services/invite';
 import { registerForPush, type PushRegistration } from '@/services/notifications';
 import { deviceRemindersEnabled, refreshReminders, setDeviceRemindersEnabled } from '@/services/reminders';
 import {
+  USAGE_ACCESS_RESTRICTED_HINT,
   getScreenTimeAvailability,
   requestScreenTimePermission,
+  usageAccessMayBeRestricted,
   type ScreenTimeAvailability,
 } from '@/services/screenTime';
 import { moveSession } from '@/services/serverMove';
@@ -762,6 +764,24 @@ export default function SettingsScreen() {
     });
   };
 
+  // A switch Android greys out as "Kısıtlanmış ayar" is unlocked from
+  // KOYDUM's App info page, the one Linking opens; look again on return.
+  const openRestrictedSettings = async () => {
+    if (!(await openAppSettings())) {
+      toast({
+        title: 'Ayarlar açılamadı',
+        body: 'Ayarlar → Uygulamalar → KOYDUM yolundan gir, sağ üstteki ⋮ menüsüne bak.',
+        kind: 'danger',
+      });
+      return;
+    }
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      sub.remove();
+      void getScreenTimeAvailability().then(setScreenTime);
+    });
+  };
+
   // Both switches live in system pages too: open one, look again on return.
   const fixBackground = async (which: 'battery' | 'alarms') => {
     const before = background;
@@ -1166,13 +1186,29 @@ export default function SettingsScreen() {
                 (screenTime.reason === 'error' && screenTime.detail ? ` (${screenTime.detail})` : '')}
         </Text>
         {screenTime && !screenTime.available && screenTime.reason === 'permission' ? (
-          <Button
-            title="Kullanım erişimi ver"
-            variant="secondary"
-            size="sm"
-            style={styles.selfStart}
-            onPress={() => void askScreenTimePermission()}
-          />
+          <>
+            <Button
+              title="Kullanım erişimi ver"
+              variant="secondary"
+              size="sm"
+              style={styles.selfStart}
+              onPress={() => void askScreenTimePermission()}
+            />
+            {usageAccessMayBeRestricted() ? (
+              <>
+                <Text variant="tiny" muted style={styles.blockTop}>
+                  {USAGE_ACCESS_RESTRICTED_HINT}
+                </Text>
+                <Button
+                  title="Uygulama bilgilerini aç"
+                  variant="ghost"
+                  size="sm"
+                  style={styles.selfStart}
+                  onPress={() => void openRestrictedSettings()}
+                />
+              </>
+            ) : null}
+          </>
         ) : null}
       </Card>
 

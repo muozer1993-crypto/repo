@@ -62,14 +62,17 @@ import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { useTimezone } from '@/hooks/useTimezone';
+import { openAppSettings } from '@/services/deviceHealth';
 import { syncDeviceNow } from '@/services/deviceSyncNow';
 import { pendingForChallenge } from '@/services/offlineQueue';
 import { recordingSince } from '@/services/recordingSteps';
 import { skipTodayCheckinReminder } from '@/services/reminders';
 import {
+  USAGE_ACCESS_RESTRICTED_HINT,
   getScreenTimeAvailability,
   getTodayScreenMinutes,
   requestScreenTimePermission,
+  usageAccessMayBeRestricted,
   type ScreenTimeAvailability,
 } from '@/services/screenTime';
 import { syncScreenTimeNow } from '@/services/screenTimeSync';
@@ -1576,6 +1579,18 @@ function LowerAction({ id, detail, type, level, today, dayKeys }: ActionProps) {
     }
   };
 
+  // A switch Android greys out as "Kısıtlanmış ayar" is unlocked from KOYDUM's
+  // App info page; the effect above looks again when the user comes back.
+  const openRestrictedSettings = async () => {
+    if (!(await openAppSettings())) {
+      toast({
+        title: 'Ayarlar açılamadı',
+        body: 'Ayarlar → Uygulamalar → KOYDUM yolundan gir, sağ üstteki ⋮ menüsüne bak.',
+        kind: 'danger',
+      });
+    }
+  };
+
   return (
     <View style={styles.actionBody}>
       <View style={styles.bigValueRow}>
@@ -1624,6 +1639,21 @@ function LowerAction({ id, detail, type, level, today, dayKeys }: ActionProps) {
           <Text variant="tiny" faint>
             Bir kere izin verirsen ekran süren telefondan okunur, ekran görüntüsüyle uğraşmazsın.
           </Text>
+          {/* shown to everyone without access on that Android, not only after a
+              return: whoever already went round in circles needs it most */}
+          {usageAccessMayBeRestricted() ? (
+            <>
+              <Text variant="tiny" faint>
+                {USAGE_ACCESS_RESTRICTED_HINT}
+              </Text>
+              <Button
+                title="Uygulama bilgilerini aç"
+                variant="secondary"
+                size="sm"
+                onPress={() => void openRestrictedSettings()}
+              />
+            </>
+          ) : null}
           <Button
             title={entry ? 'Bugünkü değeri düzelt' : 'Şimdilik elle gir'}
             variant="ghost"

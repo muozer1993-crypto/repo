@@ -132,7 +132,9 @@ function inviterLead(vulgarityMax: number): string {
 /**
  * What stops a friend between the download and the app: the warnings at which
  * somebody who has never installed an APK thinks "virüs mü bu" and gives up,
- * and the inviter cannot see their screen to help. Plain <details>, no script:
+ * and the inviter cannot see their screen to help. Then the one switch Android
+ * 15 locks for an app from outside a store, usage access, which the app itself
+ * can only send them to the greyed-out page for. Plain <details>, no script:
  * the CSP keeps the copy button's hash as the only code that may run.
  */
 const INSTALL_HELP = `<details class="help">
@@ -142,6 +144,7 @@ const INSTALL_HELP = `<details class="help">
           <li>Play Protect taramak isterse tarat, bir dakika sürer. "Engellendi" ya da "tanımıyor" derse <b>Ayrıntılar</b>'ı aç, <b>Yine de yükle</b>'ye bas.</li>
           <li>Telefon Xiaomi, Redmi ya da POCO'ysa kendi güvenlik taramasını yapar: bitmesini bekle, uyarı çıkarsa yine de kurmayı seç.</li>
           <li>"Uygulama yüklenmedi" derse çoğu zaman telefonda başka yerden kurulmuş eski bir KOYDUM vardır: onu kaldırıp tekrar kur. Hesabın sunucuda durur, kullanıcı adın ve şifrenle girersin.</li>
+          <li>Kurduktan sonra ekran süresi için <b>Kullanım erişimi</b> anahtarı gri kalıp "Kısıtlanmış ayar" derse (Android 15 ve sonrası, Play Store dışından kurulan uygulamada böyle yapar): anahtara bir kere dokun, sonra Ayarlar → Uygulamalar → KOYDUM → sağ üstteki ⋮ → <b>Kısıtlanmış ayarlara izin ver</b>, ardından anahtarı yeniden aç. Bazı telefonlarda menünün adı biraz farklıdır.</li>
         </ul>
       </details>`;
 
