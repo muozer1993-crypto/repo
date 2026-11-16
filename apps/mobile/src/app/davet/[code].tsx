@@ -1,3 +1,4 @@
+import type { VulgarityLevel } from '@koydum/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -17,7 +18,7 @@ import { normalizeInviteCode, savePendingInvite, sendInvite, type InviteOutcome 
 import { isOtherServer, moveSession } from '@/services/serverMove';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Spacing } from '@/theme';
-import { SERVER_MOVED } from '@/utils/levelCopy';
+import { SERVER_MOVED, byLevel } from '@/utils/levelCopy';
 import { isLoopbackUrl } from '@/utils/url';
 
 /**
@@ -272,7 +273,7 @@ export default function InviteScreen() {
           {sending ? (
             <Loading label="Kanka isteği gidiyor..." />
           ) : outcome ? (
-            <OutcomeText outcome={outcome} fallbackName={name} />
+            <OutcomeText outcome={outcome} fallbackName={name} level={level} />
           ) : (
             <Text variant="small">
               {name ? `${name} ile kanka olmak için isteği gönder.` : 'Kanka olmak için isteği gönder.'}
@@ -331,7 +332,15 @@ export default function InviteScreen() {
   );
 }
 
-function OutcomeText({ outcome, fallbackName }: { outcome: InviteOutcome; fallbackName: string | null }) {
+function OutcomeText({
+  outcome,
+  fallbackName,
+  level,
+}: {
+  outcome: InviteOutcome;
+  fallbackName: string | null;
+  level: VulgarityLevel;
+}) {
   const who = ('name' in outcome && outcome.name) || fallbackName;
   switch (outcome.kind) {
     case 'sent':
@@ -341,7 +350,16 @@ function OutcomeText({ outcome, fallbackName }: { outcome: InviteOutcome; fallba
         </Text>
       );
     case 'accepted':
-      return <Text variant="small">Artık kankasınız. İlk çelıncı aç, kim kime koyacak görelim.</Text>;
+      return (
+        <Text variant="small">
+          {byLevel(
+            level,
+            'Artık kankasınız. İlk çelıncı aç, bakalım kim kazanacak.',
+            'Artık kankasınız. İlk çelıncı aç, kim kime koyacak görelim.',
+            'Artık kankasınız. İlk çelıncı aç, kim kime koyacak görelim.'
+          )}
+        </Text>
+      );
     case 'already':
       return <Text variant="small">Zaten kankasınız ya da isteğin cevap bekliyor.</Text>;
     case 'self':

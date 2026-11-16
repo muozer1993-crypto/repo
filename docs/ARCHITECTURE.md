@@ -386,10 +386,10 @@ birer laf atabilir (`tie` şablonları), arkadan gelen kimseye bir şey diyemez.
 birinciliği paylaşanlar arasındadır: arkadan gelen hepsine kaybetmiştir. Bitiş bildirimi ona
 birincileri ve kaçıncı olduğunu söyler (`role: 'loser'`, `winnerId: null`; kazanan lafı vaat eden
 `challenge_finished_lost` cümlesi olmadan), Karne ve haftalık özet onu `final_rank` > 1 diye yenilgi
-sayar, sonuç ekranı, kart ve geçmiş de ona cezayı ve YEDİN'i gösterir. Kimin kime hangi
-hakla konuştuğuna rota karar verir (`tauntModeFor`). Cevapta ve beraberlikte başka havuzdan istenen
-bir şablon o durumun kendi havuzundan biriyle değiştirilir: berabere biten çelıncta "Ali koydu"
-yalan olurdu. Bildirim kimden geldiğini taşır (`fromUserId`), gelen kutusu yüzü oradan bulur.
+sayar, sonuç ekranı, kart ve geçmiş de ona cezayı ve YEDİN'i ("Nazik"te KAYBETTİN'i) gösterir.
+Kimin kime hangi hakla konuştuğuna rota karar verir (`tauntModeFor`). Cevapta ve beraberlikte
+başka havuzdan istenen bir şablon o durumun kendi havuzundan biriyle değiştirilir: berabere biten
+çelıncta "Ali koydu" yalan olurdu. Bildirim kimden geldiğini taşır (`fromUserId`), gelen kutusu yüzü oradan bulur.
 Sonuç bekleyen bir çelınc (telefonların saati, itiraz) `finished` olmadığı için bu haklar da o
 zamana kadar kapalıdır.
 
@@ -559,6 +559,8 @@ galibiyetinde kilit ekranına patlıcan düşmemeli. O yüzden bu basamakların 
 (`namePoliteTr`, `emojiPolite`: "İlk Zafer" 🏆, "Kazanmaya Alıştın", "Grubun Ustası", "Çelınc
 Profesörü") ve adı her yerde `badgeTitle(badge, seviye)` verir: bildirimde alanın, profilde
 okuyanın seviyesi. Anahtar (`koyus_1`) hiç değişmez; `badges` tablosundaki satırlar olduğu gibi kalır.
+Merdivenin kendi adı da öyle: "Nazik" okuyan profilde "KOYUŞ" ve "YİYİŞ" değil "GALİBİYET" ve
+"YENİLGİ" başlıklarını görür, sıralama da ona "en çok koyanlar" yerine "en çok kazananlar" der.
 
 Erken kalkma merdiveni (`checkinsStreakMax`) sadece **sabah** check-in'lerini sayar: açılış saati
 öğleden önce olan türler, yani Erken Kalkan Koyar ve Yatak Toplama Sabahı

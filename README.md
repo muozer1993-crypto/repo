@@ -823,8 +823,11 @@ dokunmaz, sadece sunucunun kendi verdiği adlardaki fotoğrafları siler.
 Herkes **kendi** tavan seviyesini seçer ve o seviye korunur. Sen 3'te olsan bile, 1'i seçmiş
 arkadaşına giden bildirim 1. seviyeye yumuşatılır. Bunu sunucu zorlar, uygulama değil.
 Rozetler de buna uyar: "Nazik" seçen ilk galibiyetinde "🍆 Çırak Saplamacı" değil "🏆 İlk Zafer"
-görür, kankasının profilindeki rozetleri de kendi seviyesinde okur. Yeni hesabın ilk avatarı da
-sadece "Ağır Abi" seçene 🍆 olur, diğerlerine sakin bir yüz düşer; profilden istediğin zaman değişir.
+görür, kankasının profilindeki rozetleri de kendi seviyesinde okur. Uygulamanın kendi yazıları da
+öyle: "Nazik"te biten çelıncın kartı "KOYDUN / YEDİN" değil "KAZANDIN / KAYBETTİN" der, geçmiş
+"Kazandıklarım / Kaybettiklerim" diye ayırır, profildeki sıralama da "en çok koyanlar" değil
+"en çok kazananlar" olur. Yeni hesabın ilk avatarı da sadece "Ağır Abi" seçene 🍆 olur,
+diğerlerine sakin bir yüz düşer; profilden istediğin zaman değişir.
 
 | Seviye | Kimin için | Örnek |
 |---|---|---|

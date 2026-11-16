@@ -69,9 +69,11 @@ const mockDelivery = { items: [] as unknown[] };
 jest.mock('@/services/inboxNotifier', () => ({
   deliverNewInbox: async () => ({ surface: 'in-app', items: mockDelivery.items }),
 }));
+/** What the invite parked before sign-in came to; null when there was none. */
+const mockPendingInvite: { outcome: { kind: 'accepted'; name: string | null } | null } = { outcome: null };
 jest.mock('@/services/invite', () => ({
   ...jest.requireActual('@/services/invite'),
-  applyPendingInvite: async () => null,
+  applyPendingInvite: async () => mockPendingInvite.outcome,
 }));
 
 const ME = {
@@ -139,6 +141,7 @@ let markRead: jest.SpyInstance;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockPendingInvite.outcome = null;
   markRead = jest.spyOn(ApiClient.prototype, 'markInboxRead').mockResolvedValue({ updated: 1 } as never);
   useAuth.setState({ token: 'tok', me: ME, onboarding: false, serverUrl: 'http://192.168.1.20:4000' });
 });
@@ -201,5 +204,36 @@ describe("the phone's reminders and the inbox poll", () => {
     render(<NotificationBridge />);
     await settle();
     expect(mockRefreshReminders).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the toast after an invite parked before sign-in', () => {
+  /** Everything on screen once the bridge has applied the invite, read at `level`. */
+  async function toastAt(level: 1 | 2 | 3): Promise<string> {
+    mockPendingInvite.outcome = { kind: 'accepted', name: 'Ali' };
+    // nothing new in the inbox, so no other toast takes its place
+    mockDelivery.items = [];
+    useAuth.setState({ me: { ...ME, vulgarityMax: level } });
+    const { NotificationBridge } = require('@/providers/NotificationBridge');
+    const tree = render(<NotificationBridge />);
+    await settle();
+    const walk = (node: unknown): string[] => {
+      if (typeof node === 'string') return [node];
+      if (Array.isArray(node)) return node.flatMap(walk);
+      if (node && typeof node === 'object' && 'children' in node) return walk((node as { children: unknown }).children);
+      return [];
+    };
+    return walk(tree.toJSON()).join(' ');
+  }
+
+  it('sends a "Nazik" reader off to the first çelınc without koy', async () => {
+    const text = await toastAt(1);
+    expect(text).toContain('Kanka oldunuz');
+    expect(text).toContain('İlk çelıncı aç, bakalım kim kazanacak.');
+    expect(text).not.toContain('koyacak');
+  });
+
+  it('keeps the line as it was from level 2 up', async () => {
+    expect(await toastAt(2)).toContain('İlk çelıncı aç, kim kime koyacak görelim.');
   });
 });

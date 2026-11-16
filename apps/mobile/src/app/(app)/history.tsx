@@ -20,16 +20,32 @@ import { byLevel } from '@/utils/levelCopy';
 
 type Filter = Exclude<Outcome, 'none'> | 'all';
 
-const FILTERS: { value: Filter; label: string; color: string }[] = [
-  { value: 'all', label: 'Hepsi', color: Colors.text },
-  { value: 'won', label: 'Koyduklarım', color: Colors.success },
-  { value: 'lost', label: 'Yediklerim', color: Colors.danger },
-  { value: 'tie', label: 'Berabere', color: Colors.yellow },
-  { value: 'cancelled', label: 'İptal', color: Colors.textMuted },
+const FILTERS: { value: Filter; color: string }[] = [
+  { value: 'all', color: Colors.text },
+  { value: 'won', color: Colors.success },
+  { value: 'lost', color: Colors.danger },
+  { value: 'tie', color: Colors.yellow },
+  { value: 'cancelled', color: Colors.textMuted },
 ];
 
 function isFilter(value: unknown): value is Filter {
   return FILTERS.some((filter) => filter.value === value);
+}
+
+/** A chip's name: "Nazik" files wins and losses in plain words, without the koy / ye. */
+function filterLabel(filter: Filter, level: VulgarityLevel): string {
+  switch (filter) {
+    case 'won':
+      return byLevel(level, 'Kazandıklarım', 'Koyduklarım', 'Koyduklarım');
+    case 'lost':
+      return byLevel(level, 'Kaybettiklerim', 'Yediklerim', 'Yediklerim');
+    case 'tie':
+      return 'Berabere';
+    case 'cancelled':
+      return 'İptal';
+    default:
+      return 'Hepsi';
+  }
 }
 
 /**
@@ -123,7 +139,7 @@ export default function HistoryScreen() {
           {FILTERS.map((option) => (
             <Chip
               key={option.value}
-              label={`${option.label} (${counts[option.value]})`}
+              label={`${filterLabel(option.value, level)} (${counts[option.value]})`}
               color={option.color}
               selected={filter === option.value}
               onPress={() => setFilter(option.value)}

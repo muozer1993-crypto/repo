@@ -162,6 +162,44 @@ describe('ChallengeCard on a finished tie', () => {
   });
 });
 
+describe('ChallengeCard on a finished win or loss', () => {
+  /** Ali kept all 7 days, Veli 5: Ali won outright. */
+  function decided(meId: string): ChallengeSummary {
+    const base = tiedAtTop('ali');
+    const participants = [player('ali', 'Ali', 7, 1), player('veli', 'Veli', 5, 2)];
+    return {
+      ...base,
+      challenge: { ...base.challenge, isTie: false, winnerId: 'ali' },
+      participants,
+      me: participants.find((p) => p.user.id === meId) ?? null,
+    };
+  }
+
+  function cardText(meId: string, level: 1 | 2 | 3): string {
+    let tree: ReactTestRenderer;
+    act(() => {
+      tree = create(<ChallengeCard summary={decided(meId)} level={level} meId={meId} />);
+    });
+    return textIn(tree!.toJSON()).join(' ');
+  }
+
+  it('says KAZANDIN and KAYBETTİN to a "Nazik" reader, as the result screen does', () => {
+    const won = cardText('ali', 1);
+    expect(won).toContain('KAZANDIN');
+    expect(won).not.toContain('KOYDUN');
+    const lost = cardText('veli', 1);
+    expect(lost).toContain('KAYBETTİN');
+    expect(lost).not.toContain('YEDİN');
+  });
+
+  it('keeps KOYDUN and YEDİN from level 2 up', () => {
+    for (const level of [2, 3] as const) {
+      expect(cardText('ali', level)).toContain('KOYDUN');
+      expect(cardText('veli', level)).toContain('YEDİN');
+    }
+  });
+});
+
 /**
  * Ali's step race, 9.000 to Veli's 6.000, still `active`: the phones' settle
  * hour or an itiraz's proof window holds it open past `endsAt`.

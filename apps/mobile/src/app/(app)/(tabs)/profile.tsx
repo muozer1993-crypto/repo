@@ -97,10 +97,17 @@ function statValue(stats: UserStats, key: string): number {
  */
 const BADGE_HOWTO: Record<
   BadgeFamily,
-  { how: string; cta: string; href: { pathname: string; params?: Record<string, string> } }
+  {
+    how: string;
+    /** in place of `how` at level 1, where it is said in level-2 words */
+    howPolite?: string;
+    cta: string;
+    href: { pathname: string; params?: Record<string, string> };
+  }
 > = {
   koyus: {
     how: 'Çelınc kazandıkça yükselir. Herhangi bir türde, kim kazanırsa o koyar.',
+    howPolite: 'Çelınc kazandıkça yükselir. Hangi türde olursa olsun, her galibiyet sayılır.',
     cta: 'Çelınc aç',
     href: { pathname: '/(app)/challenge/new' },
   },
@@ -136,6 +143,16 @@ const BADGE_HOWTO: Record<
     href: { pathname: '/history', params: { show: 'lost' } },
   },
 };
+
+/**
+ * A ladder's name. Two are named in level-2 words ("Koyuş", "Yiyiş"); a
+ * "Nazik" reader gets what they count, as the score tiles above say it.
+ */
+function familyLabel(family: BadgeFamily, level: VulgarityLevel): string {
+  if (level === 1 && family === 'koyus') return 'Galibiyet';
+  if (level === 1 && family === 'yiyis') return 'Yenilgi';
+  return BADGE_FAMILY_LABELS_TR[family];
+}
 
 /**
  * One rung. Earned rungs say what they are; the single locked one says what it
@@ -418,8 +435,10 @@ export default function ProfileScreen() {
           return (
             <View key={family} style={styles.ladder}>
               <View style={styles.sectionHead}>
-                <Text variant="micro" color={climbed > 0 ? Colors.yellow : Colors.textFaint} bold>
-                  {BADGE_FAMILY_LABELS_TR[family].toLocaleUpperCase('tr-TR')}
+                {/* `upper` capitalises through upperTr: Hermes has no reliable
+                    toLocaleUpperCase('tr-TR'), and "GALİBİYET" needs its dots */}
+                <Text variant="micro" color={climbed > 0 ? Colors.yellow : Colors.textFaint} bold upper>
+                  {familyLabel(family, level)}
                 </Text>
                 <Text variant="micro" faint>
                   seviye {climbed}/{total}
@@ -440,13 +459,14 @@ export default function ProfileScreen() {
         <View style={styles.sectionHead}>
           <Text variant="label">Sıralama</Text>
           <Text variant="micro" faint>
-            en çok koyanlar
+            {level === 1 ? 'en çok kazananlar' : 'en çok koyanlar'}
           </Text>
         </View>
         <Card padded={false} style={styles.boardCard}>
           <Leaderboard
             rows={leaderboard.data ?? []}
             meId={me.id}
+            level={level}
             loading={leaderboard.isLoading}
             error={leaderboard.error}
             onRetry={() => void leaderboard.refetch()}
@@ -529,9 +549,11 @@ export default function ProfileScreen() {
         {openRung ? (
           <View style={styles.rungSheet}>
             <Text variant="small" muted>
-              {BADGE_FAMILY_LABELS_TR[openRung.badge.family]} merdiveni · {openRung.badge.tier}. basamak
+              {familyLabel(openRung.badge.family, level)} merdiveni · {openRung.badge.tier}. basamak
             </Text>
-            <Text variant="body">{BADGE_HOWTO[openRung.badge.family].how}</Text>
+            <Text variant="body">
+              {(level === 1 && BADGE_HOWTO[openRung.badge.family].howPolite) || BADGE_HOWTO[openRung.badge.family].how}
+            </Text>
             {openRung.earned ? (
               <Text variant="small" color={Colors.yellow}>
                 ✓ {openRung.badge.descriptionTr}
@@ -592,12 +614,14 @@ export default function ProfileScreen() {
 function Leaderboard({
   rows,
   meId,
+  level,
   loading,
   error,
   onRetry,
 }: {
   rows: LeaderboardEntry[];
   meId: string;
+  level: VulgarityLevel;
   loading: boolean;
   error: unknown;
   onRetry: () => void;
@@ -676,7 +700,7 @@ function Leaderboard({
                   {formatNumber(row.wins)}
                 </Text>
                 <Text variant="micro" faint>
-                  koyuş
+                  {level === 1 ? 'galibiyet' : 'koyuş'}
                 </Text>
               </View>
             </Pressable>

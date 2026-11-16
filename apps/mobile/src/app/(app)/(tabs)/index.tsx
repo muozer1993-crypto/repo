@@ -599,7 +599,17 @@ function InviteCard({
       </View>
 
       <Text variant="small" muted style={styles.inviteHint}>
-        {t('challenge_pending_you', level)}
+        {/* "Kabul edersen başlar" is only true before the start: a friend
+            called into a çelınc that has run for days must know they join a
+            race under way, not open one */}
+        {summary.challenge.status === 'pending'
+          ? t('challenge_pending_you', level)
+          : byLevel(
+              level,
+              'Bu çelınc başladı bile. Kabul edersen hemen sıralamaya girersin.',
+              'Çelınc başladı bile, atla da sıralamaya gir.',
+              'Çelınc başladı bile, katıl da gör kim kime koyuyor 🍆'
+            )}
       </Text>
 
       <View style={styles.inviteActions}>

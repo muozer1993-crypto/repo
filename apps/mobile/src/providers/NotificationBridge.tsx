@@ -34,6 +34,7 @@ import { applyPendingInvite } from '@/services/invite';
 import { deliverNewInbox } from '@/services/inboxNotifier';
 import { resolveTimezone, safeTodayKey } from '@/utils/datetime';
 import { formatDayKeyFriendly } from '@/utils/format';
+import { byLevel } from '@/utils/levelCopy';
 
 /**
  * Glue between the OS and the app:
@@ -151,11 +152,19 @@ export function NotificationBridge() {
       if (!alive || !outcome) return;
       if (outcome.kind === 'sent' || outcome.kind === 'accepted') {
         invalidateFriendships(queryClient);
+        // the level as it is now, not as a dependency: /me can bring it after
+        // the token, and a rerun here would drop the toast of the first one
+        const readerLevel = useAuth.getState().me?.vulgarityMax ?? 2;
         toast({
           title: outcome.kind === 'accepted' ? 'Kanka oldunuz' : 'Kanka isteği gitti',
           body:
             outcome.kind === 'accepted'
-              ? 'İlk çelıncı aç, kim kime koyacak görelim.'
+              ? byLevel(
+                  readerLevel,
+                  'İlk çelıncı aç, bakalım kim kazanacak.',
+                  'İlk çelıncı aç, kim kime koyacak görelim.',
+                  'İlk çelıncı aç, kim kime koyacak görelim.'
+                )
               : `${outcome.name ?? 'Davet eden'} kabul edince çelınc açabilirsiniz.`,
           kind: 'success',
         });

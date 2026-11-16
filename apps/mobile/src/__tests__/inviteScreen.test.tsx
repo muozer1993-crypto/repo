@@ -64,6 +64,8 @@ jest.mock('@/lib/api', () => {
 });
 
 const mockRequestFriend = jest.fn(async () => ({ status: 'accepted' as const }));
+/** the reader's level, as useLevel answers it; 2 unless a test reads as somebody else */
+const mockLevel: { value: 1 | 2 | 3 } = { value: 2 };
 const mockAuth = {
   token: null as string | null,
   me: { id: 'me-1' },
@@ -82,7 +84,7 @@ jest.mock('@/store/auth', () => ({
   useAuth: Object.assign((selector: (state: unknown) => unknown) => selector(mockAuth), {
     getState: () => mockAuth,
   }),
-  useLevel: () => 2,
+  useLevel: () => mockLevel.value,
 }));
 
 // eslint-disable-next-line import/first
@@ -161,6 +163,7 @@ beforeEach(async () => {
   const AsyncStorage = require('@react-native-async-storage/async-storage');
   await AsyncStorage.clear();
   mockAuth.token = TOKEN;
+  mockLevel.value = 2;
   mockAuth.serverUrl = 'http://192.168.1.142:4000';
   mockAuth.serverId = null;
   mockSearchParams.code = 'abc234';
@@ -180,6 +183,16 @@ describe('invite screen, signed in', () => {
     await settle();
     expect(mockRequestFriend).toHaveBeenCalledWith({ inviteCode: 'ABC234' });
     expect(text(tree)).toContain('Artık kankasınız');
+  });
+
+  it('sends a "Nazik" reader off to the first çelınc without koy', async () => {
+    mockLevel.value = 1;
+    const tree = render(<Screen />);
+    await settle();
+    pressButton(tree, 'Kanka isteği gönder');
+    await settle();
+    expect(text(tree)).toContain('Artık kankasınız. İlk çelıncı aç, bakalım kim kazanacak.');
+    expect(text(tree)).not.toContain('koyacak');
   });
 
   it('a second link opened on top starts clean', async () => {

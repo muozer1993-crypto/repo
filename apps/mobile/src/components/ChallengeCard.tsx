@@ -21,7 +21,7 @@ export interface ChallengeCardProps {
 export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardProps) {
   const { challenge, participants, me } = summary;
   const type: ChallengeType | undefined = getChallengeType(challenge.typeKey);
-  const status = statusOf(summary);
+  const status = statusOf(summary, level);
   // Read on mount (and again when the end countdown runs out) instead of during
   // render: `Date.now()` in render is impure for the React Compiler.
   const [checkedAt, setCheckedAt] = useState(() => Date.now());
@@ -122,7 +122,7 @@ interface StatusView {
   color: string;
 }
 
-function statusOf(summary: ChallengeSummary): StatusView {
+function statusOf(summary: ChallengeSummary, level: VulgarityLevel): StatusView {
   const { challenge, me } = summary;
   if (challenge.status === 'cancelled') return { key: 'cancelled', label: 'İPTAL', color: Colors.textFaint };
   // an invite nobody answered is no "DAVET" once it is over: it was missed,
@@ -137,8 +137,11 @@ function statusOf(summary: ChallengeSummary): StatusView {
     if (challenge.isTie && !(me?.status === 'accepted' && me.rank > 1)) {
       return { key: 'tie', label: 'BERABERE', color: Colors.info };
     }
-    if (me && challenge.winnerId === me.user.id) return { key: 'won', label: 'KOYDUN', color: Colors.success };
-    return { key: 'lost', label: 'YEDİN', color: Colors.danger };
+    // "Nazik" reads the result screen's own words, without the koy / ye
+    if (me && challenge.winnerId === me.user.id) {
+      return { key: 'won', label: level === 1 ? 'KAZANDIN' : 'KOYDUN', color: Colors.success };
+    }
+    return { key: 'lost', label: level === 1 ? 'KAYBETTİN' : 'YEDİN', color: Colors.danger };
   }
   // A "Hemen" çelınc runs from its creation with only its creator in it: first
   // in a field of one is not "ÖNDESİN", and nothing to cheer or nag about yet.

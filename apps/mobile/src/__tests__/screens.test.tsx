@@ -1056,6 +1056,33 @@ describe('an invite, before and after the door closes', () => {
     expect(text).toContain('🎁 Kaybeden kahve ısmarlar · 💀 Kaybeden bulaşık yıkar');
   });
 
+  // "Kabul edersen başlar" over a çelınc two days in: a newcomer said yes and
+  // found everybody else days ahead
+  it('tells the invitee on the home card that a running çelınc already started', async () => {
+    mockLevel.value = 1;
+    const { challenge, participants, me } = screenTimeInvite({ status: 'active', startsIn: -2 * DAY });
+    api.challenges = jest.fn(async () => [{ challenge, participants, me, unreadTaunts: 0 }]);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Bu çelınc başladı bile. Kabul edersen hemen sıralamaya girersin.');
+    expect(text).not.toContain('Kabul edersen başlar');
+  });
+
+  it('keeps "Kabul edersen başlar" for one that has not started', async () => {
+    mockLevel.value = 1;
+    const { challenge, participants, me } = screenTimeInvite();
+    api.challenges = jest.fn(async () => [{ challenge, participants, me, unreadTaunts: 0 }]);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Bu çelınc seni bekliyor. Kabul edersen başlar.');
+    expect(rendered(tree)).not.toContain('başladı bile');
+  });
+
   it('names the player who called on the home card, not the creator', async () => {
     const VELI = { id: 'u-4', username: 'veli', displayName: 'Veli', avatarEmoji: '🐺', createdAt: '2026-09-01T00:00:00.000Z' };
     const { challenge, participants, me } = screenTimeInvite();
@@ -6048,6 +6075,22 @@ describe('the whole çelınc history', () => {
     expect(router.push).toHaveBeenLastCalledWith({ pathname: '/challenge/[id]/results', params: { id: 'c-1' } });
   });
 
+  it('a "Nazik" reader files them as Kazandıklarım and Kaybettiklerim, and the cards say it the same way', async () => {
+    mockLevel.value = 1;
+    serve(seven());
+    const HistoryScreen = require('@/app/(app)/history').default;
+    const tree = renderScreen(<HistoryScreen />);
+    await settle();
+
+    tapChip(tree, 'Kazandıklarım (3)');
+    expect(titles(tree)).toEqual([1, 3, 5]);
+    expect(rendered(tree)).toContain('KAZANDIN');
+    tapChip(tree, 'Kaybettiklerim (2)');
+    expect(titles(tree)).toEqual([2, 6]);
+    expect(rendered(tree)).toContain('KAYBETTİN');
+    expect(rendered(tree)).not.toMatch(/Koyduklarım|Yediklerim|KOYDUN|YEDİN/);
+  });
+
   it('the rövanş badge opens it on the losses', async () => {
     serve(seven());
     searchParams.show = 'lost';
@@ -6571,6 +6614,63 @@ describe('the score tiles at the reader\'s level', () => {
     expect(text).toContain('😵 1 YENİLGİ');
     expect(text).not.toContain('KOYDU');
     expect(text).not.toContain('🍆');
+  });
+});
+
+describe('the profile of a "Nazik" reader', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  it('names the board and the win and loss ladders without koy or ye', async () => {
+    mockLevel.value = 1;
+    api.leaderboard = jest.fn(async () => [{ user: ALI, wins: 4, losses: 1, rank: 1 }]);
+    const ProfileScreen = require('@/app/(app)/(tabs)/profile').default;
+    const polite = renderScreen(<ProfileScreen />);
+    await settle();
+    const text = rendered(polite);
+    expect(text).toContain('en çok kazananlar');
+    expect(text).toContain('galibiyet');
+    // spelled out in both cases: /i does not pair i with İ
+    expect(text).not.toMatch(/koyuş|koyan|yiyiş|KOYUŞ|YİYİŞ/);
+
+    mockLevel.value = 2;
+    const casual = renderScreen(<ProfileScreen />);
+    await settle();
+    expect(rendered(casual)).toContain('en çok koyanlar');
+    expect(rendered(casual)).toContain('koyuş');
+    expect(rendered(casual)).toContain('KOYUŞ');
+    expect(rendered(casual)).toContain('YİYİŞ');
+  });
+
+  it('explains the first rung of wins in plain words', async () => {
+    mockLevel.value = 1;
+    const ProfileScreen = require('@/app/(app)/(tabs)/profile').default;
+    const tree = renderScreen(<ProfileScreen />);
+    await settle();
+    const [rung] = tree.root.findAll(
+      (node) => node.props.rung?.badge?.key === 'koyus_1' && typeof node.props.onPress === 'function'
+    );
+    act(() => {
+      rung!.props.onPress(rung!.props.rung);
+    });
+
+    const text = rendered(tree);
+    // the sheet's line is several text nodes: "Galibiyet", " merdiveni · ", "1", ". basamak"
+    expect(text).toMatch(/Galibiyet\s+merdiveni/);
+    expect(text).not.toContain('Koyuş');
+    expect(text).toContain('Hangi türde olursa olsun, her galibiyet sayılır.');
+    expect(text).not.toContain('o koyar');
+  });
+
+  it('says what my own public profile is for without koy', async () => {
+    mockLevel.value = 1;
+    searchParams.id = ME.id;
+    api.userProfile = jest.fn(async () => ({ ...ME, stats: { wins: 0, losses: 0, challengesPlayed: 0 }, badges: [] }));
+    const UserScreen = require('@/app/(app)/user/[id]').default;
+    const tree = renderScreen(<UserScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain('Bu sensin. Kendinle yarışamazsın.');
+    expect(rendered(tree)).not.toContain('koyamazsın');
   });
 });
 

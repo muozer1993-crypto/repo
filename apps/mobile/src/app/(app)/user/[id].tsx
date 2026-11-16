@@ -495,7 +495,7 @@ export default function UserProfileScreen() {
         </View>
       ) : (
         <Text variant="small" muted center>
-          Bu sensin. Kendine koyamazsın.
+          {level === 1 ? 'Bu sensin. Kendinle yarışamazsın.' : 'Bu sensin. Kendine koyamazsın.'}
         </Text>
       )}
 
