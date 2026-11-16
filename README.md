@@ -781,7 +781,8 @@ fotoğrafları"): yanlış yedeği geri alınca fotoğraflar da yerinde olur.
 **Yeni bilgisayarda:** depoyu indirip `npm install` yap, `apps/server/.env` dosyasına aynı
 `BACKUP_DIR` satırını yaz, OneDrive klasörü inene kadar bekle, sonra `npm run yonet -- geri-yukle`
 ve sunucuyu aç. Yedeği geri yüklemeden önce sunucuyu açtıysan sorun değil: boş veritabanının
-yedeği alınmaz, `geri-yukle` yine son gerçek yedeği bulur. Herkes uygulamaya bir kez yeniden giriş
+yedeği alınmaz, `geri-yukle` yine son gerçek yedeği bulur; eski `data\uploads` klasörünü kopyaladıysan
+fotoğraflar da silinmez, hiçbir girişin fotoğraf göstermediği bir veritabanında temizlik hiç çalışmaz. Herkes uygulamaya bir kez yeniden giriş
 yapar (kullanıcı adı ve şifresiyle), çünkü oturum anahtarı (`data\secret`) yedeğe girmez; eski
 bilgisayardan o dosyayı kurtardıysan yeni `data` klasörüne koy, kimse çıkış yapmaz. Kanıt
 fotoğrafları (`data\uploads`) da yedeğe girmez.

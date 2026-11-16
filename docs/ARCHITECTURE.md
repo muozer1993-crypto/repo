@@ -1095,7 +1095,9 @@ telefonda sıraya girmiş bir giriş için: kuyruk fotoğrafı yükleyip dönen 
 sonra gidebilir; bir itirazın cevabı da gönderilmeden önce yüklenir. Kilitli bir dosya (Windows'ta
 açık bir fotoğraf görüntüleyici) atlanır, ertesi gün yine denenir. Bellekteki bir veritabanında tur
 hiç çalışmaz: önceki açılışların yüklediklerinden habersizdir, klasördeki her dosya ona sahipsiz
-görünür. Geri yüklemenin kenara koyduğu `koydum-onceki-*.db` dosyalarının girişleri de sayılır
+görünür. Hiçbir giriş tek bir fotoğraf bile göstermiyorsa da hiçbir şey silinmez: bu, yeni
+bilgisayara kopyalanmış `data\uploads` ile henüz geri yüklenmemiş boş bir veritabanıdır, sahipsiz
+fotoğraflarla dolu bir klasör değil. Geri yüklemenin kenara koyduğu `koydum-onceki-*.db` dosyalarının girişleri de sayılır
 (salt okunur açılır): yanlış yedek seçilince ilk açılış eski yedeğe göre süpürüyor, o yedekten sonra
 yazılmış girişlerin bir haftadan eski fotoğraflarını siliyordu, `data/uploads` da hiçbir yedekte
 yoktu; kenardaki dosyayı geri koymak girişleri getiriyor, fotoğraflarını getiremiyordu. O dosyalar

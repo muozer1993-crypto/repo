@@ -94,6 +94,15 @@ async function postEntry(h: TestApp, user: RegisteredUser, challengeId: string, 
 
 const fileOf = (h: TestApp, url: string): string => path.join(h.config.uploadDir, path.basename(url));
 
+/**
+ * One entry showing a fresh photo: the sweep deletes nothing while no entry
+ * shows any (a rescued uploads folder next to a database not restored yet).
+ */
+async function oneShownPhoto(h: TestApp): Promise<void> {
+  const { ali, challengeId } = await screenChallenge(h);
+  await postEntry(h, ali, challengeId, 120, await upload(h, ali));
+}
+
 describe('sweepOrphanPhotos', () => {
   it('deletes a week-old photo that was picked and swapped, and one a new photo pushed out, and counts their bytes', async () => {
     harness = await makeApp({ now: NOW });
@@ -119,6 +128,7 @@ describe('sweepOrphanPhotos', () => {
 
   it('keeps an unused photo younger than a week: its entry may still be on its way from a phone', async () => {
     harness = await makeApp({ now: NOW });
+    await oneShownPhoto(harness);
     const yesterday = put(harness, photoName(), DAY);
     const almost = put(harness, photoName('png'), UNUSED_PHOTO_GRACE_MS - 60_000);
     const old = put(harness, photoName('webp'), 8 * DAY, 'y'.repeat(2500));
@@ -213,8 +223,21 @@ describe('sweepOrphanPhotos', () => {
     }
   });
 
+  it('deletes nothing while no entry shows any photo: the rescued folder of a database not restored yet', async () => {
+    harness = await makeApp({ now: NOW });
+    const h = harness;
+    // a new PC: data\uploads copied over, the server started before geri-yukle
+    const older = put(h, photoName(), 30 * DAY);
+    const old = put(h, photoName('png'), UNUSED_PHOTO_GRACE_MS + DAY);
+
+    expect(await sweepOrphanPhotos(h.db, h.config.uploadDir, h.now())).toEqual({ removed: 0, bytes: 0 });
+    expect(fs.existsSync(older)).toBe(true);
+    expect(fs.existsSync(old)).toBe(true);
+  });
+
   it('skips a photo the disk will not let go of, and deletes the rest', async () => {
     harness = await makeApp({ now: NOW });
+    await oneShownPhoto(harness);
     const locked = put(harness, photoName(), 30 * DAY);
     const free = put(harness, photoName(), 30 * DAY, 'z'.repeat(1500));
     const unlink = fs.promises.unlink;

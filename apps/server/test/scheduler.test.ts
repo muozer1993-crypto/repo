@@ -1749,6 +1749,30 @@ describe('scheduler: proof photos no entry shows', () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       };
 
+      // one entry shows a photo: with none shown the sweep holds off (a rescued folder before geri-yukle)
+      const ali = await registerUser(h.app, 'ali');
+      const veli = await registerUser(h.app, 'veli');
+      befriend(h.app, ali.me.id, veli.me.id);
+      const created = await authed(h.app, ali.token)({
+        method: 'POST',
+        url: '/challenges',
+        payload: { typeKey: 'su_bardak', startsAt: iso(h), endsAt: MIDNIGHT_END, participantIds: [veli.me.id] },
+      });
+      const challengeId = created.json<Challenge>().id;
+      await authed(h.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+      const shown = await authed(h.app, ali.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/entries`,
+        payload: {
+          dayKey: todayKey(DEFAULT_TIMEZONE, h.now()),
+          value: 1,
+          source: 'manual',
+          proofUrl: `/uploads/${randomUUID()}.jpg`,
+          clientTime: iso(h),
+        },
+      });
+      expect(shown.statusCode).toBe(201);
+
       const first = unusedPhoto(h);
       stop = startScheduler(h.app, h.db, h.config, { push });
       await vi.waitFor(() => expect(sweeps()).toBe(1), { interval: 10, timeout: 5000 });

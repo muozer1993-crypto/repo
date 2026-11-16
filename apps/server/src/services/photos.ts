@@ -119,6 +119,13 @@ export async function sweepOrphanPhotos(
   const shown = new Set<string>();
   addShown(db, shown);
   if (options.dbPath) addShownBySetAside(options.dbPath, shown);
+  // No database here shows a single photo while old ones lie in the folder: most
+  // likely a new PC with the rescued data\uploads copied over and the server
+  // started before `geri-yukle` (README, "Yeni bilgisayarda"), or a fresh
+  // database next to an old folder. Sweeping on that evidence alone would delete
+  // every proof the backup is about to point at again, and that cannot be undone;
+  // leaving a few truly unused photos for a day costs only disk.
+  if (shown.size === 0) return result;
 
   for (const photo of old) {
     if (shown.has(photo.name)) continue;
