@@ -4280,6 +4280,8 @@ describe('settings notification preferences', () => {
     expect(text).toContain('Geride kalınca dürt beni');
     expect(text).toContain('Pazar akşamı haftalık özet');
     expect(text).toContain('Saatli çelınc uyarıları');
+    // the tap after a step çelınc's end is one of them too
+    expect(text).toContain('çelıncın son saatinde ve adım çelıncı bitince çalar');
     expect(text).toContain('“KOYDUM MU?” her zaman gelir, onu kapatamazsın.');
 
     await flip(tree, 'Geride kalınca dürt beni', false);

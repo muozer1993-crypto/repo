@@ -291,7 +291,7 @@ export async function syncReminders(
     const endsIn = new Date(challenge.endsAt).getTime() - now.getTime();
     // A step çelınc has nothing to type: what decides it is what the phones
     // send by the end of the hour after it (LIMITS.DEVICE_SETTLE_MS), and an
-    // iPhone sends only while the app runs. One left shut lost its last
+    // iPhone seldom lets the background task run. One left shut lost its last
     // evening, and with it the race, without a word.
     const steps = challenge.metricType === 'auto_steps';
     const afterEnd = steps && lastDayEndsWithIt(challenge);

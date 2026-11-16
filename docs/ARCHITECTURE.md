@@ -236,7 +236,7 @@ göndermeye devam eder, `POST /challenges/:id/entries` ise bitişten itibaren hi
 (`challenge_ended`). Elle yazılan sayı da, elle hazırlanmış bir istekte "telefon okudu" diye
 (`pedometer`, `usage_stats`) gelen sayı da sonucu gördükten sonra seçilmiş olabilir. Herkesin
 telefonu son günü bitişten sonra gönderdiyse beklemeden kapanır. iPhone adımları arka planda pek
-göndermez, bu saat ancak uygulama açılırsa işe yarar; o yüzden telefon adım çelıncının
+göndermez, bu saat çoğu zaman ancak uygulama açılırsa işe yarar; o yüzden telefon adım çelıncının
 bitişinden iki dakika sonra kendi bildirimini kurar (`services/reminders.ts`). Ona dokunmak
 çelıncı açar, uygulama öne gelirken ve "Sonuç birazdan" ekranında son günü gönderir; son saat
 uyarısı da "Skorunu girmediysen" yerine bunu söyler. Sunucu bitişte kapalıysa bir

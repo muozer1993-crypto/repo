@@ -1021,9 +1021,9 @@ export default function SettingsScreen() {
             title="Saatli çelınc uyarıları"
             detail={byLevel(
               level,
-              'Check-in saatinden yarım saat önce ve çelınc bitmeden bir saat önce hatırlatır. Sadece bu telefon için.',
-              'Check-in saatine yarım saat kala ve çelıncın son saatinde çalar. Sadece bu telefonda.',
-              'Check-in’e yarım saat kala ve son saatte “yetiştir yoksa yersin” der. Sadece bu telefonda.'
+              'Check-in saatinden yarım saat önce, çelınc bitmeden bir saat önce ve adım çelıncı bitince hatırlatır. Sadece bu telefon için.',
+              'Check-in saatine yarım saat kala, çelıncın son saatinde ve adım çelıncı bitince çalar. Sadece bu telefonda.',
+              'Check-in’e yarım saat kala ve son saatte “yetiştir yoksa yersin” der, adım çelıncı bitince de adımlarını ister. Sadece bu telefonda.'
             )}
             value={deviceAlerts}
             onChange={(on) => void chooseDeviceAlerts(on)}

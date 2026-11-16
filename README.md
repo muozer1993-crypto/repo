@@ -492,8 +492,8 @@ hepsiyle aranda engel varsa yine gelir ama isim vermez ("Bir rakibin sana 9 bard
 
 Bazı bildirimler fazla geliyorsa kanalı kapatma, uygulamada **Ayarlar → Bildirim tercihleri**'ne
 gir: gün ortası dürtmeyi ("sana fark koymuş"), pazar akşamı haftalık özeti ve telefonun kendi
-kurduğu saatli uyarıları (check-in'e yarım saat kala, çelıncın son saati, adım çelıncı bitince
-"son adımlarını yolla") ayrı ayrı kapatabilirsin.
+kurduğu saatli uyarıları (check-in'e yarım saat kala, çelıncın son saati, adım çelıncı bittikten
+iki dakika sonra) ayrı ayrı kapatabilirsin.
 Saatli uyarılar ayarı sadece o telefonda geçerli. Check-in uyarısı sadece katıldığın çelınclarda,
 çelınc sürdüğü günlerde ve o gün daha "Geldim" demediysen çalar; çelınc bitince ya da iptal olunca
 kendiliğinden susar. İleri bir tarihe açtığın çelıncı senden başka kimse kabul etmediyse o daha
@@ -1006,7 +1006,7 @@ grubu bölmen gerekmez.
 
 | Platform | Kaynak | Not |
 |---|---|---|
-| **iOS** | Core Motion (`Pedometer.getStepCountAsync`) | Son 7 günün geçmişi cihazda durur. Uygulamayı hiç açmasan da telefon adımlarını sayar, ama sunucuya ancak uygulama açılınca gider. Bir adım çelıncının sonucu, bitişten bir saat sonrasına kadar telefonlardan gelenle belli olur: çelınc bitince o saat içinde uygulamayı bir kez aç (telefon bitişten iki dakika sonra hatırlatır), sonradan gelen adımlar sonucu değiştirmez. |
+| **iOS** | Core Motion (`Pedometer.getStepCountAsync`) | Son 7 günün geçmişi cihazda durur. Uygulamayı hiç açmasan da telefon adımlarını sayar, ama iPhone arka planda pek göndertmez: sunucuya çoğu zaman uygulama açılınca gider. Bir adım çelıncının sonucu, bitişten bir saat sonrasına kadar telefonlardan gelenle belli olur: çelınc bitince o saat içinde uygulamayı bir kez aç (telefon bitişten iki dakika sonra hatırlatır), sonradan gelen adımlar sonucu değiştirmez. |
 | **Android + Health Connect** | `react-native-health-connect` | Sadece içine adım yazan bir uygulama (Samsung Health, Google Fit, Fitbit) varsa işe yarar. Android 14 ve üstünde Health Connect telefonla birlikte gelir ama çoğu zaman boştur; son 7 günde içinde adım yoksa uygulama onu kaynak saymaz, telefonun kendi sayımına bakar. Geliştirme derlemesi gerekir. 1.1.1'den itibaren uygulama Health Connect'ten arka planda okuma izni de ister: verilirse saatin yazdığı adımlar uygulama kapalıyken de 15 dakikalık arka plan göreviyle gider, verilmezse ancak KOYDUM açılınca. Bu izni olmayanlara (1.1.1'den önce Health Connect'e izin verenler gibi) **Ayarlar → Adım sayacı**'nda **Arka planda da okusun** düğmesi çıkar. İki kere hayır denince Health Connect bir daha sormaz; o zaman izin Health Connect'in içinde: **Uygulama izinleri → KOYDUM → Ek erişim → Verilere arka planda erişim**. **Ek erişim** hiç yoksa o telefondaki Health Connect bunu desteklemiyor. |
 | **Android, her telefonda** | Google Play hizmetlerinin **Recording API**'si (`modules/koydum-steps`) | Telefon adımları uygulama kapalıyken de sayar ve 10 gün saklar, iPhone'daki gibi. Hesap ya da internet gerekmez, sadece Fiziksel Aktivite izni. Kayıt, izin verildiği andan itibaren tutulur. Health Connect varken de çalışır. |
 | **Android, eski Play hizmetleri** | `Pedometer.watchStepCount` | Sadece uygulama açıkken sayar, cihazda birikir. Uygulama bunu "yaklaşık" diye işaretler ve Play hizmetlerini güncellemeyi önerir. |
@@ -1217,8 +1217,8 @@ Sonuçlandırmayı sunucudaki zamanlayıcı yapar ve 30 saniyede bir çalışır
 uygulama o sırada "Sonuç birazdan" yazar, ana sayfadaki kart da "⏳ Sonuç bekleniyor" der; kartta
 kalan ÖNDESİN / GERİDESİN o anki sıradır, sonuç değil. Herkesin telefonu son günü gönderince hemen kapanır.
 O saatten sonra gelen adımlar sonucu değiştirmez. iPhone adımları arka planda pek göndermez:
-çelınc bitince o saat içinde uygulamayı bir kez açmayanın son günü, en son açtığı andaki haliyle
-kalır. Telefon bunun için bitişten iki dakika sonra "son adımlarını yolla" diye bir bildirim atar;
+çelınc bitince o saat içinde uygulamayı bir kez açmayanın son günü, telefonunun en son gönderdiği
+haliyle kalır. Telefon bunun için bitişten iki dakika sonra son adımlarını yollaman için bir bildirim atar;
 ona dokunmak yeter.
 Sunucu kapalıysa açıldığında geçmiş çelınclarını da kapatır; adım çelınclarında telefonlara
 açıldıktan sonra yine bir saat tanır. Süre bittikten sonra kimse çelınctan ayrılamaz; yoksa
