@@ -1174,6 +1174,17 @@ fonksiyon SQLite'a verilir (`koydum_search_match`; bir fonksiyon açıldığı b
 her uygulama kendi `db`'sine bir kez kaydeder) ve sorgunun içinde, LIMIT'ten önce çalışır. İlk 20
 eşleşme döner, önüne kaç satır dizilirse dizilsin. Migration gerekmedi.
 
+Adın kendisi de bir yoldu. "seni öldürürüm" adıyla açılan bir hesabın kanka isteği kurbanın kilit
+ekranına "seni öldürürüm seni kanka listesine ekledi" diye düşüyordu; laf filtresi
+(`containsBanned`, `packages/shared/src/banned.ts`) yalnızca özel lafa bakıyordu. Artık kullanıcı
+adı ve görünen ad kayıtta, görünen ad `PATCH /me`'de, çelıncın başlığı, ödülü ve cezası da
+`POST /challenges`'ta aynı filtreden geçer (`assertClean`, `services/moderation.ts`). Ret 400
+`banned_content`'tir, mesajı hangi alanın değişeceğini söyler ("Bu ad olmaz. … Adını değiştirip
+tekrar dene."). Kontrol zod şemasına konmadı: şemanın 400'ü hep "Gönderdiğin bilgiler geçersiz."
+der, uygulama da yalnızca mesajı gösterir. Yalnızca yeni yazılan denetlenir: eski satırlara
+dokunulmaz, `PATCH /me` aynı adı geri gönderene de takılmaz (yoksa eski adlı biri başka bir ayarını
+kaydedemezdi), rövanş da eski başlığı ve cezayı olduğu gibi kopyalar.
+
 ## Sunucuyu açanın araçları
 
 E-posta yok, şifre sıfırlama bağlantısı da yok: bu bir arkadaş grubu, herkes sunucuyu açanı

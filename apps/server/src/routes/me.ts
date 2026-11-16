@@ -33,6 +33,7 @@ import { requireUser } from '../plugins/auth.js';
 import { toMe, toNotification } from '../serialize.js';
 import { replacePassword, softDeleteUser } from '../services/accounts.js';
 import { fanOutDeviceDays } from '../services/deviceSync.js';
+import { BANNED_TEXT_MESSAGES, assertClean } from '../services/moderation.js';
 import { listInbox, markRead, unreadCount } from '../services/notifications.js';
 import { awardBadges } from '../services/stats.js';
 import { AttemptLimiter, retryAfterText } from '../services/throttle.js';
@@ -115,6 +116,11 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
   app.patch('/me', auth, async (request) => {
     const { row } = requireUser(request);
     const body = parseBody(UpdateMeBodySchema, request.body);
+    // A name stored before the filter ran on names stays: sent back unchanged
+    // beside another field, it must not stop that field from saving.
+    if (body.displayName !== undefined && body.displayName !== row.display_name) {
+      assertClean(body.displayName, BANNED_TEXT_MESSAGES.displayName);
+    }
 
     const sets: string[] = [];
     const params: unknown[] = [];

@@ -23,6 +23,7 @@ import { conflict, parseBody, tooMany, unauthorized } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { toMe } from '../serialize.js';
 import { createUser, usernameTaken } from '../services/accounts.js';
+import { BANNED_TEXT_MESSAGES, assertClean } from '../services/moderation.js';
 import { publicOrigin } from '../services/origin.js';
 import { AttemptLimiter, clientKey, retryAfterText } from '../services/throttle.js';
 
@@ -77,6 +78,11 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const body = parseBody(RegisterBodySchema, request.body);
+
+    // Both names reach other people's screens before anyone has said yes: search,
+    // a profile, and the push of a kanka request on a stranger's lock screen.
+    assertClean(body.username, BANNED_TEXT_MESSAGES.username);
+    assertClean(body.displayName, BANNED_TEXT_MESSAGES.displayName);
 
     if (usernameTaken(db, body.username)) {
       throw conflict('username_taken', 'Bu kullanıcı adı kapılmış. Başka bir tane dene.');

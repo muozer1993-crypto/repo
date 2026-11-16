@@ -59,6 +59,7 @@ import {
 import { backfillFromPhone } from '../services/deviceSync.js';
 import { announceDisputeClocks } from '../services/entries.js';
 import { assertNotBlocked, isBlockedBetween } from '../services/friends.js';
+import { BANNED_TEXT_MESSAGES, assertClean } from '../services/moderation.js';
 
 interface IdParams {
   id: string;
@@ -293,6 +294,10 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     // The clock is injected so `startsAt >= now - 5min` follows the test clock too.
     const schema = createChallengeBodySchema({ now: () => now.getTime() });
     const body = parseBody(schema, request.body);
+    // invitees read these before they say yes, the title in the invite's push
+    assertClean(body.title, BANNED_TEXT_MESSAGES.title);
+    assertClean(body.rewardText, BANNED_TEXT_MESSAGES.rewardText);
+    assertClean(body.penaltyText, BANNED_TEXT_MESSAGES.penaltyText);
 
     const type = getChallengeType(body.typeKey);
     if (!type) throw badRequest('unknown_type', 'Böyle bir çelınc tipi yok.');

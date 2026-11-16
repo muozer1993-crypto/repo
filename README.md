@@ -832,8 +832,12 @@ sadece "Ağır Abi" seçene 🍆 olur, diğerlerine sakin bir yüz düşer; prof
 | **3 — Ağır Abi** | Ağzı bozuk, yumuşatmaz. Kaldırabilenler | *"Mustafa sana sapır sapır sapladı 🍆 ... Yedin Ali."* |
 
 Ne yaparsan yap uygulamanın üretmediği şeyler: etnik, dini, cinsiyet, cinsel yönelim veya
-engellilik temelli hakaret; tehdit; aile fertlerine küfür. Kullanıcı kendi metnini yazarken de
-bu filtre çalışır. Ayrıca herkes birbirini engelleyebilir ve şikayet edebilir; şikayetler
+engellilik temelli hakaret; tehdit; aile fertlerine küfür. Kullanıcının kendi yazdıkları da bu
+filtreden geçer: özel laf, kullanıcı adı, görünen ad, çelınc başlığı, ödül ve ceza. Takılan yazı
+kaydedilmez, uygulama neyi değiştirmen gerektiğini söyler ("Bu ad olmaz… Adını değiştirip tekrar
+dene."). Filtre kelimeye bakar, niyete değil: "Topal" gibi bir soyadı da takılır, öyle biri adını
+başka türlü yazar. Bu kontrol gelmeden önce kaydedilmiş adlara ve başlıklara dokunulmaz.
+Ayrıca herkes birbirini engelleyebilir ve şikayet edebilir; şikayetler
 sunucuyu açana gider ([Yönetim komutları](#yönetim-komutları)). Engel kalıcı değil: fikri
 değişen **Ayarlar → Engellediklerin**'den kaldırır; kanka olmak için yeniden istek atmak gerekir.
 Yanlış kişiye giden kanka isteği de Kankalar sekmesinde **Geri çek** ile geri alınır; karşı taraf
