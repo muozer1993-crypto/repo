@@ -11,6 +11,7 @@ import {
   LIMITS,
   clampLevel,
   containsBanned,
+  containsBannedName,
   formatScore,
   getTaunt,
   renderTaunt,
@@ -31,6 +32,11 @@ import { notify } from './notifications.js';
 import { awardBadges } from './stats.js';
 import { computeStandings, typeForChallenge } from './challenges.js';
 import { levelOf } from './challengeViews.js';
+
+/** A display name for the finished-sentence check: a clean name becomes a neutral word. */
+function asNameForCheck(name: string): string {
+  return containsBannedName(name) ? name : 'Kanka';
+}
 
 /**
  * Stable non-cryptographic hash (djb2), so an automatic template pick is the same
@@ -274,8 +280,14 @@ export function sendTaunt(db: Database, input: SendTauntInput): SendTauntResult 
     level = clampLevel(levelOf(from), recipientMax);
     const rendered = renderTaunt({ title: customTitle(mode, level, from.display_name), body: customBody }, vars);
     // the placeholders expand to names and titles other people typed; the
-    // finished sentence is what the recipient reads, so it is checked too
-    if (containsBanned(rendered.body) || containsBanned(rendered.title)) {
+    // finished sentence is what the recipient reads, so it is checked too. A name
+    // that passes as a name ("Mehmet Topal") stands in as a neutral word there, or
+    // "Topal'a koydum" would refuse every laf to that friend.
+    const checked = renderTaunt(
+      { title: customTitle(mode, level, asNameForCheck(from.display_name)), body: customBody },
+      { ...vars, winner: asNameForCheck(vars.winner), loser: asNameForCheck(vars.loser) },
+    );
+    if (containsBanned(checked.body) || containsBanned(checked.title)) {
       throw badRequest('banned_content', 'Bu laf fazla ağır. Aile, tehdit ve nefret içeren sözler yasak.');
     }
     title = rendered.title;

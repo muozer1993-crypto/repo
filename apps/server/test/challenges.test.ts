@@ -1626,6 +1626,30 @@ describe('POST /challenges/:id/taunt', () => {
     expect(taunt.level).toBe(2);
   });
 
+  it('takes a laf to a friend whose surname shares a stem with a slur, and still checks the rest', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await finishedChallenge(harness);
+    // Veli's real surname is Topal: his name goes into the finished sentence
+    const renamed = await authed(harness.app, veli.token)({ method: 'PATCH', url: '/me', payload: { displayName: 'Veli Topal' } });
+    expect(renamed.statusCode).toBe(200);
+
+    const ok = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/taunt`,
+      payload: { toUserId: veli.me.id, customBody: "{loser}'a koydum, {diff} adım fark" },
+    });
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json<{ taunt: { body: string } }>().taunt.body).toContain("Veli Topal'a koydum");
+
+    const banned = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/taunt`,
+      payload: { toUserId: ali.me.id, customBody: 'topallar gibi yürüdün', mode: 'reply' },
+    });
+    expect(banned.statusCode).toBe(400);
+    expect(banned.json().error.code).toBe('banned_content');
+  });
+
   it('prints a screen-time average with the digits the app previewed', async () => {
     harness = await makeApp({ now: NOW });
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });

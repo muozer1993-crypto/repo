@@ -91,6 +91,23 @@ describe('POST /auth/register', () => {
   });
 });
 
+describe('surnames that share a stem with a slur', () => {
+  it('lets Mehmet Topal sign up and Ayşe Kıroğlu rename herself', async () => {
+    harness = await makeApp();
+    const topal = await register(harness, 'mehmet_topal', 'Mehmet Topal');
+    expect(topal.statusCode).toBe(201);
+
+    const ayse = await register(harness, 'ayse', 'Ayşe');
+    expect(ayse.statusCode).toBe(201);
+    const renamed = await authed(harness.app, ayse.json<AuthResponse>().token)({
+      method: 'PATCH',
+      url: '/me',
+      payload: { displayName: 'Ayşe Kıroğlu' },
+    });
+    expect(renamed.statusCode).toBe(200);
+  });
+});
+
 describe('PATCH /me', () => {
   it('refuses a banned new name and leaves the stored one and the other fields alone', async () => {
     harness = await makeApp();

@@ -7,7 +7,7 @@
  * Only new writes are checked: a name or a title stored before the filter ran on
  * it stays as it is.
  */
-import { containsBanned } from '@koydum/shared';
+import { containsBanned, containsBannedName } from '@koydum/shared';
 import { badRequest } from '../errors.js';
 
 const WHY = 'Aile, tehdit ve nefret içeren sözler yasak.';
@@ -27,4 +27,12 @@ export const BANNED_TEXT_MESSAGES = {
 /** 400 `banned_content` with `message` when `text` trips the filter; a missing text passes. */
 export function assertClean(text: string | null | undefined, message: string): void {
   if (text && containsBanned(text)) throw badRequest('banned_content', message);
+}
+
+/**
+ * `assertClean` for a name: real surnames that share a stem with a slur (Topal,
+ * Kıroğlu, Zencir…) pass, see `containsBannedName`.
+ */
+export function assertCleanName(text: string | null | undefined, message: string): void {
+  if (text && containsBannedName(text)) throw badRequest('banned_content', message);
 }

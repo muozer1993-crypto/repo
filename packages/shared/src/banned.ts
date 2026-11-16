@@ -193,3 +193,27 @@ export function containsBanned(text: string): boolean {
   if (!normalized) return false;
   return BANNED_PATTERNS.some((p) => p.test(normalized));
 }
+
+/**
+ * Real Turkish surnames that share a stem with a slur above (`topal…`, `kiro…`,
+ * `gavur…`, `kotur…`, `zenci…`, `irz…`). A name is not a taunt: "Mehmet Topal" or
+ * "Ayşe Kıroğlu" must be able to sign up. Only these exact words, as
+ * `normalizeForBanned` leaves them, are spared, so the slur inside a sentence
+ * ("topallar", "kiro herif") still trips the filter.
+ */
+const SURNAME_WORDS = new Set(['topal', 'topalli', 'topaloglu', 'kiroglu', 'gavuroglu', 'koturoglu', 'zencir', 'irzik']);
+
+/**
+ * `containsBanned` for somebody's name (a display name or a username): the
+ * surnames in SURNAME_WORDS are left out before the patterns run, everything else
+ * in the name is checked as usual.
+ */
+export function containsBannedName(text: string): boolean {
+  const normalized = normalizeForBanned(text);
+  if (!normalized) return false;
+  const rest = normalized
+    .split(' ')
+    .filter((word) => !SURNAME_WORDS.has(word))
+    .join(' ');
+  return rest.length > 0 && BANNED_PATTERNS.some((p) => p.test(rest));
+}

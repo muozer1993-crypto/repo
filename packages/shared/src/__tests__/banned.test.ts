@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BANNED_PATTERNS, containsBanned, findBanned, normalizeForBanned } from '../banned';
+import { BANNED_PATTERNS, containsBanned, containsBannedName, findBanned, normalizeForBanned } from '../banned';
 
 const SOFT_HYPHEN = String.fromCharCode(0xad);
 const ZWSP = String.fromCharCode(0x200b);
@@ -114,3 +114,22 @@ describe('BANNED_PATTERNS', () => {
     }
   });
 });
+
+describe('containsBannedName', () => {
+  it('lets real surnames that share a stem with a slur through as names', () => {
+    for (const name of ['Mehmet Topal', 'Topal', 'Ayşe Kıroğlu', 'Gavuroğlu', 'Kötüroğlu', 'Topaloğlu', 'Ali Topallı', 'Zencir', 'IRZIK', 'mehmet_topal']) {
+      expect(containsBannedName(name), name).toBe(false);
+    }
+  });
+
+  it('still refuses everything else in a name, and the slur itself in other shapes', () => {
+    for (const name of ['seni öldürürüm', 'Topal ibne', 'topallar', 'kiro herif', 'zenci', 'ırz düşmanı', 'ananı']) {
+      expect(containsBannedName(name), name).toBe(true);
+    }
+  });
+
+  it('leaves the taunt filter as strict as it was', () => {
+    expect(containsBanned('Mehmet Topal')).toBe(true);
+  });
+});
+

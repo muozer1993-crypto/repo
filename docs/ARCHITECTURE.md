@@ -1203,6 +1203,13 @@ der, uygulama da yalnızca mesajı gösterir. Yalnızca yeni yazılan denetlenir
 dokunulmaz, `PATCH /me` aynı adı geri gönderene de takılmaz (yoksa eski adlı biri başka bir ayarını
 kaydedemezdi), rövanş da eski başlığı ve cezayı olduğu gibi kopyalar.
 
+Adlar için filtrenin bir istisnası var (`containsBannedName`, `assertCleanName`): engellilik ve
+etnik köklü kalıplar kelimenin başına bakar, bu yüzden "Mehmet Topal", "Ayşe Kıroğlu", Zencir,
+Irzık gibi gerçek soyadları da takılıyordu; o kanka kendi adıyla kayıt olamıyordu. Bu birkaç soyadı,
+tam kelime olarak, adlarda serbest; cümle içindeki "topallar", "kiro herif" yine takılır. Özel
+lafın bitmiş cümlesi de denetlenirken, ad olarak temiz geçen adlar nötr bir kelimeyle okunur:
+yoksa "{loser}'a koydum" Veli Topal'a giden her lafı geri çevirirdi.
+
 ## Sunucuyu açanın araçları
 
 E-posta yok, şifre sıfırlama bağlantısı da yok: bu bir arkadaş grubu, herkes sunucuyu açanı
