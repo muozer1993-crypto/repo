@@ -415,6 +415,10 @@ koymuyor) ve yerel kütüphaneleri sıkıştırıyor. APK 113 MB'tan 42 MB civar
 bir sonraki `eas build` ile gelir. Bilgisayardaki Android emülatöründe denemek istersen Android 11
 ya da üstü bir sistem imajı seç, eskileri ARM kodunu çalıştıramadığı için APK'yı kurmaz.
 
+İndirme yarıda kesilirse (tünel bir anlığına koptu, telefon ağ değiştirdi) baştan başlamaz:
+arkadaşın Chrome'un indirilenler listesinde indirmeyi devam ettirince kaldığı yerden sürer. Arada
+`apk:yayinla` ile yeni bir APK yayınladıysan yarım kalan eskinin üstüne eklenmez, yenisi baştan iner.
+
 Yayınladığın sürüm telefondakinden yeniyse uygulamanın ana ekranında **"Yeni sürüm var"** kartı
 çıkar ve İndir'e basınca APK iner. Böylece kimse hangi APK'da olduğunu tahmin etmek zorunda kalmaz.
 Bu kart 1.1 sürümüyle geldi: 1.0'daki kankalar onu görmez, yenisini bir kereliğine davet

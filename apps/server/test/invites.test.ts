@@ -295,6 +295,90 @@ describe('the published build', () => {
     });
   });
 
+  it('resumes a broken download from where it stopped, and starts over once a new build is up', async () => {
+    const appDir = tempAppDir();
+    publish(appDir, '1.1.0', 4096);
+    // every byte different from its neighbours, so a wrong slice cannot pass
+    const bytes = Buffer.from(Array.from({ length: 4096 }, (_, i) => i % 251));
+    fs.writeFileSync(path.join(appDir, 'koydum.apk'), bytes);
+    harness = await appWith(appDir);
+
+    const full = await harness.app.inject({ method: 'GET', url: '/koydum.apk' });
+    expect(full.statusCode).toBe(200);
+    expect(full.headers['accept-ranges']).toBe('bytes');
+    expect(full.headers['content-length']).toBe('4096');
+    expect(full.headers['cache-control']).toBe('no-cache');
+    const lastModified = String(full.headers['last-modified']);
+    const etag = String(full.headers.etag);
+    expect(Date.parse(lastModified)).not.toBeNaN();
+    expect(etag).not.toBe('undefined');
+
+    const part = await harness.app.inject({ method: 'GET', url: '/koydum.apk', headers: { range: 'bytes=100-199' } });
+    expect(part.statusCode).toBe(206);
+    expect(part.headers['content-range']).toBe('bytes 100-199/4096');
+    expect(part.headers['content-length']).toBe('100');
+    expect(part.headers['content-type']).toBe('application/vnd.android.package-archive');
+    expect(part.headers['content-disposition']).toContain('koydum-1.1.0.apk');
+    expect(part.rawPayload.equals(bytes.subarray(100, 200))).toBe(true);
+
+    // "Devam et" from the middle to the end
+    const rest = await harness.app.inject({ method: 'GET', url: '/koydum.apk', headers: { range: 'bytes=4000-' } });
+    expect(rest.statusCode).toBe(206);
+    expect(rest.headers['content-range']).toBe('bytes 4000-4095/4096');
+    expect(rest.rawPayload.equals(bytes.subarray(4000))).toBe(true);
+
+    const past = await harness.app.inject({ method: 'GET', url: '/koydum.apk', headers: { range: 'bytes=5000-' } });
+    expect(past.statusCode).toBe(416);
+    expect(past.headers['content-range']).toBe('bytes */4096');
+
+    // Chrome resumes with the validator it got: the same build answers the range...
+    for (const ifRange of [lastModified, etag]) {
+      const resumed = await harness.app.inject({
+        method: 'GET',
+        url: '/koydum.apk',
+        headers: { range: 'bytes=100-199', 'if-range': ifRange },
+      });
+      expect(resumed.statusCode).toBe(206);
+      expect(resumed.rawPayload.equals(bytes.subarray(100, 200))).toBe(true);
+    }
+    // ...a build that changed since then is sent whole
+    const changed = await harness.app.inject({
+      method: 'GET',
+      url: '/koydum.apk',
+      headers: { range: 'bytes=100-199', 'if-range': 'Mon, 01 Jan 2001 00:00:00 GMT' },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.rawPayload.equals(bytes)).toBe(true);
+
+    const head = await harness.app.inject({ method: 'HEAD', url: '/koydum.apk' });
+    expect(head.statusCode).toBe(200);
+    expect(head.headers['content-length']).toBe('4096');
+    expect(head.headers['accept-ranges']).toBe('bytes');
+    expect(head.rawPayload.length).toBe(0);
+  });
+
+  it('answers a missing build with apk_not_found, and boots even when APP_DIR is unusable', async () => {
+    const appDir = tempAppDir();
+    harness = await appWith(appDir);
+    const missing = await harness.app.inject({ method: 'GET', url: '/koydum.apk' });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json<{ error: { code: string } }>().error.code).toBe('apk_not_found');
+    await harness.close();
+
+    // a file where the directory should be, and a directory that is not there
+    const blocker = path.join(appDir, 'not-a-dir');
+    fs.writeFileSync(blocker, 'x');
+    for (const broken of [blocker, path.join(appDir, 'yok', 'app')]) {
+      harness = await appWith(broken);
+      expect((await harness.app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(200);
+      const apk = await harness.app.inject({ method: 'GET', url: '/koydum.apk' });
+      expect(apk.statusCode).toBe(404);
+      expect(apk.json<{ error: { code: string } }>().error.code).toBe('apk_not_found');
+      await harness.close();
+      harness = null;
+    }
+  });
+
   it('falls back to APP_DOWNLOAD_URL, and says nothing when there is no build at all', async () => {
     harness = await appWith(tempAppDir(), {
       appDownloadUrl: 'https://expo.dev/accounts/x/projects/koydum/builds/abc',

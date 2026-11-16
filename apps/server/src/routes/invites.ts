@@ -21,11 +21,13 @@
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
+import fastifyStatic from '@fastify/static';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { UserRow } from '../db/index.js';
 import { notFound, tooMany } from '../errors.js';
 import { asVulgarityLevel } from '../serialize.js';
-import { apkPath, currentRelease, type AppRelease } from '../services/appRelease.js';
+import { APK_FILE, apkPath, currentRelease, type AppRelease } from '../services/appRelease.js';
 import { publicOrigin } from '../services/origin.js';
 import { AttemptLimiter } from '../services/throttle.js';
 
@@ -287,6 +289,10 @@ function isAndroid(request: FastifyRequest): boolean {
 
 export default async function inviteRoutes(app: FastifyInstance): Promise<void> {
   const { db, config } = app;
+  // Only for `reply.sendFile` on /koydum.apk, in this plugin's scope alone. No
+  // root and nothing served: the plugin then checks no directory at boot, so a
+  // missing or broken APP_DIR cannot take the API down (see /uploads in app.ts).
+  await app.register(fastifyStatic, { serve: false });
   const lookups = new AttemptLimiter(INVITE_LOOKUPS_PER_IP.max, INVITE_LOOKUPS_PER_IP.windowMs);
 
   const throttle = (request: FastifyRequest): void => {
@@ -359,13 +365,17 @@ export default async function inviteRoutes(app: FastifyInstance): Promise<void> 
   // browsers ask every page's host for one; the invite page lives here now
   app.get('/favicon.ico', async (_request, reply) => reply.code(204).header('cache-control', 'max-age=86400').send());
 
+  // Friends download this over mobile data from the owner's home upload, so a
+  // dropped 42 MB download must go on from where it stopped, not from byte 0.
+  // @fastify/send answers Range (206, or 416 past the end) and HEAD, and its
+  // Last-Modified (or ETag) is what a resuming browser sends back in If-Range:
+  // after a new `apk:yayinla` it no longer matches, so the friend gets the
+  // whole new file, never the old half glued to the new one.
   app.get('/koydum.apk', async (request, reply) => {
     const file = apkPath(config);
-    let size: number;
     try {
       const stat = fs.statSync(file);
       if (!stat.isFile() || stat.size === 0) throw new Error('empty');
-      size = stat.size;
     } catch {
       throw notFound('apk_not_found', 'Bu sunucuda yüklenmiş bir uygulama yok.');
     }
@@ -373,9 +383,15 @@ export default async function inviteRoutes(app: FastifyInstance): Promise<void> 
     const name = release?.version ? `koydum-${release.version}.apk` : 'koydum.apk';
     return reply
       .header('content-type', 'application/vnd.android.package-archive')
-      .header('content-length', String(size))
       .header('content-disposition', `attachment; filename="${name}"`)
       .header('cache-control', 'no-cache')
-      .send(fs.createReadStream(file));
+      // contentType/cacheControl off: the two headers above stay as they are
+      .sendFile(APK_FILE, path.dirname(file), {
+        acceptRanges: true,
+        etag: true,
+        lastModified: true,
+        contentType: false,
+        cacheControl: false,
+      });
   });
 }

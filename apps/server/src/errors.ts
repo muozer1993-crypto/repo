@@ -136,6 +136,11 @@ export function errorHandler(error: Error, request: FastifyRequest, reply: Fasti
 
   const statusCode = (error as { statusCode?: number }).statusCode;
   if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 500) {
+    // Headers the error carries stay, as Fastify's own handler keeps them: when a
+    // range starts past the end of /koydum.apk, @fastify/send's 416 says the
+    // file's real length in Content-Range ("bytes */<size>"), as RFC 9110 asks.
+    const headers = (error as { headers?: Record<string, string> }).headers;
+    if (headers) reply.headers(headers);
     void reply
       .code(statusCode)
       .send({ error: { code: fastifyCode ?? 'bad_request', message: 'İstek işlenemedi.' } } satisfies ErrorBody);
