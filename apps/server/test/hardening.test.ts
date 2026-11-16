@@ -1164,6 +1164,8 @@ describe('clientKey', () => {
     expect(clientKey('64:ff9b::1.2.3.4')).toBe('64:ff9b:0:0::/64');
     expect(clientKey('1.2.3.4')).toBe('1.2.3.4');
     expect(clientKey('bilinmiyor')).toBe('bilinmiyor');
+    // a client that reset the connection leaves `request.ip` undefined
+    expect(clientKey(undefined)).toBe('');
   });
 });
 

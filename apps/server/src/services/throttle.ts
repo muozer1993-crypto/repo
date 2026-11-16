@@ -98,8 +98,14 @@ export class AttemptLimiter {
  * address therefore counts as its /64 (`2001:db8:0:0::/64`), and an IPv4 one
  * written as IPv6 (`::ffff:203.0.113.7`) as the plain IPv4 it is. Anything else,
  * IPv4 included, is its own key.
+ *
+ * `request.ip` is undefined, whatever its type says, once the client has reset the
+ * connection: the socket has no peer left to name. Those share one key (their
+ * answer goes nowhere); throwing here made every such login a 500 and two lines in
+ * the owner's window, for anybody who cared to send them.
  */
-export function clientKey(ip: string): string {
+export function clientKey(ip: string | undefined): string {
+  if (ip === undefined) return '';
   // a link-local address carries its interface: `fe80::1%eth0`
   const bare = ip.split('%')[0] ?? ip;
   if (isIP(bare) !== 6) return ip;

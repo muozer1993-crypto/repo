@@ -1155,8 +1155,10 @@ aynı kişiye istek attı, her biri onun telefonunda bir push oldu ("BOB HIRSIZ 
 ekledi"). Bir /64'ten açılan 2.100 hesaptan sonra da "Şey" ve "şeyma" aramaları @seyma'yı bulamadı.
 
 Artık bir istemci (`clientKey`: IPv4 adresi ya da IPv6 /64'ü) saatte en çok 20 hesap açar
-(`registrationsPerHourPerClient`, `src/config.ts`; her deneme sayılır). Arkadaş grubu birkaç kişi
-birden kaydolur, aynı Wi-Fi'daki bir masa bile bu sınıra varmaz. Bütün sunucu için ayrıca bir sınır
+(`registrationsPerHourPerClient`, `src/config.ts`). Arkadaş grubu birkaç kişi birden kaydolur,
+aynı Wi-Fi'daki bir masa bile bu sınıra varmaz. Sayaç, şifre hash'lenmeden hemen önce işler:
+kapılmış bir ad ya da hatalı bir form sayılmaz, aynı Wi-Fi'dan kaydolanlar yeniden denedi diye
+birbirinin hakkını yemez. Bütün sunucu için ayrıca bir sınır
 konmadı: onu tek bir trol doldurur, gerçek yeni kankalar kapıda kalırdı. Kullanıcı adıyla gönderilen
 yeni istekler de hesap başına saatte 15 (`NEW_FRIEND_REQUESTS_PER_USER`, `routes/friends.ts`). Kişi
 başına günde 3 istek bir telefonu öttüreni durduruyordu, herkesi öttüreni değil. Grubu elle ekleyen

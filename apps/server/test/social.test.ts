@@ -178,13 +178,19 @@ describe('POST /auth/register', () => {
     expect(loadConfig({ dataDir: ':memory:' }).registrationsPerHourPerClient).toBe(20);
     harness = await makeApp({ config: { registrationsPerHourPerClient: 3 } });
     const h = harness;
-    const register = (username: string, remoteAddress: string) =>
+    const register = (username: string, remoteAddress: string, password = 'sifre123') =>
       h.app.inject({
         method: 'POST',
         url: '/auth/register',
-        payload: { username, password: 'sifre123', displayName: 'BOB HIRSIZ', timezone: 'Europe/Istanbul' },
+        payload: { username, password, displayName: 'BOB HIRSIZ', timezone: 'Europe/Istanbul' },
         remoteAddress,
       });
+
+    // a taken name and a typo cost no scrypt and open no account: friends on one
+    // Wi-Fi retrying those must not spend the budget they share
+    expect((await register('alinmis', '198.51.100.20')).statusCode).toBe(201);
+    expect((await register('alinmis', '2001:db8:1:2::99')).statusCode).toBe(409);
+    expect((await register('kisa', '2001:db8:1:2::99', '123')).statusCode).toBe(400);
 
     // a fresh address of the same /64 for every account used to be a fresh budget
     for (let i = 1; i <= 3; i += 1) expect((await register(`cop${i}`, `2001:db8:1:2::${i}`)).statusCode).toBe(201);

@@ -75,13 +75,18 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     if (waitMs > 0) {
       throw tooMany('too_many_attempts', `Çok fazla hesap açtın. ${retryAfterText(waitMs)}`);
     }
-    registerByIp.record(client, now);
 
     const body = parseBody(RegisterBodySchema, request.body);
 
     if (usernameTaken(db, body.username)) {
       throw conflict('username_taken', 'Bu kullanıcı adı kapılmış. Başka bir tane dene.');
     }
+
+    // Counted here, not on arrival: friends signing up on one Wi-Fi share the
+    // budget, and a "kapılmış" retry or a typo there must not spend it (neither
+    // costs a scrypt). Still before the first await, so a burst sent at once
+    // cannot all pass the check above.
+    registerByIp.record(client, now);
 
     const row = createUser(
       db,
