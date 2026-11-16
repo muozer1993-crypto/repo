@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * Every `router.push`/`replace`/`navigate`, `goToTab` and `leaveForTab` target and every
+ * Every `router.push`/`replace`/`navigate`/`dismissTo`, `goToTab` and `leaveForTab` target and every
  * `<Link href>` in the app has to name a route that actually exists in
  * `src/app`. Expo Router fails these silently at runtime (a dead href just does
  * nothing), so the check lives here instead of in the type system.
@@ -74,7 +74,7 @@ function collectTargets(): Target[] {
   const targets: Target[] = [];
   // every path literal anywhere inside the call, so both arms of a
   // `router.push(cond ? '/a' : '/b')` get checked
-  const calls = /(?:router\.(?:push|replace|navigate)|goToTab|leaveForTab)\s*\(/g;
+  const calls = /(?:router\.(?:push|replace|navigate|dismissTo)|goToTab|leaveForTab)\s*\(/g;
   // `{ pathname: '/challenge/[id]' }` and `<Link href="/x">`
   const inline = [/pathname:\s*['"`](\/[^'"`]*)['"`]/g, /href=\{?['"`](\/[^'"`]*)['"`]/g];
 

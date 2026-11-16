@@ -268,6 +268,10 @@ export default function ResultsScreen() {
   const pull = usePullRefresh(() => Promise.all([query.refetch(), detail.refetch()]));
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)'));
+  // "Çelınca dön": back down to the çelınc these results were opened from, or
+  // in their place when a push opened them alone. A navigate reuses only the
+  // screen in front, so it stacked a second çelınc over the results.
+  const backToChallenge = () => router.dismissTo({ pathname: '/challenge/[id]', params: { id } });
 
   /** Without `to` the picker asks who it is for. */
   const openTaunt = (to?: string) => {
@@ -365,7 +369,7 @@ export default function ResultsScreen() {
           actionLabel={missing ? 'Listeye dön' : early ? 'Çelınca dön' : 'Tekrar dene'}
           onAction={() => {
             if (missing) back();
-            else if (early) router.navigate({ pathname: '/challenge/[id]', params: { id } });
+            else if (early) backToChallenge();
             else void query.refetch();
           }}
         />
@@ -390,7 +394,7 @@ export default function ResultsScreen() {
               : 'Bitiş saatini bekle, sonuç o zaman yazılır.'
           }
           actionLabel="Çelınca dön"
-          onAction={() => router.navigate({ pathname: '/challenge/[id]', params: { id } })}
+          onAction={() => backToChallenge()}
         />
       </Screen>
     );
@@ -832,7 +836,7 @@ export default function ResultsScreen() {
           size="md"
           fullWidth
           style={styles.gap}
-          onPress={() => router.navigate({ pathname: '/challenge/[id]', params: { id } })}
+          onPress={() => backToChallenge()}
         />
       </Card>
     </Screen>

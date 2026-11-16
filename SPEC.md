@@ -924,7 +924,10 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             the reader's level (tie / "Koydum, geçmiş olsun." / "Bu sefer Ali koydu, yedik." / behind a tie
                             "Ali ve Veli berabere kaldı, ben 3. oldum, yedik.") and my invite
                             link (useInviteLink) unless it is loopback or a home-network address. Phone → Share.share
-                            ("Paylaşılamadı" toast on a throw), web → clipboard ("Kopyalandı")
+                            ("Paylaşılamadı" toast on a throw), web → clipboard ("Kopyalandı"). "Çelınca dön" (here and on the
+                            not-finished / cancelled states) uses `router.dismissTo`: back down to the çelınc the results were
+                            opened from, or in their place when a push opened them alone; `navigate` reuses only the screen in
+                            front and stacked a second copy of the çelınc over the results
 (app)/challenge/[id]/taunt.tsx     picker: target chip(s), a context chip per loser from `tauntContexts` (RÖVANŞ / SERİ / EZİCİ FARK / NORMAL FARK / KIL PAYI;
                             without the field, the margin); a loser answering gets the winner as the only target and the CEVAP
                             (`reply`) pool ("Önce o konuşsun" before the winner's laf, "Cevabını verdin" after the answer), a

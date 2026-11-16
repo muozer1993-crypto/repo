@@ -36,6 +36,7 @@ jest.mock('expo-router', () => ({
     canGoBack: () => false,
     canDismiss: jest.fn(() => false),
     dismissAll: jest.fn(),
+    dismissTo: jest.fn(),
   },
   useLocalSearchParams: () => searchParams,
   useFocusEffect: (effect: () => void) => {
@@ -3316,6 +3317,21 @@ describe('a loser still waiting for the winner to talk', () => {
     expect(text).toContain('Kazanan sana laf soktu, aşağıda.');
     expect(text).toContain('Ali koydu, Mustafa yedi.');
     expect(text).not.toContain('Laf gelirse aşağıda');
+  });
+
+  it('goes back down to the çelınc from "Çelınca dön", not a second copy of it', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => lostTo(3 * 3_600_000));
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.navigate!.mockClear();
+    router.dismissTo!.mockClear();
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    press(tree, 'Çelınca dön');
+    expect(router.dismissTo).toHaveBeenCalledWith({ pathname: '/challenge/[id]', params: { id: 'c-1' } });
+    expect(router.navigate).not.toHaveBeenCalled();
   });
 
   it('stops promising a laf after a day without one', async () => {
