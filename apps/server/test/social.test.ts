@@ -923,15 +923,19 @@ describe('friends', () => {
     const asker = await registerUser(h.app, 'mustafa');
     const target = await registerUser(h.app, 'kemal');
     const call = authed(h.app, asker.token);
+    const codeOf = (id: string) => userRow(h, id).invite_code;
 
     await authed(h.app, target.token)({ method: 'POST', url: `/users/${asker.me.id}/block` });
-    const theirs = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: target.me.inviteCode } });
+    // the block retired the code in the link; even the new one meets the block
+    const old = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: target.me.inviteCode } });
+    expect(old.statusCode).toBe(404);
+    const theirs = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: codeOf(target.me.id) } });
     expect(theirs.statusCode).toBe(403);
     expect(theirs.json<{ error: { code: string } }>().error.code).toBe('blocked');
 
     await authed(h.app, target.token)({ method: 'POST', url: `/users/${asker.me.id}/unblock` });
     await call({ method: 'POST', url: `/users/${target.me.id}/block` });
-    const mine = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: target.me.inviteCode } });
+    const mine = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: codeOf(target.me.id) } });
     expect(mine.statusCode).toBe(403);
     expect(mine.json<{ error: { code: string } }>().error.code).toBe('blocked');
 
@@ -940,6 +944,91 @@ describe('friends', () => {
     expect(
       h.db.prepare("SELECT * FROM notifications WHERE user_id = ? AND type = 'friend_accepted'").all(target.me.id),
     ).toHaveLength(0);
+  });
+
+  it('gives the blocker a new invite code, so a fresh account cannot walk past the block with the old link', async () => {
+    const h = await boot();
+    const kemal = await registerUser(h.app, 'kemal');
+    const stalker = await registerUser(h.app, 'stalker');
+    const link = kemal.me.inviteCode;
+    await authed(h.app, stalker.token)({ method: 'POST', url: '/friends/request', payload: { inviteCode: link } });
+    h.advance(30 * 24 * 60 * 60 * 1000);
+
+    expect((await authed(h.app, kemal.token)({ method: 'POST', url: `/users/${stalker.me.id}/block` })).statusCode).toBe(200);
+    const renewed = (await authed(h.app, kemal.token)({ method: 'GET', url: '/me' })).json<Me>().inviteCode;
+    expect(renewed).not.toBe(link);
+
+    // a new account with the link he kept finds nobody
+    const second = await registerUser(h.app, 'stalker2', { displayName: 'Ayşe' });
+    const again = await authed(h.app, second.token)({ method: 'POST', url: '/friends/request', payload: { inviteCode: link } });
+    expect(again.statusCode).toBe(404);
+    expect((await authed(h.app, second.token)({ method: 'GET', url: `/invites/${link}` })).statusCode).toBe(404);
+    const view = (await authed(h.app, kemal.token)({ method: 'GET', url: '/friends' })).json<FriendsView>();
+    expect(view.friends).toHaveLength(0);
+    expect(
+      h.db.prepare("SELECT * FROM notifications WHERE user_id = ? AND type = 'friend_accepted' AND created_at > ?").all(
+        kemal.me.id,
+        nowIso(new Date(h.now().getTime() - 60_000)),
+      ),
+    ).toHaveLength(0);
+
+    // the new link works for whoever kemal shares it with
+    const friend = await registerUser(h.app, 'zeynep');
+    const joined = await authed(h.app, friend.token)({ method: 'POST', url: '/friends/request', payload: { inviteCode: renewed } });
+    expect(joined.json<{ status: string }>().status).toBe('accepted');
+  });
+
+  it('does not let the invite code of a new account undo a removal', async () => {
+    const h = await boot();
+    const kemal = await registerUser(h.app, 'kemal');
+    const pushy = await registerUser(h.app, 'pushy');
+    const call = authed(h.app, pushy.token);
+    const code = { inviteCode: kemal.me.inviteCode };
+    expect((await call({ method: 'POST', url: '/friends/request', payload: code })).json<{ status: string }>().status).toBe('accepted');
+
+    h.advance(24 * 60 * 60 * 1000);
+    expect((await authed(h.app, kemal.token)({ method: 'DELETE', url: `/friends/${pushy.me.id}` })).statusCode).toBe(200);
+    h.advance(24 * 60 * 60 * 1000);
+
+    // still under a week old, still holding the link: it only asks now
+    const again = await call({ method: 'POST', url: '/friends/request', payload: code });
+    expect(again.statusCode).toBe(201);
+    expect(again.json<{ status: string }>().status).toBe('pending');
+    const view = (await authed(h.app, kemal.token)({ method: 'GET', url: '/friends' })).json<FriendsView>();
+    expect(view.friends).toHaveLength(0);
+    expect(view.incoming.map((r) => r.user.id)).toEqual([pushy.me.id]);
+
+    // kemal's own yes ends his no: the code counts as his yes again later
+    expect(
+      (await authed(h.app, kemal.token)({ method: 'POST', url: `/friends/${view.incoming[0]!.id}/accept` })).statusCode,
+    ).toBe(200);
+    expect(h.db.prepare('SELECT * FROM friend_refusals').all()).toHaveLength(0);
+  });
+
+  it('does not let the invite code of a new account turn a "Reddet" into a friendship', async () => {
+    const h = await boot();
+    const kemal = await registerUser(h.app, 'kemal');
+    const asker = await registerUser(h.app, 'burak');
+    const call = authed(h.app, asker.token);
+    const first = await call({ method: 'POST', url: '/friends/request', payload: { username: 'kemal' } });
+    const declined = await authed(h.app, kemal.token)({
+      method: 'POST',
+      url: `/friends/${first.json<{ friendshipId: string }>().friendshipId}/decline`,
+    });
+    expect(declined.statusCode).toBe(200);
+
+    h.advance(60_000);
+    const byCode = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: kemal.me.inviteCode } });
+    expect(byCode.statusCode).toBe(201);
+    expect(byCode.json<{ status: string }>().status).toBe('pending');
+    expect((h.db.prepare('SELECT status FROM friendships').all() as { status: string }[]).map((r) => r.status)).toEqual([
+      'pending',
+    ]);
+
+    // once kemal asks burak himself, his no is over
+    await call({ method: 'DELETE', url: `/friends/${kemal.me.id}?only=request` });
+    await authed(h.app, kemal.token)({ method: 'POST', url: '/friends/request', payload: { username: 'burak' } });
+    expect(h.db.prepare('SELECT * FROM friend_refusals').all()).toHaveLength(0);
   });
 
   it('auto-accepts when the target already asked', async () => {

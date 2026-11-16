@@ -28,6 +28,18 @@ export function uniqueInviteCode(db: Database): string {
   throw new Error('Could not generate a unique invite code');
 }
 
+/**
+ * Gives `userId` a new invite code; the old one stops finding them. A code
+ * from a new account is a friendship on the spot (routes/friends.ts), and the
+ * old one lives on in every davet link ever sent: after a block it would let
+ * the blocked person in again through a fresh account. Returns the new code.
+ */
+export function renewInviteCode(db: Database, userId: string): string {
+  const code = uniqueInviteCode(db);
+  db.prepare('UPDATE users SET invite_code = ? WHERE id = ?').run(code, userId);
+  return code;
+}
+
 /** True when the username is already taken (soft-deleted users release theirs). */
 export function usernameTaken(db: Database, username: string): boolean {
   return db.prepare('SELECT 1 FROM users WHERE username = ?').get(username) !== undefined;

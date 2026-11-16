@@ -37,11 +37,25 @@ güvenmez:
   (`effectiveDeadline`); ekranda görünen, hatırlatmanın kurulduğu ve rövanşa geçen saat de odur.
 * Sunucunun duyamadığı zamanlar da olur: bilgisayar uyur, kapanır, pencere kapanır. Zamanlayıcı
   bunları `server_pauses`'a yazar: iki vuruşu arasında beş dakikadan uzun bir boşluk, ya da açılırken
-  kapanmadan önceki son vuruşundan (`server_state`) bu yana geçen süre. O arada telefonun sıraya
+  kapanmadan önceki son vuruşundan (`server_state`; düzgün kapanış onu kapanış anında yazar) bu yana
+  geçen süre, ne kadar kısa olursa olsun: `dur` ile `y` arasındaki üç dakikada tünel 502 döner,
+  o arada basılan "Geldim" de gecenin uykusundaki gibi sayılmalı. Çalışırken saat de ileri alınabilir
+  (Linux'tan sonra üç saat geride açılan Windows `w32tm /resync` ile düzelir): duvar saatine göre
+  bu da iki vuruş arası üç saatlik bir boşluk gibi görünür, ama sunucu o arada açıktı. Boşluk bu yüzden
+  makinenin açık kalma süresiyle de ölçülür (`os.uptime`: uykuda da sayar, saat ayarıyla oynamaz);
+  onun görmediği bir boşluk kesinti yazılmaz, pencerede "bilgisayarın saati 3 saat ileri alındı"
+  yazar. O arada telefonun sıraya
   aldığı check-in sunucuya ancak sonra varır. Vardığı an günü ya da son saati kaçırıyorsa ve
   `clientTime` son 12 saatte biten böyle bir aralığın içindeyse, check-in basıldığı ana göre
   değerlendirilir (`checkinInstant`): son saat 23:30, bilgisayar 23:00-08:00 uyumuş, 23:10'da basılıp
-  08:30'da gelen "Geldim" o gecenin ve zamanında sayılır. 22:00 yazan bir check-in'e güvenilmez,
+  08:30'da gelen "Geldim" o gecenin ve zamanında sayılır. Günün yaşı da o ana göredir (kapağı hafta
+  sonu kapalı kalan bilgisayarda cuma gecesinin check-in'i pazartesi "2 günden eski" olmaz), satırın
+  kayıt saati de odur: telefonlar "bugün yaptı mı"yı en son kaydın saatinden okur, sabahki varış
+  saatiyle yazılan dünkü check-in o akşamın hatırlatmasını susturuyordu. Tek istisna çelıncın son
+  gecesi: süre bittikten sonra gelen check-in, uykuda basılmış olsa da reddedilir (sonuç o arada
+  belli olur). Sunucunun zaten yazdığı bir check-in'in tekrarı (cevabı kaybolmuş, kuyruk sabah yine
+  gönderiyor) "sadece bugün" diye değil "O gün zaten check-in yapmıştın." diye cevaplanır; kuyruk onu
+  gitmiş sayar. 22:00 yazan bir check-in'e güvenilmez,
   sunucu o saatte ayaktaydı ve basılsaydı duyardı. Bedeli: kayıtlı bir kesintinin içinde saatini
   geri almış bir telefon o aralığın herhangi bir dakikasını iddia edebilir; dışında hiçbir şey
   kazanmaz.
@@ -62,7 +76,9 @@ tarihli sayılıp bir kanka "Varım" diyene kadar `pending` beklemesin diye sunu
 ilerideki başlangıcı "şimdi" sayar ve öyle kaydeder. Bu düzeltmeden önceki uygulamalar telefonun
 saatini gönderir; onlar artık genel "Gönderdiğin bilgiler geçersiz." yerine `start_in_past`
 hatasının nedenini söyleyen mesajını görür. Fark 3 dakikayı geçince ana sayfada ve Ayarlar'da hangi
-saatin ne kadar ileri ya da geri olduğunu söyleyen bir kart çıkar. Yanlış olan çoğu zaman
+saatin ne kadar ileri ya da geri olduğunu söyleyen bir kart çıkar. Fark sunucuya aittir: çıkış
+yapınca ya da başka bir adrese geçince unutulur (`forgetServerTime`), yeni adresin ilk `/health`'i
+yeniden ölçer. Yanlış olan çoğu zaman
 bilgisayardır: Linux'la yan yana kurulu bir Windows, Linux'tan sonra donanım saatini yerel saat
 sanıp 3 saat geri başlar ve eşitlenene kadar öyle kalır. O arada check-in'ler yanlış saate göre
 değerlendirilir, çelınclar saatlerce kayık biter; kart bilgisayarın saatini nasıl eşitleyeceğini
@@ -130,7 +146,13 @@ arasında engel olan da çağrılamaz (`blocked_in_challenge`): sihirbazda herke
 kabul etmeden görüyordu, sonradan gelen davette kimse bir şey kabul etmedi, ve akış engelleyenin her
 sayısını, fotoğrafını engellenene gösterirdi. Ret kimin kimi engellediğini söylemez. Davetten
 sonra konan engel de kazanır: çağrılanla çelıncı açan ya da onu çağıran arasında engel varsa kabul
-edemez (403 `blocked`).
+edemez (403 `blocked`). Kabul etmiş başka bir oyuncuyla arasında engel varsa da edemez (400
+`blocked_in_challenge`, "Bu çelınca katılamazsın.", kimseyi söylemez): sonradan çağrılan çoğu zaman
+öbür oyuncuların tanımadığı biridir, ona hayır demenin tek yolu engeldir; reddedip sonra fikrini
+değiştiren de o arada gelmiş engellisinin yanına oturamaz. Engelli iki kişi, hangisi ikinci kabul
+ederse etsin, aynı çelıncta asla birlikte `accepted` olmaz. Çelıncı açan çıkıp gitmiş olsa da
+sayılır: onun engellediği biri çağrılmaz, "kanka oldunuz" haberi de onu o çelınca yönlendirmez
+(`invitableFor`), çünkü kabul kuralı açanla arasındaki engele hep bakar.
 
 Rövanş, eskisi kaç yerel gün sürdüyse o kadar gün sürer ve sihirbaz gibi açanın saat diliminde bir
 günün son milisaniyesinde biter. Önceden "şimdi + eski süre" ile düğmeye basılan saatte bitiyordu;
@@ -260,7 +282,10 @@ sayılmaz). Kalanı aşan seans reddedilmez, kalana kırpılarak yazılır: eski
 gönderir, reddetmek sığan kısmı da çöpe atardı. Tekrar gönderilen bir seans bu hesaba hiç gelmez,
 `sessionId` kontrolü önce çalışır. Bir dakika bile kalmadıysa 400 `daily_cap`. Odak ekranı da
 seansı günün kalanına göre kısaltır ve "Bugün 30 dk hakkın kaldı" der; kaydedince sunucunun
-yazdığı sayıyı gösterir.
+yazdığı sayıyı gösterir. Eski APK'nın odak ekranı ise sunucu ne yazarsa yazsın seansın tamamını
+"skoruna eklendi" der; kırpılan her seans için yazana bir bildirim gider ("“Odak Ligi”: 180
+dakikalık seansın 60 dakikası yazıldı. Günde en fazla 360 dakika sayılıyor."). 360 dolduktan sonra
+eski APK seansı yine de başlatır, bitince sunucu reddeder.
 
 ## Laf sokma zinciri
 
@@ -543,7 +568,9 @@ başka biri de cevap verebilir: bilgisayar uyurken Cloudflare tüneli 530'luk bi
 Wi-Fi'ı 200'lük bir giriş sayfasıyla, bir yönlendirici 403'le. Eskiden 200'lük sayfa boş cevap
 sayılıyordu, yani kuyruktaki giriş "gönderildi" diye siliniyordu; zarfsız 4xx kesin ret sayılıp
 atılıyor, zarfsız 401 de kankayı oturumdan atıyordu. Şimdi `lib/api.ts` bunları ayırır:
-502/503/504/520-530 `server_down` ("Sunucu şu an kapalı ya da uyuyor"), gerisi `not_koydum` ("Bu
+502/503/504/520-530 `server_down` ("Sunucu şu an kapalı, uyuyor ya da adresi değişmiş": penceresi
+kapatılıp açılan tünelin eski adresi de uyuyan bilgisayarınkiyle aynı 530'u döner, o iş kendiliğinden
+düzelmez, yeni bağlantı gerekir), gerisi `not_koydum` ("Bu
 adreste KOYDUM sunucusu yok gibi"), 200'lük sayfa da durumu 0 olan bir `not_koydum`. Kuyruk ikisini
 de bağlantı yokmuş gibi karşılar: giriş yerinde kalır, deneme hakkı yemez (bütün gece uyuyan bir
 bilgisayar sekiz hakkı sabaha kadar bitirirdi), oturum kapanmaz. Tek istisna zarfsız 413: VPS'in
@@ -556,6 +583,14 @@ boşaltıyordu; ekranda olmayan toast'ı kimse görmüyor, giriş yine de silini
 giriş kuyrukta bekler, uygulama öne gelince söylenir, ancak ondan sonra silinir. Söylerken hangi
 çelınc ve hangi gün olduğunu da söyler ("“Adım savaşı” · Dün: Süre bitti, artık giriş yok."); giriş
 kuyruğa çelıncın adıyla girer.
+
+Kuyruk bir boşaltmada listeyi bir kez okur, ama bir fotoğraf iki dakika sürebilir ve uygulama o
+arada açıktır: aynı gün doğrudan yazılmış (kuyruktaki kopyası silinmiş) ya da yeniden kuyruğa girmiş
+olabilir. Eskiden elindeki eski kopyayı yine gönderiyordu: "Yaptım" kaydedildi denen gün sessizce
+"Yapmadım"a dönüyordu. Şimdi her göndermeden hemen önce listeye yeniden bakar; giriş gitmişse ya da
+aynı anahtarla yeniden girmişse (`queuedAt` farklı) dokunmaz, yenisi sonraki boşaltmada gider.
+Sunucunun zaten yazdığı bir check-in'in tekrarı (409 `already_checked_in`) reddedilmiş değil,
+gitmiş sayılır: ilk gönderim varmış, sadece cevabı kaybolmuştu.
 
 Kanıt fotoğrafı da bu yoldan gider. Bağlantı yokken seçilen fotoğraf yüklenemez; giriş ekranı onu
 telefonda tutar, "Kaydet"e izin verir ve giriş fotoğrafın telefondaki yeriyle (`proofLocalUri`)
@@ -899,8 +934,16 @@ davet eden de onu süren çelıncına çağıramıyordu (`requireFriend`). Push'
 Artık kodla gelen istek, gönderen hesap en çok bir haftalıksa (`INVITE_AUTO_ACCEPT_MAX_AGE_MS`,
 telefonun bekleyen daveti tuttuğu hafta) hemen `accepted` olur ve davet edene `friend_accepted`
 gider (`via: 'invite'`). Kodu paylaşan onu kime istediyse ona verdi, "evet" o an verilmiş sayılır.
-Hafta sınırı, arkadaşlıktan çıkarılıp kodu saklayan eski bir hesabın sorulmadan geri gelmesini
-engeller: o hâlâ istek gönderir. Engel iki yönde de 403 kalır. Kod altı karakter, 32 karakterlik bir
+Hafta sınırı eski bir hesabın sorulmadan gelmesini engeller: o hâlâ istek gönderir. Ama insanın
+arkadaşlıktan çıkardığı ya da isteğini reddettiği kişi çoğu zaman tam da bağlantıyla gelmiş yeni
+hesaptır, kod da hâlâ bağlantısındadır: arkadaşlık silinir, hafta dolmamıştır, kod onu ertesi gün
+sorulmadan geri getiriyordu. Bu yüzden "hayır" saklanır (`friend_refusals`: çıkarma, **Reddet**,
+engel). Kodun sahibi bir kez hayır dediyse o kişinin kodla gelişi ne kadar yeni olursa olsun
+sıradan bir istektir; sahibi ona kendisi istek atınca ya da isteğini kabul edince hayır kalkar.
+Engel iki yönde de 403 kalır, ama engellenen yeni bir hesap açıp eski bağlantıyla gelebilirdi:
+engel artık engelleyenin davet kodunu da yeniler (`renewInviteCode`), eski bağlantı kimseyi
+bulmaz. Uygulama yeni kodu /me'den okur ve "Davet bağlantın da yenilendi" der; eski bağlantıyla
+henüz gelmemiş biri varsa ona yenisini Paylaş'la göndermek gerekir. Kod altı karakter, 32 karakterlik bir
 alfabeden; doğru bir tahmin artık bir arkadaşlık demek. Bu yüzden bir hesabın kimseyi bulamayan
 kodları saatte 20 ile sınırlı (`INVITE_CODE_MISSES_PER_USER`, süreç içi `AttemptLimiter`), sınırı
 aşan doğru kodla gelse de bekler.
@@ -969,7 +1012,11 @@ telefonda sıraya girmiş bir giriş için: kuyruk fotoğrafı yükleyip dönen 
 sonra gidebilir; bir itirazın cevabı da gönderilmeden önce yüklenir. Kilitli bir dosya (Windows'ta
 açık bir fotoğraf görüntüleyici) atlanır, ertesi gün yine denenir. Bellekteki bir veritabanında tur
 hiç çalışmaz: önceki açılışların yüklediklerinden habersizdir, klasördeki her dosya ona sahipsiz
-görünür.
+görünür. Geri yüklemenin kenara koyduğu `koydum-onceki-*.db` dosyalarının girişleri de sayılır
+(salt okunur açılır): yanlış yedek seçilince ilk açılış eski yedeğe göre süpürüyor, o yedekten sonra
+yazılmış girişlerin bir haftadan eski fotoğraflarını siliyordu, `data/uploads` da hiçbir yedekte
+yoktu; kenardaki dosyayı geri koymak girişleri getiriyor, fotoğraflarını getiremiyordu. O dosyalar
+durdukça fotoğrafları da durur; açılamayan biri olursa o gün hiçbir şey silinmez.
 
 Bilgisayarı uyanık tutmak da onun işi olurdu, ama akla gelmez: dizüstü 15-30 dakika boşta kalınca
 uyur ve uyuyan sunucuya kimse bağlanamaz. Bu yüzden sunucu Windows'ta açılırken gizli bir

@@ -383,6 +383,24 @@ const PARTICIPANT_INVITED_BY = `
 ALTER TABLE challenge_participants ADD COLUMN invited_by TEXT;
 `;
 
+/**
+ * Who said no to whom: `user_id` ended a friendship with `other_id`, turned
+ * down their request ("Reddet") or blocked them. A friendship row is deleted
+ * on all three, and an invite code from an account under a week old is
+ * accepted on the spot (`POST /friends/request`): the people somebody removes
+ * or turns down are mostly such new accounts, and the code they came by is
+ * still in their link. With a row here that code only asks again. The row goes
+ * once `user_id` asks or accepts `other_id` themselves.
+ */
+const FRIEND_REFUSALS = `
+CREATE TABLE IF NOT EXISTS friend_refusals (
+  user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  other_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  at       TEXT NOT NULL,
+  PRIMARY KEY (user_id, other_id)
+);
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -399,4 +417,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '013_nudges_sent_user_day', sql: NUDGES_SENT_USER_DAY },
   { id: '014_server_pauses', sql: SERVER_PAUSES },
   { id: '015_participant_invited_by', sql: PARTICIPANT_INVITED_BY },
+  { id: '016_friend_refusals', sql: FRIEND_REFUSALS },
 ];

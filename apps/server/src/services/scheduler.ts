@@ -5,6 +5,7 @@
  * The timer is `unref()`ed so it never keeps a test process (or a CLI run) alive,
  * and no exception can escape a tick — a broken pass must not kill the server.
  */
+import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { DEFAULT_TIMEZONE, todayKey } from '@koydum/shared';
@@ -36,8 +37,13 @@ export const BACKUP_COPY_RETRY_MS = 60 * 60_000;
 /**
  * A gap this long between two beats of the 30-second interval means the process
  * was not running: the PC slept (Windows suspends it, the process never restarts)
- * or was frozen. Well above a beat, so a busy event loop never reads as one; a
- * false one only holds a result an hour longer.
+ * or was frozen. Well above a beat, so a busy event loop never reads as one.
+ * The wall clock alone cannot tell a sleep from a clock put forward (w32tm
+ * /resync after a Linux boot left it hours behind), and a sleep is written down
+ * as a pause in which a parked check-in counts at its tap: the gap is checked
+ * against the machine's uptime too, which runs on through a sleep and never
+ * jumps with the clock (`SchedulerOptions.uptimeMs`). A clock put forward only
+ * moves `bootAt`, which holds a result an hour longer.
  */
 export const RESUME_GAP_MS = 5 * 60_000;
 
@@ -54,7 +60,15 @@ export function nextBootAt(prev: Date, lastBeatMs: number, now: Date): Date {
 export interface SchedulerOptions {
   /** Stand-in for the Expo sender; tests hold a flush open to watch stop() wait for it. */
   push?: PushSender;
+  /**
+   * Milliseconds the machine has been up: counts on through a sleep (Windows'
+   * tick count, Linux's boot time) and is not moved by setting the clock.
+   * Tests tie it to their injected clock to stand for a sleep.
+   */
+  uptimeMs?: () => number;
 }
+
+const machineUptimeMs = (): number => os.uptime() * 1000;
 
 /**
  * Starts the interval and returns the stop function. Await it before closing the
@@ -68,6 +82,7 @@ export function startScheduler(
   options: SchedulerOptions = {},
 ): () => Promise<void> {
   const push = options.push ?? createPushSender(config);
+  const uptimeMs = options.uptimeMs ?? machineUptimeMs;
   let inFlight: Promise<void> | null = null;
   let copyInFlight: Promise<void> | null = null;
   let copyRetryAt = 0;
@@ -80,6 +95,7 @@ export function startScheduler(
   // the interval moves it on when it comes back (`nextBootAt`).
   let bootAt = app.now();
   let lastBeatMs = bootAt.getTime();
+  let lastBeatUptimeMs = uptimeMs();
   // the itiraz route and the çelınc detail read it (`disputesOpenUntil`)
   app.schedulerBootAt.at = bootAt;
 
@@ -93,11 +109,14 @@ export function startScheduler(
       app.log.warn({ err }, 'writing down when the server was off failed');
     }
   };
-  // A process that was stopped (Ctrl+C, the window closed, the power cut) left
-  // its last beat behind: the time since then is a pause like a sleep.
+  // A process that was stopped (Ctrl+C, the window closed, the power cut, `dur`
+  // and `y` in the npm run internet window) left its last beat behind: the time
+  // since then is a pause like a sleep, however short. Nothing ran meanwhile,
+  // and a "Geldim" the tunnel answered with a 502 during a three-minute update
+  // must count at its tap like one tapped in the night.
   remember(() => {
     const lastRun = readLastBeat(db);
-    if (lastRun && bootAt.getTime() - lastRun.getTime() > RESUME_GAP_MS) recordPause(db, lastRun, bootAt);
+    if (lastRun && lastRun.getTime() < bootAt.getTime()) recordPause(db, lastRun, bootAt);
   });
 
   const tick = async (): Promise<void> => {
@@ -155,7 +174,9 @@ export function startScheduler(
       // a failed sweep waits for tomorrow, not for the next pass 30 s on
       sweptDay = today;
       try {
-        const { removed, bytes } = await sweepOrphanPhotos(db, path.resolve(config.uploadDir), app.now());
+        const { removed, bytes } = await sweepOrphanPhotos(db, path.resolve(config.uploadDir), app.now(), {
+          dbPath: path.resolve(config.dbPath),
+        });
         if (removed > 0) app.log.info({ removed, mb: Math.round((bytes * 10) / (1024 * 1024)) / 10 }, 'proof photos swept');
       } catch (err) {
         app.log.warn({ err }, 'proof photo sweep failed');
@@ -183,14 +204,22 @@ export function startScheduler(
     // Measured on every beat, including the ones a slow pass makes us skip: a
     // push flush that holds a pass for minutes is not a sleep.
     const now = app.now();
+    const upNow = uptimeMs();
     const next = nextBootAt(bootAt, lastBeatMs, now);
     if (next !== bootAt) {
-      app.log.warn({ minutes: Math.round((now.getTime() - lastBeatMs) / 60_000) }, 'scheduler resumed after a pause');
-      remember(() => recordPause(db, new Date(lastBeatMs), now));
+      const minutes = Math.round((now.getTime() - lastBeatMs) / 60_000);
+      if (upNow - lastBeatUptimeMs > RESUME_GAP_MS) {
+        app.log.warn({ minutes }, 'scheduler resumed after a pause');
+        remember(() => recordPause(db, new Date(lastBeatMs), now));
+      } else {
+        // the process was here all along: no tap went unheard
+        app.log.warn({ minutes }, 'clock moved forward');
+      }
     }
     bootAt = next;
     app.schedulerBootAt.at = bootAt;
     lastBeatMs = now.getTime();
+    lastBeatUptimeMs = upNow;
     // what the next start reads back
     remember(() => writeLastBeat(db, now));
 
@@ -208,6 +237,9 @@ export function startScheduler(
 
   return async () => {
     clearInterval(timer);
+    // the pause the next start writes down begins now, not at the last beat:
+    // up to 30 s in which this server was still here to hear a tap
+    remember(() => writeLastBeat(db, app.now()));
     if (!inFlight && !copyInFlight) return;
     let waited: NodeJS.Timeout | undefined;
     const gaveUp = await Promise.race([

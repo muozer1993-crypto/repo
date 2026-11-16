@@ -4,7 +4,8 @@
  *
  * Blocking is modelled as a `friendships` row with status `blocked` and the blocker
  * as `requester_id` (SPEC 2.2). A blocked pair is invisible to each other: no search
- * hit, no profile, no friend request, no challenge invite.
+ * hit, no profile, no friend request, no challenge invite. A block also retires the
+ * blocker's invite code: the old davet links stop working.
  */
 import type { FastifyInstance } from 'fastify';
 import { foldUsername, ReportBodySchema, UserSearchQuerySchema, type PublicUser } from '@koydum/shared';
@@ -12,7 +13,8 @@ import { newId, nowIso, type Database, type UserRow } from '../db/index.js';
 import { badRequest, notFound, parseBody, parseQuery } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { toPublicProfile, toPublicUser } from '../serialize.js';
-import { blockedByMe, isBlockedBetween, removeBlock, upsertBlock } from '../services/friends.js';
+import { renewInviteCode } from '../services/accounts.js';
+import { blockedByMe, isBlockedBetween, recordRefusal, removeBlock, upsertBlock } from '../services/friends.js';
 
 /** Max hits returned to the app (SPEC 2.2). */
 const SEARCH_LIMIT = 20;
@@ -115,7 +117,16 @@ export default async function userRoutes(app: FastifyInstance): Promise<void> {
     const target = loadTarget(db, request.params.id);
     if (target.id === me.id) throw badRequest('cannot_block_self', 'Kendini engelleyemezsin.');
 
-    upsertBlock(db, me.id, target.id, app.now());
+    const now = app.now();
+    db.transaction(() => {
+      upsertBlock(db, me.id, target.id, now);
+      // after an unblock their invite code still only asks (routes/friends.ts)
+      recordRefusal(db, me.id, target.id, now);
+      // The davet links I sent carry my code, and a new account's code is a
+      // friendship at once: the blocked one would be back with a fresh account.
+      // The app reads the new code from /me.
+      renewInviteCode(db, me.id);
+    })();
     return { status: 'blocked' as const, userId: target.id };
   });
 

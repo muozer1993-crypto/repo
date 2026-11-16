@@ -742,7 +742,9 @@ export function invitableFor(db: Database, inviterId: string, friendId: string, 
     if (theirs?.status === 'left' && theirs.joined_at !== null) return false;
     const seated = rows.filter((p) => p.status === 'accepted' || p.status === 'invited');
     if (seated.filter((p) => p.user_id !== challenge.creator_id).length >= LIMITS.PARTICIPANTS_MAX) return false;
-    return !seated.some((p) => p.user_id !== inviterId && isBlockedBetween(db, friendId, p.user_id));
+    // the creator even after leaving: the accept route would refuse them
+    const others = [...seated.map((p) => p.user_id), challenge.creator_id].filter((id) => id !== inviterId);
+    return !others.some((id) => isBlockedBetween(db, friendId, id));
   });
 }
 

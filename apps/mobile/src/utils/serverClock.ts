@@ -35,6 +35,17 @@ export function noteServerTime(iso: string, sentAtMs: number, receivedAtMs: numb
   for (const listener of listeners) listener();
 }
 
+/**
+ * Another server, or nobody signed in: the last one's clock says nothing about
+ * the next, and ClockSkewCard must not show its difference. The next /health
+ * of the new address measures again.
+ */
+export function forgetServerTime(): void {
+  if (offsetMs === null) return;
+  offsetMs = null;
+  for (const listener of listeners) listener();
+}
+
 export function clockSkewMs(): number | null {
   return offsetMs;
 }

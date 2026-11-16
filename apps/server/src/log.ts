@@ -191,6 +191,10 @@ const MESSAGES: Record<string, (entry: Entry) => string | null> = {
   'scheduler pass still running at shutdown, closing anyway': () => 'zamanlayıcı turu bitmedi, beklemeden kapatıyorum',
   'scheduler resumed after a pause': (e) =>
     `bilgisayar ${duration(count(e, 'minutes'))} uyumuş; telefonlara ve itiraza cevap verecek olanlara bir saat daha veriyorum`,
+  'clock moved forward': (e) =>
+    `bilgisayarın saati ${duration(count(e, 'minutes'))} ileri alındı; sunucu hep açıktı, bunu uyku saymıyorum`,
+  'writing down when the server was off failed': () =>
+    "sunucunun kapalı kaldığı saati yazamadım; o arada basılan check-in'ler sunucuya vardıkları saatle sayılır",
   'keep-awake helper failed': () => 'bilgisayarı uyanık tutamadım; uykuyu Ayarlar → Sistem → Güç\'ten kapat (README: "Bilgisayar uyumasın")',
   'push flush': pushLine,
   'push flush failed': () => 'push gönderilemedi',

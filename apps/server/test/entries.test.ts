@@ -14,6 +14,7 @@ import {
   type Entry,
   type ParticipantView,
   type Challenge,
+  type ChallengeSummary,
   type FeedPage,
 } from '@koydum/shared';
 import { newId } from '../src/db/index.js';
@@ -443,6 +444,17 @@ describe('focus_minutes entries', () => {
     expect(over.statusCode).toBe(201);
     expect(over.json<{ entry: Entry }>().entry.value).toBe(60);
     expect(over.json<{ standings: ParticipantView[] }>().standings.find((p) => p.user.id === ali.me.id)?.score).toBe(360);
+
+    // the older app shows "3 sa skoruna eklendi" whatever was stored: the inbox says what was
+    const told = harness.db
+      .prepare("SELECT title, body, data FROM notifications WHERE user_id = ? AND type = 'reminder'")
+      .all(ali.me.id) as { title: string; body: string; data: string }[];
+    expect(told).toHaveLength(1);
+    expect(told[0]).toMatchObject({
+      title: 'Odak tavanı doldu',
+      body: '“Odak Seansı”: 180 dakikalık seansın 60 dakikası yazıldı. Günde en fazla 360 dakika sayılıyor.',
+    });
+    expect(JSON.parse(told[0]!.data)).toEqual({ challengeId, kind: 'focus_cap' });
   });
 
   it('still answers a replayed session after the cap with the row it wrote', async () => {
@@ -608,9 +620,13 @@ describe('checkin_deadline entries', () => {
     const SENT = '2026-01-06T05:30:00.000Z'; // 08:30
     const NIGHT = '2026-01-05';
 
+    /** The last `parkedCheckin`'s çelınc and players. */
+    let parked: Ctx | null = null;
+
     async function parkedCheckin(clientTime: string, options: { slept?: [string, string] | null; sentAt?: string } = {}) {
       harness = await makeApp({ now: NOW });
-      const { ali, challengeId } = await liveChallenge(harness, 'erken_yat', { deadlineTime: '23:30' });
+      parked = await liveChallenge(harness, 'erken_yat', { deadlineTime: '23:30' });
+      const { ali, challengeId } = parked;
       const slept = options.slept === undefined ? [SLEPT, WOKE] : options.slept;
       if (slept) recordPause(harness.db, new Date(slept[0]), new Date(slept[1]));
       harness.setNow(options.sentAt ?? SENT);
@@ -656,6 +672,39 @@ describe('checkin_deadline entries', () => {
       });
       expect(response.statusCode).toBe(201);
       expect(response.json<{ entry: Entry }>().entry.value).toBe(1);
+    });
+
+    it("stamps it with its night, so the phones do not take it for the morning's check-in", async () => {
+      const response = await parkedCheckin('2026-01-05T20:10:00.000Z'); // 23:10
+      expect(response.json<{ entry: Entry }>().entry.createdAt).toBe('2026-01-05T20:10:00.000Z');
+      // "done today" on the phones (and their evening reminder) reads the latest of these
+      const [summary] = (
+        await authed(harness!.app, parked!.ali.token)({ method: 'GET', url: '/challenges' })
+      ).json<ChallengeSummary[]>();
+      expect(summary?.me?.lastEntryAt).toBe('2026-01-05T20:10:00.000Z');
+    });
+
+    it('counts Friday night after a weekend with the lid shut: the age of the day is judged at the tap too', async () => {
+      // asleep from 23:00 until three mornings later, sent half an hour after it woke
+      const response = await parkedCheckin('2026-01-05T20:10:00.000Z', {
+        slept: [SLEPT, '2026-01-08T05:00:00.000Z'],
+        sentAt: '2026-01-08T05:30:00.000Z',
+      });
+      expect(response.statusCode).toBe(201);
+      expect(response.json<{ entry: Entry }>().entry).toMatchObject({ dayKey: NIGHT, value: 1 });
+    });
+
+    it('answers a check-in it already counted as counted, the morning after too', async () => {
+      // the first send landed at 23:10 and its answer was lost; the queue sends it again at 08:30
+      harness = await makeApp({ now: '2026-01-05T20:10:00.000Z' });
+      const { ali, challengeId } = await liveChallenge(harness, 'erken_yat', { deadlineTime: '23:30' });
+      const body = { dayKey: NIGHT, value: 1, source: 'checkin', clientTime: iso(harness) };
+      expect((await post(harness, ali, challengeId, body)).statusCode).toBe(201);
+      harness.setNow(SENT);
+      const replay = await post(harness, ali, challengeId, body);
+      expect(replay.statusCode).toBe(409);
+      expect(errorCode(replay)).toBe('already_checked_in');
+      expect((replay.json() as { error: { message: string } }).error.message).toBe('O gün zaten check-in yapmıştın.');
     });
 
     it('takes the arrival when it is in time anyway, never a tap that would put it out', async () => {

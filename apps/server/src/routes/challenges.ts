@@ -108,6 +108,25 @@ function isBlocked(db: Database, a: string, b: string): boolean {
 }
 
 /**
+ * Who is in a çelınc with one of `statuses`, but `exceptId`: the people the
+ * invite and accept routes check a newcomer's blocks against (SPEC 2.2).
+ */
+function lineUpOf(
+  db: Database,
+  challengeId: string,
+  exceptId: string,
+  statuses: readonly ('accepted' | 'invited')[],
+): string[] {
+  const rows = db
+    .prepare(
+      `SELECT user_id, status FROM challenge_participants
+        WHERE challenge_id = ? AND user_id <> ?`,
+    )
+    .all(challengeId, exceptId) as { user_id: string; status: string }[];
+  return rows.filter((row) => (statuses as readonly string[]).includes(row.status)).map((row) => row.user_id);
+}
+
+/**
  * Somebody the reader may put in a çelınc: an existing account and an accepted
  * friendship with no block on top of it. Creation and a later invite pass the
  * same gate.
@@ -401,6 +420,13 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     // whoever called them in with "Kanka ekle"
     assertNotBlocked(db, me.id, challenge.creator_id);
     if (membership.invited_by) assertNotBlocked(db, me.id, membership.invited_by);
+    // And anybody already playing: a block placed after the invite (a player
+    // who was never asked about the newcomer has only that to say), or a no
+    // taken back after somebody they blocked came in. Two blocked people are
+    // never both in, whoever says yes second; the refusal names nobody.
+    if (lineUpOf(db, challenge.id, me.id, ['accepted']).some((otherId) => isBlockedBetween(db, me.id, otherId))) {
+      throw badRequest('blocked_in_challenge', 'Bu çelınca katılamazsın.');
+    }
     if (now.getTime() >= acceptClosesAt(challenge.starts_at, challenge.ends_at)) {
       throw badRequest('accept_closed', 'Çelıncın bitmesine az kaldı, artık katılamazsın.');
     }
@@ -557,14 +583,11 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     // the wizard everybody saw the line-up before saying yes; a late invite
     // nobody else agreed to must not get round a block. The refusal does not
     // say who blocked whom.
-    const lineUp = db
-      .prepare(
-        `SELECT user_id FROM challenge_participants
-          WHERE challenge_id = ? AND user_id <> ? AND status IN ('accepted', 'invited')`,
-      )
-      .all(challenge.id, me.id) as { user_id: string }[];
+    // The creator counts even after leaving: the accept route refuses anybody
+    // with a block between them and the creator.
+    const lineUp = [...lineUpOf(db, challenge.id, me.id, ['accepted', 'invited']), challenge.creator_id];
     for (const { user } of invitees) {
-      const others = [...lineUp.map((p) => p.user_id), ...invitees.map((i) => i.user.id)].filter((id) => id !== user.id);
+      const others = [...lineUp, ...invitees.map((i) => i.user.id)].filter((id) => id !== user.id && id !== me.id);
       if (others.some((otherId) => isBlockedBetween(db, user.id, otherId))) {
         throw badRequest('blocked_in_challenge', `${user.display_name} bu çelınca eklenemez.`);
       }

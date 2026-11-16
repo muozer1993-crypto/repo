@@ -13,6 +13,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import BetterSqlite3 from 'better-sqlite3';
 import type { Database } from '../db/index.js';
 import { UPLOADED_PHOTO } from './accounts.js';
 
@@ -27,6 +28,45 @@ export const UNUSED_PHOTO_GRACE_MS = 7 * 24 * 60 * 60_000;
 /** The names `POST /uploads` gives. Anything else in the folder (a `.tmp`, a file the owner put there) is not ours to delete. */
 const PHOTO_NAME = /^[0-9a-f-]{36}\.(?:jpg|png|webp)$/;
 
+/** What `restoreBackup` calls the database it moves aside (services/backup.ts). */
+const SET_ASIDE = /^koydum-onceki-.+\.db$/;
+
+/** Adds every photo name `entries.proof_url` of `db` points at to `shown`. */
+function addShown(db: Database, shown: Set<string>): void {
+  const rows = db.prepare('SELECT proof_url FROM entries WHERE proof_url IS NOT NULL').all() as { proof_url: string }[];
+  for (const { proof_url: url } of rows) {
+    const name = UPLOADED_PHOTO.exec(url)?.[1];
+    if (name) shown.add(name);
+  }
+}
+
+/**
+ * The photos the databases a restore set aside next to `dbPath` show. A wrong
+ * backup is undone by putting that file back (README, "Geri yüklemek"), and
+ * the first start after the restore sweeps against the old backup: without
+ * these, the photos of every entry made since that backup went at once, and
+ * `data\uploads` is not in any backup. They stay as long as the owner keeps
+ * the file. One that cannot be read throws, and nothing is deleted that day.
+ */
+function addShownBySetAside(dbPath: string, shown: Set<string>): void {
+  const dir = path.dirname(dbPath);
+  let names: string[];
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    if (!SET_ASIDE.test(name)) continue;
+    const aside = new BetterSqlite3(path.join(dir, name), { readonly: true, fileMustExist: true });
+    try {
+      addShown(aside, shown);
+    } finally {
+      aside.close();
+    }
+  }
+}
+
 export interface SweepResult {
   /** photos deleted */
   removed: number;
@@ -37,16 +77,19 @@ export interface SweepResult {
 /**
  * Deletes every photo in `uploadDir` that `POST /uploads` named, that is older
  * than `graceMs` at `now`, and that no entry points at, in either form an
- * entry stores (`/uploads/<name>`, or with a server address in front). A file
- * the disk will not let go of (a locked file on Windows) is skipped, and the
- * next day's pass tries it again. A missing folder is nothing to do.
+ * entry stores (`/uploads/<name>`, or with a server address in front). With
+ * `dbPath` (the open database's file), the entries of a database a restore
+ * set aside beside it count too. A file the disk will not let go of (a locked
+ * file on Windows) is skipped, and the next day's pass tries it again. A
+ * missing folder is nothing to do.
  */
 export async function sweepOrphanPhotos(
   db: Database,
   uploadDir: string,
   now: Date,
-  graceMs: number = UNUSED_PHOTO_GRACE_MS,
+  options: { dbPath?: string; graceMs?: number } = {},
 ): Promise<SweepResult> {
+  const graceMs = options.graceMs ?? UNUSED_PHOTO_GRACE_MS;
   const result: SweepResult = { removed: 0, bytes: 0 };
   let names: string[];
   try {
@@ -74,11 +117,8 @@ export async function sweepOrphanPhotos(
 
   // read after the folder, so an entry posted while it was listed still counts
   const shown = new Set<string>();
-  const rows = db.prepare('SELECT proof_url FROM entries WHERE proof_url IS NOT NULL').all() as { proof_url: string }[];
-  for (const { proof_url: url } of rows) {
-    const name = UPLOADED_PHOTO.exec(url)?.[1];
-    if (name) shown.add(name);
-  }
+  addShown(db, shown);
+  if (options.dbPath) addShownBySetAside(options.dbPath, shown);
 
   for (const photo of old) {
     if (shown.has(photo.name)) continue;

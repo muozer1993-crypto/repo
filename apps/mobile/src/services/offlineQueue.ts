@@ -140,10 +140,35 @@ export async function dropParked(id: string): Promise<void> {
   await removeFromQueue(ownerId ? `${ownerId}/${id}` : id);
 }
 
+/**
+ * The same parked write as `item`: same id, and not parked again since. A
+ * re-park under the id (a corrected number, another "Geldim") gets a new
+ * `queuedAt`, and a flush that read the older one must leave the newer alone.
+ */
+function sameParking(a: PendingEntry, b: PendingEntry): boolean {
+  return a.id === b.id && a.queuedAt === b.queuedAt;
+}
+
 /** Stores what a flush learned about one item (its uploaded photo) before going on. */
 async function replaceInQueue(next: PendingEntry): Promise<void> {
   const queue = await readQueue();
-  await writeQueue(queue.map((item) => (item.id === next.id ? next : item)));
+  await writeQueue(queue.map((item) => (sameParking(item, next) ? next : item)));
+}
+
+/**
+ * Whether `item` is still waiting as this flush read it. A write that got
+ * through directly meanwhile spent it (`dropParked`), and a re-park replaced
+ * it: sending the copy in hand would put the older value back over the newer
+ * one, with no word to anybody (the server upserts a day).
+ */
+async function stillParked(item: PendingEntry): Promise<boolean> {
+  return (await readQueue()).some((stored) => sameParking(stored, item));
+}
+
+/** Removes `item` once it landed, but not a re-park that took its id meanwhile. */
+async function removeDelivered(item: PendingEntry): Promise<void> {
+  const queue = await readQueue();
+  await writeQueue(queue.filter((stored) => !sameParking(stored, item)));
 }
 
 /**
@@ -162,6 +187,15 @@ const PHOTO_TOO_SLOW = 'Kanıt fotoğrafı gitmedi, bağlantı çok yavaştı.';
  * mistake; they pressed it on the day, and only the queue arrived on the next.
  */
 const CHECKIN_DAY_OVER = 'Check-in sunucuya ulaşamadan gün bitti, o gün sayılmadı.';
+
+/**
+ * A parked check-in the server already has: the first send landed and only its
+ * answer was lost (a timeout parks it), so the copy comes back as a replay.
+ * That night counted; it is delivered, not refused.
+ */
+function alreadyCheckedIn(item: PendingEntry, error: ApiError): boolean {
+  return item.body.source === 'checkin' && error.status === 409 && error.code === 'already_checked_in';
+}
 
 type PhotoOutcome =
   | { kind: 'sent'; url: string }
@@ -274,7 +308,8 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
   // or the owner reset it. The phone is being signed out; whatever waits here
   // goes up untouched when the same account signs in again.
   let signedOut = false;
-  const delivered = new Set<string>();
+  // both by id and `queuedAt` (`sameParking`): a re-park during the flush is not this one
+  const delivered: PendingEntry[] = [];
   const touched = new Map<string, PendingEntry>();
 
   const retryLater = (item: PendingEntry) => {
@@ -333,12 +368,19 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
       await replaceInQueue(item);
     }
 
+    // A photo can take two minutes, and the app is open meanwhile: the same
+    // day may have been written directly (and this one dropped) or parked anew.
+    if (!(await stillParked(queued))) continue;
+
+    const landed = async () => {
+      sent += 1;
+      delivered.push(item);
+      // persisted immediately: a crash or a second pass must not re-send it
+      await removeDelivered(item);
+    };
     try {
       await client.addEntry(item.challengeId, item.body);
-      sent += 1;
-      delivered.add(item.id);
-      // persisted immediately: a crash or a second pass must not re-send it
-      await removeFromQueue(item.id);
+      await landed();
       // The photo is left where the picker put it: its cache is the OS's to clear.
     } catch (error) {
       // before the 4xx below: a 403 page from a portal never refused anything.
@@ -350,6 +392,10 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
       }
       if (error instanceof ApiError && error.status === 401) {
         signedOut = true;
+        continue;
+      }
+      if (error instanceof ApiError && alreadyCheckedIn(item, error)) {
+        await landed();
         continue;
       }
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
@@ -368,8 +414,11 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
   // the attempt counters and failure reasons this pass produced
   const current = await readQueue();
   const keep = current
-    .filter((item) => !delivered.has(item.id))
-    .map((item) => touched.get(item.id) ?? item);
+    .filter((item) => !delivered.some((sent) => sameParking(sent, item)))
+    .map((item) => {
+      const next = touched.get(item.id);
+      return next && sameParking(next, item) ? next : item;
+    });
   await writeQueue(keep);
   return { sent, dropped, remaining: keep.filter((item) => mine(item) && !item.failedReason).length };
 }

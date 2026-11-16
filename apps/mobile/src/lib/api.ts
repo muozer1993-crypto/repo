@@ -193,11 +193,14 @@ export class ApiClient {
     const ours = typeof envelope?.error?.code === 'string';
 
     if (!response.ok && !ours) {
-      // The status stays: a 5xx parks an entry for later, as before.
+      // The status stays: a 5xx parks an entry for later, as before. Cloudflare
+      // answers a quick tunnel's old address (its window reopened, the home
+      // internet back) with the same 530 as a sleeping PC: that one never
+      // heals by itself, and the friend needs the new link.
       if (gatewayDown(response.status)) {
         throw new ApiError(
           'server_down',
-          'Sunucu şu an kapalı ya da uyuyor. Sunucuyu açan kankana haber ver; açılınca kendiliğinden düzelir.',
+          'Sunucu şu an kapalı, uyuyor ya da adresi değişmiş. Sunucuyu açan kankana haber ver: açıksa yeni bağlantıyı ondan iste, kapalıysa açılınca kendiliğinden düzelir.',
           response.status
         );
       }

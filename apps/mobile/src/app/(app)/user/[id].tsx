@@ -40,6 +40,8 @@ export default function UserProfileScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
   const myId = useAuth((s) => s.me?.id ?? null);
+  const myCode = useAuth((s) => s.me?.inviteCode ?? null);
+  const refreshMe = useAuth((s) => s.refreshMe);
   // the reader's level names the badges, not the owner's: a "Nazik" reader
   // looking at a level-3 friend still gets "İlk Zafer", not "Çırak Saplamacı"
   const level = useLevel();
@@ -200,9 +202,13 @@ export default function UserProfileScreen() {
     setBusy('block');
     try {
       await api.blockUser(id);
+      // A block gives me a new invite code (an older server keeps the old one):
+      // Paylaş must not send the retired one, and the links already out are dead.
+      const fresh = await refreshMe();
+      const renewed = !!fresh && !!myCode && fresh.inviteCode !== myCode;
       toast({
         title: 'Engellendi',
-        body: "Fikrin değişirse Ayarlar → Engellediklerin'den kaldırırsın.",
+        body: `${renewed ? 'Davet bağlantın da yenilendi, eskisiyle kimse gelemez. ' : ''}Fikrin değişirse Ayarlar → Engellediklerin'den kaldırırsın.`,
         kind: 'info',
       });
       // Ayarlar may still hold the list from before this block

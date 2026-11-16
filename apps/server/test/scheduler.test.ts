@@ -905,6 +905,12 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
     expect(nextBootAt(prev, lastBeat, woke)).toBe(woke);
   });
 
+  /**
+   * The machine's uptime as the test clock: moving that clock is a sleep, the
+   * uptime running on through it (a clock merely put forward leaves it alone).
+   */
+  const asleepWithClock = (h: TestApp) => ({ push: quietPush, uptimeMs: () => h.now().getTime() });
+
   /** What the scheduler wrote down as time it was not running (a parked check-in counts at its tap inside one). */
   function pauses(h: TestApp): { started_at: string; ended_at: string }[] {
     return h.db.prepare('SELECT started_at, ended_at FROM server_pauses ORDER BY started_at').all() as {
@@ -918,7 +924,7 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     let stop: (() => Promise<void>) | null = null;
     try {
-      stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush });
+      stop = startScheduler(harness.app, harness.db, harness.config, asleepWithClock(harness));
       const beat = async (): Promise<void> => {
         await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
         await new Promise((resolve) => setImmediate(resolve));
@@ -958,13 +964,58 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
       vi.useRealTimers();
     }
 
-    // started again a minute after that run's last beat: nothing worth writing down
+    // `dur` and `y` a minute apart: a "Geldim" the tunnel answered with a 502
+    // meanwhile counts at its tap like one in the night, so even that is written
+    // down, from the moment the stop wrote its last beat
     at(harness, NOW, MINUTE);
     try {
       stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush });
-      expect(pauses(harness)).toHaveLength(1);
+      expect(pauses(harness)).toEqual([
+        { started_at: lastRun, ended_at: NOW },
+        { started_at: NOW, ended_at: iso(harness) },
+      ]);
+      // stopped 20 s after its last beat
+      at(harness, NOW, MINUTE + 20_000);
     } finally {
       await stop?.();
+    }
+    // the stop leaves its own beat: the next pause begins there, not up to 30 s
+    // before, while this server was still up to hear a tap
+    expect(readLastBeat(harness.db)?.toISOString()).toBe(iso(harness));
+  });
+
+  it('takes a clock put forward while it runs for what it is, not for a sleep', async () => {
+    harness = await makeApp({ now: NOW });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const warn = vi.spyOn(harness.app.log, 'warn');
+    let uptime = 1_000_000;
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush, uptimeMs: () => uptime });
+      // Windows came up three hours behind after Linux; w32tm /resync puts it
+      // right between two beats while the process serves all along
+      at(harness, NOW, 3 * HOUR);
+      uptime += SCHEDULER_INTERVAL_MS;
+      await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // no pause: a check-in claiming a minute of those three hours was heard, or not tapped
+      expect(pauses(harness)).toEqual([]);
+      expect(warn).toHaveBeenCalledWith({ minutes: 180 }, 'clock moved forward');
+      expect(warn).not.toHaveBeenCalledWith(expect.anything(), 'scheduler resumed after a pause');
+      // the results still wait their hour from now, which costs nobody anything
+      expect(harness.app.schedulerBootAt.at?.toISOString()).toBe(iso(harness));
+
+      // a real sleep after that is one
+      const lastBeat = iso(harness);
+      at(harness, lastBeat, 2 * HOUR);
+      uptime += 2 * HOUR;
+      await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(pauses(harness)).toEqual([{ started_at: lastBeat, ended_at: iso(harness) }]);
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
     }
   });
 
@@ -982,7 +1033,7 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
     try {
       // the server was started at 23:30, and the laptop went to sleep soon after
       at(harness, MIDNIGHT_END, -30 * MINUTE);
-      stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush });
+      stop = startScheduler(harness.app, harness.db, harness.config, asleepWithClock(harness));
       // it wakes at 09:00 with the same process: Windows does not restart it
       at(harness, MIDNIGHT_END, 9 * HOUR);
       const wokeAt = harness.now().getTime();
@@ -1023,7 +1074,7 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
     try {
       // running at 23:00, then the laptop sleeps until 08:00
       at(harness, MIDNIGHT_END, -HOUR);
-      stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush });
+      stop = startScheduler(harness.app, harness.db, harness.config, asleepWithClock(harness));
       at(harness, MIDNIGHT_END, 8 * HOUR);
       const wokeAt = new Date(harness.now().getTime()).toISOString();
       await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);

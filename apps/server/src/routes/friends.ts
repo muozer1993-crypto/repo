@@ -12,8 +12,12 @@
  * spot. The code is the inviter's own, shared by them with the people they want in,
  * and somebody who had just signed up through the link used to sit on "Önce bir
  * kanka ekle" until the inviter opened the app and tapped "Kabul" — often hours on a
- * phone without push. An older account (a removed friend who kept the code) still
- * asks. Wrong codes are counted per account: a guessed code is now a friendship.
+ * phone without push. An older account still asks, and so does anybody the code's
+ * owner has said no to since (removed, turned down or blocked: `friend_refusals`),
+ * however new: the people one removes are mostly the ones who came by the link,
+ * and the link still carries the code. A block also gives the blocker a new code
+ * (routes/users.ts), so a fresh account cannot walk past it with the old link.
+ * Wrong codes are counted per account: a guessed code is now a friendship.
  */
 import type { FastifyInstance } from 'fastify';
 import {
@@ -29,7 +33,15 @@ import { badRequest, conflict, forbidden, notFound, parseBody, parseQuery, tooMa
 import { requireUser } from '../plugins/auth.js';
 import { asVulgarityLevel, toPublicUser } from '../serialize.js';
 import { invitableFor } from '../services/challenges.js';
-import { friendRows, friendshipBetween, incomingRequests, outgoingRequests } from '../services/friends.js';
+import {
+  forgetRefusal,
+  friendRows,
+  friendshipBetween,
+  incomingRequests,
+  outgoingRequests,
+  recordRefusal,
+  refusedBy,
+} from '../services/friends.js';
 import { notify } from '../services/notifications.js';
 import { AttemptLimiter, retryAfterText } from '../services/throttle.js';
 
@@ -201,9 +213,15 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
     if (existing?.status === 'accepted') {
       throw conflict('already_friends', 'Zaten kankasınız.');
     }
+    // asking is a yes from me: a no I said to them earlier is over
+    forgetRefusal(db, me.id, target.id);
 
-    // The inviter's yes was given when they shared the code; see the file header.
-    const viaCode = byCode && now.getTime() - Date.parse(me.row.created_at) <= INVITE_AUTO_ACCEPT_MAX_AGE_MS;
+    // The inviter's yes was given when they shared the code, unless they have
+    // said no to me since; see the file header.
+    const viaCode =
+      byCode &&
+      now.getTime() - Date.parse(me.row.created_at) <= INVITE_AUTO_ACCEPT_MAX_AGE_MS &&
+      !refusedBy(db, target.id, me.id);
     const tellJoined = (friendshipId: string): void =>
       tellFriendAccepted(db, now, target, me.row, { friendshipId, via: 'invite' }, joinedByCodeCopy);
 
@@ -269,6 +287,7 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
     const at = nowIso(now);
 
     db.prepare("UPDATE friendships SET status = 'accepted', updated_at = ? WHERE id = ?").run(at, friendship.id);
+    forgetRefusal(db, me.id, friendship.requester_id);
 
     const requester = db.prepare('SELECT * FROM users WHERE id = ?').get(friendship.requester_id) as UserRow | undefined;
     const live = requester && requester.deleted_at === null ? requester : undefined;
@@ -286,8 +305,12 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
     const me = requireUser(request);
     const friendship = loadPendingForAddressee(db, request.params.id, me.id);
     // Deleted rather than kept as 'declined': the schema has no such status and the
-    // requester should be able to try again later.
-    db.prepare('DELETE FROM friendships WHERE id = ?').run(friendship.id);
+    // requester should be able to try again later. By asking: the no is kept, so
+    // the invite code a new account came with does not turn it into a yes.
+    db.transaction(() => {
+      db.prepare('DELETE FROM friendships WHERE id = ?').run(friendship.id);
+      recordRefusal(db, me.id, friendship.requester_id, app.now());
+    })();
     return { status: 'declined' as const, friendshipId: friendship.id };
   });
 
@@ -323,7 +346,11 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
     if (!existing || existing.status !== 'accepted') {
       throw notFound('friendship_not_found', 'Böyle bir kanka bağın yok.');
     }
-    db.prepare('DELETE FROM friendships WHERE id = ?').run(existing.id);
+    // the other one keeps my invite code in the link they came by: it only asks now
+    db.transaction(() => {
+      db.prepare('DELETE FROM friendships WHERE id = ?').run(existing.id);
+      recordRefusal(db, me.id, request.params.userId, app.now());
+    })();
     return { status: 'removed' as const, userId: request.params.userId };
   });
 }

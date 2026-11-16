@@ -919,7 +919,8 @@ function ActionArea(props: ActionProps) {
       </Text>
       {type.metricType === 'auto_steps' ? <StepsAction {...props} /> : null}
       {type.metricType === 'focus_minutes' ? <FocusAction {...props} /> : null}
-      {type.metricType === 'checkin_deadline' ? <CheckinAction {...props} /> : null}
+      {/* a new day is a new button: "sırada" from last night's tap is not about today */}
+      {type.metricType === 'checkin_deadline' ? <CheckinAction key={props.today} {...props} /> : null}
       {type.metricType === 'daily_boolean' ? <BooleanAction {...props} /> : null}
       {type.metricType === 'manual_count' ? <CountAction {...props} /> : null}
       {type.metricType === 'manual_lower_is_better' ? <LowerAction {...props} /> : null}

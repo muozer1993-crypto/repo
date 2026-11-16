@@ -317,7 +317,13 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
   }
 
   const window = challengeWindow(challenge, tz);
-  const issue = dayWindowIssue(window, type.metricType, tz, body.dayKey, now, body.source);
+  // A check-in tapped while this server was down is judged at its tap, the age
+  // of its day too: a weekend with the lid shut must not make Friday night's
+  // "Geldim" two days too old by Monday (`checkinInstant`; `at` is `now` for
+  // everything else).
+  const checkinDeadline = type.metricType === 'checkin_deadline' ? effectiveDeadline(type, challenge.deadline_time) : null;
+  const at = checkinDeadline !== null ? checkinInstant(db, body, checkinDeadline, tz, now) : now;
+  const issue = dayWindowIssue(window, type.metricType, tz, body.dayKey, at, body.source);
   if (issue) throw dayWindowError(issue, type.metricType, body.source);
   // the same rule as the fan-out: after the whistle a day the end cut in half
   // keeps what it had, or steps walked after the end would count
@@ -400,7 +406,20 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
               : `Bugünlük odak tavanı doldu (${cap}).`,
         );
       }
-      return { entry: insertEntry(db, input, Math.min(body.value, left), false, sessionId), created: true };
+      const kept = Math.min(body.value, left);
+      if (kept < body.value) {
+        // The 1.0 and early 1.1 focus screens say the whole session went in
+        // ("1 sa skoruna eklendi.") whatever was stored; the inbox says what did.
+        notify(db, {
+          userId: user.id,
+          type: 'reminder',
+          title: 'Odak tavanı doldu',
+          body: `“${challenge.title}”: ${body.value} dakikalık seansın ${kept} dakikası yazıldı. Günde en fazla ${type.maxPerDay} dakika sayılıyor.`,
+          data: { challengeId: challenge.id, kind: 'focus_cap' },
+          createdAt: nowIso(now),
+        });
+      }
+      return { entry: insertEntry(db, input, kept, false, sessionId), created: true };
     }
 
     case 'checkin_deadline': {
@@ -410,13 +429,18 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
       // server was down, is `checkinInstant`'s). A deadline stored before the window
       // check (erken_yat at 00:00) is read as the type's default, or no check-in
       // in that çelınc could ever count.
-      const deadline = effectiveDeadline(type, challenge.deadline_time);
-      const at = checkinInstant(db, body, deadline, tz, now);
+      const deadline = checkinDeadline ?? effectiveDeadline(type, challenge.deadline_time);
+      // First, whenever it arrives: a check-in the server wrote but whose answer
+      // was lost comes back from the phone's queue, often the next morning, and
+      // "sadece bugün" would tell the friend a counted night did not count.
+      if (selectDayEntry(db, challenge.id, user.id, body.dayKey)) {
+        throw conflict(
+          'already_checked_in',
+          body.dayKey === todayKey(tz, now) ? 'Bugün zaten check-in yaptın.' : 'O gün zaten check-in yapmıştın.',
+        );
+      }
       if (body.dayKey !== todayKey(tz, at)) {
         throw badRequest('checkin_today_only', 'Check-in sadece bugün için yapılır.');
-      }
-      if (selectDayEntry(db, challenge.id, user.id, body.dayKey)) {
-        throw conflict('already_checked_in', 'Bugün zaten check-in yaptın.');
       }
       const localAt = localTimeHHmm(at, tz);
       // "yattım" at 02:00 is not an early bedtime, it is last night's late one:
@@ -426,7 +450,10 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
         throw badRequest('checkin_too_early', `Bu check-in saat ${type.checkinWindowStart} olmadan sayılmıyor. Biraz erken geldin.`);
       }
       const onTime = isBeforeOrEqualHHmm(localAt, deadline);
-      return { entry: insertEntry(db, input, onTime ? 1 : 0, !onTime), created: true };
+      // Stamped with the moment it was judged at: "Kayıt saati" and the phones'
+      // "done today" (the latest `created_at`) belong to that night, not to the
+      // morning it arrived, which would silence the next evening's reminder.
+      return { entry: insertEntry(db, at === now ? input : { ...input, now: at }, onTime ? 1 : 0, !onTime), created: true };
     }
 
     case 'daily_boolean': {

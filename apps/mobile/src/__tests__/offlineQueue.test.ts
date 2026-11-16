@@ -4,6 +4,7 @@ import { ApiClient, ApiError } from '@/lib/api';
 import { StorageKeys, setJson } from '@/lib/storage';
 import {
   clearFailed,
+  dropParked,
   enqueueEntry,
   flushQueue,
   pendingForChallenge,
@@ -469,6 +470,75 @@ describe('a reply that is not from our server', () => {
     const [item] = await readQueue();
     expect(item?.proofLocalUri).toBe(PHOTO);
     expect(item?.failedReason).toBeUndefined();
+  });
+});
+
+describe('a write that got through while a flush was running', () => {
+  const PHOTO = 'file:///data/user/0/com.koydum.app/cache/ImagePicker/slow.jpeg';
+  const DAY = 'c2:2026-09-08:manual:';
+  const yesNo = (value: number) => ({ ...body('2026-09-08', value), clientTime: `2026-09-08T2${value}:00:00.000Z` });
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  /** A photo entry ahead in the line, its upload held open until `release` is called. */
+  async function heldFlush() {
+    await enqueueEntry('c1', body('2026-09-08', 5), 'photo', PHOTO);
+    // "Yapmadım", parked while offline, behind the photo
+    await enqueueEntry('c2', yesNo(0), DAY);
+    let release!: () => void;
+    const uploadPhoto = jest.fn(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ url: '/uploads/p1.jpg' });
+        })
+    );
+    const addEntry = jest.fn().mockResolvedValue({});
+    const flush = flushQueue(fakeClient(addEntry, { uploadPhoto }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(uploadPhoto).toHaveBeenCalled();
+    return { addEntry, flush, release: () => release() };
+  }
+
+  it('does not send the older value a direct write already put right', async () => {
+    const { addEntry, flush, release } = await heldFlush();
+    // "Yaptım" while the photo goes up: it gets through, and spends the parked "Yapmadım"
+    await dropParked(DAY);
+    release();
+
+    expect(await flush).toMatchObject({ sent: 1, remaining: 0 });
+    expect(addEntry).toHaveBeenCalledTimes(1);
+    expect(addEntry).toHaveBeenCalledWith('c1', expect.objectContaining({ proofUrl: '/uploads/p1.jpg' }));
+    expect(await readQueue()).toEqual([]);
+  });
+
+  it('leaves a correction parked during the flush for the next one, and never writes the older copy over it', async () => {
+    const { addEntry, flush, release } = await heldFlush();
+    // a new queuedAt, as a real re-park a moment later has
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await enqueueEntry('c2', yesNo(1), DAY);
+    release();
+
+    await flush;
+    expect(addEntry).toHaveBeenCalledTimes(1);
+    const queue = await readQueue();
+    expect(queue.map((item) => [item.id, item.body.value, item.attempts])).toEqual([[DAY, 1, 0]]);
+
+    addEntry.mockClear();
+    await flushQueue(fakeClient(addEntry));
+    expect(addEntry).toHaveBeenCalledWith('c2', yesNo(1));
+  });
+
+  it('takes a check-in the server already has as sent, not as refused', async () => {
+    // its first send landed and only the answer was lost; the replay comes the next morning
+    await enqueueEntry('c1', { ...body('2026-09-07', 1), source: 'checkin' }, 'c1:2026-09-07:checkin:');
+    const addEntry = jest
+      .fn()
+      .mockRejectedValue(new ApiError('already_checked_in', 'O gün zaten check-in yapmıştın.', 409));
+
+    expect(await flushQueue(fakeClient(addEntry))).toEqual({ sent: 1, dropped: 0, remaining: 0 });
+    expect(await readQueue()).toEqual([]);
   });
 });
 

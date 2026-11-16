@@ -208,7 +208,9 @@ describe('a reply that is not from our server', () => {
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: 'server_down', status: 530 });
     expect(error.isNetwork).toBe(false);
-    expect(error.message).toMatch(/kapalı ya da uyuyor/);
+    expect(error.message).toMatch(/kapalı, uyuyor ya da adresi değişmiş/);
+    // a closed tunnel window answers its old address with the same page: only the new link helps
+    expect(error.message).toContain('açıksa yeni bağlantıyı ondan iste');
   });
 
   it("reads a gateway's 502 the same way", async () => {

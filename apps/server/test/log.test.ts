@@ -92,6 +92,16 @@ describe('ownerLogStream', () => {
     ]);
   });
 
+  it('tells a clock put forward from a sleep, and says when it could not write the time down', () => {
+    const { stream, lines } = capture();
+    stream.write(pino({ level: 40, minutes: 180, msg: 'clock moved forward' }));
+    stream.write(pino({ level: 40, err: { message: 'SQLITE_BUSY: database is locked' }, msg: 'writing down when the server was off failed' }));
+    expect(lines().slice(1)).toEqual([
+      '21:03:12 ! bilgisayarın saati 3 saat ileri alındı; sunucu hep açıktı, bunu uyku saymıyorum',
+      "21:03:12 ! sunucunun kapalı kaldığı saati yazamadım; o arada basılan check-in'ler sunucuya vardıkları saatle sayılır: SQLITE_BUSY: database is locked",
+    ]);
+  });
+
   it('counts the pushes that went and the ones that did not', () => {
     const { stream, lines } = capture();
     stream.write(pino({ sent: 4, failed: 1, msg: 'push flush' }));

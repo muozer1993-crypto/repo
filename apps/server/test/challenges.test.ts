@@ -6,7 +6,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { LIMITS, addDays, todayKey, DEFAULT_TIMEZONE, type ChallengeDetail, type ChallengeResults, type ChallengeSummary, type LeaderboardEntry, type Challenge } from '@koydum/shared';
-import { runSchedulerOnce } from '../src/services/challenges.js';
+import { invitableFor, runSchedulerOnce } from '../src/services/challenges.js';
 import { listByType } from '../src/services/notifications.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
@@ -673,7 +673,7 @@ describe('saying yes: who hears it', () => {
     expect(titles(harness, veli, 'challenge_started')).toEqual(['🍆 ÇELINC BAŞLADI']);
   });
 
-  it('says nothing across a block, or to an account that is gone', async () => {
+  it('lets nobody in past a block with a player, and says nothing to an account that is gone', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, cem } = await trio(harness);
     const can = await registerUser(harness.app, 'can', { displayName: 'Can' });
@@ -684,15 +684,26 @@ describe('saying yes: who hears it', () => {
     await accept(harness, veli, id);
     harness.advance(60 * 1000);
     await accept(harness, cem, id);
-    // Veli wants nothing to do with Can; Cem's account is gone while still on
-    // the line-up (the route keeps that from happening, the guard holds anyway)
+    // Veli wants nothing to do with Can: Can's yes is refused, without saying
+    // who blocked whom, and nobody hears one
     await authed(harness.app, veli.token)({ method: 'POST', url: `/users/${can.me.id}/block` });
-    harness.db.prepare('UPDATE users SET deleted_at = ? WHERE id = ?').run(iso(harness), cem.me.id);
+    harness.advance(60 * 1000);
+    const refused = await accept(harness, can, id);
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json<{ error: { code: string; message: string } }>().error).toEqual({
+      code: 'blocked_in_challenge',
+      message: 'Bu çelınca katılamazsın.',
+    });
+    expect(titles(harness, ali, 'challenge_accepted')).toEqual(['Cem kabul etti']);
 
+    // the block lifted; Cem's account is gone while still on the line-up (the
+    // route keeps that from happening, the guard holds anyway)
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/users/${can.me.id}/unblock` });
+    harness.db.prepare('UPDATE users SET deleted_at = ? WHERE id = ?').run(iso(harness), cem.me.id);
     harness.advance(60 * 1000);
     expect((await accept(harness, can, id)).statusCode).toBe(200);
     expect(titles(harness, ali, 'challenge_accepted')).toEqual(['Can kabul etti', 'Cem kabul etti']);
-    expect(titles(harness, veli, 'challenge_accepted')).toEqual(['Cem sahaya indi 🍆']);
+    expect(titles(harness, veli, 'challenge_accepted')).toEqual(['Can sahaya indi 🍆', 'Cem sahaya indi 🍆']);
     expect(titles(harness, cem, 'challenge_accepted')).toEqual([]);
   });
 });
@@ -1095,6 +1106,83 @@ describe('POST /challenges/:id/invite', () => {
       .prepare('SELECT status FROM challenge_participants WHERE challenge_id = ? AND user_id = ?')
       .get(challengeId, cem.me.id) as { status: string };
     expect(row.status).toBe('invited');
+  });
+
+  it('keeps a late invitee out whom a player who was never asked blocked after the invite', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const deniz = await registerUser(harness.app, 'deniz', { displayName: 'Deniz' });
+    const cem = await registerUser(harness.app, 'cem', { displayName: 'Cem' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, deniz.me.id);
+    befriend(harness.app, veli.me.id, cem.me.id);
+    const id = (await createChallenge(harness, ali, { participantIds: [veli.me.id, deniz.me.id] })).json<Challenge>().id;
+    for (const player of [veli, deniz]) {
+      await authed(harness.app, player.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    }
+    // Veli brings his own kanka, a stranger to Deniz, who has only the block to say no with
+    expect((await invite(harness, veli, id, [cem.me.id])).statusCode).toBe(200);
+    expect((await authed(harness.app, deniz.token)({ method: 'POST', url: `/users/${cem.me.id}/block` })).statusCode).toBe(200);
+
+    const accepted = await authed(harness.app, cem.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    expect(accepted.statusCode).toBe(400);
+    // nobody is named
+    expect(accepted.json().error).toEqual({ code: 'blocked_in_challenge', message: 'Bu çelınca katılamazsın.' });
+    const status = (userId: string) =>
+      (
+        harness!.db
+          .prepare('SELECT status FROM challenge_participants WHERE challenge_id = ? AND user_id = ?')
+          .get(id, userId) as { status: string }
+      ).status;
+    expect(status(cem.me.id)).toBe('invited');
+  });
+
+  it('does not let a no taken back put two blocked people in the same çelınc', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const deniz = await registerUser(harness.app, 'deniz', { displayName: 'Deniz' });
+    const cem = await registerUser(harness.app, 'cem', { displayName: 'Cem' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, deniz.me.id);
+    befriend(harness.app, veli.me.id, cem.me.id);
+    const id = (await createChallenge(harness, ali, { participantIds: [veli.me.id, deniz.me.id] })).json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    // Deniz says no and has Cem blocked; a no holds no seat, so Cem may come in
+    await authed(harness.app, deniz.token)({ method: 'POST', url: `/challenges/${id}/decline` });
+    await authed(harness.app, deniz.token)({ method: 'POST', url: `/users/${cem.me.id}/block` });
+    expect((await invite(harness, veli, id, [cem.me.id])).statusCode).toBe(200);
+    expect((await authed(harness.app, cem.token)({ method: 'POST', url: `/challenges/${id}/accept` })).statusCode).toBe(200);
+
+    // Deniz changes her mind: Cem is in now, and the two never are together
+    const back = await authed(harness.app, deniz.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    expect(back.statusCode).toBe(400);
+    expect(back.json().error.code).toBe('blocked_in_challenge');
+  });
+
+  it('does not offer or invite a kanka whom the creator blocked and then left', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const deniz = await registerUser(harness.app, 'deniz', { displayName: 'Deniz' });
+    const fatma = await registerUser(harness.app, 'fatma', { displayName: 'Fatma' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, deniz.me.id);
+    const id = (await createChallenge(harness, ali, { participantIds: [veli.me.id, deniz.me.id] })).json<Challenge>().id;
+    for (const player of [veli, deniz]) {
+      await authed(harness.app, player.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    }
+    await authed(harness.app, ali.token)({ method: 'POST', url: `/users/${fatma.me.id}/block` });
+    expect((await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${id}/leave` })).statusCode).toBe(200);
+    befriend(harness.app, veli.me.id, fatma.me.id);
+
+    // accept would refuse her over the creator's block: neither the pointer nor the invite holds out a seat
+    expect(invitableFor(harness.db, veli.me.id, fatma.me.id, harness.now())).toEqual([]);
+    const blocked = await invite(harness, veli, id, [fatma.me.id]);
+    expect(blocked.statusCode).toBe(400);
+    expect(blocked.json().error).toEqual({ code: 'blocked_in_challenge', message: 'Fatma bu çelınca eklenemez.' });
+    expect(listByType(harness.db, fatma.me.id, 'challenge_invite')).toHaveLength(0);
   });
 
   it('does not put somebody a player blocked into that player\'s running çelınc', async () => {

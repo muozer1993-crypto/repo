@@ -7,7 +7,9 @@
  */
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import BetterSqlite3 from 'better-sqlite3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Challenge } from '@koydum/shared';
 import { sweepOrphanPhotos, UNUSED_PHOTO_GRACE_MS } from '../src/services/photos.js';
@@ -172,6 +174,43 @@ describe('sweepOrphanPhotos', () => {
     harness = await makeApp({ now: NOW });
     const missing = path.join(harness.config.uploadDir, 'yok');
     expect(await sweepOrphanPhotos(harness.db, missing, harness.now())).toEqual({ removed: 0, bytes: 0 });
+  });
+
+  it('keeps the photos a database set aside by a restore shows, so putting it back loses nothing', async () => {
+    harness = await makeApp({ now: NOW });
+    // `npm run yonet -- geri-yukle` with a two-week-old backup: the database
+    // that was open moved aside, and only it knows these entries
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'koydum-data-'));
+    try {
+      const onlyThere = photoName();
+      const answer = photoName('png');
+      const aside = new BetterSqlite3(path.join(dataDir, 'koydum-onceki-2026-01-05-1200.db'));
+      aside.pragma('journal_mode = WAL');
+      aside.exec('CREATE TABLE entries (id TEXT, proof_url TEXT)');
+      aside.prepare('INSERT INTO entries VALUES (?, ?)').run('e1', `/uploads/${onlyThere}`);
+      aside.prepare('INSERT INTO entries VALUES (?, ?)').run('e2', `https://x.trycloudflare.com/uploads/${answer}`);
+      aside.close();
+      const kept = [put(harness, onlyThere, 10 * DAY), put(harness, answer, 10 * DAY)];
+      const unused = put(harness, photoName(), 10 * DAY);
+
+      const result = await sweepOrphanPhotos(harness.db, harness.config.uploadDir, harness.now(), {
+        dbPath: path.join(dataDir, 'koydum.db'),
+      });
+
+      expect(result.removed).toBe(1);
+      for (const file of kept) expect(fs.existsSync(file)).toBe(true);
+      expect(fs.existsSync(unused)).toBe(false);
+
+      // one it cannot read deletes nothing that day
+      fs.writeFileSync(path.join(dataDir, 'koydum-onceki-2026-01-06-0900.db'), 'bozuk dosya, sqlite degil');
+      const another = put(harness, photoName(), 10 * DAY);
+      await expect(
+        sweepOrphanPhotos(harness.db, harness.config.uploadDir, harness.now(), { dbPath: path.join(dataDir, 'koydum.db') }),
+      ).rejects.toThrow();
+      expect(fs.existsSync(another)).toBe(true);
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 
   it('skips a photo the disk will not let go of, and deletes the rest', async () => {

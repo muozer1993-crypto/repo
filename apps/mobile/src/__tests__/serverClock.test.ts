@@ -54,6 +54,23 @@ describe('serverClock', () => {
     expect(clock.clockSkewMs()).toBe(first);
   });
 
+  it('forgets the reading for another server, and tells the card', () => {
+    const clock = load();
+    const listener = jest.fn();
+    clock.subscribeClockSkew(listener);
+    clock.noteServerTime('2026-11-15T12:00:00.500Z', SENT, SENT + 1_000);
+    expect(clock.clockSkewMs()).toBe(3 * 3_600_000);
+
+    clock.forgetServerTime();
+    expect(clock.clockSkewMs()).toBeNull();
+    jest.spyOn(Date, 'now').mockReturnValue(SENT);
+    expect(clock.serverNow().getTime()).toBe(SENT);
+    expect(listener).toHaveBeenCalledTimes(2);
+    // nothing to forget: no repaint
+    clock.forgetServerTime();
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
   it('tells a subscriber about a new reading, and only about a new one', () => {
     const clock = load();
     const listener = jest.fn();

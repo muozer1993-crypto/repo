@@ -74,6 +74,9 @@ const ME: Me = {
   badges: [],
 };
 
+/** the profile as /me reads it again; null is what a failed read gives */
+const mockRefreshMe = jest.fn(async (): Promise<Me | null> => null);
+
 /** what a 401 leaves behind for the login screen (see store/auth) */
 const mockSession = { ended: false, reason: null as string | null };
 const mockClearSessionEnded = jest.fn(() => {
@@ -102,7 +105,7 @@ jest.mock('@/store/auth', () => ({
       token: 'token',
       serverUrl: mockServer.url,
       setServerUrl: mockSetServerUrl,
-      refreshMe: jest.fn(),
+      refreshMe: mockRefreshMe,
       setSession: mockSetSession,
       setMe: mockSetMe,
       client: () => ({ login: mockLogin }),
@@ -1522,7 +1525,7 @@ describe('a proof photo with no connection', () => {
   });
 
   it("keeps the photo on the phone too while the owner's PC sleeps and the tunnel answers 530", async () => {
-    const asleep = new ApiError('server_down', 'Sunucu şu an kapalı ya da uyuyor.', 530);
+    const asleep = new ApiError('server_down', 'Sunucu şu an kapalı, uyuyor ya da adresi değişmiş.', 530);
     searchParams.id = 'c-1';
     api.challenge = jest.fn(async () => runDetail());
     api.uploadPhoto = jest.fn(async () => {
@@ -1788,6 +1791,58 @@ describe('a check-in', () => {
     await settle();
 
     expect(mockReminders.skipToday).not.toHaveBeenCalled();
+  });
+
+  it('drops last night\'s "sırada" once the day turns and the parked one has counted for that night', async () => {
+    searchParams.id = 'c-1';
+    const evening = new Date('2026-09-08T19:45:00.000Z').getTime(); // 22:45 in Istanbul
+    // only the clock is faked: the query and settle() still need real timers
+    jest.useFakeTimers({
+      now: evening,
+      doNotFake: [
+        'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',
+        'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval',
+        'clearInterval', 'setTimeout', 'clearTimeout',
+      ],
+    });
+    try {
+      api.challenge = jest.fn(async () => checkinDetail());
+      api.addEntry = jest.fn(async () => {
+        throw NETWORK_ERROR;
+      });
+      const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+      const tree = renderScreen(<ChallengeScreen />);
+      await settle();
+      await act(async () => {
+        await findWith(tree, 'title', 'Geldim', 'onPress').props.onPress();
+      });
+      await settle();
+      const QUEUED = 'Sunucu uyuyorsa bastığın saat sayılır';
+      // under the button and in the toast
+      const shown = () => rendered(tree).split(QUEUED).length - 1;
+      expect(shown()).toBe(2);
+
+      // The screen stayed open overnight. In the morning the queue sent it, and
+      // it counted for last night; nothing waits for today.
+      for (const item of await readQueue()) await removeFromQueue(item.id);
+      jest.setSystemTime(evening + 10 * 60 * 60_000);
+      const lastNight: Entry = {
+        id: 'e-1', challengeId: 'c-1', userId: 'me-1', dayKey: '2026-09-08', value: 1, source: 'checkin',
+        note: null, proofUrl: null, status: 'ok', createdAt: new Date(evening).toISOString(),
+      };
+      api.challenge = jest.fn(async () => ({ ...checkinDetail(), myEntries: [lastNight] }));
+      await act(async () => {
+        await clientOf(tree).invalidateQueries();
+      });
+      await settle();
+
+      // only the toast of the tap, which goes by itself; not the line under today's button
+      expect(shown()).toBe(1);
+      expect(rendered(tree)).toContain('Check-in sadece bugün için sayılır.');
+      expect(findWith(tree, 'title', 'Geldim', 'onPress').props.disabled).toBeFalsy();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 
@@ -4510,6 +4565,39 @@ describe('taking a social mistake back', () => {
     // the stale row goes: the list is read again and Mehmet is a kanka now
     expect(api.friends).toHaveBeenCalled();
     expect(rendered(tree)).not.toContain('Geri çek');
+  });
+
+  it('says the davet link is new after a block, and reads the new code for Paylaş', async () => {
+    searchParams.id = MEHMET.id;
+    api.userProfile = jest.fn(async () => ({
+      ...MEHMET,
+      stats: { wins: 0, losses: 0, challengesPlayed: 0 },
+      badges: [],
+    }));
+    api.friends = jest.fn(async () => ({ friends: [MEHMET], incoming: [], outgoing: [] }));
+    api.blockUser = jest.fn(async () => ({ status: 'blocked', userId: MEHMET.id }));
+    mockRefreshMe.mockClear();
+    mockRefreshMe.mockResolvedValueOnce({ ...ME, inviteCode: 'YENI99' });
+    const UserScreen = require('@/app/(app)/user/[id]').default;
+    const tree = renderScreen(<UserScreen />);
+    await settle();
+
+    press(tree, 'Diğer seçenekler');
+    const [blockRow] = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityRole === 'button' &&
+        typeof node.props.onPress === 'function' &&
+        node.findAll((inner) => inner.props.children === '⛔ Engelle').length > 0
+    );
+    act(() => {
+      blockRow!.props.onPress();
+    });
+    await settle();
+    await answerAlert('Engelle');
+
+    expect(api.blockUser).toHaveBeenCalledWith('u-4');
+    expect(mockRefreshMe).toHaveBeenCalledTimes(1);
+    expect(rendered(tree)).toContain('Davet bağlantın da yenilendi, eskisiyle kimse gelemez.');
   });
 
   it('the profile of someone I asked offers "İsteği geri çek" instead of a dead button', async () => {

@@ -165,8 +165,10 @@ evdeki Wi-Fi'da kalabilir; aynı sunucudur.
 Bilinmesi gerekenler:
 
 * **Pencere açık kaldıkça çalışır.** Bilgisayar uyursa ya da pencereyi kapatırsan kankaların
-  bağlanamaz, uygulamada "Sunucu şu an kapalı ya da uyuyor" görürler; o arada girdikleri sayılar
-  telefonda bekler ve sunucu açılınca kendiliğinden gider. Çelınc sonuçları sunucu tekrar açılınca
+  bağlanamaz, uygulamada "Sunucu şu an kapalı, uyuyor ya da adresi değişmiş" görürler; o arada
+  girdikleri sayılar telefonda bekler. Bilgisayar uyandığında kendiliğinden gider. Pencereyi kapatıp
+  yeniden açtıysan adres değişmiştir (aşağıda): bekleyenler kankan yeni bağlantıya dokunup **Yeni
+  adrese geç**'e basınca gider, yeni bağlantıyı göndermeyi unutma. Çelınc sonuçları sunucu tekrar açılınca
   hesaplanır. Kapatırken **Ctrl+C**'ye bas: sunucu elindeki bildirimleri bitirip veritabanını
   düzgünce kapatır.
 * **Bilgisayar uyumasın.** Sunucu penceresi açıkken (`npm run server` de `npm run internet` de)
@@ -182,7 +184,9 @@ Bilinmesi gerekenler:
   için bir saat daha alır. Uyurken (ya da sunucu kapalıyken) basılan "Geldim" de basıldığı saatle
   sayılır: sunucu ne zaman uyuduğunu kendi yazar, telefon check-in'i sırada tutup uyanınca gönderir.
   Bunun için telefonun onu bilgisayar uyandıktan sonraki 12 saat içinde göndermesi lazım; kankanın
-  uygulamayı bir kez açması yeter. Ama son gece elle yazılan sayılar, odak seansları ve uyurken biten
+  uygulamayı bir kez açması yeter (pencereyi kapatıp açtıysan önce yeni bağlantıya geçmesi). Hafta
+  sonu kapalı kalan bilgisayarda cuma gecesinin check-in'i de böyle sayılır. Birkaç dakikalık
+  kapanış da sayılır (`dur` ile `y` arası, çökme). Ama son gece elle yazılan sayılar, odak seansları ve uyurken biten
   bir check-in çelıncının son günü süre bittiyse reddedilir (uygulama hangi çelıncın hangi gününün
   gitmediğini söyler). Elle sayı ve odak çelınclarında bilgisayarın uyumaması şart.
 * **Sunucu çökerse pencere onu kendisi yeniden açar.** "Sunucu düştü, yeniden açıyorum" yazar,
@@ -374,10 +378,14 @@ Arkadaşın bağlantıya dokununca sunucunun kendi sayfası açılır:
   açılır (bkz. [Çelınc sürerken kanka ekleme](#çelınc-sürerken-kanka-ekleme)).
 
 Davet bağlantısı senin "evet"inin yerine geçer: onunla gelen yeni hesap (bir haftadan genç)
-sorulmadan kankan olur. Daha eski bir hesap (arkadaşlıktan çıkardığın ama kodunu saklayan biri
-gibi) bağlantıya dokunursa sadece istek gider, sen kabul edersin. Bağlantı WhatsApp gruplarında
-elden ele geçer: tanımadığın biri gelirse profilinden engelle. Kodu tahmin etmeye kalkan da saatte
-20 yanlış denemeden sonra bekletilir.
+sorulmadan kankan olur. Daha eski bir hesap bağlantıya dokunursa sadece istek gider, sen kabul
+edersin. Arkadaşlıktan çıkardığın, isteğini reddettiğin ya da engellediğin biri de, hesabı ne kadar
+yeni olursa olsun, bağlantıyla artık sadece istek gönderir; sen ona kendin istek atarsan ya da
+isteğini kabul edersen bu kalkar. Bağlantı WhatsApp gruplarında elden ele geçer: tanımadığın biri
+gelirse profilinden engelle. Engellemek davet bağlantını da yeniler: eskisiyle (yeni bir hesapla
+bile) kimse gelemez, uygulama "Davet bağlantın da yenilendi" der. Henüz gelmemiş biri varsa ona
+**Kankalar → Paylaş**'la yenisini at. Kodu tahmin etmeye kalkan da saatte 20 yanlış denemeden
+sonra bekletilir.
 
 APK'yı sunucuya koymak için expo.dev'den indirdiğin dosyayı bir kere yayınla:
 
@@ -684,7 +692,8 @@ de gider, açınca adres değişir ve herkese yeni bağlantı atman gerekir. Pen
 değiştiremiyordur (Windows'ta veritabanı modülü olur). `npm run internet` penceresinde `dur`
 yazıp Enter'a bas, "Sunucu durdu" yazınca `npm install`'ı tekrar çalıştır, bitince yine o
 pencerede `y` ve Enter. Sunucu dururken tünel açık kalır; o bir iki dakikada kankaların
-uygulamada "Sunucu şu an kapalı ya da uyuyor" görür, girdikleri sayılar telefonda bekler.
+uygulamada "Sunucu şu an kapalı, uyuyor ya da adresi değişmiş" görür, girdikleri sayılar telefonda
+bekler ve sunucu geri gelince gider; o arada basılan "Geldim" basıldığı saatle sayılır.
 
 Sunucu yeni kodla açılamazsa pencere ne yapacağını yazar: "Bir paket eksik" diyorsa
 `npm install`'ı, "better-sqlite3 bu Node.js sürümüyle açılmıyor" diyorsa (Node.js'i
@@ -736,7 +745,8 @@ Komut yedeği yüklemeden önce sağlam mı diye bakar; bozuksa ya da KOYDUM'un 
 Eski veritabanını silmez, `data\koydum-onceki-<tarih-saat>.db` diye kenara koyar ve yanlış
 yedeği seçtiysen onu nasıl geri koyacağını ekrana yazar. Eski `koydum.db-wal` ve `koydum.db-shm`
 dosyalarını kendisi halleder, elle bir şey silme. Kenara konan dosyalar birikir; işin bitince
-silebilirsin.
+silebilirsin. Kenarda durdukça içlerindeki girişlerin kanıt fotoğrafları da silinmez (aşağıda
+"Kullanılmayan kanıt fotoğrafları"): yanlış yedeği geri alınca fotoğraflar da yerinde olur.
 
 **Yeni bilgisayarda:** depoyu indirip `npm install` yap, `apps/server/.env` dosyasına aynı
 `BACKUP_DIR` satırını yaz, OneDrive klasörü inene kadar bekle, sonra `npm run yonet -- geri-yukle`
@@ -800,7 +810,7 @@ iste-geri çek-iste biriyle bütün gün telefonunu öttürebilirdi.
 Ölçüm altı yöntemden birine oturur:
 
 * **Otomatik adım** — telefonun adım sayacı, elle giriş yok.
-* **Odak dakikası** — uygulama içi sayaç; uygulamadan çıkarsan seans yanar. Geri tuşu seansı yakmaz, önce "bitirelim mi?" diye sorar. Çelınc bittikten sonra sunucu odak dakikası almadığı için seans, çelıncın kalan süresine sığacak kadar kısaltılır: son gece 23:30'da 45 dakika seçersen seans 29 dakika sürer ve bitince yazılır, kaybolmaz. Bir seans en fazla 180, bir gün en fazla 360 dakika sayılır: süreyi seçerken ekranda "Bugün 30 dk hakkın kaldı" yazar ve seans ona göre kısalır, 360 dolunca da "Bugünlük 360 dk doldu" yazar, seans başlamaz. Eski APK'dan gelen uzun bir seans reddedilmez, sığan kısmı yazılır.
+* **Odak dakikası** — uygulama içi sayaç; uygulamadan çıkarsan seans yanar. Geri tuşu seansı yakmaz, önce "bitirelim mi?" diye sorar. Çelınc bittikten sonra sunucu odak dakikası almadığı için seans, çelıncın kalan süresine sığacak kadar kısaltılır: son gece 23:30'da 45 dakika seçersen seans 29 dakika sürer ve bitince yazılır, kaybolmaz. Bir seans en fazla 180, bir gün en fazla 360 dakika sayılır: süreyi seçerken ekranda "Bugün 30 dk hakkın kaldı" yazar ve seans ona göre kısalır, 360 dolunca da "Bugünlük 360 dk doldu" yazar, seans başlamaz. Eski APK'dan gelen uzun bir seans reddedilmez, sığan kısmı yazılır; eski APK ekranda yine seansın tamamını "skoruna eklendi" der, kaç dakikanın yazıldığını kankaya giden "Odak tavanı doldu" bildirimi söyler. 360 dolduktan sonra eski APK seansı yine başlatır, bitince sunucu reddeder.
 * **Saatli check-in** — belirlenen saatten önce "GELDİM" demen gerekir, saati sunucu doğrular. Her türün bir de açılış saati var (uyanma 04:00, yatma 19:00, yatak 05:00); ondan önce basılan check-in sayılmaz, yoksa gece ikideki "yattım" erken yatma sayılırdı. Bu yüzden check-in saati açılış saatinden sonra, en geç 23:59 olmalı: Erken Yatma Sözü'nde 00:00 seçilirse hiçbir gece sayılmaz, çelınc 0-0 biterdi. Sihirbaz böyle bir saati kabul etmiyor; eskiden böyle açılmış bir çelınc türün kendi saatiyle (yatma için 23:00) sayılır. Profildeki erken kalkma rozetleri (🐓 Horoz ve üstü) sadece sabah check-in'lerini sayar, yani Erken Kalkan Koyar ile Yatak Toplama Sabahı'nı; Erken Yatma Sözü'nün geceleri oraya sayılmaz.
 * **Sayı girişi** — bardak, sayfa, km, tekrar. Çelıncı açan isterse fotoğraf kanıtı zorunlu olur; fotoğraf sadece bu tür girişlerde vardır.
 * **Az olan kazanır** — ekran süresi gibi; günlük ortalama yarışır, girmediğin gün en kötü değerden (1440 dk) sayılır. Bugün ortalamaya ancak gün bitince girer, Android'in öğlen gönderdiği yarım gün kimseyi öne geçirmez; yalnız ilk gün hiçbir şey girmeyen 1440 dk görünür. Hiçbir gün girmemiş kanka dürtülemez: o 1440 onun skoru değil, girmediği günün cezası. Android'in okuduğu bir gün sadece yukarı gider: aynı hesapla ikinci bir telefon ya da geçmişi silinmiş bir telefon o güne 300'ün ardından 5 gönderirse 300 kalır, yoksa bir telefon değiştirmek günü kazandırırdı. Elle yazılmış bir günü ise telefonun okuduğu sayı her durumda ezer. Yarışa sonradan çağrılan ("Kanka ekle"), çağrıldığı günün bir gün öncesinden itibaren sayılır; ondan önceki günler için ceza yemez. Baştan çağrılıp daveti bekleten ise beklediği günlerin cezasını öder. İleri bir saate kurulan çelınc, kuranın yanına biri "Varım" diyene kadar başlamaz; o güne kadar kimse yazamadığı için kimse o günlerden ceza yemez.
@@ -866,8 +876,9 @@ ve tek başınayken "öndesin" demez. İlk kabul edenle ikinize "Çelınc başla
 sonradan katılan her kanka için içeridekilere "Ali kabul etti" gelir (seviyene göre "Ali varım
 dedi" ya da "Ali sahaya indi 🍆"). İleri bir tarihte başlayan çelıncta kabulleri sadece açan duyar
 (sonradan **Kankaları Çağır** ile gelen birinin kabulünü onu çağıran da duyar), başlangıç saatinde
-herkese "başladı" gider. Kimse katılmazsa çelınc bitişte iptal olur. Engellediğin
-(ya da seni engelleyen) birinin kabulü sana bildirilmez.
+herkese "başladı" gider. Kimse katılmazsa çelınc bitişte iptal olur. Çelıncta kabul etmiş biriyle
+arasında engel olan (kim kimi engellemiş olursa olsun) kabul edemez, "Bu çelınca katılamazsın."
+görür: engelli iki kişi aynı çelıncta oynamaz.
 
 ### Çelınc sürerken kanka ekleme
 
@@ -891,14 +902,19 @@ grubu bölmen gerekmez.
   yeni kankan seçili gelir; **Çağır**'a basman yeter.
 * Davet bildirimi de ana sayfadaki davet kartı da seni kimin çağırdığını yazar. Reddedersen haber
   çelıncı açana değil, seni çağırana gider. Çelıncı iptal etmek yine sadece açanın elinde.
-* Düğmenin açandan başkasında görünmesi yeni APK ile gelir: eski APK'da sadece çelıncı açan görür,
-  "Yeni kanka" bildirimine dokununca da Kankalar sekmesi açılır.
+* Düğmenin açandan başkasında görünmesi uygulama güncellemesiyle gelir (`eas update`, yeni APK
+  gerekmez; bkz. [1b](#1b-güncellemeleri-apk-indirmeden-almak-eas-update)). Güncellemeyi almamış 1.1.0'da düğmeyi sadece
+  çelıncı açan görür, 1.0'da düğme hiç yok; "Yeni kanka" bildirimi yine de "“Ofis Ligi” çelıncına
+  çağır" der. 1.0'da o bildirime uygulama açıkken dokununca çelınc, bildirim çubuğundan dokununca
+  Kankalar sekmesi açılır.
 * Daveti reddeden kankayı yeniden çağırabilirsin, ona yeni bir bildirim gider. Oynayıp ayrılan
   geri dönemez.
 * Son bir saatte kimse eklenmez (kısa çelınclarda sürenin son dörtte birinde); o sırada daveti
   kabul etmek de kapalı. Süre bittikten sonra, sonuç beklenirken de eklenmez.
-* Çelınctaki birinin engellediği (ya da onu engellemiş) biri eklenmez; uygulama "Can bu çelınca
-  eklenemez." der, kimin kimi engellediğini söylemez.
+* Çelınctaki birinin (çıkıp gitmiş olsa da çelıncı açanın) engellediği ya da onu engellemiş biri
+  eklenmez; uygulama "Can bu çelınca eklenemez." der, kimin kimi engellediğini söylemez. Davetten
+  sonra konan engel de geçerli: içerideki biri yeni geleni engellerse yeni gelen "Bu çelınca
+  katılamazsın." der ve giremez.
 * Eklenen kanka, ondan önce başlamış bir itiraz saatini durdurmaz: o itiraz, başladığı anda
   çelıncta olanların çoğunluğuyla açıldı ve öyle kalır.
 * Bir çelıncta açandan başka en fazla 15 kişi olur. Reddedenler bu sayıya girmez.

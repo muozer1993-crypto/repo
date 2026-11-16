@@ -14,6 +14,7 @@ jest.mock('@/services/reminders', () => ({ clearReminders: () => mockClearRemind
 import type { Me } from '@koydum/shared';
 
 import { useAuth } from '@/store/auth';
+import { clockSkewMs, noteServerTime } from '@/utils/serverClock';
 
 const ME = { id: 'me-1', username: 'mustafa', displayName: 'Mustafa' } as Me;
 
@@ -97,5 +98,35 @@ describe('a 401 from the server', () => {
     expect(useAuth.getState().token).toBeNull();
     expect(useAuth.getState().sessionEnded).toBe(true);
     expect(useAuth.getState().sessionEndReason).toBeNull();
+  });
+});
+
+describe("the server clock's difference", () => {
+  const SENT = Date.parse('2026-11-15T09:00:00.000Z');
+  // the old server's clock, three hours ahead of the phone
+  const measure = () => noteServerTime('2026-11-15T12:00:00.500Z', SENT, SENT + 1_000);
+
+  beforeEach(() => {
+    global.fetch = jest.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch;
+  });
+
+  it('goes with a sign-out: the next account may be on another server', async () => {
+    useAuth.setState({ token: 'tok', me: ME });
+    measure();
+    expect(clockSkewMs()).toBe(3 * 3_600_000);
+
+    await useAuth.getState().logout();
+
+    expect(clockSkewMs()).toBeNull();
+  });
+
+  it('goes with a new address, and stays for the same one', async () => {
+    await useAuth.getState().setServerUrl('https://eski.trycloudflare.com');
+    measure();
+    await useAuth.getState().setServerUrl('https://eski.trycloudflare.com/');
+    expect(clockSkewMs()).toBe(3 * 3_600_000);
+
+    await useAuth.getState().setServerUrl('https://yeni.trycloudflare.com');
+    expect(clockSkewMs()).toBeNull();
   });
 });

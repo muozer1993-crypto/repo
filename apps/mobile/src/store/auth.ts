@@ -8,6 +8,7 @@ import { queryClient } from '@/lib/query';
 import { StorageKeys, getJson, setItem, setJson } from '@/lib/storage';
 import { clearReminders } from '@/services/reminders';
 import { forgetStoredSession, markTokenRenewed, renewTokenIfDue } from '@/services/session';
+import { forgetServerTime } from '@/utils/serverClock';
 
 interface AuthState {
   hydrated: boolean;
@@ -144,6 +145,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
 
   setServerUrl: async (url) => {
+    if (stripTrailingSlash(url) !== stripTrailingSlash(get().serverUrl)) forgetServerTime();
     set({ serverUrl: url });
     await setItem(StorageKeys.serverUrl, JSON.stringify(url));
   },
@@ -177,6 +179,8 @@ export const useAuth = create<AuthState>((set, get) => ({
         .catch(() => {});
     }
     set({ token: null, me: null, serverId: null });
+    // the next sign-in may be on another server, with another clock
+    forgetServerTime();
     // the next account must not be served this one's challenges, inbox or badge
     queryClient.clear();
     // nor ring for this account's check-ins: the alarms are the phone's own and

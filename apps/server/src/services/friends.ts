@@ -15,8 +15,11 @@
  * the victim's block by blocking and immediately unblocking them.
  *
  * A declined request is deleted rather than kept, so asking again is possible.
+ * What survives a "Reddet", a removal or a block is `friend_refusals`: the one
+ * who said no, so an invite code (accepted on the spot from a new account) only
+ * asks them again (`recordRefusal`, `refusedBy`).
  * Everything here is a pure read except `upsertBlock`, which is the one place a
- * relationship is forcibly replaced.
+ * relationship is forcibly replaced, and the refusal rows.
  */
 import { newId, nowIso, type Database, type FriendshipRow, type UserRow } from '../db/index.js';
 import { forbidden } from '../errors.js';
@@ -191,6 +194,29 @@ export function upsertBlock(db: Database, blockerId: string, blockedId: string, 
     return row;
   });
   return run();
+}
+
+/**
+ * `userId` said no to `otherId`: ended the friendship, turned down their
+ * request or blocked them. From now on `otherId`'s request by invite code is
+ * an ordinary request even from a new account (routes/friends.ts): the code was
+ * shared before that no, and must not undo it.
+ */
+export function recordRefusal(db: Database, userId: string, otherId: string, now: Date): void {
+  db.prepare(
+    `INSERT INTO friend_refusals (user_id, other_id, at) VALUES (?, ?, ?)
+     ON CONFLICT(user_id, other_id) DO UPDATE SET at = excluded.at`,
+  ).run(userId, otherId, nowIso(now));
+}
+
+/** True when `userId` said no to `otherId` and has not asked or accepted them since. */
+export function refusedBy(db: Database, userId: string, otherId: string): boolean {
+  return db.prepare('SELECT 1 FROM friend_refusals WHERE user_id = ? AND other_id = ?').get(userId, otherId) !== undefined;
+}
+
+/** `userId` asked `otherId` or accepted them after all: their earlier no is over. */
+export function forgetRefusal(db: Database, userId: string, otherId: string): void {
+  db.prepare('DELETE FROM friend_refusals WHERE user_id = ? AND other_id = ?').run(userId, otherId);
 }
 
 /** Removes the block `blockerId` → `blockedId`. Returns false when there was none. */
