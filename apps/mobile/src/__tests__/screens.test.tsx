@@ -6752,6 +6752,37 @@ describe('"Kanka ekle" on a çelınc already under way', () => {
     expect(api.inviteToChallenge).toHaveBeenCalledWith('c-1', [CEM.id]);
   });
 
+  it('opens with the new kanka ticked when the tap lands on this çelınc while it is open', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => mine());
+    api.friends = jest.fn(async () => ({ friends: [ALI, CEM, VELI], incoming: [], outgoing: [] }));
+    api.inviteToChallenge = jest.fn(async () => mine());
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const { useState } = require('react') as typeof import('react');
+    // the router hands the open screen its new params in place: a re-render, no remount
+    let reparam!: (invite: string) => void;
+    function OpenScreen() {
+      const [invite, setInvite] = useState<string | undefined>(undefined);
+      reparam = (next) => {
+        searchParams.invite = next;
+        setInvite(next);
+      };
+      return <ChallengeScreen invite={invite} />;
+    }
+    const tree = renderScreen(<OpenScreen />);
+    await settle();
+    expect(rendered(tree)).not.toContain('Kimi çağırıyorsun?');
+
+    act(() => {
+      reparam(CEM.id);
+    });
+    await settle();
+
+    expect(rendered(tree)).toContain('Kimi çağırıyorsun?');
+    expect(friendRow(tree, CEM.id)?.props.selected).toBe(true);
+    expect(friendRow(tree, VELI.id)?.props.selected).toBe(false);
+  });
+
   it('goes away when the last hour starts, as the server stops taking anybody new', async () => {
     searchParams.id = 'c-1';
     const detail = mine();

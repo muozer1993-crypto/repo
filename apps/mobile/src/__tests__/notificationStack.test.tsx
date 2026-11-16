@@ -44,9 +44,12 @@ function mockResolve(href: unknown): MockScreen {
  * an ESM package the preset does not transform); these are the rules it showed
  * when rendered with ExpoRoot and getMockContext: `push` always adds a screen;
  * `navigate` adds one unless the screen in front is the same route with the
- * same params (it never goes back to an older copy); a tab route from the tab
- * bar only switches tabs, from a screen over it (push or navigate) it stacks a
- * second tab bar; `dismissAll` goes back down to the tab bar.
+ * same path params (`id`; it never goes back to an older copy), and then hands
+ * that same screen the new params in place: a search param such as `invite`
+ * does not make it another screen, and nothing is mounted again; a tab route
+ * from the tab bar only switches tabs, from a screen over it (push or
+ * navigate) it stacks a second tab bar; `dismissAll` goes back down to the tab
+ * bar.
  */
 function mockOpen(href: unknown, how: 'push' | 'navigate'): void {
   const screen = mockResolve(href);
@@ -55,9 +58,11 @@ function mockOpen(href: unknown, how: 'push' | 'navigate'): void {
     top.params = screen.params;
     return;
   }
-  const paramsOf = (entry: MockScreen) => JSON.stringify(Object.entries(entry.params).sort());
-  const same = top.path === screen.path && paramsOf(top) === paramsOf(screen);
-  if (how === 'navigate' && same) return;
+  // the path carries the id, the only path param these routes have
+  if (how === 'navigate' && top.path === screen.path) {
+    top.params = screen.params;
+    return;
+  }
   mockStack.push(screen);
 }
 
@@ -283,6 +288,19 @@ describe('a notification about the çelınc on screen', () => {
 
     tapPush({ type: 'friend_accepted', challengeId: 'c-1', userId: 'u-3' });
     tapPush({ type: 'friend_accepted', challengeId: 'c-1', userId: 'u-3' });
+    expect(stack()).toEqual(['(tabs) /', '/challenge/c-1?invite=u-3']);
+  });
+
+  it('hands a new kanka to the çelınc already open in place, rather than a second copy of it', async () => {
+    startOn('/', '/challenge/c-1');
+    const tree = renderBridge();
+    await settle();
+
+    act(() => {
+      mockListeners.received!('Kanka oldunuz', 'Ali artık kankan.', { type: 'friend_accepted', challengeId: 'c-1', userId: 'u-3' });
+    });
+    pressToast(tree, 'Kanka oldunuz');
+    // the same screen, now with the param (screens.test.tsx: it opens the sheet with Ali ticked)
     expect(stack()).toEqual(['(tabs) /', '/challenge/c-1?invite=u-3']);
   });
 

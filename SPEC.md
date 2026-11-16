@@ -1014,8 +1014,10 @@ of the app (home's greeting, the inbox, the wizard, the recap) keeps `me.timezon
   A `reminder` with `data.kind === 'taunt_followup'` (2.4, 3b) opens the results, where the laf is sent; the inbox row does the same.
   The in-app toast for a push received in the foreground opens the same place (`routeForNotificationData`).
 - Every one of these (push tap, its toast, the poll's toast, a Gelen row) opens its screen with `router.navigate`, not
-  `push`: when the screen in front is already that route with the same params (a "Dürtüldün" about the çelınc on
-  screen, a second tap on the banner or the row) nothing new is stacked; another çelınc still opens over it. The bridge's
+  `push`: when the screen in front is already that route with the same path params (a "Dürtüldün" about the çelınc on
+  screen, a second tap on the banner or the row) nothing new is stacked, and the same screen gets the new search params in
+  place without remounting (the çelınc screen keys its "Kanka ekle" sheet on `invite`, so a "Kanka oldunuz" about the
+  çelınc on screen still opens it with the kanka ticked); another çelınc still opens over it. The bridge's
   inbox and friends tabs go through `goToTab` (utils/navigation.ts): `dismissAll` down to the tab bar when something is
   stacked over it (`canDismiss`), then `navigate`. A tab route pushed or navigated to from a çelınc stacked a second
   tab bar over it. The çelınc screen's "Kankalara git" and the wizard's button under "Kanka yok" use it too.

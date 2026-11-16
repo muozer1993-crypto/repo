@@ -554,7 +554,11 @@ export default function ChallengeDetailScreen() {
           </Text>
         ) : null}
         {canInvite ? (
+          // Keyed on the kanka: a "Kanka oldunuz" tap about this çelınc while it
+          // is open hands the screen the new param in place (navigate keeps the
+          // screen), and only a fresh picker reads it to open with them ticked.
           <InviteMore
+            key={invite ?? ''}
             id={id}
             participants={participants}
             creatorId={challenge.creatorId}
