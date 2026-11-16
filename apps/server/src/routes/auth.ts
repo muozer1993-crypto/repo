@@ -94,12 +94,22 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     // cannot all pass the check above.
     registerByIp.record(client, now);
 
+    const passwordHash = await hashPassword(body.password);
+    // Two phones sending the same free name at once both passed the check above
+    // while their passwords hashed, and the second insert hit the UNIQUE index as
+    // a 500. better-sqlite3 is synchronous: nothing runs between this look and
+    // the insert. The loser gets "kapılmış" and its sign-up back.
+    if (usernameTaken(db, body.username)) {
+      registerByIp.unrecord(client, now);
+      throw conflict('username_taken', 'Bu kullanıcı adı kapılmış. Başka bir tane dene.');
+    }
+
     const row = createUser(
       db,
       {
         username: body.username,
         displayName: body.displayName,
-        passwordHash: await hashPassword(body.password),
+        passwordHash,
         timezone: body.timezone,
         vulgarityMax: body.vulgarityMax,
       },

@@ -689,8 +689,8 @@ verdiğin şifreyle kalır.
 satır düşer, `npm run yonet -- sikayetler` de en yeni 200 şikayeti listeler (daha fazlası varsa
 toplam kaç tane olduğunu altına yazar). Gerisi sana kalmış: konuşursunuz, gerekirse engellemesini
 söylersin. Bir hesap saatte en fazla 10 şikayet gönderebilir, fazlasına uygulama "Çok fazla şikayet
-gönderdin" der. Aynı kişiyi bir gün içinde yeniden şikayet ederse uygulama yine "alındı" der ama
-sana yeni bir satır gelmez. Böylece kimse pencereni şikayetle doldurup tünel adresini ve gerçek
+gönderdin" der. Aynı kişiyi bir gün içinde aynı sebeple yeniden şikayet ederse (iki kez dokunmak
+gibi) uygulama yine "alındı" der ama sana yeni bir satır gelmez; yeni bir sebep yeni bir satırdır. Böylece kimse pencereni şikayetle doldurup tünel adresini ve gerçek
 hataları ekrandan kaydıramaz. Sebebin içindeki satır sonları ve PowerShell'de ekranı silen ya da
 yazıyı gizleyen kaçış kodları atılır: liste hep düz yazı çıkar. Tanımadığın biri girdiyse
 `npm run yonet -- sil <kullanici>` ile hesabını kapat.

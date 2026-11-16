@@ -76,9 +76,36 @@ const SLOW_REQUEST_MS = 2_000;
  * send (a 14-day step sync, a çelınc with 15 friends) is a few KB; anything bigger
  * only holds the one event loop every friend shares. A 3 MB list of `{}` kept it
  * busy for 14 s and pushed the process to 3 GB. Proof photos are not under this:
- * @fastify/multipart reads its own stream and keeps `limits.fileSize`.
+ * @fastify/multipart reads its own stream with its own `MULTIPART_LIMITS`.
  */
 export const JSON_BODY_LIMIT = 64 * 1024;
+
+/**
+ * POST /uploads takes one part, the photo (`file`), and the app sends nothing
+ * else. busboy's defaults let a body carry 1,000 parts of 1 MB text fields
+ * besides, every one kept in memory until the request ends: one account sent
+ * 99 such fields per request, stalled each just under Cloudflare's 100 MB cap,
+ * and a few dozen of them ran the process out of heap. A few small fields are
+ * still read (a client that adds a name is no attacker), cut at 1 KB; more fields
+ * than that are a 400 `too_many_parts`.
+ */
+export const MULTIPART_LIMITS = {
+  fileSize: LIMITS.UPLOAD_MAX_BYTES,
+  files: 1,
+  fields: 4,
+  fieldSize: 1024,
+  fieldNameSize: 100,
+  parts: 5,
+  headerPairs: 20,
+} as const;
+
+/**
+ * How long a request may take to arrive. Fastify's default is no limit, so a
+ * body stalled halfway held its memory for as long as the sender kept the
+ * connection open. The app gives a photo two minutes (`UPLOAD_TIMEOUT_MS`), a
+ * JSON call 15 s; this leaves a slow connection a margin past both.
+ */
+export const REQUEST_TIMEOUT_MS = 150_000;
 
 export interface BuiltApp {
   app: FastifyInstance;
@@ -101,6 +128,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
     // the owner's window; the hook below keeps only the requests worth a look.
     logController: new LogController({ disableRequestLogging: true }),
     bodyLimit: JSON_BODY_LIMIT,
+    requestTimeout: REQUEST_TIMEOUT_MS,
     trustProxy: config.trustProxy,
   });
 
@@ -181,9 +209,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
       }
     },
   );
-  await app.register(multipart, {
-    limits: { fileSize: LIMITS.UPLOAD_MAX_BYTES, files: 1 },
-  });
+  await app.register(multipart, { limits: MULTIPART_LIMITS });
 
   // Proof photos are served straight from disk at /uploads/<file>. When the
   // directory cannot be created (read-only filesystem, a file in the way),

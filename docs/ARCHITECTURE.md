@@ -697,7 +697,7 @@ civarındaki yüklemesinde ya da zayıf 4G'de 15-25 saniye sürer: telefon inter
 zaman aşımına uğruyor, çekmiyormuş gibi kuyruğa giriyordu. Kuyrukta da zaman aşımı "bağlantı yok"
 sayıldığı için kuyruk her turda orada duruyor, arkasındaki başka çelıncların girişleri hiç
 gitmiyor, iki gün sonra "süre bitti" diye düşüyordu. Şimdi fotoğraf yüklemesinin iki dakikası var
-(`UPLOAD_TIMEOUT_MS`; sunucu bir isteğe kendi süre sınırı koymaz). O da yetmezse kuyruk `/health`'e
+(`UPLOAD_TIMEOUT_MS`; sunucu bir isteğin gelmesini 150 saniye bekler). O da yetmezse kuyruk `/health`'e
 sorar: cevap yoksa bağlantı yoktur ve tur durur; cevap varsa bağlantı bu fotoğrafa yetmiyordur,
 giriş fotoğrafıyla bekler ama arkasındakiler gider (`photoSlowTries`). Üçüncü yavaş turda fotoğraf
 bırakılır, giriş onsuz gider; fotoğraf zorunluysa kullanıcı "Kanıt fotoğrafı gitmedi, bağlantı çok
@@ -1120,6 +1120,15 @@ alır, kimden gelirse gelsin. Şemaların kabul ettiği en büyük gövde, 500 k
 `/me/inbox/read`, 33 KB civarındadır; uygulamanın gönderdikleri birkaç KB. Kanıt fotoğrafı bu
 sınıra girmez: multipart kendi akışını okur ve kendi 5 MB'ını tutar.
 
+Multipart'ın kendi sınırı yalnızca dosyaya bakıyordu. busboy'un varsayılanıyla fotoğrafın önünde
+1.000 parça, her biri 1 MB'lık metin alanı gelebiliyordu ve hepsi istek bitene kadar bellekte
+duruyordu: bir hesap 99 alanlık istekleri Cloudflare'in 100 MB sınırının hemen altında yarıda
+bıraktı, birkaç düzinesi süreci belleksiz bıraktı. Uygulama yalnızca `file` gönderir; şimdi
+fotoğrafın yanında en fazla 4 alan, her biri en fazla 1 KB okunur (`MULTIPART_LIMITS`), fazlası
+400 `too_many_parts`. Fastify'ın varsayılanı bir isteğin gelmesini sonsuza dek beklemekti; artık
+150 saniyede gelmeyen istek kesilir (`REQUEST_TIMEOUT_MS`), uygulamanın fotoğrafa verdiği iki
+dakikanın biraz ötesi.
+
 Sınır tek başına yetmiyordu: zod bir listenin uzunluğuna ancak bütün elemanlarını okuduktan sonra
 bakar ve her bozuk elemanı ayrı bir hata sayar, 64 KB'lık bir `{}` listesi bile megabaytlarca
 cevap döndürüyordu. Bu yüzden sınırı olan listeler (`days`, `participantIds`, `userIds`, `ids`)
@@ -1162,7 +1171,9 @@ yazılamadı.
 
 Şimdi `POST /uploads` (`routes/uploads.ts`) dört yerde durur. Saatte 60 fotoğraf hem hesap hem
 istemci başına sayılır (`clientKey`: IPv4 adresi ya da IPv6 /64'ü), ikinci hesap açmak bir şey
-kazandırmaz. Bütün sunucu 24 saatte en fazla 2 GB fotoğraf alır (`uploadDailyBudgetBytes`); adres
+kazandırmaz. İkisi de gövde okunmadan, ilk `await`'ten önce sayılır, fotoğraf saklanmazsa geri
+verilir: önce yalnızca yazılan fotoğraf sayılıyordu, aynı anda gönderilen 150 fotoğrafın hepsi
+gövdeleri gelirken kontrolden geçip 201 aldı. Bütün sunucu 24 saatte en fazla 2 GB fotoğraf alır (`uploadDailyBudgetBytes`); adres
 ve hesap çoğaltana karşı tek sınır budur. Baytlar dakika dakika toplanır, liste 1.440 kayıttan
 uzamaz. Yazmadan önce ayrılırlar ki aynı anda gelen fotoğraflar hep birlikte sınırın altından
 kaçmasın; yazma başarısız olursa geri verilirler. Gövde okunmadan önce de diskte
@@ -1194,7 +1205,9 @@ Artık bir istemci (`clientKey`: IPv4 adresi ya da IPv6 /64'ü) saatte en çok 2
 (`registrationsPerHourPerClient`, `src/config.ts`). Arkadaş grubu birkaç kişi birden kaydolur,
 aynı Wi-Fi'daki bir masa bile bu sınıra varmaz. Sayaç, şifre hash'lenmeden hemen önce işler:
 kapılmış bir ad ya da hatalı bir form sayılmaz, aynı Wi-Fi'dan kaydolanlar yeniden denedi diye
-birbirinin hakkını yemez. Bütün sunucu için ayrıca bir sınır
+birbirinin hakkını yemez. Ad, hash bittikten sonra eklemeden hemen önce bir kez daha aranır: aynı
+boş adı aynı anda isteyen iki telefondan ikincisi 500 alıyordu, artık "kapılmış" der ve hakkını
+geri alır. Bütün sunucu için ayrıca bir sınır
 konmadı: onu tek bir trol doldurur, gerçek yeni kankalar kapıda kalırdı. Kullanıcı adıyla gönderilen
 yeni istekler de hesap başına saatte 15 (`NEW_FRIEND_REQUESTS_PER_USER`, `routes/friends.ts`). Kişi
 başına günde 3 istek bir telefonu öttüreni durduruyordu, herkesi öttüreni değil. Grubu elle ekleyen
@@ -1207,8 +1220,12 @@ harfli bir sorgu SQL'de daraltılamaz, önek boş kalır, LIKE `%` olur. Türkç
 (`matchesPrefix`, `routes/users.ts`) ise JavaScript'te, kullanıcı adı sırasıyla ilk 2.000 satırda
 çalışıyordu; "aa…" diye başlayan 2.100 hesap @seyma'yı o 2.000'in dışına itti. Şimdi aynı
 fonksiyon SQLite'a verilir (`koydum_search_match`; bir fonksiyon açıldığı bağlantıya ait olduğundan
-her uygulama kendi `db`'sine bir kez kaydeder) ve sorgunun içinde, LIMIT'ten önce çalışır. İlk 20
-eşleşme döner, önüne kaç satır dizilirse dizilsin. Migration gerekmedi.
+her uygulama kendi `db`'sine bir kez kaydeder) ve sorgunun içinde, LIMIT'ten önce çalışır. Sıra da
+LIMIT'ten önce kurulur: önce sorgunun kendisi olan kullanıcı adı, sonra onunla başlayan kullanıcı
+adları, sonra yalnızca görünen adı tutanlar. Yalnızca kullanıcı adına göre sıralanınca görünen adı
+"Seyma" olan 20 hesap (@a01…@a20) "seyma" aramasında @seyma'yı yine dışarıda bırakıyordu; artık
+tam kullanıcı adını hiçbir kalabalık gizleyemez. "şey" gibi kısa bir önek ise onunla başlayan
+herkesindir, ilk 20'si döner. Migration gerekmedi.
 
 Adın kendisi de bir yoldu. "seni öldürürüm" adıyla açılan bir hesabın kanka isteği kurbanın kilit
 ekranına "seni öldürürüm seni kanka listesine ekledi" diye düşüyordu; laf filtresi
@@ -1256,8 +1273,10 @@ README sahibe o pencereyi izlemesini söylüyor, ama şikayetin bir sınırı yo
 2,4 saniyede 3.000 şikayet yazdı, tünel adresi de gerçek hatalar da ekrandan kaydı. `listReports`
 da hepsini döküyordu. Şimdi bir hesap saatte en çok 10 şikayet kaydeder (`REPORTS_PER_USER`,
 `routes/users.ts`; sayaç giriş sayaçları gibi süreçte durur). Aynı hesap aynı kişiyi 24 saat içinde
-yeniden şikayet ederse 201 alır, ama ne satır ne log yazılır, sayaç da işlemez: sahibin okuyacağı
-yeni bir şey yok, telefon yine "alındı" der. `sikayetler` en yeni 200 şikayeti (`REPORTS_LISTED`)
+aynı sebeple yeniden şikayet ederse (iki kez dokunmak, yeniden denemek) 201 alır, ama ne satır ne
+log yazılır, sayaç da işlemez: sahibin okuyacağı yeni bir şey yok, telefon yine "alındı" der. Yeni
+bir sebep ("şimdi de tehdit etti") her şikayet gibi kaydedilir; önce o da sessizce atılıyordu,
+telefon "alındı" derken sahibe hiç ulaşmıyordu. Seli saatte 10 sınırı zaten durduruyor. `sikayetler` en yeni 200 şikayeti (`REPORTS_LISTED`)
 gösterir, fazlası varsa toplamı söyler.
 
 Sebep de sahibin konsolunda okunur. `ESC[2J` ekranı silip listeyi boşaltıyordu, `ESC[8m`

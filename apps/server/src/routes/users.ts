@@ -9,7 +9,7 @@
  *
  * Every stored report is a `YENİ ŞİKAYET` line in the owner's server window: an
  * account files at most `REPORTS_PER_USER` an hour, and a repeat of the same
- * person within a day is not stored again.
+ * person for the same reason within a day is not stored again.
  */
 import type { FastifyInstance } from 'fastify';
 import { foldUsername, ReportBodySchema, UserSearchQuerySchema, type PublicUser } from '@koydum/shared';
@@ -33,9 +33,10 @@ const SEARCH_LIMIT = 20;
 export const REPORTS_PER_USER = { max: 10, windowMs: 60 * 60 * 1000 };
 
 /**
- * A second report of the same person from the same account this soon is not
- * stored: the owner has the first one to read, and the phone hears "alındı"
- * either way.
+ * A second report of the same person for the same reason from the same account
+ * this soon is not stored: a double tap or a retry, the owner has the first one
+ * to read, and the phone hears "alındı" either way. A new reason ("şimdi de
+ * tehdit etti") is news for the owner and is stored like any report.
  */
 export const REPORT_REPEAT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -71,9 +72,16 @@ function sqlPrefix(query: string): string {
  * on the first 2,000 rows by username, and for a query SQL cannot narrow ("Şey",
  * "şeyma": the LIKE is then `%`) those were simply the first 2,000 accounts, so
  * 2,000 throwaway "aa…" accounts hid @seyma from everybody.
+ *
+ * The hits are ranked before the LIMIT too: the username itself first, then
+ * usernames that start with the query, then names that only match by display
+ * name. Sorted by username alone, 20 accounts named "Seyma" (@a01…@a20) hid
+ * @seyma from a search for "seyma".
  */
 function searchHits(db: Database, meId: string, query: string): UserRow[] {
   const like = `${sqlPrefix(query)}%`;
+  const folded = foldUsername(query);
+  const usernamePrefix = `${folded.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
   return db
     .prepare(
       `SELECT * FROM users
@@ -86,10 +94,10 @@ function searchHits(db: Database, meId: string, query: string): UserRow[] {
              WHERE f.status = 'blocked'
                AND ((f.requester_id = ? AND f.addressee_id = users.id)
                  OR (f.addressee_id = ? AND f.requester_id = users.id)))
-        ORDER BY username ASC
+        ORDER BY (username = ?) DESC, (username LIKE ? ESCAPE '\\') DESC, username ASC
         LIMIT ?`,
     )
-    .all(meId, like, like, query, meId, meId, SEARCH_LIMIT) as UserRow[];
+    .all(meId, like, like, query, meId, meId, folded, usernamePrefix, SEARCH_LIMIT) as UserRow[];
 }
 
 /**
@@ -181,8 +189,8 @@ export default async function userRoutes(app: FastifyInstance): Promise<void> {
     const waitMs = reportsPerUser.retryAfterMs(me.id, now);
     if (waitMs > 0) throw tooMany('too_many_requests', `Çok fazla şikayet gönderdin. ${retryAfterText(waitMs)}`);
     const repeat = db
-      .prepare('SELECT 1 FROM reports WHERE reporter_id = ? AND reported_id = ? AND created_at >= ?')
-      .get(me.id, target.id, nowIso(new Date(now.getTime() - REPORT_REPEAT_WINDOW_MS)));
+      .prepare('SELECT 1 FROM reports WHERE reporter_id = ? AND reported_id = ? AND reason = ? AND created_at >= ?')
+      .get(me.id, target.id, body.reason, nowIso(new Date(now.getTime() - REPORT_REPEAT_WINDOW_MS)));
     if (repeat) return reply.code(201).send({ ok: true });
 
     db.prepare('INSERT INTO reports (id, reporter_id, reported_id, reason, created_at) VALUES (?, ?, ?, ?, ?)').run(

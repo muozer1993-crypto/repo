@@ -134,68 +134,79 @@ export default async function uploadRoutes(app: FastifyInstance): Promise<void> 
       throw tooMany('upload_limit', `Bu ağdan bir saatte çok fazla fotoğraf yüklendi. ${retryAfterText(clientWait)}`);
     }
 
-    if (!request.isMultipart()) {
-      throw badRequest('invalid_multipart', 'Dosya yüklemek için multipart form gerekli.');
-    }
-
-    const part = await request.file();
-    if (!part) throw badRequest('file_required', 'Bir dosya seçmelisin.');
-
-    const mimetype = part.mimetype.split(';')[0]?.trim().toLowerCase() ?? '';
-    const extension = EXTENSIONS[mimetype];
-    if (!extension) {
-      // Drain the stream so the connection is not left hanging on a rejected file.
-      part.file.resume();
-      throw badRequest('invalid_file_type', 'Sadece JPG, PNG ya da WEBP fotoğraf yükleyebilirsin.');
-    }
-
-    // Before the body is read. What is left on a nearly full disk belongs to the
-    // database: a step sync on a full one fails with "database or disk is full".
-    const free = await freeBytes(uploadDir);
-    if (free !== null && free < app.config.uploadMinFreeBytes) {
-      part.file.resume();
-      throw diskFull(at, { freeMb: Math.floor(free / (1024 * 1024)) });
-    }
-
-    const buffer = await part.toBuffer();
-    if (part.file.truncated) {
-      throw badRequest('file_too_large', 'Dosya çok büyük (en fazla 5 MB).');
-    }
-    if (buffer.length === 0) throw badRequest('file_required', 'Boş dosya gönderdin.');
-
-    // the APKs on phones send camera shots with their GPS in them: the metadata goes, the picture stays
-    const kind = sniffImage(buffer);
-    if (!kind) throw badRequest('invalid_file_type', 'Sadece JPG, PNG ya da WEBP fotoğraf yükleyebilirsin.');
-    const clean = stripMetadata(buffer, kind);
-    if (!clean) throw badRequest('invalid_file_type', 'Bu fotoğraf bozuk görünüyor, başka bir tane seç.');
-
-    const budgetWait = budgetWaitMs(clean.length, at);
-    if (budgetWait > 0) {
-      if (at - budgetWarnedAt >= OWNER_WARN_EVERY_MS) {
-        budgetWarnedAt = at;
-        app.log.warn({ mb: Math.round(storedToday(at) / (1024 * 1024)) }, 'daily upload budget used up');
-      }
-      throw tooMany('upload_limit', `Sunucu bugün çok fazla fotoğraf aldı. ${retryAfterText(budgetWait)}`);
-    }
-
-    const filename = `${randomUUID()}.${extension}`;
-    const target = path.join(uploadDir, filename);
-    const slot = reserve(clean.length, at);
-    try {
-      await fs.promises.mkdir(uploadDir, { recursive: true });
-      await fs.promises.writeFile(target, clean);
-    } catch (err) {
-      slot.bytes -= clean.length;
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === 'ENOSPC' || code === 'EDQUOT') {
-        // writeFile leaves behind whatever it got down before the disk ran out
-        await fs.promises.unlink(target).catch(() => undefined);
-        throw diskFull(at, { err });
-      }
-      throw err;
-    }
+    // Counted before the first await: the checks above and these two lines run
+    // in one go, so a burst sent side by side cannot all pass them while the
+    // first bodies are still coming in (150 at once all got 201 against the 60).
+    // Given back below when nothing is stored: a refused photo costs no hour.
     perUser.record(row.id, now);
     perClient.record(client, now);
+    let filename: string;
+    try {
+      if (!request.isMultipart()) {
+        throw badRequest('invalid_multipart', 'Dosya yüklemek için multipart form gerekli.');
+      }
+
+      const part = await request.file();
+      if (!part) throw badRequest('file_required', 'Bir dosya seçmelisin.');
+
+      const mimetype = part.mimetype.split(';')[0]?.trim().toLowerCase() ?? '';
+      const extension = EXTENSIONS[mimetype];
+      if (!extension) {
+        // Drain the stream so the connection is not left hanging on a rejected file.
+        part.file.resume();
+        throw badRequest('invalid_file_type', 'Sadece JPG, PNG ya da WEBP fotoğraf yükleyebilirsin.');
+      }
+
+      // Before the body is read. What is left on a nearly full disk belongs to the
+      // database: a step sync on a full one fails with "database or disk is full".
+      const free = await freeBytes(uploadDir);
+      if (free !== null && free < app.config.uploadMinFreeBytes) {
+        part.file.resume();
+        throw diskFull(at, { freeMb: Math.floor(free / (1024 * 1024)) });
+      }
+
+      const buffer = await part.toBuffer();
+      if (part.file.truncated) {
+        throw badRequest('file_too_large', 'Dosya çok büyük (en fazla 5 MB).');
+      }
+      if (buffer.length === 0) throw badRequest('file_required', 'Boş dosya gönderdin.');
+
+      // the APKs on phones send camera shots with their GPS in them: the metadata goes, the picture stays
+      const kind = sniffImage(buffer);
+      if (!kind) throw badRequest('invalid_file_type', 'Sadece JPG, PNG ya da WEBP fotoğraf yükleyebilirsin.');
+      const clean = stripMetadata(buffer, kind);
+      if (!clean) throw badRequest('invalid_file_type', 'Bu fotoğraf bozuk görünüyor, başka bir tane seç.');
+
+      const budgetWait = budgetWaitMs(clean.length, at);
+      if (budgetWait > 0) {
+        if (at - budgetWarnedAt >= OWNER_WARN_EVERY_MS) {
+          budgetWarnedAt = at;
+          app.log.warn({ mb: Math.round(storedToday(at) / (1024 * 1024)) }, 'daily upload budget used up');
+        }
+        throw tooMany('upload_limit', `Sunucu bugün çok fazla fotoğraf aldı. ${retryAfterText(budgetWait)}`);
+      }
+
+      filename = `${randomUUID()}.${extension}`;
+      const target = path.join(uploadDir, filename);
+      const slot = reserve(clean.length, at);
+      try {
+        await fs.promises.mkdir(uploadDir, { recursive: true });
+        await fs.promises.writeFile(target, clean);
+      } catch (err) {
+        slot.bytes -= clean.length;
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === 'ENOSPC' || code === 'EDQUOT') {
+          // writeFile leaves behind whatever it got down before the disk ran out
+          await fs.promises.unlink(target).catch(() => undefined);
+          throw diskFull(at, { err });
+        }
+        throw err;
+      }
+    } catch (err) {
+      perUser.unrecord(row.id, now);
+      perClient.unrecord(client, now);
+      throw err;
+    }
 
     // Relative on purpose: the phones resolve it against the address THEY use
     // for this server. An absolute URL built from PUBLIC_URL's default

@@ -165,6 +165,65 @@ describe('POST /uploads per-client cap', () => {
   });
 });
 
+describe('POST /uploads under a burst', () => {
+  it('holds the hourly cap for photos sent side by side', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+
+    const answers = await Promise.all(Array.from({ length: 100 }, () => upload(harness!, ali.token, '192.0.2.78')));
+    const codes = answers.map((answer) => answer.statusCode);
+    expect(codes.filter((code) => code === 201)).toHaveLength(UPLOADS_PER_USER.max);
+    expect(codes.filter((code) => code === 429)).toHaveLength(100 - UPLOADS_PER_USER.max);
+    expect(stored(harness)).toHaveLength(UPLOADS_PER_USER.max);
+  });
+
+  it('gives the hour back for a photo it did not store', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+    const notImage = multipart({ filename: 'x.jpg', contentType: 'image/jpeg', content: Buffer.from('not a photo') });
+
+    for (let i = 0; i < UPLOADS_PER_USER.max; i += 1) {
+      const refused = await authed(harness.app, ali.token)({ method: 'POST', url: '/uploads', ...notImage, remoteAddress: '192.0.2.5' });
+      expect(refused.statusCode).toBe(400);
+    }
+    expect((await upload(harness, ali.token, '192.0.2.5')).statusCode).toBe(201);
+  });
+});
+
+describe('POST /uploads text fields', () => {
+  function withFields(count: number, size: number) {
+    const boundary = '----koydumfields';
+    const fields = Array.from(
+      { length: count },
+      (_, i) => `--${boundary}\r\nContent-Disposition: form-data; name="f${i}"\r\n\r\n${'x'.repeat(size)}\r\n`,
+    ).join('');
+    const head = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="kanit.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`;
+    return {
+      payload: Buffer.concat([Buffer.from(fields + head), JPEG_1X1, Buffer.from(`\r\n--${boundary}--\r\n`)]),
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    };
+  }
+
+  it('turns away a photo with a pile of text fields in front of it', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+
+    const refused = await authed(harness.app, ali.token)({ method: 'POST', url: '/uploads', ...withFields(50, 10) });
+    expect(refused.statusCode).toBe(400);
+    expect(error(refused)).toEqual({ code: 'too_many_parts', message: 'Fotoğrafın yanında çok fazla alan gönderdin.' });
+    expect(stored(harness)).toHaveLength(0);
+  });
+
+  it('keeps no more than a kilobyte of a field, and still takes the photo behind it', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+
+    const response = await authed(harness.app, ali.token)({ method: 'POST', url: '/uploads', ...withFields(1, 2 * 1024 * 1024) });
+    expect(response.statusCode).toBe(201);
+    expect(stored(harness)).toHaveLength(1);
+  });
+});
+
 describe('POST /uploads daily budget', () => {
   it("stops the whole server at the day's bytes, whoever sends them, until the oldest are a day old", async () => {
     harness = await makeApp({ now: NOW, config: { uploadDailyBudgetBytes: 3 * JPEG_1X1.length } });

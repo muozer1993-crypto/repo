@@ -91,6 +91,7 @@ const FASTIFY_MESSAGES: Record<string, { status: number; code: string; message: 
   FST_REQ_FILE_TOO_LARGE: { status: 413, code: 'file_too_large', message: 'Dosya çok büyük (en fazla 5 MB).' },
   FST_PARTS_LIMIT: { status: 400, code: 'too_many_parts', message: 'Çok fazla dosya gönderdin.' },
   FST_FILES_LIMIT: { status: 400, code: 'too_many_parts', message: 'Çok fazla dosya gönderdin.' },
+  FST_FIELDS_LIMIT: { status: 400, code: 'too_many_parts', message: 'Fotoğrafın yanında çok fazla alan gönderdin.' },
   FST_INVALID_MULTIPART_CONTENT_TYPE: { status: 400, code: 'invalid_multipart', message: 'Dosya yüklemek için multipart form gerekli.' },
   // busboy/dicer give up on a truncated body with this one; a dropped mobile upload
   // is a client problem, not a server fault.

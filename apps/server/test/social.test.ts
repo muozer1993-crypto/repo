@@ -208,6 +208,35 @@ describe('POST /auth/register', () => {
   });
 });
 
+describe('POST /auth/register at the same moment', () => {
+  it('opens the name once and tells the others it is taken, without spending their sign-ups', async () => {
+    harness = await makeApp({ config: { registrationsPerHourPerClient: 2 } });
+    const h = harness;
+    const register = (username: string, remoteAddress: string) =>
+      h.app.inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username, password: 'sifre123', displayName: 'Yarış', timezone: 'Europe/Istanbul' },
+        remoteAddress,
+      });
+
+    const addresses = Array.from({ length: 6 }, (_, i) => `198.51.100.${40 + i}`);
+    const answers = await Promise.all(addresses.map((address) => register('yaris', address)));
+    const codes = answers.map((answer) => answer.statusCode).sort();
+    expect(codes).toEqual([201, 409, 409, 409, 409, 409]);
+    for (const answer of answers.filter((a) => a.statusCode === 409)) {
+      expect(answer.json<{ error: { code: string; message: string } }>().error).toEqual({
+        code: 'username_taken',
+        message: 'Bu kullanıcı adı kapılmış. Başka bir tane dene.',
+      });
+    }
+    // a "kapılmış" costs nothing: every address still has both of its sign-ups
+    const loser = addresses[answers.findIndex((answer) => answer.statusCode === 409)]!;
+    expect((await register('yaris2', loser)).statusCode).toBe(201);
+    expect((await register('yaris3', loser)).statusCode).toBe(201);
+  });
+});
+
 describe('POST /auth/login', () => {
   it('returns a token for the right password', async () => {
     const h = await boot();
@@ -1490,6 +1519,31 @@ describe('GET /users/search', () => {
     expect(await usernames('BOB HIRSIZ 2099')).toEqual(['aa02099']);
   });
 
+  it('puts the username itself first, however many display names also match', async () => {
+    const h = await boot();
+    const me = await registerUser(h.app, 'mustafa');
+    await registerUser(h.app, 'seyma', { displayName: 'Şeyma Yılmaz' });
+    await registerUser(h.app, 'seymanur', { displayName: 'Nur' });
+    // look-alikes: their usernames sort before hers, their display names match her name
+    for (let i = 1; i <= 25; i += 1) {
+      await registerUser(h.app, `a${String(i).padStart(2, '0')}`, { displayName: 'Seyma' });
+    }
+    const call = authed(h.app, me.token);
+    const usernames = async (q: string): Promise<string[]> =>
+      (await call({ method: 'GET', url: `/users/search?q=${encodeURIComponent(q)}` }))
+        .json<{ username: string }[]>()
+        .map((u) => u.username);
+
+    for (const q of ['seyma', 'Seyma', 'SEYMA']) {
+      const hits = await usernames(q);
+      expect(hits, q).toHaveLength(20);
+      // the exact username, then the usernames that start with it, then display names
+      expect(hits.slice(0, 3), q).toEqual(['seyma', 'seymanur', 'a01']);
+    }
+    // the look-alikes' plain S does not match a Ş: only the folded usernames do
+    expect(await usernames('Şeyma')).toEqual(['seyma', 'seymanur']);
+  });
+
   it('hides soft-deleted users', async () => {
     const h = await boot();
     const me = await registerUser(h.app, 'mustafa');
@@ -1717,7 +1771,7 @@ describe('block / unblock / report', () => {
     expect(h.db.prepare('SELECT reason FROM reports').all()).toEqual([{ reason: 'spam kötü' }]);
   });
 
-  it('takes ten reports an hour from one account, and stores one per person a day', async () => {
+  it('takes ten reports an hour from one account, and stores one per person and reason a day', async () => {
     const h = await boot();
     const me = await registerUser(h.app, 'mustafa');
     const call = authed(h.app, me.token);
@@ -1727,12 +1781,19 @@ describe('block / unblock / report', () => {
       call({ method: 'POST', url: `/users/${id}/report`, payload: { reason } });
     const stored = () => (h.db.prepare('SELECT COUNT(*) AS n FROM reports').get() as { n: number }).n;
 
-    // the same person again within the day: "alındı" on the phone, nothing new for the owner
+    // the same report again within the day (a double tap, a retry): "alındı" on the phone, nothing new for the owner
     expect((await report(others[0]!.me.id)).statusCode).toBe(201);
-    expect((await report(others[0]!.me.id, 'Bir de fotoğrafı sahte.')).statusCode).toBe(201);
+    expect((await report(others[0]!.me.id)).statusCode).toBe(201);
     expect(stored()).toBe(1);
+    // a new reason is news: the owner reads it
+    expect((await report(others[0]!.me.id, 'Şimdi de tehdit etti.')).statusCode).toBe(201);
+    expect(h.db.prepare('SELECT reason FROM reports ORDER BY created_at').all()).toEqual([
+      { reason: 'Küfür ediyor.' },
+      { reason: 'Şimdi de tehdit etti.' },
+    ]);
 
-    for (const other of others.slice(1, REPORTS_PER_USER.max)) expect((await report(other.me.id)).statusCode).toBe(201);
+    // two of the hour's ten went to that person
+    for (const other of others.slice(1, REPORTS_PER_USER.max - 1)) expect((await report(other.me.id)).statusCode).toBe(201);
     expect(stored()).toBe(REPORTS_PER_USER.max);
 
     const over = await report(others[REPORTS_PER_USER.max]!.me.id);
@@ -1743,7 +1804,7 @@ describe('block / unblock / report', () => {
     });
     expect(stored()).toBe(REPORTS_PER_USER.max);
 
-    // a day on, the same person can be reported again, and the hour's budget is back
+    // a day on, the same report can be filed again, and the hour's budget is back
     h.advance(25 * 60 * 60 * 1000);
     expect((await report(others[0]!.me.id)).statusCode).toBe(201);
     expect((await report(others[REPORTS_PER_USER.max]!.me.id)).statusCode).toBe(201);

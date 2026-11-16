@@ -53,6 +53,21 @@ export class AttemptLimiter {
     if (this.hits.size > MAX_KEYS) this.evict(at, key);
   }
 
+  /**
+   * Takes back one attempt `record` counted for `key` at `now`. A caller that
+   * counts before its first await, so a burst sent at once cannot all pass the
+   * check, gives the hit back when the request then fails without costing what
+   * the budget is for (a photo that was never stored, a name somebody else took).
+   */
+  unrecord(key: string, now: Date): void {
+    const list = this.hits.get(key);
+    if (!list) return;
+    const index = list.lastIndexOf(now.getTime());
+    if (index === -1) return;
+    list.splice(index, 1);
+    if (list.length === 0) this.hits.delete(key);
+  }
+
   /** Forgets `key` — a successful login clears the failures that led to it. */
   reset(key: string): void {
     this.hits.delete(key);
