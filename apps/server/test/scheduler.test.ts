@@ -33,7 +33,7 @@ import {
 } from '../src/services/scheduler.js';
 import { readLastBeat, writeLastBeat } from '../src/services/pauses.js';
 import { getBadges } from '../src/services/stats.js';
-import { newId, nowIso, type ChallengeRow, type ParticipantRow } from '../src/db/index.js';
+import { migrate, newId, nowIso, type ChallengeRow, type ParticipantRow } from '../src/db/index.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
@@ -1367,6 +1367,63 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
       await stop?.();
       vi.useRealTimers();
     }
+  });
+
+  // The owner updates from a version older than 014: that server ran its passes
+  // but never wrote a beat down, so the new one's first start had nothing to
+  // measure the stop from (migration 017 seeds it from the data).
+
+  /**
+   * Ali and Veli in a bedtime çelınc (23:30) on that old server: it last
+   * answered Ali's inbox poll at 23:20 and comes back updated at 23:40, with
+   * `seed` saying whether 017 ran on the way. Returns when it last heard anybody.
+   */
+  async function stoppedForTheUpdate(h: TestApp, seed: boolean) {
+    const { ali, challengeId } = await checkinRace(h, 'erken_yat', '23:30');
+    tick(h);
+    at(h, '2026-01-05T20:20:00.000Z');
+    expect((await authed(h.app, ali.token)({ method: 'GET', url: '/me/inbox/unread' })).statusCode).toBe(200);
+    const lastSeen = (h.db.prepare('SELECT last_seen_at FROM users WHERE id = ?').get(ali.me.id) as { last_seen_at: string })
+      .last_seen_at;
+    // what the old version left: no beat, and no 017
+    h.db.exec("DELETE FROM server_state; DELETE FROM _migrations WHERE id = '017_seed_last_beat'");
+    at(h, '2026-01-05T20:40:00.000Z');
+    if (seed) expect(migrate(h.db)).toEqual(['017_seed_last_beat']);
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      stop = startScheduler(h.app, h.db, h.config, { push: quietPush });
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+    return { ali, challengeId, lastSeen };
+  }
+
+  it('counts a "Geldim" tapped while the old version was stopped for the update at its tap', async () => {
+    harness = await makeApp({ now: '2026-01-05T20:00:00.000Z' }); // 23:00
+    const { ali, challengeId, lastSeen } = await stoppedForTheUpdate(harness, true);
+    expect(lastSeen).toBe('2026-01-05T20:20:00.000Z');
+    expect(pauses(harness)).toEqual([{ started_at: lastSeen, ended_at: '2026-01-05T20:40:00.000Z' }]);
+
+    // 23:25, while nothing answered; the phone's queue sends it at 23:40
+    const response = await geldim(harness, ali, challengeId, '2026-01-05', '2026-01-05T20:25:00.000Z');
+    expect(response.statusCode).toBe(201);
+    const { entry } = response.json<{ entry: Entry }>();
+    expect(entry.value).toBe(1);
+    expect(entry.late).toBeUndefined();
+  });
+
+  it('scores that "Geldim" a late 0 without the beat 017 seeds', async () => {
+    harness = await makeApp({ now: '2026-01-05T20:00:00.000Z' });
+    const { ali, challengeId } = await stoppedForTheUpdate(harness, false);
+    expect(pauses(harness)).toEqual([]);
+
+    const response = await geldim(harness, ali, challengeId, '2026-01-05', '2026-01-05T20:25:00.000Z');
+    expect(response.statusCode).toBe(201);
+    const { entry } = response.json<{ entry: Entry }>();
+    expect(entry.value).toBe(0);
+    expect(entry.late).toBe(true);
   });
 
   it('takes an itiraz sent right after it wakes, in the hour that starts at the wake', async () => {

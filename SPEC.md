@@ -389,7 +389,10 @@ friend_refusals(user_id TEXT, other_id TEXT, at TEXT, PRIMARY KEY(user_id, other
   -- them. An invite code from other_id is then an ordinary request, however new the account; the row goes when user_id
   -- asks or accepts other_id
 server_state(key TEXT PK, value TEXT)
-  -- 'last_beat': the scheduler's latest beat (ISO), written every 30 s and read back at start
+  -- 'last_beat': the scheduler's latest beat (ISO), written every 30 s and read back at start. A database migrated
+  -- from before 014 gets it seeded once from the newest users.last_seen_at / entries.updated_at /
+  -- notifications.created_at (migration 017; a new database has none of those yet), so the first start after that
+  -- upgrade still writes the pause
 ```
 
 ### 2.2 Endpoints (all JSON; errors `{ error: { code, message } }`, message in Turkish)

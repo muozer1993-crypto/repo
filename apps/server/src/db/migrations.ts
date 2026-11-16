@@ -401,6 +401,30 @@ CREATE TABLE IF NOT EXISTS friend_refusals (
 );
 `;
 
+/**
+ * The beat a server from before 014 never wrote. Without it the first start
+ * of the new version finds no last beat, writes down no pause, and a "Geldim"
+ * a phone parked while the old one was off for the update is judged at its
+ * arrival: a late 0, or refused as not today's after a night. Every signed-in
+ * request (the phones' background inbox polls too) leaves `users.last_seen_at`
+ * at most a minute behind it (`plugins/auth.ts`), so the newest of these three
+ * (all stored as toISOString(), so the strings compare as the instants do) is
+ * about when the old server last answered, and no tap after it was heard.
+ * A database at 014 or later already holds the key and keeps it (OR IGNORE); a
+ * new one, a test's included, has empty tables here, so MAX is NULL and nothing
+ * is written. `startScheduler` then writes the pause as after any stop.
+ */
+const SEED_LAST_BEAT = `
+INSERT OR IGNORE INTO server_state (key, value)
+SELECT 'last_beat', t FROM (
+  SELECT MAX(t) AS t FROM (
+    SELECT MAX(last_seen_at) AS t FROM users
+    UNION ALL SELECT MAX(updated_at) FROM entries
+    UNION ALL SELECT MAX(created_at) FROM notifications
+  )
+) WHERE t IS NOT NULL;
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -418,4 +442,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '014_server_pauses', sql: SERVER_PAUSES },
   { id: '015_participant_invited_by', sql: PARTICIPANT_INVITED_BY },
   { id: '016_friend_refusals', sql: FRIEND_REFUSALS },
+  { id: '017_seed_last_beat', sql: SEED_LAST_BEAT },
 ];

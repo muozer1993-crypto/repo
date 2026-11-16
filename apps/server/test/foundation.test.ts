@@ -2,6 +2,7 @@
  * Foundation tests: the pieces every route module builds on.
  */
 import { createHmac } from 'node:crypto';
+import BetterSqlite3 from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 import { hashPassword, verifyPassword } from '../src/auth/password.js';
 import { DEFAULT_TTL_SECONDS, bearerToken, signToken, verifyToken } from '../src/auth/jwt.js';
@@ -9,6 +10,7 @@ import { migrate, newInviteCode, openDb } from '../src/db/index.js';
 import { MIGRATIONS } from '../src/db/migrations.js';
 import { loadConfig } from '../src/config.js';
 import { listInbox, markRead, notify, unreadCount } from '../src/services/notifications.js';
+import { readLastBeat, writeLastBeat } from '../src/services/pauses.js';
 import { computeUserStats, getBadges } from '../src/services/stats.js';
 import { conflict } from '../src/errors.js';
 import { TEST_SECRET, makeApp, registerUser, type TestApp } from './helpers.js';
@@ -141,6 +143,37 @@ describe('migrations', () => {
 
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
     db.close();
+  });
+
+  it('seeds the last beat a server from before 014 never wrote', () => {
+    // the database an owner on an older version has: at 013, never a beat
+    const db = new BetterSqlite3(':memory:');
+    db.exec('CREATE TABLE _migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)');
+    for (const migration of MIGRATIONS.slice(0, 13)) {
+      db.exec(migration.sql);
+      db.prepare('INSERT INTO _migrations (id, applied_at) VALUES (?, ?)').run(migration.id, '2026-11-01T10:00:00.000Z');
+    }
+    db.prepare(
+      `INSERT INTO users (id, username, display_name, password_hash, invite_code, created_at, last_seen_at)
+       VALUES ('u1', 'ali', 'Ali', 'x', 'K7QF2M', '2026-11-01T10:00:00.000Z', '2026-11-16T20:19:00.000Z')`,
+    ).run();
+
+    expect(migrate(db)).toEqual(['014_server_pauses', '015_participant_invited_by', '016_friend_refusals', '017_seed_last_beat']);
+    // the first start of the new version writes the pause from here
+    expect(readLastBeat(db)?.toISOString()).toBe('2026-11-16T20:19:00.000Z');
+
+    // one at 016 that already beats keeps its own beat, even behind a later request
+    writeLastBeat(db, new Date('2026-11-16T21:00:00.000Z'));
+    db.prepare("UPDATE users SET last_seen_at = '2026-11-16T22:00:00.000Z'").run();
+    db.prepare("DELETE FROM _migrations WHERE id = '017_seed_last_beat'").run();
+    expect(migrate(db)).toEqual(['017_seed_last_beat']);
+    expect(readLastBeat(db)?.toISOString()).toBe('2026-11-16T21:00:00.000Z');
+    db.close();
+
+    // a new database (every test's) has nobody yet, so no beat either
+    const fresh = openDb(':memory:');
+    expect(readLastBeat(fresh)).toBeNull();
+    fresh.close();
   });
 
   it('generates readable invite codes', () => {
