@@ -310,11 +310,18 @@ diye. Bu kart da bir güncellemeyle geldi; onu henüz almamış telefonlar günc
 sonraki açılışta çalıştırır. Kanal, `eas.json`'daki profilde yazıyor; `play-internal` profili de
 `preview` kanalını dinler, yani tek komut ikisine birden gider.
 
-Kural: `app.json`'daki `version` değeri, uygulamanın "çalışma zamanı"dır (`runtimeVersion:
-appVersion`). Yerel tarafı değiştiren bir derleme yaptığında `version`'ı yükselt (1.0.0 → 1.1.0),
-böylece eski kurulumlar kendilerinde olmayan native kodu varsayan bir güncelleme almaz.
-Ekran süresi modülü tam olarak böyle bir değişiklikti: 1.1.0 sürümü yeni bir APK ister, `eas update`
-ile 1.0.0 kurulumlarına gitmez.
+Hangi APK'nın hangi güncellemeyi alacağını `app.json`'daki `runtimeVersion` söyler, `version`
+değil. `version` APK'nın sürümüdür (Ayarlar'ın en altında ve indirme sayfasında görünen) ve her
+yeni APK'da yükselir. `runtimeVersion` şu an `"1.1.0"`: 1.1.0 ve 1.1.1 APK'ları aynı
+`eas update`'i alır. 1.1.1'in getirdiği düzeltme (ekran süresine ana ekranın girmemesi) tamamen
+telefonun yerel kodunda, JavaScript ondan habersiz; aynı güncelleme 1.1.0'da da sorunsuz çalışır.
+Böylece 1.1.1'i henüz kurmamış kankaların da düzeltmeleri almaya devam eder.
+
+`runtimeVersion`'ı ancak JavaScript, eski APK'da olmayan yerel koda seslenmeye başladığında
+değiştir, o zaman da yeni APK'nın sürümüne çek (`"runtimeVersion": "1.2.0"` gibi). Değiştirdiğin
+an eski APK'lar güncelleme almayı bırakır: bekleyen düzeltmeleri önce eski numarayla
+`eas update` ile yayınla, sonra değiştir. Ekran süresi modülü böyle bir değişiklikti: 1.1.0 yeni
+bir APK istedi, `eas update` 1.0.0 kurulumlarına gitmedi.
 
 Depoyu çekip (`git pull`) sunucuyu yeni kodla açtığında
 ([Sunucuyu güncellemek](#sunucuyu-güncellemek)) `apps/mobile` da değiştiyse `eas update`'i
@@ -1007,7 +1014,19 @@ geri gelmez.
 Android tarafı `apps/mobile/modules/koydum-screen-time/` altındaki yerel Expo modülü (Kotlin).
 Günlük dakikaları `queryEvents` üzerinden hesaplıyor: her uygulamanın ön planda kaldığı aralık,
 yerel gece yarısına göre gün gün toplanıyor. Dijital Denge'nin gösterdiği "ekran süresi" de aynı
-şekilde çıkıyor. Modülün `app.plugin.js` dosyası manifeste `PACKAGE_USAGE_STATS` iznini ekler.
+şekilde çıkıyor. Ana ekran (uygulama listesi ve son uygulamalar ekranı dahil) ile bildirim
+paneli ekran süresine girmez; Dijital Denge de onları saymaz. Modülün `app.plugin.js` dosyası
+manifeste `PACKAGE_USAGE_STATS` iznini ve ana ekranı görebilmek için bir `<queries>` girişi ekler.
+
+1.1.0 bu konuda yanılıyordu: Android 11'den beri bir uygulama manifestinde sormadığı uygulamaları
+göremiyor ve o girişi olmayan 1.1.0, Pixel gibi sade Android'li telefonlarda ana ekranı bulamayıp
+onu da sayıyordu (günde 10-30 dakika fazladan). Sayım da ekranın kapandığı an değil kilitlendiği
+an durduğu için, geç kilitlenen telefonda aradaki birkaç dakika da girebiliyordu. 1.1.1 ikisini de
+düzeltir ama yeni APK ister: `apps/mobile` klasöründe
+`eas build --profile preview --platform android`, sonra proje klasöründe indirdiğin dosyayla
+`npm run apk:yayinla -- C:\Users\sen\Downloads\koydum.apk`. 1.1.0'daki kankalar ana ekranda
+"Yeni sürüm var" kartını görür. Telefonun önceden gönderdiği günler (güncellediği gün dahil)
+eski, biraz şişkin değerinde kalır: sunucu bir günün dakikasını hiç düşürmez.
 
 Üç şey bilinsin:
 

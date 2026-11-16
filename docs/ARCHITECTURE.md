@@ -754,6 +754,13 @@ modülüdür (Kotlin, `UsageStatsManager.queryEvents`). Uygulama onu adıyla ara
 birlikte "okuyamıyorum" der ve ekran elle girişe döner. iPhone'da bu veri hiçbir uygulamaya
 açık değildir; orada elle giriş kalıcıdır.
 
+Ana ekran ve sistem arayüzü (`com.android.systemui`) Dijital Denge'deki gibi sayılmaz. Ana ekranı
+bulmak manifestte bir `<queries>` MAIN/HOME girişi ister (modülün `app.plugin.js`'i ekler):
+Android 11'in paket görünürlüğü onsuz yalnızca Ayarlar'ın FallbackHome'unu gösterir, 1.1.0'da
+asıl ana ekran, uygulama listesi ve Pixel'in son uygulamalar ekranı bu yüzden sayılıyordu. Bir
+uygulamanın aralığı ekran karardığında (`SCREEN_NON_INTERACTIVE`) kapanır, kilit ekranı
+geldiğinde değil: geç kilitlenen telefonda ikisinin arası birkaç dakikadır.
+
 ## Arka planda ne çalışır
 
 `services/background.ts` on beş dakikada bir uyanan sistem görevini tanımlar. Uygulama açıkken

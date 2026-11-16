@@ -64,13 +64,21 @@ class KoydumScreenTimeModule : Module() {
     // UsageEvents.Event type codes, by value so the file compiles against any
     // compileSdk and never trips the NewApi lint: 1/2 are MOVE_TO_FOREGROUND /
     // MOVE_TO_BACKGROUND (renamed ACTIVITY_RESUMED / ACTIVITY_PAUSED in API 29),
-    // 23 is ACTIVITY_STOPPED (API 29), 16/17 SCREEN_INTERACTIVE /
-    // SCREEN_NON_INTERACTIVE (API 28), 26 DEVICE_SHUTDOWN (API 26).
+    // 23 is ACTIVITY_STOPPED (API 29), 16 SCREEN_NON_INTERACTIVE (API 28; 15 is
+    // SCREEN_INTERACTIVE), 26 DEVICE_SHUTDOWN (API 26). The screen going dark is
+    // 16, not 17: 17 is KEYGUARD_SHOWN, which on a phone set to lock a few
+    // minutes after the screen goes off comes only then, and closing on it
+    // counted those dark minutes.
     private const val EVENT_RESUMED = 1
     private const val EVENT_PAUSED = 2
     private const val EVENT_STOPPED = 23
-    private const val EVENT_SCREEN_OFF = 17
+    private const val EVENT_SCREEN_OFF = 16
     private const val EVENT_SHUTDOWN = 26
+
+    // What a HOME lookup answers that is not a launcher: "android" is the
+    // chooser (no default home picked yet), "com.android.settings" is
+    // FallbackHome, the placeholder Android shows before the first unlock.
+    private val NOT_A_LAUNCHER = setOf("android", "com.android.settings")
 
     /** PACKAGE_USAGE_STATS is granted per app from Settings, not at runtime. */
     fun hasUsageAccess(context: Context): Boolean {
@@ -218,14 +226,31 @@ class KoydumScreenTimeModule : Module() {
     /**
      * The launcher and the system UI are "the phone", not an app you are using;
      * Digital Wellbeing leaves them out of screen time and so do we.
+     *
+     * Seeing the launcher takes the MAIN/HOME <queries> entry that app.plugin.js
+     * adds to the manifest. Since Android 11 an app sees only a few system
+     * packages besides the ones it declares, and without that entry this lookup
+     * found just Settings' FallbackHome, so Settings was left out and the real
+     * home screen, its app drawer and Pixel's Recents counted. Only the default
+     * home is left out when there is one: a second "launcher" with a feed of its
+     * own is time spent.
      */
     private fun ignoredPackages(context: Context): Set<String> {
       val set = HashSet<String>()
       set.add("com.android.systemui")
       try {
+        val pm = context.packageManager
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        val resolved = context.packageManager.resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY)
-        resolved?.activityInfo?.packageName?.let { set.add(it) }
+        val chosen = pm.resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
+        if (chosen != null && chosen !in NOT_A_LAUNCHER) {
+          set.add(chosen)
+        } else {
+          // no default home picked yet: every home screen on the phone is the phone
+          for (info in pm.queryIntentActivities(home, PackageManager.MATCH_DEFAULT_ONLY)) {
+            val pkg = info.activityInfo?.packageName ?: continue
+            if (pkg !in NOT_A_LAUNCHER) set.add(pkg)
+          }
+        }
       } catch (_: Exception) {
         // no launcher to exclude; count everything
       }
