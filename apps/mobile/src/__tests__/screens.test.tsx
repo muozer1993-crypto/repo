@@ -593,6 +593,75 @@ describe('standings verdict', () => {
   });
 });
 
+describe('the "laf sok" note in a group çelınc', () => {
+  /** Mustafa (the reader), Ali and Veli at these scores and ranks; the reader may poke whoever is listed. */
+  function threeWay(me: [number, number], ali: [number, number], veli: [number, number], targets: string[]) {
+    const detail = challengeDetail();
+    const rival = (id: string, username: string, displayName: string, [score, rank]: [number, number]) => ({
+      user: { id, username, displayName, avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' },
+      status: 'accepted' as const,
+      score,
+      days: 2,
+      rank,
+      lastEntryAt: '2026-09-08T09:00:00.000Z',
+      isWinner: false,
+    });
+    const mine = { ...detail.me, score: me[0], rank: me[1] };
+    return {
+      ...detail,
+      me: mine,
+      participants: [rival('u-2', 'ali', 'Ali', ali), mine, rival('u-3', 'veli', 'Veli', veli)],
+      pokeTargets: targets.map((toUserId) => ({ toUserId, done: false })),
+    };
+  }
+
+  async function noteFor(detail: ReturnType<typeof threeWay>) {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => detail);
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    return rendered(tree);
+  }
+
+  it('tells the one in the middle whom they are ahead of, not "öndesin"', async () => {
+    // second of three: behind Ali, ahead of Veli, so Veli is the only one on the list
+    const text = await noteFor(threeWay([12430, 2], [15000, 1], [4201, 3], ['u-3']));
+    expect(text).toContain('Geridesin');
+    expect(text).toContain('Bunların önündesin, laf sokma hakkı sende.');
+    expect(text).toContain('Veli');
+    expect(text).not.toContain('Öndesin');
+  });
+
+  it('says it at every level', async () => {
+    const middle = threeWay([12430, 2], [15000, 1], [4201, 3], ['u-3']);
+    mockLevel.value = 1;
+    let text = await noteFor(middle);
+    expect(text).toContain('Aşağıdakilerin önündesin, onlara bir mesaj gönderebilirsin.');
+    expect(text).not.toContain('Öndesin');
+
+    mockLevel.value = 3;
+    text = await noteFor(middle);
+    expect(text).toContain('Bunlara koyuyorsun. Laf sokma hakkı senin 🍆');
+    expect(text).not.toContain('Öndesin');
+  });
+
+  it('does not tell a co-leader "öndesin" under "başa baş"', async () => {
+    // level with Ali at the top, both ahead of Veli
+    const text = await noteFor(threeWay([12430, 1], [12430, 1], [4201, 3], ['u-3']));
+    expect(text).toContain('Başa baş');
+    expect(text).toContain('Bunların önündesin, laf sokma hakkı sende.');
+    expect(text).not.toContain('Öndesin');
+  });
+
+  it('keeps "öndesin" for the one in front', async () => {
+    const text = await noteFor(threeWay([15000, 1], [12430, 2], [4201, 3], ['u-2', 'u-3']));
+    expect(text).toContain('Aferin lan koçum');
+    expect(text).toContain('Öndesin, laf sokma hakkı sende.');
+    expect(text).not.toContain('Bunların önündesin');
+  });
+});
+
 describe('how fresh a phone\'s count is', () => {
   const HOUR = 3_600_000;
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };

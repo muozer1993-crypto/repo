@@ -621,6 +621,7 @@ export default function ChallengeDetailScreen() {
           rivals={targets}
           cooling={coolingIds}
           me={mine}
+          leading={leading}
           level={level}
         />
       ) : null}
@@ -2322,6 +2323,11 @@ function FeedRow({
  * the reader is genuinely ahead of (`pokeTargets`), and pressing the button
  * opens the same choice the winner gets at the end — a handful of ready lines,
  * rendered with the real names and scores, pick one and it goes.
+ *
+ * Being ahead of somebody is not being in front: with three or more players
+ * the one in the middle gets this card too, right under a verdict that says
+ * "Geridesin", and a co-leader under "Başa baş". So only the sole leader is
+ * told "Öndesin"; everyone else is told whom they are ahead of.
  */
 function PokeSection({
   id,
@@ -2329,6 +2335,7 @@ function PokeSection({
   rivals,
   cooling,
   me,
+  leading,
   level,
 }: {
   id: string;
@@ -2336,6 +2343,8 @@ function PokeSection({
   rivals: ParticipantView[];
   cooling: Set<string>;
   me: ParticipantView | undefined;
+  /** first on their own — the standings verdict's "öndesin" rule */
+  leading: boolean;
   level: VulgarityLevel;
 }) {
   const poke = usePoke(id);
@@ -2411,12 +2420,19 @@ function PokeSection({
         {byLevel(level, 'Mesaj gönder', 'Laf sok', 'Laf sok 🍆')}
       </Text>
       <Text variant="tiny" muted style={styles.pokeNote}>
-        {byLevel(
-          level,
-          'Öndesin, bir mesaj gönderebilirsin.',
-          'Öndesin, laf sokma hakkı sende.',
-          'Öndesin. Laf sokma hakkı senin 🍆'
-        )}
+        {leading
+          ? byLevel(
+              level,
+              'Öndesin, bir mesaj gönderebilirsin.',
+              'Öndesin, laf sokma hakkı sende.',
+              'Öndesin. Laf sokma hakkı senin 🍆'
+            )
+          : byLevel(
+              level,
+              'Aşağıdakilerin önündesin, onlara bir mesaj gönderebilirsin.',
+              'Bunların önündesin, laf sokma hakkı sende.',
+              'Bunlara koyuyorsun. Laf sokma hakkı senin 🍆'
+            )}
       </Text>
       <View style={styles.pokeList}>
         {rivals.map((rival) => {
