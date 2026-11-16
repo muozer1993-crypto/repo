@@ -3868,7 +3868,7 @@ describe('settings: Health Connect read in the background', () => {
     };
   const FROM_HEALTH_CONNECT = { available: true, source: 'health_connect', approximate: false };
   const REFUSED =
-    'Dokun, Health Connect’i açayım: KOYDUM’un izinlerinden arka plan erişimini aç. Orada yoksa telefonun bunu desteklemiyor.';
+    'Dokun, Health Connect’i açayım: Uygulama izinleri → KOYDUM → Ek erişim → “Verilere arka planda erişim”i aç. Ek erişim hiç yoksa telefonundaki Health Connect bunu desteklemiyor.';
 
   beforeEach(() => {
     steps().requestHealthConnectBackground.mockClear();
@@ -4935,6 +4935,46 @@ describe('taking a social mistake back', () => {
     expect(rendered(tree)).toContain('Davet bağlantın da yenilendi, eskisiyle kimse gelemez.');
   });
 
+  // Sıralama is me and my friends; the Ben tab stays mounted and only read it
+  // again on a focus 20 s later, so a kanka I had just dropped stayed on it
+  it('takes a removed or blocked kanka off Sıralama too, not only off the list', async () => {
+    searchParams.id = MEHMET.id;
+    api.userProfile = jest.fn(async () => ({
+      ...MEHMET,
+      stats: { wins: 0, losses: 0, challengesPlayed: 0 },
+      badges: [],
+    }));
+    api.friends = jest.fn(async () => ({ friends: [MEHMET], incoming: [], outgoing: [] }));
+    api.removeFriend = jest.fn(async () => ({ status: 'removed', userId: MEHMET.id }));
+    api.blockUser = jest.fn(async () => ({ status: 'blocked', userId: MEHMET.id }));
+    const { qk } = require('@/lib/query') as typeof import('@/lib/query');
+    const UserScreen = require('@/app/(app)/user/[id]').default;
+
+    for (const [label, confirm] of [
+      ['👋 Arkadaşlıktan çıkar', 'Çıkar'],
+      ['⛔ Engelle', 'Engelle'],
+    ] as const) {
+      const tree = renderScreen(<UserScreen />);
+      await settle();
+      const invalidated = jest.spyOn(clientOf(tree), 'invalidateQueries');
+      press(tree, 'Diğer seçenekler');
+      const [row] = tree.root.findAll(
+        (node) =>
+          node.props.accessibilityRole === 'button' &&
+          typeof node.props.onPress === 'function' &&
+          node.findAll((inner) => inner.props.children === label).length > 0
+      );
+      act(() => {
+        row!.props.onPress();
+      });
+      await settle();
+      await answerAlert(confirm);
+      expect([label, invalidated.mock.calls.map(([filters]) => filters?.queryKey)]).toEqual([label, expect.arrayContaining([qk.leaderboard])]);
+    }
+    expect(api.removeFriend).toHaveBeenCalledWith('u-4');
+    expect(api.blockUser).toHaveBeenCalledWith('u-4');
+  });
+
   it('the profile of someone I asked offers "İsteği geri çek" instead of a dead button', async () => {
     searchParams.id = MEHMET.id;
     api.userProfile = jest.fn(async () => ({
@@ -5602,6 +5642,45 @@ describe('the rövanş rung on the profile', () => {
     // left somebody who keeps winning rematches of his own wins at 0/3
     expect(rendered(tree)).toContain('Kaybettiğin 3 çelıncın rövanşını al');
     expect(rendered(tree)).not.toContain('3 rövanş kazan');
+  });
+});
+
+describe('Sıralama on the profile', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  // The tab refetches the board on focus and after a finish; the owner's PC
+  // asleep or the tunnel down must not swap the board it showed for an error.
+  it('keeps the last board when a refetch fails, and says it is not the newest', async () => {
+    api.leaderboard = jest.fn(async () => [{ user: ALI, wins: 4, losses: 1, rank: 1 }]);
+    const ProfileScreen = require('@/app/(app)/(tabs)/profile').default;
+    const tree = renderScreen(<ProfileScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('Ali');
+    expect(rendered(tree)).not.toContain('Güncellenemedi');
+
+    api.leaderboard = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    await act(async () => {
+      await clientOf(tree).refetchQueries({ queryKey: ['leaderboard'] });
+    });
+    await settle();
+    expect(api.leaderboard).toHaveBeenCalled();
+    const text = rendered(tree);
+    expect(text).toContain('Ali');
+    expect(text).toContain('Güncellenemedi, son gelen sıralama bu.');
+    expect(text).not.toContain('Sunucuya ulaşamadım');
+  });
+
+  it('shows the error with a retry when there is no board to keep', async () => {
+    api.leaderboard = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    const ProfileScreen = require('@/app/(app)/(tabs)/profile').default;
+    const tree = renderScreen(<ProfileScreen />);
+    await settle();
+    expect(rendered(tree)).toContain('Sunucuya ulaşamadım');
+    expect(rendered(tree)).toContain('TEKRAR DENE');
   });
 });
 

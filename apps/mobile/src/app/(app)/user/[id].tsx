@@ -18,7 +18,7 @@ import { Sheet } from '@/components/Sheet';
 import { Stat } from '@/components/Stat';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
-import { useChallenges, useFriendAction, useFriends, useProfile } from '@/hooks/queries';
+import { invalidateFriendships, useChallenges, useFriendAction, useFriends, useProfile } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { useNewKankaToast } from '@/hooks/useNewKankaToast';
 import { usePullRefresh } from '@/hooks/usePullRefresh';
@@ -223,6 +223,8 @@ export default function UserProfileScreen() {
       });
       // Ayarlar may still hold the list from before this block
       void queryClient.invalidateQueries({ queryKey: qk.blocked });
+      // the block tore the friendship down: off the list and off Sıralama
+      invalidateFriendships(queryClient);
       await friends.refetch();
       if (router.canGoBack()) router.back();
     } catch (err) {

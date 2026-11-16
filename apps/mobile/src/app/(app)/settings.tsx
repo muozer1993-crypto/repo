@@ -861,7 +861,7 @@ export default function SettingsScreen() {
       } else {
         toast({
           title: 'İzin verilmedi',
-          body: 'Dokun, Health Connect’i açayım: KOYDUM’un izinlerinden arka plan erişimini aç. Orada yoksa telefonun bunu desteklemiyor.',
+          body: 'Dokun, Health Connect’i açayım: Uygulama izinleri → KOYDUM → Ek erişim → “Verilere arka planda erişim”i aç. Ek erişim hiç yoksa telefonundaki Health Connect bunu desteklemiyor.',
           kind: 'danger',
           durationMs: 8000,
           onPress: () => void openHealthConnect(),

@@ -22,7 +22,7 @@ import { refreshReminders } from '@/services/reminders';
 import { startForegroundStepTracking } from '@/services/steps';
 import { syncStepsNow } from '@/services/stepSync';
 import { syncScreenTimeNow } from '@/services/screenTimeSync';
-import { cachedChallengeTitle, invalidateForNotifications } from '@/hooks/queries';
+import { cachedChallengeTitle, invalidateForNotifications, invalidateFriendships } from '@/hooks/queries';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { applyPendingInvite } from '@/services/invite';
@@ -134,7 +134,7 @@ export function NotificationBridge() {
       const outcome = await applyPendingInvite(makeClient(), serverUrl);
       if (!alive || !outcome) return;
       if (outcome.kind === 'sent' || outcome.kind === 'accepted') {
-        void queryClient.invalidateQueries({ queryKey: qk.friends });
+        invalidateFriendships(queryClient);
         toast({
           title: outcome.kind === 'accepted' ? 'Kanka oldunuz' : 'Kanka isteği gitti',
           body:

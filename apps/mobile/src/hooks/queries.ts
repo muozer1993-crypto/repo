@@ -299,6 +299,17 @@ export function invalidateForNotifications(
   }
 }
 
+/**
+ * A kanka gained or lost on this phone (a request accepted, an invite link,
+ * "Arkadaşlıktan çıkar", a block): Sıralama is me and my friends, so it moves
+ * with the list. The profile tab stays mounted and only refetched it on a
+ * focus 20 s after the last try, so the board went on showing the old kankalar.
+ */
+export function invalidateFriendships(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: qk.friends });
+  void qc.invalidateQueries({ queryKey: qk.leaderboard });
+}
+
 /* ----------------------------------------------------------- mutations */
 
 /** Everything a write can invalidate; challenge lists and detail always move together. */
@@ -311,7 +322,7 @@ function useInvalidator() {
       void qc.invalidateQueries({ queryKey: qk.results(id) });
       void qc.invalidateQueries({ queryKey: ['challenges'] });
     },
-    friends: () => qc.invalidateQueries({ queryKey: qk.friends }),
+    friends: () => invalidateFriendships(qc),
     inbox: () => {
       void qc.invalidateQueries({ queryKey: qk.inbox });
       void qc.invalidateQueries({ queryKey: qk.unread });

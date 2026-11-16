@@ -612,7 +612,10 @@ function Leaderboard({
     );
   }
 
-  if (error) {
+  // A refetch that fails keeps the last board (TanStack keeps `data`): the tab
+  // refetches on focus and after a finish, and a sleeping server must not swap
+  // the board it showed a minute ago for an error.
+  if (error && rows.length === 0) {
     return (
       <View style={styles.boardMessage}>
         <Text variant="small" muted center>
@@ -639,6 +642,11 @@ function Leaderboard({
 
   return (
     <View>
+      {error ? (
+        <Text variant="micro" faint center style={styles.boardStale}>
+          Güncellenemedi, son gelen sıralama bu.
+        </Text>
+      ) : null}
       {visible.map((row, index) => {
         const isMe = row.user.id === meId;
         const gap = mine && index === visible.length - 1 && visible.length > top.length;
@@ -747,6 +755,7 @@ const styles = StyleSheet.create({
   boardName: { flex: 1 },
   boardWins: { alignItems: 'flex-end' },
   boardGap: { color: Colors.textFaint, textAlign: 'center', fontSize: FontSize.tiny },
+  boardStale: { paddingTop: Spacing.sm, paddingHorizontal: Spacing.md },
 
   actions: { gap: Spacing.md, marginBottom: Spacing.xl },
 

@@ -9,9 +9,10 @@ import { Loading } from '@/components/Loading';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
+import { invalidateFriendships } from '@/hooks/queries';
 import { ApiClient, type InviteLookup } from '@/lib/api';
 import { normalizeServerUrl, serverUrlIsEditable } from '@/lib/config';
-import { qk, queryClient } from '@/lib/query';
+import { queryClient } from '@/lib/query';
 import { normalizeInviteCode, savePendingInvite, sendInvite, type InviteOutcome } from '@/services/invite';
 import { isOtherServer, moveSession } from '@/services/serverMove';
 import { useAuth, useLevel } from '@/store/auth';
@@ -150,7 +151,7 @@ export default function InviteScreen() {
     setOutcome(result);
     setSending(false);
     if (result.kind === 'sent' || result.kind === 'accepted') {
-      void queryClient.invalidateQueries({ queryKey: qk.friends });
+      invalidateFriendships(queryClient);
     }
   };
 
