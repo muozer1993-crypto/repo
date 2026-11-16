@@ -259,6 +259,15 @@ function targetForPayload(payload: Record<string, unknown>): RouteTarget {
 
 const NO_SUBSCRIPTION = { remove: () => {} };
 
+/**
+ * The last tap this process has already opened (its notification's id). The
+ * OS keeps the last response for as long as the app runs, sets it on every
+ * tap, warm ones included, and nothing here clears it; the bridge asks for it
+ * again on every sign-in. A logout and a login, or a move to another server,
+ * opened that old çelınc once more, perhaps another account's.
+ */
+let openedResponseId: string | null = null;
+
 export function addResponseListener(
   handler: (route: NotificationRoute) => void
 ): { remove: () => void } {
@@ -267,6 +276,7 @@ export function addResponseListener(
   if (!api) return NO_SUBSCRIPTION;
   try {
     const sub = api.addNotificationResponseReceivedListener((response) => {
+      openedResponseId = response.notification.request.identifier || null;
       handler(routeForNotificationData(response.notification.request.content.data));
     });
     return { remove: () => sub.remove() };
@@ -292,7 +302,7 @@ export function addReceivedListener(
   }
 }
 
-/** The notification that launched the app, if any. */
+/** The notification that launched the app, if any, and only once: a tap already opened is not one. */
 export async function getInitialRoute(): Promise<NotificationRoute> {
   if (Platform.OS === 'web') return null;
   const api = localNotifications();
@@ -300,6 +310,9 @@ export async function getInitialRoute(): Promise<NotificationRoute> {
   try {
     const response = await api.getLastNotificationResponseAsync();
     if (!response) return null;
+    const id = response.notification.request.identifier || null;
+    if (id !== null && id === openedResponseId) return null;
+    openedResponseId = id;
     return routeForNotificationData(response.notification.request.content.data);
   } catch {
     return null;

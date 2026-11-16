@@ -77,7 +77,8 @@ export function NotificationBridge() {
   const token = useAuth((s) => s.token);
   // A renewed token (services/session) or a password change swaps the token
   // string but not the person; the tap handler keys on this so it does not
-  // replay the notification the app was opened with.
+  // run again for it. A real sign-in does run it again, and getInitialRoute
+  // hands out a tap only once, so the old one is not replayed then either.
   const signedIn = !!token;
   const serverUrl = useAuth((s) => s.serverUrl);
   const makeClient = useAuth((s) => s.client);
