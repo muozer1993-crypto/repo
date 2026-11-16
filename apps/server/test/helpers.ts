@@ -60,6 +60,8 @@ export async function makeApp(overrides: MakeAppOptions = {}): Promise<TestApp> 
       enableDevRoutes: true,
       // how full the test machine's disk is must not decide whether a photo goes up
       uploadMinFreeBytes: 0,
+      // every test registers from 127.0.0.1; one that counts sign-ups sets its own
+      registrationsPerHourPerClient: 100_000,
       ...overrides.config,
     },
   });

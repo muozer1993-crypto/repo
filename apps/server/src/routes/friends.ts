@@ -157,6 +157,16 @@ function tellFriendAccepted(
 export const FRIEND_REQUESTS_PER_PAIR = { max: 3, windowMs: 24 * 60 * 60 * 1000 };
 
 /**
+ * New requests by username one account may send in an hour, to anybody. The
+ * pair budget above stops one person buzzing one phone; this one stops a fresh
+ * account asking the whole server, a push on every phone, from a name anybody can
+ * pick. A newcomer adding the group by hand fits in it, and a request by invite
+ * code is not counted: that needs the other's own code (and is budgeted by its
+ * misses).
+ */
+export const NEW_FRIEND_REQUESTS_PER_USER = { max: 15, windowMs: 60 * 60 * 1000 };
+
+/**
  * How young an account must be for its request by invite code to be accepted at
  * once: the same week the phone keeps a parked invite (apps/mobile/src/services/invite.ts).
  */
@@ -173,6 +183,7 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
   const auth = { preHandler: app.authenticate };
   const requestsPerPair = new AttemptLimiter(FRIEND_REQUESTS_PER_PAIR.max, FRIEND_REQUESTS_PER_PAIR.windowMs);
   const codeMisses = new AttemptLimiter(INVITE_CODE_MISSES_PER_USER.max, INVITE_CODE_MISSES_PER_USER.windowMs);
+  const newRequestsPerUser = new AttemptLimiter(NEW_FRIEND_REQUESTS_PER_USER.max, NEW_FRIEND_REQUESTS_PER_USER.windowMs);
 
   app.get('/friends', auth, async (request) => {
     const me = requireUser(request);
@@ -254,6 +265,13 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
     if (waitMs > 0) {
       throw tooMany('too_many_requests', `Bu kişiye çok sık istek gönderdin. ${retryAfterText(waitMs)}`);
     }
+    // checked before the pair's is spent, so a refused request costs that pair nothing
+    if (!byCode) {
+      const senderWaitMs = newRequestsPerUser.retryAfterMs(me.id, now);
+      if (senderWaitMs > 0) {
+        throw tooMany('too_many_requests', `Çok fazla kanka isteği gönderdin. ${retryAfterText(senderWaitMs)}`);
+      }
+    }
     requestsPerPair.record(pairKey, now);
 
     const friendshipId = newId();
@@ -261,6 +279,7 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
       `INSERT INTO friendships (id, requester_id, addressee_id, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(friendshipId, me.id, target.id, viaCode ? 'accepted' : 'pending', at, at);
+    if (!byCode) newRequestsPerUser.record(me.id, now);
 
     if (viaCode) {
       tellJoined(friendshipId);

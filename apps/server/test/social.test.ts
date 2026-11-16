@@ -16,6 +16,7 @@ import {
   type Me,
   type Notification,
 } from '@koydum/shared';
+import { loadConfig } from '../src/config.js';
 import { newId, nowIso, type ChallengeRow, type EntryRow, type UserRow } from '../src/db/index.js';
 import { clearDeletedTraces } from '../src/services/accounts.js';
 import { createPushSender } from '../src/services/push.js';
@@ -170,6 +171,33 @@ describe('POST /auth/register', () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json<{ error: { code: string } }>().error.code).toBe('validation');
+  });
+
+  it('opens only so many accounts an hour from one client, an IPv6 /64 being one', async () => {
+    expect(loadConfig({ dataDir: ':memory:' }).registrationsPerHourPerClient).toBe(20);
+    harness = await makeApp({ config: { registrationsPerHourPerClient: 3 } });
+    const h = harness;
+    const register = (username: string, remoteAddress: string) =>
+      h.app.inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { username, password: 'sifre123', displayName: 'BOB HIRSIZ', timezone: 'Europe/Istanbul' },
+        remoteAddress,
+      });
+
+    // a fresh address of the same /64 for every account used to be a fresh budget
+    for (let i = 1; i <= 3; i += 1) expect((await register(`cop${i}`, `2001:db8:1:2::${i}`)).statusCode).toBe(201);
+    const fourth = await register('cop4', '2001:db8:1:2:ffff::4');
+    expect(fourth.statusCode).toBe(429);
+    expect(fourth.json<{ error: { code: string; message: string } }>().error).toEqual({
+      code: 'too_many_attempts',
+      message: 'Çok fazla hesap açtın. 60 dakika sonra tekrar dene.',
+    });
+
+    // somebody on another network is not held up by it, and an hour later it opens again
+    expect((await register('kemal', '2001:db8:1:3::1')).statusCode).toBe(201);
+    h.advance(61 * 60 * 1000);
+    expect((await register('cop4', '2001:db8:1:2::4')).statusCode).toBe(201);
   });
 });
 
@@ -1243,6 +1271,42 @@ describe('friends', () => {
     expect((await call({ method: 'POST', url: '/friends/request', payload: { username: 'kurban' } })).statusCode).toBe(201);
   });
 
+  it('lets one account ask at most 15 people by username an hour', async () => {
+    const h = await boot();
+    const troll = await registerUser(h.app, 'trol');
+    const call = authed(h.app, troll.token);
+    const ask = (username: string) => call({ method: 'POST', url: '/friends/request', payload: { username } });
+    for (let i = 1; i <= 16; i += 1) await registerUser(h.app, `kurban${i}`);
+    const asker = await registerUser(h.app, 'ahmet');
+    const inviter = await registerUser(h.app, 'davetci');
+
+    for (let i = 1; i <= 15; i += 1) expect((await ask(`kurban${i}`)).statusCode).toBe(201);
+    const sixteenth = await ask('kurban16');
+    expect(sixteenth.statusCode).toBe(429);
+    expect(sixteenth.json<{ error: { code: string; message: string } }>().error).toEqual({
+      code: 'too_many_requests',
+      message: 'Çok fazla kanka isteği gönderdin. 60 dakika sonra tekrar dene.',
+    });
+    // nothing reached the sixteenth phone
+    const pushed = h.db
+      .prepare("SELECT count(*) AS n FROM notifications WHERE type = 'friend_request'")
+      .get() as { n: number };
+    expect(pushed.n).toBe(15);
+
+    // saying yes to somebody who asked first is not a new request
+    await authed(h.app, asker.token)({ method: 'POST', url: '/friends/request', payload: { username: 'trol' } });
+    const answered = await ask('ahmet');
+    expect(answered.statusCode).toBe(200);
+    expect(answered.json<{ status: string }>().status).toBe('accepted');
+    // nor is coming by somebody's own invite code
+    const byCode = await call({ method: 'POST', url: '/friends/request', payload: { inviteCode: inviter.me.inviteCode } });
+    expect(byCode.statusCode).toBe(200);
+    expect(byCode.json<{ status: string }>().status).toBe('accepted');
+
+    h.advance(61 * 60 * 1000);
+    expect((await ask('kurban16')).statusCode).toBe(201);
+  });
+
   it('does not let the addressee delete an incoming request, only decline it', async () => {
     const h = await boot();
     const asker = await registerUser(h.app, 'mustafa');
@@ -1386,6 +1450,37 @@ describe('GET /users/search', () => {
     const invalid = await call({ method: 'GET', url: '/users/search?q=' });
     expect(invalid.statusCode).toBe(400);
     expect(invalid.json<{ error: { code: string } }>().error.code).toBe('validation');
+  });
+
+  it('finds a friend past thousands of accounts whose names sort before hers', async () => {
+    const h = await boot();
+    const me = await registerUser(h.app, 'mustafa');
+    // written straight to the table: 2,100 sign-ups would take minutes of scrypt
+    const insert = h.db.prepare(
+      `INSERT INTO users (id, username, display_name, password_hash, invite_code, created_at)
+       VALUES (?, ?, ?, 'x', ?, ?)`,
+    );
+    const at = nowIso(h.now());
+    h.db.transaction(() => {
+      for (let i = 0; i < 2_100; i += 1) {
+        const n = String(i).padStart(5, '0');
+        insert.run(newId(), `aa${n}`, `BOB HIRSIZ ${i}`, `J${n}`, at);
+      }
+    })();
+    await registerUser(h.app, 'seyma', { displayName: 'Şeyma' });
+    const call = authed(h.app, me.token);
+    const usernames = async (q: string): Promise<string[]> =>
+      (await call({ method: 'GET', url: `/users/search?q=${encodeURIComponent(q)}` }))
+        .json<{ username: string }[]>()
+        .map((u) => u.username);
+
+    // a Turkish letter leaves SQL's LIKE nothing to narrow by, so every account is a candidate
+    expect(await usernames('Şey')).toEqual(['seyma']);
+    expect(await usernames('şeyma')).toEqual(['seyma']);
+    expect(await usernames('seyma')).toEqual(['seyma']);
+    // and the flood itself still comes back 20 at a time
+    expect(await usernames('bob')).toEqual(Array.from({ length: 20 }, (_, i) => `aa${String(i).padStart(5, '0')}`));
+    expect(await usernames('BOB HIRSIZ 2099')).toEqual(['aa02099']);
   });
 
   it('hides soft-deleted users', async () => {

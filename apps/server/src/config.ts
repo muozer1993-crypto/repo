@@ -38,6 +38,13 @@ export interface Config {
    * Friends send a few MB a day; this only stops a flood. Default 2 GiB.
    */
   uploadDailyBudgetBytes: number;
+  /**
+   * Accounts one client (`clientKey`: an IPv4 address or an IPv6 /64) may open
+   * in an hour; more is 429 `too_many_attempts`. A friend group signs up a few at
+   * a time. 120 every 10 minutes let one address send friend requests (each a
+   * push) from a fresh account each time and bury real names in search. Default 20.
+   */
+  registrationsPerHourPerClient: number;
   /** SQLite database file, or ':memory:'. */
   dbPath: string;
   /** Absolute base URL the phones use (PUBLIC_URL). */
@@ -98,6 +105,7 @@ const DEFAULTS = {
   dataDir: './data',
   uploadMinFreeMb: 2048,
   uploadDailyBudgetBytes: 2 * 1024 * 1024 * 1024,
+  registrationsPerHourPerClient: 20,
   logLevel: 'info',
   version: '1.0.0',
 } as const;
@@ -167,6 +175,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
   const uploadMinFreeBytes =
     overrides.uploadMinFreeBytes ?? Math.max(0, readInt(env.UPLOAD_MIN_FREE_MB, DEFAULTS.uploadMinFreeMb)) * 1024 * 1024;
   const uploadDailyBudgetBytes = overrides.uploadDailyBudgetBytes ?? DEFAULTS.uploadDailyBudgetBytes;
+  const registrationsPerHourPerClient =
+    overrides.registrationsPerHourPerClient ?? DEFAULTS.registrationsPerHourPerClient;
 
   const dbPath = overrides.dbPath ?? (memory ? MEMORY : path.join(dataDir, 'koydum.db'));
 
@@ -224,6 +234,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     uploadDir,
     uploadMinFreeBytes,
     uploadDailyBudgetBytes,
+    registrationsPerHourPerClient,
     dbPath,
     publicUrl,
     publicUrlExplicit,

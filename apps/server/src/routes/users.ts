@@ -18,8 +18,6 @@ import { blockedByMe, isBlockedBetween, recordRefusal, removeBlock, upsertBlock 
 
 /** Max hits returned to the app (SPEC 2.2). */
 const SEARCH_LIMIT = 20;
-/** How many rows the SQL pre-filter may hand to the Turkish-aware refinement. */
-const SEARCH_SCAN_LIMIT = 2000;
 
 /** Turkish casing: `I → ı`, `İ → i`. `toLowerCase()` gets both of those wrong. */
 function trLower(value: string): string {
@@ -32,8 +30,8 @@ function trLower(value: string): string {
  * SQLite's `lower()` and its case-insensitive LIKE are ASCII-only, so anything with a
  * Turkish letter in it — and the dotted/dotless i pair in particular, where "ist" must
  * match "İstanbul" — cannot be resolved in SQL. We therefore cut the prefix at the
- * first character SQL cannot be trusted with; an empty prefix simply means "scan and
- * let JavaScript decide". A space counts too: the folded username match drops it, so
+ * first character SQL cannot be trusted with; an empty prefix simply means "every row
+ * goes to `matchesPrefix`". A space counts too: the folded username match drops it, so
  * "ali veli" has to reach `aliveli`. `%`, `_` and `\` are escaped (the query uses ESCAPE '\').
  */
 function sqlPrefix(query: string): string {
@@ -45,8 +43,16 @@ function sqlPrefix(query: string): string {
   return prefix.replace(/[\\%_]/g, (m) => `\\${m}`);
 }
 
-/** Candidate rows: not me, not soft-deleted, not in a blocked relationship with me. */
-function searchCandidates(db: Database, meId: string, query: string): UserRow[] {
+/**
+ * The hits: not me, not soft-deleted, not in a blocked relationship with me, and a
+ * prefix match (`koydum_search_match`, registered in `userRoutes`).
+ *
+ * The match runs inside the query, before the LIMIT. It used to run in JavaScript
+ * on the first 2,000 rows by username, and for a query SQL cannot narrow ("Şey",
+ * "şeyma": the LIKE is then `%`) those were simply the first 2,000 accounts, so
+ * 2,000 throwaway "aa…" accounts hid @seyma from everybody.
+ */
+function searchHits(db: Database, meId: string, query: string): UserRow[] {
   const like = `${sqlPrefix(query)}%`;
   return db
     .prepare(
@@ -54,6 +60,7 @@ function searchCandidates(db: Database, meId: string, query: string): UserRow[] 
         WHERE deleted_at IS NULL
           AND id <> ?
           AND (lower(username) LIKE ? ESCAPE '\\' OR lower(display_name) LIKE ? ESCAPE '\\')
+          AND koydum_search_match(username, display_name, ?) = 1
           AND NOT EXISTS (
             SELECT 1 FROM friendships f
              WHERE f.status = 'blocked'
@@ -62,7 +69,7 @@ function searchCandidates(db: Database, meId: string, query: string): UserRow[] 
         ORDER BY username ASC
         LIMIT ?`,
     )
-    .all(meId, like, like, meId, meId, SEARCH_SCAN_LIMIT) as UserRow[];
+    .all(meId, like, like, query, meId, meId, SEARCH_LIMIT) as UserRow[];
 }
 
 /**
@@ -70,7 +77,7 @@ function searchCandidates(db: Database, meId: string, query: string): UserRow[] 
  * also tried in the spelling it is stored in (`foldUsername`), so "şey" finds @seyma
  * even when her display name is spelled some other way.
  */
-function matchesPrefix(row: UserRow, query: string): boolean {
+function matchesPrefix(row: Pick<UserRow, 'username' | 'display_name'>, query: string): boolean {
   const tr = trLower(query);
   const plain = query.toLowerCase();
   const folded = foldUsername(query);
@@ -84,14 +91,17 @@ export default async function userRoutes(app: FastifyInstance): Promise<void> {
   const { db } = app;
   const auth = { preHandler: app.authenticate };
 
+  // `matchesPrefix` as an SQL function (see `searchHits`). A function belongs to
+  // the connection it is made on, so every app makes it once, on its own `db`.
+  db.function('koydum_search_match', { deterministic: true }, (username: string, displayName: string, query: string) =>
+    matchesPrefix({ username, display_name: displayName }, query) ? 1 : 0,
+  );
+
   app.get('/users/search', auth, async (request) => {
     const me = requireUser(request);
     const { q } = parseQuery(UserSearchQuerySchema, request.query);
 
-    const users: PublicUser[] = searchCandidates(db, me.id, q)
-      .filter((row) => matchesPrefix(row, q))
-      .slice(0, SEARCH_LIMIT)
-      .map(toPublicUser);
+    const users: PublicUser[] = searchHits(db, me.id, q).map(toPublicUser);
 
     // SPEC 2.2 and the mobile client both expect a bare array.
     return users;

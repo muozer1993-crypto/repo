@@ -1147,6 +1147,31 @@ başlıyorsa gerisi çözülmeden saklanır (`services/images.ts` yalnızca üst
 arkasındaki çöp `nosniff` ve `sandbox`'lı CSP ile sunulur, resimden başka bir şey olarak açılamaz;
 asıl tehlike diskin dolmasıydı.
 
+## Çöp hesaplar
+
+Hesap açmak için sunucuya ulaşmak yeter, kullanıcı adıyla kanka isteği de herkese gidebilir. Bir
+istemci 10 dakikada 120 hesap açabiliyordu, saatte 720. Aynı adresten açılan 50-110 hesabın her biri
+aynı kişiye istek attı, her biri onun telefonunda bir push oldu ("BOB HIRSIZ 7 seni kanka listesine
+ekledi"). Bir /64'ten açılan 2.100 hesaptan sonra da "Şey" ve "şeyma" aramaları @seyma'yı bulamadı.
+
+Artık bir istemci (`clientKey`: IPv4 adresi ya da IPv6 /64'ü) saatte en çok 20 hesap açar
+(`registrationsPerHourPerClient`, `src/config.ts`; her deneme sayılır). Arkadaş grubu birkaç kişi
+birden kaydolur, aynı Wi-Fi'daki bir masa bile bu sınıra varmaz. Bütün sunucu için ayrıca bir sınır
+konmadı: onu tek bir trol doldurur, gerçek yeni kankalar kapıda kalırdı. Kullanıcı adıyla gönderilen
+yeni istekler de hesap başına saatte 15 (`NEW_FRIEND_REQUESTS_PER_USER`, `routes/friends.ts`). Kişi
+başına günde 3 istek bir telefonu öttüreni durduruyordu, herkesi öttüreni değil. Grubu elle ekleyen
+yeni biri buna sığar. Davet koduyla gelen istek sayılmaz, kodu sahibi verir (kimseyi bulamayan kodlar
+zaten ayrıca sayılır); önce istemiş birine "evet" demek de yeni istek değildir. Sayaçlar giriş
+sayaçları gibi süreçtedir, yeniden başlatma onları sıfırlar.
+
+Aramada sorun eşleştirmenin sırasıydı. SQLite'ın `lower()`'ı ve LIKE'ı yalnızca ASCII bilir; Türkçe
+harfli bir sorgu SQL'de daraltılamaz, önek boş kalır, LIKE `%` olur. Türkçe eşleştirme
+(`matchesPrefix`, `routes/users.ts`) ise JavaScript'te, kullanıcı adı sırasıyla ilk 2.000 satırda
+çalışıyordu; "aa…" diye başlayan 2.100 hesap @seyma'yı o 2.000'in dışına itti. Şimdi aynı
+fonksiyon SQLite'a verilir (`koydum_search_match`; bir fonksiyon açıldığı bağlantıya ait olduğundan
+her uygulama kendi `db`'sine bir kez kaydeder) ve sorgunun içinde, LIMIT'ten önce çalışır. İlk 20
+eşleşme döner, önüne kaç satır dizilirse dizilsin. Migration gerekmedi.
+
 ## Sunucuyu açanın araçları
 
 E-posta yok, şifre sıfırlama bağlantısı da yok: bu bir arkadaş grubu, herkes sunucuyu açanı

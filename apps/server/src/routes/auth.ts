@@ -27,14 +27,14 @@ import { publicOrigin } from '../services/origin.js';
 import { AttemptLimiter, clientKey, retryAfterText } from '../services/throttle.js';
 
 /**
- * Budgets for the two unauthenticated endpoints. They are generous enough that a
- * group of friends sharing one NAT never notices, and small enough that neither
- * password guessing nor scrypt flooding is free. "IP" is `clientKey`: an IPv6
- * client's whole /64.
+ * Budgets for the two unauthenticated endpoints (registration's is
+ * `config.registrationsPerHourPerClient`). They are generous enough that a group
+ * of friends sharing one NAT never notices, and small enough that neither password
+ * guessing nor scrypt flooding is free. "IP" is `clientKey`: an IPv6 client's
+ * whole /64.
  */
 export const LOGIN_FAILURES_PER_ACCOUNT = { max: 8, windowMs: 15 * 60 * 1000 };
 const LOGIN_FAILURES_PER_IP = { max: 40, windowMs: 15 * 60 * 1000 };
-const REGISTRATIONS_PER_IP = { max: 120, windowMs: 10 * 60 * 1000 };
 /**
  * One account's attempts from every address together. The two budgets above are
  * per address, and addresses are cheap (a rented /48 holds 65,536 /64s), so one
@@ -52,7 +52,8 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
   const loginByAccount = new AttemptLimiter(LOGIN_FAILURES_PER_ACCOUNT.max, LOGIN_FAILURES_PER_ACCOUNT.windowMs);
   const loginByIp = new AttemptLimiter(LOGIN_FAILURES_PER_IP.max, LOGIN_FAILURES_PER_IP.windowMs);
   const loginByUsername = new AttemptLimiter(LOGIN_FAILURES_PER_USERNAME.max, LOGIN_FAILURES_PER_USERNAME.windowMs);
-  const registerByIp = new AttemptLimiter(REGISTRATIONS_PER_IP.max, REGISTRATIONS_PER_IP.windowMs);
+  // Per client only: a server-wide cap would let one troll keep every newcomer out.
+  const registerByIp = new AttemptLimiter(config.registrationsPerHourPerClient, 60 * 60 * 1000);
 
   /**
    * A REAL hash of a throwaway password, verified for users that do not exist.

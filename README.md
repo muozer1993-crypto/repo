@@ -833,7 +833,8 @@ sunucuyu açana gider ([Yönetim komutları](#yönetim-komutları)). Engel kalı
 değişen **Ayarlar → Engellediklerin**'den kaldırır; kanka olmak için yeniden istek atmak gerekir.
 Yanlış kişiye giden kanka isteği de Kankalar sekmesinde **Geri çek** ile geri alınır; karşı taraf
 daha okumadıysa gelen kutusundan da silinir. Aynı kişiye günde en fazla üç istek gider, yoksa
-iste-geri çek-iste biriyle bütün gün telefonunu öttürebilirdi.
+iste-geri çek-iste biriyle bütün gün telefonunu öttürebilirdi. Bir hesap da kullanıcı adıyla saatte
+en fazla 15 kişiye istek gönderir; davet bağlantısıyla gelen istek buna sayılmaz.
 
 ---
 
@@ -1292,6 +1293,15 @@ yüklemesi pek olmaz: pencerede "günlük sınır doldu" satırı varsa büyük 
 doldurmaya çalışıyordur. Sınır, en eski fotoğraflar 24 saati doldurdukça kendiliğinden açılır.
 Sunucuyu yeniden başlatmak sayaçları sıfırlar, ama doldurmaya çalışan biri varsa o da kaldığı
 yerden devam eder.
+
+**Uygulama "Çok fazla hesap açtın" ya da "Çok fazla kanka isteği gönderdin" diyor.**
+Biri sunucuyu çöp hesaplarla doldurup herkese istek yağdırmasın diye bir internet bağlantısından
+saatte en fazla 20 hesap açılır (aynı Wi-Fi'daki telefonlar çoğu zaman birlikte sayılır), bir hesap
+da kullanıcı adıyla saatte en fazla 15 kişiye kanka isteği gönderir. Arkadaş grubu buna pek takılmaz;
+takılan yazılan süre kadar beklesin. Kalabalık bir grubu ekleyen yeni kanka beklemek istemezse
+kalanlar ona kendi davet bağlantılarını göndersin (Kankalar → Paylaş): bağlantıyla gelen istek bu
+sayıya girmez. `npm run yonet -- kullanicilar` listesinde tanımadığın bir yığın hesap görürsen biri
+sunucuyu dolduruyordur.
 
 **Uygulama "Saatler tutmuyor" ya da "Başlangıç sunucunun saatine göre geçmişte kalıyor" diyor.**
 Sunucu her şeye kendi saatiyle karar verir: çelıncın ne zaman başlayıp biteceğine, check-in'in
