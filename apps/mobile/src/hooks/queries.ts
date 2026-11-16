@@ -267,9 +267,17 @@ export function invalidateForNotifications(
   void qc.invalidateQueries({ queryKey: qk.unread });
 
   let friends = false;
+  // A finish is what moves wins and losses, Sıralama and the Karne alike, and a
+  // badge is a rozet my cached `me` still draws locked. A recap only reports
+  // the week; the profile tab's focus refetch catches the rest.
+  let statsMoved = false;
+  // a new kanka is a new row on the board; a request is not one yet
+  let newKanka = false;
   const challengeIds = new Set<string>();
   for (const item of items) {
     if (item.type === 'friend_request' || item.type === 'friend_accepted') friends = true;
+    if (item.type === 'friend_accepted') newKanka = true;
+    if (item.type === 'challenge_finished' || item.type === 'badge') statsMoved = true;
     const data = item.data && typeof item.data === 'object' ? (item.data as Record<string, unknown>) : {};
     // a `rematch` also names the çelınc it is a rematch of: that results screen
     // turns its "Rövanş" into a link to this one
@@ -279,6 +287,9 @@ export function invalidateForNotifications(
   }
 
   if (friends) void qc.invalidateQueries({ queryKey: qk.friends });
+  if (statsMoved || newKanka) void qc.invalidateQueries({ queryKey: qk.leaderboard });
+  // `me` lives in the auth store, not the query cache; without a token this is a no-op
+  if (statsMoved) void useAuth.getState().refreshMe();
   // a taunt lands on an open results screen, which has no refetch interval:
   // without this the loser keeps reading "henüz konuşmadı, bekle"
   if (challengeIds.size > 0) void qc.invalidateQueries({ queryKey: ['challenges'] });

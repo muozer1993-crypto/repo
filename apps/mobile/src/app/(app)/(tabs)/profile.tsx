@@ -16,8 +16,9 @@ import {
   type UserStats,
   type VulgarityLevel,
 } from '@koydum/shared';
+import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -36,9 +37,13 @@ import { useToast } from '@/components/Toast';
 import { useFriends, useLeaderboard, useUpdateMe } from '@/hooks/queries';
 import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { ApiError } from '@/lib/api';
+import { qk } from '@/lib/query';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, Radius, Spacing } from '@/theme';
 import { formatMinutes, formatNumber } from '@/utils/format';
+
+/** Coming back to the tab refetches a board older than this (the app's staleTime). */
+const PROFILE_FRESH_MS = 20_000;
 
 /** Curated avatar set — loud, friendly, and safe to show in a group chat. */
 const AVATAR_EMOJI = [
@@ -196,6 +201,24 @@ export default function ProfileScreen() {
   const updateMe = useUpdateMe();
 
   const pull = usePullRefresh(() => Promise.all([refreshMe(), friends.refetch(), leaderboard.refetch()]));
+  const queryClient = useQueryClient();
+
+  // The tab stays mounted and nothing refetches on focus (lib/query), and `me`
+  // only moves on foreground through the step and screen-time sync, which a
+  // phone without those permissions (and the web) never runs: a friend's finish
+  // left Sıralama in the old order, a fresh rozet stayed locked.
+  useFocusEffect(() => {
+    const state = queryClient.getQueryState(qk.leaderboard);
+    if (!state || state.fetchStatus !== 'idle') return;
+    // from the last answer, good or bad: a server that is down is asked at most every 20 s
+    const lastTry = Math.max(state.dataUpdatedAt, state.errorUpdatedAt);
+    if (Date.now() - lastTry > PROFILE_FRESH_MS) {
+      // the Karne and the board are both computeUserStats: read them at the same moment
+      void queryClient.refetchQueries({ queryKey: qk.leaderboard });
+      void refreshMe();
+    }
+  });
+
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [nameOpen, setNameOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState('');

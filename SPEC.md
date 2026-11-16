@@ -933,11 +933,14 @@ davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), r
   also behind any refresh in flight: that refresh still holds the old token, its list still arrives, and it would
   otherwise schedule the old account's alarms right after the clear.
 - New rows refresh what is on screen (`invalidateForNotifications` in hooks/queries): inbox + unread always, friends for
-  friend_*, and for each `data.challengeId` (and a `rematch` row's `data.rematchOfId`, whose results then link to it) the challenge lists, the detail and the results. Called by the received listener
+  friend_*, and for each `data.challengeId` (and a `rematch` row's `data.rematchOfId`, whose results then link to it) the challenge lists, the detail and the results.
+  A `challenge_finished` or `badge` row also moves the leaderboard and reads `me` again (`refreshMe`: the Karne and the
+  rozetler live in the auth store, not the query cache), and a `friend_accepted` row the leaderboard (a new row on it). Called by the received listener
   (push), by the inbox poll whenever it returns items (either surface) and by the background handler while the app is alive.
-  The tabs stay mounted and `refetchOnWindowFocus` is off, so the two list tabs also catch up on their own: Gelen refetches
+  The tabs stay mounted and `refetchOnWindowFocus` is off, so the list tabs also catch up on their own: Gelen refetches
   when the unread poll's `latestId` is not its first row (waiting while an older page is on its way), and its "N yeni" chip /
-  "Hepsini okundu yap" use the larger of the loaded pages' unread and the server's `count`; Kankalar refetches on focus when its list is older than 20 s.
+  "Hepsini okundu yap" use the larger of the loaded pages' unread and the server's `count`; Kankalar refetches on focus when its list is older than 20 s;
+  Profil refetches the leaderboard and `me` together on focus when the leaderboard is older than 20 s (a friend's finish sends me no row).
 
 ### 3.6 Tests
 

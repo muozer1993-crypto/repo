@@ -340,9 +340,13 @@ KOYDUM ulaşır, sadece anında değil.
 Yeni bir satır gelince (push ya da bu yoklama) açık ekranlar da tazelenir
 (`invalidateForNotifications`): gelen kutusu ve rozet her zaman, kanka isteğinde Kankalar,
 çelınca dair bir satırda çelınc listeleri, o çelıncın detayı ve sonucu (rövanş satırında eski
-çelıncınki de: oradaki **Rövanş** düğmesi yeni rövanşa giden bağlantıya döner). Sekmeler açık kalır ve odağa
+çelıncınki de: oradaki **Rövanş** düğmesi yeni rövanşa giden bağlantıya döner). Biten bir çelınc
+ya da yeni bir rozet Profil'deki Sıralama'yı ve karneyi (`me`, sorgu önbelleğinde değil oturum
+deposunda durur) da tazeler, kabul edilen bir kanka isteği Sıralama'yı. Sekmeler açık kalır ve odağa
 dönünce kendiliğinden yenilenmez; o yüzden Gelen, rozetin gördüğü en yeni satır kendi en
 üstündeki değilse kendini yeniler, Kankalar da listesi 20 saniyeden eskiyse sekmeye dönünce.
+Profil de Sıralama 20 saniyeden eskiyse sekmeye dönünce onu ve karneyi birlikte yeniden okur:
+bir kankanın kendi çelıncı bitince sana satır gelmez ama sıra değişir.
 Bir bildirime dokunmak onu okunmuş sayar: push da telefonun kendi kopyası da satırın
 `notificationId`'sini taşır.
 
