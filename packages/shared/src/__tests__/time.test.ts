@@ -13,6 +13,7 @@ import {
   isValidHHmm,
   isValidTimeZone,
   localHour,
+  localInstant,
   localTimeHHmm,
   startOfDayInTz,
   todayKey,
@@ -181,6 +182,41 @@ describe('startOfDayInTz', () => {
 
   it('throws on an impossible day like the other day-key helpers', () => {
     expect(() => startOfDayInTz('2026-02-30', IST)).toThrow(RangeError);
+  });
+});
+
+describe('localInstant', () => {
+  const BERLIN = 'Europe/Berlin';
+
+  it('is the wall-clock time in the zone, not in UTC', () => {
+    expect(localInstant('2027-01-01', 4, 0, IST).toISOString()).toBe('2027-01-01T01:00:00.000Z');
+    expect(localInstant('2027-01-01', 9, 30, IST).toISOString()).toBe('2027-01-01T06:30:00.000Z');
+  });
+
+  it('lands on 04:00 local on both DST Sundays, where midnight + 4 h would not', () => {
+    // Berlin falls back on 2026-10-25 (25 hours) and springs forward on 2026-03-29 (23 hours)
+    const autumn = localInstant('2026-10-25', 4, 0, BERLIN);
+    expect(autumn.toISOString()).toBe('2026-10-25T03:00:00.000Z');
+    expect(localTimeHHmm(autumn, BERLIN)).toBe('04:00');
+    expect(autumn.getTime() - startOfDayInTz('2026-10-25', BERLIN).getTime()).toBe(5 * 60 * 60 * 1000);
+
+    const spring = localInstant('2026-03-29', 4, 0, BERLIN);
+    expect(spring.toISOString()).toBe('2026-03-29T02:00:00.000Z');
+    expect(localTimeHHmm(spring, BERLIN)).toBe('04:00');
+    expect(spring.getTime() - startOfDayInTz('2026-03-29', BERLIN).getTime()).toBe(3 * 60 * 60 * 1000);
+  });
+
+  it('is startOfDayInTz at 00:00', () => {
+    for (const key of ['2026-01-06', '2026-03-08', '2026-11-01']) {
+      expect(localInstant(key, 0, 0, NY).getTime()).toBe(startOfDayInTz(key, NY).getTime());
+    }
+  });
+
+  it('throws on an impossible day or time', () => {
+    expect(() => localInstant('2026-02-30', 4, 0, IST)).toThrow(RangeError);
+    expect(() => localInstant('2026-02-03', 24, 0, IST)).toThrow(RangeError);
+    expect(() => localInstant('2026-02-03', 4, 60, IST)).toThrow(RangeError);
+    expect(() => localInstant('2026-02-03', 4.5, 0, IST)).toThrow(RangeError);
   });
 });
 

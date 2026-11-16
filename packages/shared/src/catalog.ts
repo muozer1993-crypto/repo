@@ -475,6 +475,22 @@ export function effectiveDeadline(type: ChallengeType, stored: string | null): s
     : (type.defaultDeadlineTime ?? '23:59');
 }
 
+/** The hour the wizard's "Yarın" has always started a çelınc at. */
+const NEXT_DAY_START = '09:00';
+
+/**
+ * The time of day a çelınc that cannot start today starts the next day: 09:00,
+ * or, for a check-in type whose window opens before that, the opening
+ * (erken_kus 04:00, yatak_toplama 05:00). At 09:00 erken_kus' 07:00 deadline
+ * was gone before the çelınc began, yet that day still counted: "5 gün" gave
+ * four mornings and nobody could tap "Geldim" on the first. erken_yat keeps
+ * 09:00: its 19:00 window is still ahead, and the day is left to accept in.
+ */
+export function nextDayStartTime(type: ChallengeType | undefined): string {
+  const opens = type?.metricType === 'checkin_deadline' ? type.checkinWindowStart : undefined;
+  return opens && hhmmToMinutes(opens) < hhmmToMinutes(NEXT_DAY_START) ? opens : NEXT_DAY_START;
+}
+
 /**
  * The check-in types answered in the morning (their window opens before noon):
  * erken_kus and yatak_toplama. Only these climb the "erken kalkma" badge ladder

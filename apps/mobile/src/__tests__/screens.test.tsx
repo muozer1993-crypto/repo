@@ -5162,6 +5162,117 @@ describe('effort that would not count', () => {
   });
 });
 
+describe('the first morning of a check-in çelınc', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const PAST_DEADLINE = 'Bugünün check-in saati geçti, ilk check-in yarın.';
+
+  /** The wizard at `at` (a wall-clock instant), on its settings step for `key`. */
+  async function settingsFor(key: string, at: string): Promise<ReactTestRenderer> {
+    // only the clock is faked: the query and settle() still need real timers
+    jest.useFakeTimers({
+      now: new Date(at),
+      doNotFake: [
+        'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',
+        'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval',
+        'clearInterval', 'setTimeout', 'clearTimeout',
+      ],
+    });
+    const NewChallengeScreen = require('@/app/(app)/challenge/new').default;
+    const tree = renderScreen(<NewChallengeScreen />);
+    await settle();
+    const [row] = tree.root.findAll(
+      (node) => typeof node.props.onSelect === 'function' && node.props.type?.key === key
+    );
+    if (!row) throw new Error(`${key} bulunamadı`);
+    act(() => {
+      row.props.onSelect(row.props.type);
+    });
+    press(tree, 'İleri');
+    return tree;
+  }
+
+  function startAt(tree: ReactTestRenderer, mode: 'now' | 'tomorrow'): void {
+    const [control] = tree.root.findAll(
+      (node) =>
+        typeof node.props.onChange === 'function' &&
+        Array.isArray(node.props.options) &&
+        node.props.options.some((option: { value: string }) => option.value === 'tomorrow')
+    );
+    if (!control) throw new Error('başlangıç seçimi bulunamadı');
+    act(() => {
+      control.props.onChange(mode);
+    });
+  }
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('starts an Erken Kalkan Koyar "Yarın" at 04:00, and a "Hemen" after 07:00 there too', async () => {
+    api.friends = jest.fn(async () => ({ friends: [ALI], incoming: [], outgoing: [] }));
+    api.createChallenge = jest.fn(async () => ({ id: 'c-new' }));
+    // 08:00 on 9 September in Istanbul: this morning's 07:00 is gone
+    const tree = await settingsFor('erken_kus', '2026-09-09T05:00:00.000Z');
+
+    expect(rendered(tree)).toContain('Yarın 04:00');
+    expect(rendered(tree)).not.toContain('Yarın 09:00');
+    expect(rendered(tree)).toContain(PAST_DEADLINE);
+    expect(rendered(tree)).toContain('10 Eylül Perşembe · 04:00');
+    // five mornings: 10-14 September
+    expect(rendered(tree)).toContain('14 Eylül Pazartesi · 23:59');
+
+    // "Yarın" starts there anyway: nothing to warn about
+    startAt(tree, 'tomorrow');
+    expect(rendered(tree)).not.toContain(PAST_DEADLINE);
+    expect(rendered(tree)).toContain('10 Eylül Perşembe · 04:00');
+
+    // with 10:30 typed, this morning can still be played
+    startAt(tree, 'now');
+    typeInto(tree, 'Check-in saati', '10:30');
+    expect(rendered(tree)).not.toContain(PAST_DEADLINE);
+    expect(rendered(tree)).toContain('9 Eylül Çarşamba · 08:00');
+
+    typeInto(tree, 'Check-in saati', '07:00');
+    press(tree, 'İleri');
+    const [ali] = tree.root.findAll(
+      (node) => typeof node.props.onToggle === 'function' && node.props.user?.id === ALI.id
+    );
+    if (!ali) throw new Error('Ali bulunamadı');
+    act(() => {
+      ali.props.onToggle(ALI.id);
+    });
+    press(tree, 'İleri');
+    await act(async () => {
+      findWith(tree, 'title', 'KOY BAKALIM', 'onPress').props.onPress();
+    });
+    const [body] = api.createChallenge.mock.calls[0] as [{ startsAt: string; endsAt: string }];
+    expect(body.startsAt).toBe('2026-09-10T01:00:00.000Z');
+    expect(body.endsAt).toBe('2026-09-14T20:59:59.999Z');
+  });
+
+  it('starts a "Hemen" at once while the morning can still be played', async () => {
+    // 06:00 in Istanbul
+    const tree = await settingsFor('erken_kus', '2026-09-09T03:00:00.000Z');
+    expect(rendered(tree)).not.toContain(PAST_DEADLINE);
+    expect(rendered(tree)).toContain('9 Eylül Çarşamba · 06:00');
+  });
+
+  it('says "Yarın 05:00" for Yatak Toplama Sabahı and keeps 09:00 for the rest', async () => {
+    const yatak = await settingsFor('yatak_toplama', '2026-09-09T17:00:00.000Z');
+    expect(rendered(yatak)).toContain('Yarın 05:00');
+
+    // 20:00: tonight's 23:00 is still ahead
+    const yat = await settingsFor('erken_yat', '2026-09-09T17:00:00.000Z');
+    expect(rendered(yat)).toContain('Yarın 09:00');
+    expect(rendered(yat)).not.toContain(PAST_DEADLINE);
+
+    const steps = await settingsFor('adim_yarisi', '2026-09-09T17:00:00.000Z');
+    expect(rendered(steps)).toContain('Yarın 09:00');
+    expect(rendered(steps)).not.toContain(PAST_DEADLINE);
+    expect(rendered(steps)).toContain('9 Eylül Çarşamba · 20:00');
+  });
+});
+
 describe('saying no to a çelınc', () => {
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
   const CEM = { id: 'u-3', username: 'cem', displayName: 'Cem', avatarEmoji: '🦁', createdAt: '2026-09-01T00:00:00.000Z' };

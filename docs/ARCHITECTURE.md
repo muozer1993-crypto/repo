@@ -42,6 +42,15 @@ Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
   saatinden sonra olmak zorunda (`deadlineFitsWindow`): erken yatmada 00:00 her check-in'i ya
   erken ya geç sayardı. Bu kuraldan önce yazılmış böyle bir saat türün varsayılanıyla okunur
   (`effectiveDeadline`); ekranda görünen, hatırlatmanın kurulduğu ve rövanşa geçen saat de odur.
+* Check-in çelıncında her gün bir son saattir, "5 gün" beş son saat demek; ilk gün de oynanabilir
+  olmalı. Sihirbazın "Yarın"ı check-in türünü ertesi gün türün açılış saatinde başlatır
+  (`nextDayStartTime`): Erken Kalkan Koyar 04:00'te, Yatak Toplama Sabahı 05:00'te; açılışı 19:00
+  olan Erken Yatma Sözü öteki türler gibi 09:00'da. Eskiden hepsi 09:00'da başlıyordu: Erken Kalkan
+  Koyar'ın 07:00'si çelınc başlamadan geçiyor, ilk sabah kimse "Geldim" diyemiyordu ama o gün yine
+  sayılıyordu, beş günlük çelıncın dört sabahı oynanıyordu. Bugünün son saati geçtikten sonra
+  seçilen "Hemen" de aynı yerden başlar, sihirbaz bunu söyler ("Bugünün check-in saati geçti, ilk
+  check-in yarın."); son saat geçtikten sonra açılan rövanş da öyle. Bu karar uygulamada verilir:
+  sunucu eski uygulamaların gönderdiği 09:00 başlangıcını yine kabul eder.
 * Sunucunun duyamadığı zamanlar da olur: bilgisayar uyur, kapanır, pencere kapanır. Zamanlayıcı
   bunları `server_pauses`'a yazar: iki vuruşu arasında beş dakikadan uzun bir boşluk, ya da açılırken
   kapanmadan önceki son vuruşundan (`server_state`; düzgün kapanış onu kapanış anında yazar) bu yana
@@ -76,8 +85,8 @@ bu yüzden çelınc yaşam döngüsü gerçek zamana hiç bağlı değildir.
 
 Uygulama da sunucunun saatine bakar. Her `/health` cevabı o saati (`time`) taşır; telefon onu
 isteğin gidiş-dönüşünün ortasında okunmuş sayar ve aradaki farkı tutar (`utils/serverClock.ts`;
-5 saniye ve üstü süren bir cevap bir şey söylemez, sayılmaz). Sihirbazın "Hemen"i ve "yarın
-09:00"ı bu farkla, yani sunucunun saatiyle kurulur: sunucu beş dakikadan eski bir başlangıcı
+5 saniye ve üstü süren bir cevap bir şey söylemez, sayılmaz). Sihirbazın "Hemen"i ve
+"Yarın"ı bu farkla, yani sunucunun saatiyle kurulur: sunucu beş dakikadan eski bir başlangıcı
 reddettiği için 20 dakika geri kalan bir telefon eskiden hiç "Hemen" çelınc açamazdı. Bu tahmin
 gidiş-dönüşün yarısı kadar şaşabilir: sunucunun saatini bir an ileri tahmin eden "Hemen" ileri
 tarihli sayılıp bir kanka "Varım" diyene kadar `pending` beklemesin diye sunucu bir dakikadan az
@@ -175,6 +184,10 @@ engeli varsa hiçbir isim, "Birinciler berabere kaldı") ve çelıncı açanın 
 Rövanş, eskisi kaç yerel gün sürdüyse o kadar gün sürer ve sihirbaz gibi açanın saat diliminde bir
 günün son milisaniyesinde biter. Önceden "şimdi + eski süre" ile düğmeye basılan saatte bitiyordu;
 yarıda kesilen son günün sonradan gelen telefon sayısı bitişten sonra atılan adımları da taşırdı.
+Beş dakika sonra başlar; check-in çelıncında o beş dakikanın sonunda açanın saatiyle bugünün son
+saati geçmiş oluyorsa ertesi gün türün açılış saatinde başlar (`nextDayStartTime`, yukarıda): akşam
+22:00'de açılan Erken Kalkan Koyar rövanşı 22:05'te başlasaydı ilk günü kimsenin oynayamadığı bir
+gün olurdu.
 Reddedilen (yani iptal olan) bir rövanş yenisini açmaya engel değildir.
 
 Bir çelıncın rövanşı bir tane olur. Rövanş düğmesi iki tarafta da kocaman durur; ikisi de basınca

@@ -204,15 +204,27 @@ function zoneOffsetMs(date: Date, tz: string): number {
 }
 
 /**
- * The instant `dayKey` starts in `tz` (local midnight). One refinement pass puts
- * a DST change on the right side. `startOfDayInTz(addDays(k, 1), tz) - 1` is the
- * last millisecond of `k`, which is where the app snaps a çelınc's end.
+ * The instant the clock in `tz` reads `hour:minute` on `dayKey`. One refinement
+ * pass puts a DST change on the right side. The wall time is built in, never
+ * added to local midnight: on a DST Sunday "midnight + 4 h" is 03:00 or 05:00.
  */
-export function startOfDayInTz(dayKey: string, tz: string): Date {
+export function localInstant(dayKey: string, hour: number, minute: number, tz: string): Date {
   const [y, m, d] = parseDayKey(dayKey);
-  const wall = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) {
+    throw new RangeError(`Invalid time: ${String(hour)}:${String(minute)}`);
+  }
+  const wall = Date.UTC(y, m - 1, d, hour, minute, 0, 0);
   const first = wall - zoneOffsetMs(new Date(wall), tz);
   return new Date(wall - zoneOffsetMs(new Date(first), tz));
+}
+
+/**
+ * The instant `dayKey` starts in `tz` (local midnight).
+ * `startOfDayInTz(addDays(k, 1), tz) - 1` is the last millisecond of `k`, which
+ * is where the app snaps a çelınc's end.
+ */
+export function startOfDayInTz(dayKey: string, tz: string): Date {
+  return localInstant(dayKey, 0, 0, tz);
 }
 
 const TR_MONTHS = [

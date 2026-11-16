@@ -3,11 +3,11 @@ import {
   CATEGORY_ORDER,
   CHALLENGE_TYPES,
   LIMITS,
-  addDays,
   deadlineFitsWindow,
   getChallengeType,
   hhmmToMinutes,
   isValidHHmm,
+  nextDayStartTime,
   t,
   type ChallengeType,
   type VulgarityLevel,
@@ -33,8 +33,9 @@ import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
+import { computeWindow, type StartMode } from '@/utils/challengeWindow';
 import { confirmTr } from '@/utils/confirm';
-import { endOfDayInTz, safeDayKey, safeTodayKey, zonedInstant } from '@/utils/datetime';
+import { safeDayKey } from '@/utils/datetime';
 import { formatDayKey, formatTime } from '@/utils/format';
 import { byLevel, typeDescription } from '@/utils/levelCopy';
 import { serverNow, useClockSkew } from '@/utils/serverClock';
@@ -49,7 +50,6 @@ const STAKE_OPTIONS: { value: StakeMode; label: string; emoji: string }[] = [
 ];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-type StartMode = 'now' | 'tomorrow';
 type DurationChoice = number | 'custom';
 /** A çelınc is played for ONE thing: a prize, or a forfeit. Never both. */
 type StakeMode = 'reward' | 'penalty';
@@ -66,40 +66,6 @@ function formatMoment(iso: string, tz: string): string {
   const dayKey = safeDayKey(iso, tz);
   if (!dayKey) return '';
   return `${formatDayKey(dayKey, { withWeekday: true })} · ${formatTime(iso, tz)}`;
-}
-
-/**
- * Start/end as ISO strings; "Hemen" means `now` (the server allows a 5 dk grace).
- *
- * `now` is the SERVER's clock (utils/serverClock): the server refuses a start
- * more than 5 dk in its own past, so a phone running 20 minutes slow could
- * never open a "Hemen" çelınc, and "yarın" is the server's tomorrow.
- *
- * The window is built in the ACCOUNT's zone, because that is the zone the
- * server slices into day keys — and the end is snapped to the last millisecond
- * of the final local day, so "3 gün" really covers three day keys instead of
- * four (which would quietly add a `missingDayPenalty` day to a lower-is-better
- * çelınc). A window too short to be legal falls back to plain 24 h steps.
- */
-function computeWindow(
-  startMode: StartMode,
-  days: number,
-  tz: string,
-  now: Date
-): { startsAt: string; endsAt: string } {
-  const todayKeyLocal = safeTodayKey(tz, now);
-  const start =
-    startMode === 'tomorrow'
-      ? (zonedInstant(addDays(todayKeyLocal, 1), 9, 0, tz) ?? new Date(now.getTime() + DAY_MS))
-      : now;
-
-  const startKey = safeDayKey(start, tz) ?? todayKeyLocal;
-  const lastKey = addDays(startKey, Math.max(1, days) - 1);
-  const snapped = endOfDayInTz(lastKey, tz);
-  const fallback = new Date(start.getTime() + days * DAY_MS);
-  const end =
-    snapped && snapped.getTime() - start.getTime() > LIMITS.MIN_DURATION_MS ? snapped : fallback;
-  return { startsAt: start.toISOString(), endsAt: end.toISOString() };
 }
 
 /** The catalog's suggested reward can be longer than the field allows. */
@@ -327,7 +293,9 @@ export default function NewChallengeScreen() {
     startMode,
     daysValid ? days : (type?.defaultDurationDays ?? 1),
     tz,
-    new Date(shownAt + (skew ?? 0))
+    new Date(shownAt + (skew ?? 0)),
+    type,
+    deadlineTime
   );
   const finalTitle = (title.trim() || type?.nameTr || '').slice(0, LIMITS.CHALLENGE_TITLE_MAX);
 
@@ -439,7 +407,7 @@ export default function NewChallengeScreen() {
 
   const submit = async () => {
     if (!type || !settingsValid || !friendsValid) return;
-    const { startsAt, endsAt } = computeWindow(startMode, days, tz, serverNow());
+    const { startsAt, endsAt } = computeWindow(startMode, days, tz, serverNow(), type, deadlineTime);
     try {
       const challenge = await create.mutateAsync({
         typeKey: type.key,
@@ -550,11 +518,17 @@ export default function NewChallengeScreen() {
               <SegmentedControl<StartMode>
                 options={[
                   { value: 'now', label: 'Hemen', emoji: '⚡' },
-                  { value: 'tomorrow', label: 'Yarın 09:00', emoji: '🌅' },
+                  // a morning check-in starts when its window opens, or day one is lost
+                  { value: 'tomorrow', label: `Yarın ${nextDayStartTime(type)}`, emoji: '🌅' },
                 ]}
                 value={startMode}
                 onChange={setStartMode}
               />
+              {preview.startsTomorrow ? (
+                <Text variant="tiny" muted>
+                  Bugünün check-in saati geçti, ilk check-in yarın.
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.field}>

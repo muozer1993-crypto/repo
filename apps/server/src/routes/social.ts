@@ -18,7 +18,12 @@ import {
   addDays,
   dayKeyInTz,
   effectiveDeadline,
+  hhmmToMinutes,
+  isBeforeOrEqualHHmm,
   isValidTimeZone,
+  localInstant,
+  localTimeHHmm,
+  nextDayStartTime,
   startOfDayInTz,
   type Challenge,
   type ChallengeDetail,
@@ -211,6 +216,24 @@ function findRematch(db: Database, challengeId: string, meId: string, now: Date)
 }
 
 /**
+ * When a rematch asked for at `now` starts: in `REMATCH_START_DELAY_MS`, unless
+ * it is a check-in çelınc whose deadline is gone by then in the creator's zone.
+ * Its first day could not be played (erken_kus asked for at 22:00 started at
+ * 22:05, its 07:00 long past) yet counted among the days, so "5 gün" came back
+ * as four mornings. It starts the next day when the window opens instead
+ * (`nextDayStartTime`), as the wizard's "Yarın" does.
+ */
+function rematchStartsAt(challenge: ChallengeRow, zone: string, now: Date): Date {
+  const soon = new Date(now.getTime() + LIMITS.REMATCH_START_DELAY_MS);
+  if (challenge.metric_type !== 'checkin_deadline') return soon;
+  const tz = isValidTimeZone(zone) ? zone : DEFAULT_TIMEZONE;
+  const type = typeForChallenge(challenge);
+  if (isBeforeOrEqualHHmm(localTimeHHmm(soon, tz), effectiveDeadline(type, challenge.deadline_time))) return soon;
+  const opens = hhmmToMinutes(nextDayStartTime(type));
+  return localInstant(addDays(dayKeyInTz(soon, tz), 1), Math.floor(opens / 60), opens % 60, tz);
+}
+
+/**
  * When a rematch starting at `startsAt` ends: as many local days as the
  * original had, ending on the last millisecond of a day in the creator's zone,
  * the way the wizard snaps an end. `startsAt + duration` used to end it at
@@ -370,7 +393,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     if (duplicate) throw conflict('already_rematched', 'Bu çelınc için zaten rövanş açtın.');
 
     // Same settings, same number of days; only the calendar moves.
-    const startsAtDate = new Date(now.getTime() + LIMITS.REMATCH_START_DELAY_MS);
+    const startsAtDate = rematchStartsAt(challenge, me.row.timezone, now);
     const startsAt = startsAtDate.toISOString();
     const originalTz = participantTimezone(
       getParticipant(db, challenge.id, challenge.creator_id),

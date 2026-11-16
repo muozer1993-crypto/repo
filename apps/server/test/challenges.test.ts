@@ -301,6 +301,57 @@ describe('POST /challenges', () => {
     });
   });
 
+  it('plays every morning of a "5 gün" Erken Kalkan Koyar opened the evening before', async () => {
+    harness = await makeApp({ now: '2026-12-31T19:00:00.000Z' }); // 22:00 on New Year's Eve
+    const ali = await registerUser(harness.app, 'ali');
+    const veli = await registerUser(harness.app, 'veli');
+    befriend(harness.app, ali.me.id, veli.me.id);
+    // the wizard's "Yarın" + 5 gün: from 04:00 on 1 January, when the window opens,
+    // to the end of the 5th. It started at 09:00 and lost the first morning: 4-4.
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'erken_kus',
+      participantIds: [veli.me.id],
+      deadlineTime: '07:00',
+      startsAt: '2027-01-01T01:00:00.000Z',
+      endsAt: '2027-01-05T20:59:59.999Z',
+    });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+
+    for (let i = 0; i < 5; i++) {
+      const day = addDays('2027-01-01', i);
+      harness.setNow(`${day}T03:30:00.000Z`); // both up at 06:30
+      runSchedulerOnce(harness.db, harness.now());
+      for (const user of [ali, veli]) {
+        const response = await postEntry(harness, user, challengeId, { dayKey: day, value: 1, source: 'checkin', clientTime: iso(harness) });
+        expect({ day, user: user.me.username, status: response.statusCode }).toEqual({ day, user: user.me.username, status: 201 });
+        expect(response.json().entry.value).toBe(1);
+      }
+    }
+
+    harness.setNow('2027-01-06T00:00:00.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    const detail = (await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>();
+    expect(detail.challenge.status).toBe('finished');
+    expect(detail.participants.map((p) => p.score)).toEqual([5, 5]);
+  });
+
+  it('still takes the 09:00 start an older app sends for a check-in çelınc', async () => {
+    harness = await makeApp({ now: '2026-12-31T19:00:00.000Z' });
+    const ali = await registerUser(harness.app, 'ali');
+    const veli = await registerUser(harness.app, 'veli');
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'erken_kus',
+      participantIds: [veli.me.id],
+      deadlineTime: '07:00',
+      startsAt: '2027-01-01T06:00:00.000Z',
+      endsAt: '2027-01-05T20:59:59.999Z',
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json<Challenge>()).toMatchObject({ status: 'pending', startsAt: '2027-01-01T06:00:00.000Z' });
+  });
+
   it('rejects an unknown type key', async () => {
     harness = await makeApp({ now: NOW });
     const ali = await registerUser(harness.app, 'ali');
@@ -1914,6 +1965,60 @@ describe('POST /challenges/:id/rematch', () => {
     const rematch = (await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })).json<Challenge>();
     expect(rematch.startsAt).toBe('2026-01-06T20:25:00.000Z');
     expect(rematch.endsAt).toBe('2026-01-07T20:59:59.999Z');
+  });
+
+  it('starts a check-in rematch asked for after the deadline on the next morning its window opens', async () => {
+    harness = await makeApp({ now: '2026-12-31T19:00:00.000Z' });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    // "5 gün" Erken Kalkan Koyar, 1-5 January
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'erken_kus',
+      participantIds: [veli.me.id],
+      deadlineTime: '07:00',
+      startsAt: '2027-01-01T01:00:00.000Z',
+      endsAt: '2027-01-05T20:59:59.999Z',
+    });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await harness.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` });
+
+    // 22:00 on 6 January: 22:05 would have lost the 7th's morning, yet counted it
+    harness.setNow('2027-01-06T19:00:00.000Z');
+    const evening = (await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })).json<Challenge>();
+    expect(evening.startsAt).toBe('2027-01-07T01:00:00.000Z'); // 04:00
+    expect(evening.endsAt).toBe('2027-01-11T20:59:59.999Z'); // five mornings, 7-11 January
+
+    // 03:00 on the 7th: this morning can still be played, so in five minutes as ever
+    harness.setNow('2027-01-07T00:00:00.000Z');
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${evening.id}/decline` });
+    const night = (await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })).json<Challenge>();
+    expect(night.startsAt).toBe('2027-01-07T00:05:00.000Z');
+    expect(night.endsAt).toBe('2027-01-11T20:59:59.999Z');
+  });
+
+  it('starts a check-in rematch on the next day when the deadline passes in its five minutes', async () => {
+    harness = await makeApp({ now: '2026-12-31T19:00:00.000Z' });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'yatak_toplama',
+      participantIds: [veli.me.id],
+      deadlineTime: '09:00',
+      startsAt: '2027-01-01T02:00:00.000Z',
+      endsAt: '2027-01-03T20:59:59.999Z',
+    });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    await harness.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` });
+
+    // 08:57: it would start at 09:02, past this morning's 09:00
+    harness.setNow('2027-01-04T05:57:00.000Z');
+    const rematch = (await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` })).json<Challenge>();
+    expect(rematch.startsAt).toBe('2027-01-05T02:00:00.000Z'); // 05:00 on the 5th
+    expect(rematch.endsAt).toBe('2027-01-07T20:59:59.999Z');
   });
 
   it('lets the creator ask again after a rematch was turned down (and so cancelled)', async () => {

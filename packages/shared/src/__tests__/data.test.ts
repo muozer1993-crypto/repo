@@ -26,6 +26,7 @@ import {
   deadlineFitsWindow,
   effectiveDeadline,
   getChallengeType,
+  nextDayStartTime,
   requireChallengeType,
 } from '../catalog';
 import { containsBanned } from '../banned';
@@ -116,6 +117,20 @@ describe('challenge catalog', () => {
     const erkenKus = requireChallengeType('erken_kus');
     expect(effectiveDeadline(erkenKus, '06:30')).toBe('06:30');
     expect(effectiveDeadline(erkenKus, '03:59')).toBe('07:00');
+  });
+
+  it("starts a check-in çelınc on a later day when its window opens, so the first deadline can be met", () => {
+    expect(nextDayStartTime(requireChallengeType('erken_kus'))).toBe('04:00');
+    expect(nextDayStartTime(requireChallengeType('yatak_toplama'))).toBe('05:00');
+    // its 19:00 window is far off: the 09:00 every çelınc started at stays
+    expect(nextDayStartTime(requireChallengeType('erken_yat'))).toBe('09:00');
+    expect(nextDayStartTime(requireChallengeType('adim_yarisi'))).toBe('09:00');
+    expect(nextDayStartTime(undefined)).toBe('09:00');
+    for (const type of CHALLENGE_TYPES) {
+      if (type.metricType !== 'checkin_deadline') continue;
+      // the first day's deadline is still ahead when it starts
+      expect({ key: type.key, early: nextDayStartTime(type) <= type.defaultDeadlineTime! }).toEqual({ key: type.key, early: true });
+    }
   });
 
   it('counts only the morning check-ins as getting up', () => {
