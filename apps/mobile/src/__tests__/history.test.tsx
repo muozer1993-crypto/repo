@@ -161,3 +161,89 @@ describe('ChallengeCard on a finished tie', () => {
     expect(text).not.toContain('YEDİN');
   });
 });
+
+/**
+ * Ali's step race, 9.000 to Veli's 6.000, still `active`: the phones' settle
+ * hour or an itiraz's proof window holds it open past `endsAt`.
+ */
+function stepRace(endsAt: string, meId: string): ChallengeSummary {
+  const base = tiedAtTop('ali');
+  const participants = [player('ali', 'Ali', 9000, 1), player('veli', 'Veli', 6000, 2)];
+  return {
+    ...base,
+    challenge: {
+      ...base.challenge,
+      typeKey: 'adim_yarisi',
+      metricType: 'auto_steps',
+      unit: 'adım',
+      title: 'Adım Yarışı',
+      endsAt,
+      status: 'active',
+      finalizedAt: null,
+      isTie: false,
+      penaltyText: null,
+    },
+    participants,
+    me: participants.find((p) => p.user.id === meId) ?? null,
+  };
+}
+
+describe('ChallengeCard after the end while the result waits', () => {
+  function cardText(summary: ChallengeSummary, meId: string, level: 1 | 2 | 3): string {
+    let tree: ReactTestRenderer;
+    act(() => {
+      tree = create(<ChallengeCard summary={summary} level={level} meId={meId} />);
+    });
+    const text = textIn(tree!.toJSON()).join(' ');
+    // the countdown keeps ticking otherwise, past the end of the test
+    act(() => tree.unmount());
+    return text;
+  }
+
+  const endedAt = () => new Date(Date.now() - 5 * 60_000).toISOString();
+
+  it('stops nagging the one behind, but still says where he stands', () => {
+    const text = cardText(stepRace(endedAt(), 'veli'), 'veli', 3);
+    expect(text).toContain('⏳ Sonuç bekleniyor');
+    expect(text).toContain('GERİDESİN');
+    expect(text).not.toContain('Geridesin');
+    expect(text).not.toContain('yersin');
+  });
+
+  it('stops cheering the one ahead, but still says where she stands', () => {
+    const text = cardText(stepRace(endedAt(), 'ali'), 'ali', 1);
+    expect(text).toContain('⏳ Sonuç bekleniyor');
+    expect(text).toContain('ÖNDESİN');
+    expect(text).not.toContain('Öndesin');
+    expect(text).not.toContain('Böyle devam');
+  });
+
+  it('keeps the line while the race still runs', () => {
+    const endsAt = new Date(Date.now() + 60 * 60_000).toISOString();
+    expect(cardText(stepRace(endsAt, 'veli'), 'veli', 3)).toContain('Geridesin. Kalk yoksa akşam yersin');
+    expect(cardText(stepRace(endsAt, 'ali'), 'ali', 1)).toContain('Öndesin, aferin. Böyle devam.');
+  });
+
+  it('drops it when the end passes with the card on screen', () => {
+    const now = new Date('2026-09-10T20:59:59.000Z').getTime();
+    jest.useFakeTimers({ now });
+    try {
+      let tree: ReactTestRenderer;
+      act(() => {
+        tree = create(<ChallengeCard summary={stepRace(new Date(now + 1000).toISOString(), 'veli')} level={3} meId="veli" />);
+      });
+      expect(textIn(tree!.toJSON()).join(' ')).toContain('Geridesin. Kalk yoksa akşam yersin');
+
+      act(() => {
+        jest.advanceTimersByTime(1500);
+      });
+      const text = textIn(tree!.toJSON()).join(' ');
+      expect(text).toContain('⏳ Sonuç bekleniyor');
+      expect(text).toContain('GERİDESİN');
+      expect(text).not.toContain('Geridesin');
+      act(() => tree.unmount());
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});

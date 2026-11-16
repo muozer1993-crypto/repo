@@ -1179,7 +1179,8 @@ yükleniyor, gelmezse uygulama onsuz devam ediyor.
 **Çelınc bitti ama sonuç çıkmadı.**
 Sonuçlandırmayı sunucudaki zamanlayıcı yapar ve 30 saniyede bir çalışır. Adım ve ekran süresi
 çelınclarında bu bilerek bir saate kadar sürer: son akşamın adımları telefonlardan geç gelir,
-uygulama o sırada "Sonuç birazdan" yazar. Herkesin telefonu son günü gönderince hemen kapanır.
+uygulama o sırada "Sonuç birazdan" yazar, ana sayfadaki kart da "⏳ Sonuç bekleniyor" der; kartta
+kalan ÖNDESİN / GERİDESİN o anki sıradır, sonuç değil. Herkesin telefonu son günü gönderince hemen kapanır.
 Sunucu kapalıysa açıldığında geçmiş çelınclarını da kapatır; adım çelınclarında telefonlara
 açıldıktan sonra yine bir saat tanır. Süre bittikten sonra kimse çelınctan ayrılamaz; yoksa
 teke tek çelıncta kaybeden ayrılıp sonucu iptal ettirebilirdi.

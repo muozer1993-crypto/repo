@@ -712,7 +712,9 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             photo, and "🎁 … · 💀 …" on up to two lines; only invites still open: `stillJoinable`, pending/active
                             and before `acceptClosesAt`, read against the list's last fetch),
                             Aktif (cards: emoji, title, countdown, mini standings, my rank; losing → red "yiyorsun" chip;
-                            fewer than two accepted → "RAKİP YOK" chip and no verdict line; a pending card past its start
+                            fewer than two accepted → "RAKİP YOK" chip and no verdict line; past `endsAt` but still
+                            `active` (the settle hour, an itiraz's 12 hours) → "⏳ Sonuç bekleniyor", the chip as it stands
+                            but no verdict line and no red glow, as the çelınc screen; a pending card past its start
                             → "🚦 kabul bekleniyor", not the countdown's "Bitti"),
                             Bekleyen, Biten (newest 5; the header counts all of them, and past 5 a "Hepsini gör (N)"
                             button opens history; a finished çelınc I never answered → "KAÇIRDIN" chip, not "DAVET");
@@ -783,7 +785,7 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             gallery pick → /uploads → POST .../proof),
                             past `endsAt` but still `active` (settling, 2.4) → "Süre bitti / Sonuç birazdan" instead of the
                             countdown, no action area, "böyle devam" verdict, "laf sok" or "Ayrıl", one device sync on open
-                            (the list card says "Sonuç bekleniyor"),
+                            (the list card says "Sonuç bekleniyor" and drops its verdict line too),
                             "laf sok" per rival you lead, before `endsAt` — opens a sheet of rendered `poke` lines to choose from,
                             titled with dativeTr ("Mehmet'e ne diyelim?", "🔥 için ne diyelim?" when it gives null),
                             running (before `endsAt`) with fewer than two accepted → "Rakip bekleniyor / 1/2 kişi" hero

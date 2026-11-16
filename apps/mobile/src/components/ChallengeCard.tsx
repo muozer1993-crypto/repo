@@ -1,5 +1,6 @@
 import type { ChallengeSummary, ChallengeType, VulgarityLevel } from '@koydum/shared';
 import { getChallengeType, t } from '@koydum/shared';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/Card';
@@ -21,9 +22,21 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
   const { challenge, participants, me } = summary;
   const type: ChallengeType | undefined = getChallengeType(challenge.typeKey);
   const status = statusOf(summary);
+  // Read on mount (and again when the end countdown runs out) instead of during
+  // render: `Date.now()` in render is impure for the React Compiler.
+  const [checkedAt, setCheckedAt] = useState(() => Date.now());
+  /**
+   * Past its end a çelınc stays `active` while the server waits: up to an hour
+   * for the phones' last count, up to 12 hours for the proof an itiraz asked
+   * for. Nothing more can be done about the standing then, so the card drops
+   * the "kalk yoksa yersin" nag and the red glow, as the çelınc screen drops
+   * its verdict; the chip still says where I stand.
+   */
+  const endsMs = Date.parse(challenge.endsAt);
+  const ended = challenge.status === 'active' && Number.isFinite(endsMs) && endsMs <= checkedAt;
 
   return (
-    <Card onPress={onPress} edgeColor={status.color} glow={status.key === 'losing'}>
+    <Card onPress={onPress} edgeColor={status.color} glow={status.key === 'losing' && !ended}>
       <View style={styles.header}>
         <Text style={styles.emoji}>{type?.emoji ?? '🎯'}</Text>
         <View style={styles.headerBody}>
@@ -52,14 +65,16 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
 
       <View style={styles.footer}>
         {challenge.status === 'active' ? (
-          // Past the end a phone-counted çelınc stays active for up to an hour
-          // while the last syncs come in; the countdown's own clock flips it.
+          // Past the end a çelınc stays active while the last syncs or an
+          // itiraz's proof come in; the countdown's own clock flips it, and the
+          // card with it when the end passes on screen.
           <Countdown
             target={challenge.endsAt}
             prefix="⏳"
             finishedLabel="⏳ Sonuç bekleniyor"
             variant="tiny"
             bold
+            onFinish={() => setCheckedAt(Date.now())}
           />
         ) : challenge.status === 'pending' ? (
           // past its start a pending çelınc is waiting for a second yes, not over
@@ -79,7 +94,7 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
                 : '🚫 İptal'}
           </Text>
         )}
-        {me && challenge.status === 'active' && status.key !== 'pending' ? (
+        {me && challenge.status === 'active' && !ended && status.key !== 'pending' ? (
           <Text variant="tiny" muted numberOfLines={1} style={styles.hint}>
             {/* the same reading as the chip: rank 1 is shared in a dead heat,
                 so "sen koyuyorsun" on equal scores would be a lie */}
