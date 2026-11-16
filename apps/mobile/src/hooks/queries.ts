@@ -460,10 +460,11 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
   return useMutation<AddEntryResult, Error, AddEntryVariables>({
     mutationFn: async ({ proofLocalUri, ...body }) => {
       const key = `${id}:${body.dayKey}:${body.source}:${body.sessionId ?? ''}${append ? `:${body.clientTime}` : ''}`;
-      // The account that tapped, once: the request goes with its token, and a
-      // logout while it is out (the form closes, the write runs on) must not
-      // park, drop or drain it under whoever is logged in when it answers.
-      const owner = useAuth.getState().me?.id ?? (await currentOwnerId());
+      // The account that tapped, once, as the queue reads it everywhere else:
+      // the request goes with its token, and a logout while it is out (the
+      // form closes, the write runs on) must not park, drop or drain it under
+      // whoever is logged in when it answers.
+      const owner = await currentOwnerId();
       // a page from a Wi-Fi portal or a proxy is not our server saying no (lib/api.ts).
       // A 507 is: the photo's disk is nearly full, the connection is fine, and the
       // form shows its message (remove the photo, or tell the owner) rather than
