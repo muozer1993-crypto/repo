@@ -809,6 +809,68 @@ describe('a "Hemen" çelınc nobody else has joined yet', () => {
     expect(text).toContain('🚦 kabul bekleniyor');
     expect(text).not.toContain('Bitti');
   });
+
+  /** The reader's own çelınc, started an hour ago, still waiting for a second yes. */
+  function stalled(overrides: Record<string, unknown> = {}) {
+    const detail = challengeDetail();
+    const ali = {
+      ...detail.me,
+      user: { ...detail.me.user, id: 'u-2', username: 'ali', displayName: 'Ali' },
+      status: 'invited' as const,
+      score: 0,
+      rank: 0,
+    };
+    return {
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        status: 'pending' as const,
+        startsAt: new Date(Date.now() - 60 * 60_000).toISOString(),
+        ...overrides,
+      },
+      participants: [detail.me, ali],
+    };
+  }
+
+  it('does not claim the clock of a stalled çelınc is stopped: the end stays, the phones count', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => stalled());
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toMatch(/KABUL BEKLENİYOR 1 ?\/2 kişi/);
+    expect(text).toContain('İkinci kişi kabul edince başlar, ama bitiş tarihi kaymaz.');
+    expect(text).toContain('Telefonların saydığı adımlar şimdiden yazılıyor.');
+    expect(text).toContain('bitişte kendiliğinden iptal olur');
+    expect(text).toContain('İstersen aşağıdan şimdi iptal edebilirsin.');
+    expect(text).not.toContain('süre işlemiyor');
+    expect(text).not.toContain('giriş yapılamaz');
+  });
+
+  it('tells a stalled check-in çelınc that nothing goes in before it starts', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () =>
+      stalled({
+        typeKey: 'erken_kus',
+        metricType: 'checkin_deadline',
+        unit: 'gün',
+        title: 'Sabah Kalkma',
+        deadlineTime: '07:00',
+      })
+    );
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('İkinci kişi kabul edince başlar, ama bitiş tarihi kaymaz.');
+    expect(text).toContain('Başlayana kadar giriş yapılamaz.');
+    expect(text).not.toContain('şimdiden yazılıyor');
+    // and no "Geldim" to press while it waits
+    expect(text).not.toContain('GELDİM');
+  });
 });
 
 describe('saying yes to a çelınc the phone counts', () => {

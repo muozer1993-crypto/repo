@@ -21,6 +21,7 @@ import { safeDayKey, safeDayKeysBetween, safeTodayKey, zonedInstant } from '@/ut
  *
  * Only çelınclar the reader accepted get them: the list also carries the ones
  * they were merely invited to, and an unanswered invite has no deadline to miss.
+ * Nor does one still waiting for a second yes: it has not started.
  *
  * `expo-notifications` is reached through `services/expoNotifications` rather
  * than imported: the barrel throws at import time in Expo Go on Android, and a
@@ -178,6 +179,18 @@ async function refresh(client: Pick<ApiClient, 'challenges'>, level: 1 | 2 | 3, 
   const today = safeTodayKey(tz);
   const reminders: ReminderChallenge[] = summaries
     .filter((summary) => summary.me?.status === 'accepted')
+    // A `pending` çelınc with the reader alone in it takes no check-in (the
+    // server answers `challenge_not_active`) and is cancelled at its end if
+    // nobody joins: "30 dakikan kaldı" and "Skorunu girmediysen yersin" rang
+    // every morning for a race that had not started. The yes that makes it two
+    // is picked up by the next refresh (foreground, background task, drain).
+    .filter(
+      (summary) =>
+        !(
+          summary.challenge.status === 'pending' &&
+          summary.participants.filter((p) => p.status === 'accepted').length < 2
+        )
+    )
     .map((summary) => ({
       id: summary.challenge.id,
       title: summary.challenge.title,

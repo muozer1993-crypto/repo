@@ -167,6 +167,19 @@ function settlingNote(type: ChallengeType | undefined, awaitingProof: boolean): 
   }
 }
 
+/**
+ * What a `pending` çelınc past its start does while it waits for a second yes.
+ * The clock does not stop: the end never moves (`activateDueChallenges` only
+ * flips the status), and the phones' steps go in from the start and all count.
+ * Typed numbers wait, and so does screen time, whose average only counts from
+ * the day before the second yes (`lateJoinFloor`).
+ */
+function waitingNote(type: ChallengeType | undefined): string {
+  return type?.deviceMetric === 'steps'
+    ? 'Telefonların saydığı adımlar şimdiden yazılıyor.'
+    : 'Başlayana kadar giriş yapılamaz.';
+}
+
 /* ----------------------------------------------------------------- screen */
 
 export default function ChallengeDetailScreen() {
@@ -377,8 +390,8 @@ export default function ChallengeDetailScreen() {
               <Text variant="label">Kabul bekleniyor</Text>
               <Text variant="big">{accepted.length}/2 kişi</Text>
               <Text variant="tiny" faint>
-                En az 2 kişi kabul edene kadar süre işlemiyor. Kimse kabul etmezse bitiş
-                tarihinde kendiliğinden iptal olur.
+                İkinci kişi kabul edince başlar, ama bitiş tarihi kaymaz. {waitingNote(type)} Kimse
+                kabul etmezse bitişte kendiliğinden iptal olur.
                 {isCreator ? ' İstersen aşağıdan şimdi iptal edebilirsin.' : ''}
               </Text>
             </>

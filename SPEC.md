@@ -777,6 +777,11 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             running (before `endsAt`) with fewer than two accepted → "Rakip bekleniyor / 1/2 kişi" hero
                             (the clock runs; nobody in by the end → cancelled) with a small end countdown, no
                             "öndesin" verdict and no "laf sok",
+                            `pending` past `startsAt` → "Kabul bekleniyor / 1/2 kişi" hero: it starts with the second yes
+                            and the end does not move; a steps çelınc says the phones' days already go in (all of them
+                            count), any other "Başlayana kadar giriş yapılamaz." (typing is refused, and a screen-time
+                            average only counts from the day before the second yes); nobody in by the end → cancelled;
+                            the creator is pointed at "İptal et" below,
                             invited → "Varım" / "Yokum" ("Yokum" asks first, like the home card; a "Varım" before the start
                             toasts "Çelınc başlayınca skorun sayılmaya başlar."); declined → "Reddetmiştin..." card with "Katıl"
                             (accept); both only while `stillJoinable` (pending/active and before `acceptClosesAt`, against the
@@ -904,7 +909,9 @@ davet/[code].tsx            invite deep link (koydum://davet/CODE?server=...), r
   it, and the bridge sends `POST /me/inbox/read { ids: [id] }` (then refreshes unread + inbox) before navigating. The phone's own
   reminders carry no id.
 - The phone's own reminders (services/reminders.ts), only for çelınclar whose `me.status` is `accepted` (the list also
-  returns invites): a check-in çelınc's slot 30 minutes before its deadline and a "son 1 saat" warning before every end.
+  returns invites), and not for a `pending` one with fewer than two accepted (it takes no entry and is cancelled at its
+  end if nobody joins; the refresh after the second yes sets them): a check-in çelınc's slot 30 minutes before its
+  deadline and a "son 1 saat" warning before every end.
   The check-in slot is one DATE trigger per remaining day of the window in the account's zone (`zonedInstant`;
   identifier `koydum-checkin-<challengeId>-<dayKey>`; a deadline before 00:30 is poked the evening before), never a
   repeating one: only days from today on, today left out once `me.lastEntryAt` is today, at most 14 days ahead, and only

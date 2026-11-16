@@ -485,8 +485,9 @@ gir: gün ortası dürtmeyi ("sana fark koymuş"), pazar akşamı haftalık öze
 kurduğu saatli uyarıları (check-in'e yarım saat kala, çelıncın son saati) ayrı ayrı kapatabilirsin.
 Saatli uyarılar ayarı sadece o telefonda geçerli. Check-in uyarısı sadece katıldığın çelınclarda,
 çelınc sürdüğü günlerde ve o gün daha "Geldim" demediysen çalar; çelınc bitince ya da iptal olunca
-kendiliğinden susar. "KOYDUM MU?" lafları, kankanın elle dürtmesi, davetler ve sonuçlar her zaman
-gelir.
+kendiliğinden susar. İleri bir tarihe açtığın çelıncı senden başka kimse kabul etmediyse o daha
+başlamamıştır: ne check-in ne de son saat uyarısı çalar, ikinci kişi kabul edince kurulur.
+"KOYDUM MU?" lafları, kankanın elle dürtmesi, davetler ve sonuçlar her zaman gelir.
 
 **Anlık olsun istersen** (laf atıldığı saniye telefon titresin), Android'e Google'ın push servisi
 (Firebase Cloud Messaging) gerekir. Bir kerelik iş, ücretsiz:
@@ -890,7 +891,9 @@ ve tek başınayken "öndesin" demez. İlk kabul edenle ikinize "Çelınc başla
 sonradan katılan her kanka için içeridekilere "Ali kabul etti" gelir (seviyene göre "Ali varım
 dedi" ya da "Ali sahaya indi 🍆"). İleri bir tarihte başlayan çelıncta kabulleri sadece açan duyar
 (sonradan **Kankaları Çağır** ile gelen birinin kabulünü onu çağıran da duyar), başlangıç saatinde
-herkese "başladı" gider. Kimse katılmazsa çelınc bitişte iptal olur. Çelıncta kabul etmiş biriyle
+herkese "başladı" gider. Başlangıç saatinde senden başka kabul eden yoksa çelınc ekranı "Kabul
+bekleniyor, 1/2 kişi" der: ikinci kişi kabul edince başlar ama bitiş tarihi kaymaz, adımları
+telefonlar o arada da yazar. Kimse katılmazsa çelınc bitişte iptal olur. Çelıncta kabul etmiş biriyle
 arasında engel olan (kim kimi engellemiş olursa olsun) kabul edemez, "Bu çelınca katılamazsın."
 görür: engelli iki kişi aynı çelıncta oynamaz.
 

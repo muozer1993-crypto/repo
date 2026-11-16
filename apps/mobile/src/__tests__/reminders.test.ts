@@ -130,6 +130,9 @@ function checkinSummary(
     deadlineTime?: string;
     status?: 'invited' | 'accepted';
     lastEntryAt?: string | null;
+    /** the çelınc's own status, and everybody's answer, the reader's included */
+    challengeStatus?: 'pending' | 'active';
+    players?: ('invited' | 'accepted')[];
   } = {}
 ): ChallengeSummary {
   return {
@@ -140,7 +143,9 @@ function checkinSummary(
       endsAt: (overrides.endsAt ?? new Date(Date.now() + 5 * HOUR_MS)).toISOString(),
       metricType: 'checkin_deadline',
       deadlineTime: overrides.deadlineTime ?? '07:00',
+      ...(overrides.challengeStatus ? { status: overrides.challengeStatus } : {}),
     },
+    ...(overrides.players ? { participants: overrides.players.map((status) => ({ status })) } : {}),
     me: { status: overrides.status ?? 'accepted', lastEntryAt: overrides.lastEntryAt ?? null },
   } as unknown as ChallengeSummary;
 }
@@ -195,6 +200,47 @@ describe('which days get a check-in poke', () => {
     const checkins = checkinRequests();
     expect(checkins[0]?.identifier).toBe('koydum-checkin-c1-2026-10-08');
     expect(checkins[0]?.trigger.date?.toISOString()).toBe('2026-10-08T03:30:00.000Z');
+    expect(checkins).toHaveLength(7);
+  });
+
+  it('rings nothing for a çelınc still waiting for a second yes, past its start or not', async () => {
+    // started two days ago, nobody but the reader said yes: no "Geldim" to press
+    const stalled = checkinSummary({
+      id: 'c-stalled',
+      endsAt: new Date(NOW.getTime() + 3 * DAY_MS),
+      challengeStatus: 'pending',
+      players: ['accepted', 'invited'],
+    });
+    // starts in three days, and the invite is still unanswered
+    const startsAt = new Date('2026-10-07T21:00:00.000Z');
+    const early = checkinSummary({
+      id: 'c-early',
+      startsAt,
+      endsAt: new Date(startsAt.getTime() + 7 * DAY_MS),
+      challengeStatus: 'pending',
+      players: ['accepted', 'invited'],
+    });
+
+    // neither a check-in poke nor "son 1 saat" for a çelınc cancelled at its end
+    expect(await refreshReminders(listOf(stalled, early), 3, TZ)).toBe(0);
+    expect(mockSchedule).not.toHaveBeenCalled();
+  });
+
+  it('sets the pokes of a çelınc that starts later once a second player is in', async () => {
+    const startsAt = new Date('2026-10-07T21:00:00.000Z');
+    const client = listOf(
+      checkinSummary({
+        startsAt,
+        endsAt: new Date(startsAt.getTime() + 7 * DAY_MS),
+        challengeStatus: 'pending',
+        players: ['accepted', 'accepted', 'invited'],
+      })
+    );
+
+    await refreshReminders(client, 2, TZ);
+
+    const checkins = checkinRequests();
+    expect(checkins[0]?.identifier).toBe('koydum-checkin-c1-2026-10-08');
     expect(checkins).toHaveLength(7);
   });
 
