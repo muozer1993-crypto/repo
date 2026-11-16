@@ -103,11 +103,18 @@ const FASTIFY_MESSAGES: Record<string, { status: number; code: string; message: 
  */
 const MULTIPART_STREAM_MESSAGE = /multipart data|Premature close|Unexpected end of form/i;
 
+/**
+ * How many zod issues a 400 lists. The app only shows the message, and the first
+ * few issues are all a person reading the reply needs; every bad item of a list
+ * is an issue of its own, and a 64 KB body of them came back as megabytes of JSON.
+ */
+export const MAX_ISSUES = 20;
+
 /** `app.setErrorHandler(errorHandler)` — the single renderer for every failure. */
 export function errorHandler(error: Error, request: FastifyRequest, reply: FastifyReply): void {
   if (isZodError(error)) {
     const body: ErrorBody = {
-      error: { code: 'validation', message: 'Gönderdiğin bilgiler geçersiz.', issues: error.issues },
+      error: { code: 'validation', message: 'Gönderdiğin bilgiler geçersiz.', issues: error.issues.slice(0, MAX_ISSUES) },
     };
     void reply.code(400).send(body);
     return;

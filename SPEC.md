@@ -297,7 +297,7 @@ src/log.ts              ownerLogStream(): pino lines → one Turkish line each f
                         wantsReadableLogs(): stdout is a TTY and LOG_FORMAT is not `json`
 src/env.ts              loadDotEnv(): apps/server/.env into process.env, never over a variable already set; entry
                         points only (main.ts, cli/yonet.ts; scripts/env.mjs for the .mjs scripts), not loadConfig
-src/app.ts              buildApp(opts): registers plugins, routes, error handler; exported for tests
+src/app.ts              buildApp(opts): registers plugins, routes, error handler, JSON bodies ≤ 64 KB; exported for tests
 src/config.ts           env: PORT=4000, HOST=0.0.0.0, DATA_DIR=./data, UPLOAD_DIR=<DATA_DIR>/uploads (so one
                         volume holds the database and the photos), JWT_SECRET (auto-generated & persisted to
                         DATA_DIR/secret if missing), PUBLIC_URL, LOG_LEVEL
@@ -394,7 +394,11 @@ Auth: `Authorization: Bearer <jwt>`; 401 `unauthorized`. The token's `ver` claim
 or an owner reset adds 1 and every older token gets the same 401 `unauthorized`, with the message "Şifren değişti, bu
 telefondaki oturum kapandı. Yeni şifreyle gir." (the app's login screen shows the 401's message). A token of a deleted account
 gets the same code with "Bu hesap kapatıldı, bununla bir daha giriş yapılamaz. Bir yanlışlık varsa sunucuyu kuran kişiye
-sor." (no signing back in: the name is anonymised and the password gone). Validation errors → 400 `validation` with zod issues.
+sor." (no signing back in: the name is anonymised and the password gone). Validation errors → 400 `validation` with the first
+20 zod issues (the app shows only the message); a capped list (`days`, `participantIds`, `userIds`, `ids`) is counted before
+its items are read, so one too long is a single issue. A JSON body over 64 KB (`JSON_BODY_LIMIT`) is refused unread, signed
+in or not: 413 `body_too_large` "Gönderdiğin veri çok büyük." The biggest a schema accepts, 500 ids to `/me/inbox/read`, is
+about 33 KB; `POST /uploads` is multipart, outside that limit, and keeps its own 5 MB.
 Several endpoints take no request body. A JSON content type with an empty payload is parsed as `{}`
 rather than rejected, so a client that always sets `Content-Type: application/json` still works.
 

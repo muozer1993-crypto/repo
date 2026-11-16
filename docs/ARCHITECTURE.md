@@ -1073,6 +1073,24 @@ veritabanı yedeklemesi kolaydır (`cp koydum.db yedek.db`), ORM yoktur, migrati
 içinde string olarak durur ve açılışta bir transaction içinde uygulanır. Sorgu sayısı azdır ve
 hepsi hazırlanmış ifadelerdir.
 
+## Bir isteğin ağırlığı
+
+Sunucu tek bir Node sürecidir: bir isteği saniyelerce işlemek, o arada bütün kankaların isteğini
+bekletmek demek. Eskiden bir JSON gövdesi 6 MB olabiliyordu. 3 MB'lık bir `{}` listesi sunucuyu
+14 saniye kilitliyor, belleğini 3 GB'a çıkarıyor, 279 MB'lık bir hata cevabı döndürüyordu;
+`/auth/login`'e giden iç içe `[[[…]]]` için hesap bile gerekmiyordu. Şimdi bir JSON gövdesi en
+fazla 64 KB olabilir (`JSON_BODY_LIMIT`, `src/app.ts`); fazlası okunmadan 413 `body_too_large`
+alır, kimden gelirse gelsin. Şemaların kabul ettiği en büyük gövde, 500 kimlikle
+`/me/inbox/read`, 33 KB civarındadır; uygulamanın gönderdikleri birkaç KB. Kanıt fotoğrafı bu
+sınıra girmez: multipart kendi akışını okur ve kendi 5 MB'ını tutar.
+
+Sınır tek başına yetmiyordu: zod bir listenin uzunluğuna ancak bütün elemanlarını okuduktan sonra
+bakar ve her bozuk elemanı ayrı bir hata sayar, 64 KB'lık bir `{}` listesi bile megabaytlarca
+cevap döndürüyordu. Bu yüzden sınırı olan listeler (`days`, `participantIds`, `userIds`, `ids`)
+önce sayılır (`boundedArray`, `packages/shared/src/schemas.ts`): fazla uzunsa tek bir hata çıkar,
+elemanlarına hiç bakılmaz. 400 `validation` cevabı da en fazla 20 hata listeler; uygulama zaten
+yalnızca mesajı gösterir.
+
 ## Sunucuyu açanın araçları
 
 E-posta yok, şifre sıfırlama bağlantısı da yok: bu bir arkadaş grubu, herkes sunucuyu açanı

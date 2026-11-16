@@ -117,6 +117,20 @@ function optionalText(max: number) {
 }
 
 /**
+ * `z.array(item)` with its length checked before its items. zod runs `.max()` only
+ * after parsing every item, and each bad item is an issue of its own: a long list of
+ * `{}` kept the server busy for seconds and came back as megabytes of issues.
+ * Counted first, a list that is too long is one issue and none of its items is read.
+ */
+function boundedArray<T extends z.ZodType>(
+  item: T,
+  bounds: { max: number; maxMessage?: string; min?: number; minMessage?: string },
+) {
+  const counted = z.array(z.unknown()).max(bounds.max, bounds.maxMessage);
+  return (bounds.min === undefined ? counted : counted.min(bounds.min, bounds.minMessage)).pipe(z.array(item));
+}
+
+/**
  * Optional text shown in one line (a title, the stakes, a custom laf that becomes a
  * push): invisible characters dropped and line breaks folded into one space, like
  * a name. Empty strings become `undefined`.
@@ -223,7 +237,10 @@ export const StepsSyncDaySchema = z.object({
 export type StepsSyncDay = z.infer<typeof StepsSyncDaySchema>;
 
 export const StepsSyncBodySchema = z.object({
-  days: z.array(StepsSyncDaySchema).max(LIMITS.STEPS_SYNC_DAYS_MAX, `En fazla ${LIMITS.STEPS_SYNC_DAYS_MAX} gün`),
+  days: boundedArray(StepsSyncDaySchema, {
+    max: LIMITS.STEPS_SYNC_DAYS_MAX,
+    maxMessage: `En fazla ${LIMITS.STEPS_SYNC_DAYS_MAX} gün`,
+  }),
 });
 export type StepsSyncBody = z.infer<typeof StepsSyncBodySchema>;
 
@@ -238,9 +255,10 @@ export const ScreenTimeSyncDaySchema = z.object({
 export type ScreenTimeSyncDay = z.infer<typeof ScreenTimeSyncDaySchema>;
 
 export const ScreenTimeSyncBodySchema = z.object({
-  days: z
-    .array(ScreenTimeSyncDaySchema)
-    .max(LIMITS.SCREEN_TIME_SYNC_DAYS_MAX, `En fazla ${LIMITS.SCREEN_TIME_SYNC_DAYS_MAX} gün`),
+  days: boundedArray(ScreenTimeSyncDaySchema, {
+    max: LIMITS.SCREEN_TIME_SYNC_DAYS_MAX,
+    maxMessage: `En fazla ${LIMITS.SCREEN_TIME_SYNC_DAYS_MAX} gün`,
+  }),
 });
 export type ScreenTimeSyncBody = z.infer<typeof ScreenTimeSyncBodySchema>;
 
@@ -304,10 +322,12 @@ export function createChallengeBodySchema(opts: ChallengeSchemaOptions = {}) {
       title: optionalLine(LIMITS.CHALLENGE_TITLE_MAX),
       startsAt: IsoDateTimeSchema,
       endsAt: IsoDateTimeSchema,
-      participantIds: z
-        .array(IdSchema)
-        .min(LIMITS.PARTICIPANTS_MIN, 'En az bir kanka seçmelisin')
-        .max(LIMITS.PARTICIPANTS_MAX, `En fazla ${LIMITS.PARTICIPANTS_MAX} kişi`),
+      participantIds: boundedArray(IdSchema, {
+        min: LIMITS.PARTICIPANTS_MIN,
+        minMessage: 'En az bir kanka seçmelisin',
+        max: LIMITS.PARTICIPANTS_MAX,
+        maxMessage: `En fazla ${LIMITS.PARTICIPANTS_MAX} kişi`,
+      }),
       rewardText: optionalLine(LIMITS.REWARD_TEXT_MAX),
       penaltyText: optionalLine(LIMITS.PENALTY_TEXT_MAX),
       deadlineTime: HHmmSchema.optional(),
@@ -380,10 +400,12 @@ export type CreateChallengeBody = z.infer<typeof CreateChallengeBodySchema>;
  */
 export const InviteToChallengeBodySchema = z
   .object({
-    userIds: z
-      .array(IdSchema)
-      .min(1, 'En az bir kanka seçmelisin')
-      .max(LIMITS.PARTICIPANTS_MAX, `En fazla ${LIMITS.PARTICIPANTS_MAX} kişi`),
+    userIds: boundedArray(IdSchema, {
+      min: 1,
+      minMessage: 'En az bir kanka seçmelisin',
+      max: LIMITS.PARTICIPANTS_MAX,
+      maxMessage: `En fazla ${LIMITS.PARTICIPANTS_MAX} kişi`,
+    }),
   })
   .refine((v) => new Set(v.userIds).size === v.userIds.length, {
     message: 'Aynı kanka iki kez seçilemez',
@@ -458,7 +480,7 @@ export type ReportBody = z.infer<typeof ReportBodySchema>;
  */
 export const InboxReadBodySchema = z
   .object({
-    ids: z.array(IdSchema).max(500).optional(),
+    ids: boundedArray(IdSchema, { max: 500 }).optional(),
     all: z.boolean().optional(),
   })
   .refine((v) => v.all !== undefined || v.ids !== undefined, {

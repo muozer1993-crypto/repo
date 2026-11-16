@@ -17,6 +17,7 @@ import {
   PushTokenBodySchema,
   RegisterBodySchema,
   ReportBodySchema,
+  ScreenTimeSyncBodySchema,
   StepsSyncBodySchema,
   TauntBodySchema,
   UpdateMeBodySchema,
@@ -170,6 +171,29 @@ describe('PushTokenBody / StepsSyncBody', () => {
     expect(StepsSyncBodySchema.safeParse({ days: [{ ...day, source: 'manual' }] }).success).toBe(false);
     expect(StepsSyncBodySchema.safeParse({ days: [{ ...day, dayKey: '2024-02-30' }] }).success).toBe(false);
     expect(StepsSyncBodySchema.safeParse({ days: Array.from({ length: 15 }, () => day) }).success).toBe(false);
+  });
+
+  // Each bad item used to be an issue of its own, all of them parsed before the
+  // length was looked at: a body of `{}`s held the server for seconds.
+  it('counts a capped list before reading its items', () => {
+    const junk = Array.from({ length: 1000 }, () => ({}));
+    const cases = [
+      { result: StepsSyncBodySchema.safeParse({ days: junk }), message: 'En fazla 14 gün' },
+      { result: ScreenTimeSyncBodySchema.safeParse({ days: junk }), message: 'En fazla 14 gün' },
+      { result: InviteToChallengeBodySchema.safeParse({ userIds: junk }), message: 'En fazla 15 kişi' },
+      { result: InboxReadBodySchema.safeParse({ ids: junk }), message: undefined },
+    ];
+    for (const { result, message } of cases) {
+      expect(result.error?.issues).toHaveLength(1);
+      expect(result.error?.issues[0]?.code).toBe('too_big');
+      if (message) expect(result.error?.issues[0]?.message).toBe(message);
+    }
+    const create = createChallengeBodySchema().safeParse({ participantIds: junk });
+    expect(create.error?.issues.filter((i) => i.path[0] === 'participantIds')).toEqual([
+      expect.objectContaining({ code: 'too_big', message: 'En fazla 15 kişi' }),
+    ]);
+    // within the cap the items are still checked, each with its own path
+    expect(issuePaths(StepsSyncBodySchema.safeParse({ days: [{}] }))).toEqual(['days.0.dayKey', 'days.0.steps', 'days.0.source']);
   });
 });
 

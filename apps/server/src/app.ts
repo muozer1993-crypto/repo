@@ -68,6 +68,16 @@ export interface BuildAppOptions {
 /** A response slower than this is logged even when it succeeded. */
 const SLOW_REQUEST_MS = 2_000;
 
+/**
+ * The most a JSON body may weigh. The biggest one a schema lets through,
+ * `/me/inbox/read` with 500 ids of 64 characters, is about 33 KB, and what the apps
+ * send (a 14-day step sync, a çelınc with 15 friends) is a few KB; anything bigger
+ * only holds the one event loop every friend shares. A 3 MB list of `{}` kept it
+ * busy for 14 s and pushed the process to 3 GB. Proof photos are not under this:
+ * @fastify/multipart reads its own stream and keeps `limits.fileSize`.
+ */
+export const JSON_BODY_LIMIT = 64 * 1024;
+
 export interface BuiltApp {
   app: FastifyInstance;
   db: Database;
@@ -88,7 +98,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
     // Two JSON lines per request buried the tunnel address and every real error in
     // the owner's window; the hook below keeps only the requests worth a look.
     logController: new LogController({ disableRequestLogging: true }),
-    bodyLimit: LIMITS.UPLOAD_MAX_BYTES + 1024 * 1024,
+    bodyLimit: JSON_BODY_LIMIT,
     trustProxy: config.trustProxy,
   });
 
