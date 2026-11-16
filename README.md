@@ -562,9 +562,9 @@ lafları çıkar; arada bir beraberlik ya da kayıp seriyi bozar. Rövanş sadec
 başkası üzerinden tanıştığın biri gelmez. Sonuç ekranı bunu rövanş düğmesinin altında söyler;
 final tablosunda adına dokunup profilinden ekleyebilirsin. Rövanş eskisi kaç gün sürdüyse o kadar
 gün sürer ve açanın saatiyle gece yarısı biter. Saatli check-in'de bugünün saati geçtikten sonra
-açılan rövanş ertesi gün türün açılış saatinde başlar (Erken Kalkan Koyar 04:00'te), ilk günü
-boşa gitmez. Reddedilen bir rövanş iptal olur ama yenisini açmana engel olmaz. Bir çelıncın
-içinde olduğun rövanşı bir tane olur: kankan senden önce
+açılan rövanş, sihirbazdaki **Yarın** gibi ertesi gün başlar (Erken Kalkan Koyar 04:00'te, Erken
+Yatma Sözü 09:00'da), ilk günü boşa gitmez. Reddedilen bir rövanş iptal olur ama yenisini
+açmana engel olmaz. Bir çelıncın içinde olduğun rövanşı bir tane olur: kankan senden önce
 açtıysa düğme **Rövanş daveti sende** der ve seni o rövanşa götürür (içindeysen **Rövanşa git**,
 bittiyse **Rövanşın sonucu**). İkiniz aynı anda bassanız bile ikinci rövanş açılmaz, uygulama
 seni açılmış olana götürür. Reddettiğin, içinden çıktığın (kendi açtığın da olsa) ya da artık
@@ -916,10 +916,12 @@ ve tek başınayken "öndesin" demez. İlk kabul edenle ikinize "Çelınc başla
 sonradan katılan her kanka için içeridekilere "Ali kabul etti" gelir (seviyene göre "Ali varım
 dedi" ya da "Ali sahaya indi 🍆"). İleri bir tarihte başlayan çelıncta kabulleri sadece açan duyar
 (sonradan **Kankaları Çağır** ile gelen birinin kabulünü onu çağıran da duyar), başlangıç saatinde
-herkese "başladı" gider. Başlangıç saatinde senden başka kabul eden yoksa çelınc ekranı "Kabul
-bekleniyor, 1/2 kişi" der: ikinci kişi kabul edince başlar ama bitiş tarihi kaymaz. Adım
-çelıncında telefonların saydığı adımlar o arada da yazılır; başka çelınclarda giriş, başlayana kadar
-açılmaz. Kimse katılmazsa çelınc bitişte iptal olur. Çelıncta kabul etmiş biriyle
+herkese "başladı" gider. Sabah check-in'leri bunun dışında: Erken Kalkan Koyar 04:00'te, Yatak
+Toplama Sabahı 05:00'te başlar ve saat 07:00 olmadan kimse "başladı" bildirimiyle uyandırılmaz;
+ilk öten, telefonun check-in hatırlatması olur. Başlangıç saatinde senden başka kabul eden yoksa
+çelınc ekranı "Kabul bekleniyor, 1/2 kişi" der: ikinci kişi kabul edince başlar ama bitiş tarihi
+kaymaz. Adım çelıncında telefonların saydığı adımlar o arada da yazılır; başka çelınclarda giriş,
+başlayana kadar açılmaz. Kimse katılmazsa çelınc bitişte iptal olur. Çelıncta kabul etmiş biriyle
 arasında engel olan (kim kimi engellemiş olursa olsun) kabul edemez, "Bu çelınca katılamazsın."
 görür: engelli iki kişi aynı çelıncta oynamaz. Çelınc sürerken konan engel ise iki oyuncuyu da
 çelınctan çıkarmaz, birbirlerinin girişine yine itiraz edebilirler: yoksa elle 99.000 adım yazıp

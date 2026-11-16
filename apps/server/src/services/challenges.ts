@@ -617,8 +617,26 @@ function tauntFollowupCopy(level: VulgarityLevel, losers: string[]): { title: st
 // ---------------------------------------------------------------------------
 
 /**
+ * A morning check-in çelınc starts when its window opens, 04:00 or 05:00
+ * (`nextDayStartTime`), so that its first morning counts. Nobody wants to be
+ * woken for that: before this hour where the player lives its "başladı" is not
+ * sent, and the phone's check-in reminder half an hour before the deadline is
+ * the first thing they hear.
+ */
+const STARTED_QUIET_UNTIL_HOUR = 7;
+
+function stillNight(now: Date, timezone: string): boolean {
+  try {
+    return localHour(now, timezone) < STARTED_QUIET_UNTIL_HOUR;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Step 1a — `pending` challenges whose start time has passed and that have at least
- * two accepted participants become `active` and notify everyone who accepted.
+ * two accepted participants become `active` and notify everyone who accepted (on a
+ * check-in çelınc, not before 07:00 where they are: `STARTED_QUIET_UNTIL_HOUR`).
  */
 export function activateDueChallenges(db: Database, now: Date = new Date()): number {
   const iso = nowIso(now);
@@ -634,7 +652,12 @@ export function activateDueChallenges(db: Database, now: Date = new Date()): num
     const users = userMap(db, accepted.map((p) => p.user_id));
     const run = db.transaction(() => {
       db.prepare("UPDATE challenges SET status = 'active' WHERE id = ? AND status = 'pending'").run(challenge.id);
-      for (const user of users.values()) {
+      for (const participant of accepted) {
+        const user = users.get(participant.user_id);
+        if (!user) continue;
+        if (challenge.metric_type === 'checkin_deadline' && stillNight(now, participantTimezone(participant, user))) {
+          continue;
+        }
         const copy = startedCopy(levelOf(user), challenge.title);
         notify(db, {
           userId: user.id,

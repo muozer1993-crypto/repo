@@ -50,7 +50,10 @@ Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
   sayılıyordu, beş günlük çelıncın dört sabahı oynanıyordu. Bugünün son saati geçtikten sonra
   seçilen "Hemen" de aynı yerden başlar, sihirbaz bunu söyler ("Bugünün check-in saati geçti, ilk
   check-in yarın."); son saat geçtikten sonra açılan rövanş da öyle. Bu karar uygulamada verilir:
-  sunucu eski uygulamaların gönderdiği 09:00 başlangıcını yine kabul eder.
+  sunucu eski uygulamaların gönderdiği 09:00 başlangıcını yine kabul eder. 04:00'te başlayan çelınc
+  için kimse uykusundan uyandırılmaz: zamanlayıcı check-in çelıncını başlatırken oyuncunun saatiyle
+  daha 07:00 olmadıysa ona "başladı" göndermez; ilk duyduğu, telefonun son saatten yarım saat önce
+  çalan hatırlatması olur.
 * Sunucunun duyamadığı zamanlar da olur: bilgisayar uyur, kapanır, pencere kapanır. Zamanlayıcı
   bunları `server_pauses`'a yazar: iki vuruşu arasında beş dakikadan uzun bir boşluk, ya da açılırken
   kapanmadan önceki son vuruşundan (`server_state`; düzgün kapanış onu kapanış anında yazar) bu yana
@@ -185,9 +188,9 @@ Rövanş, eskisi kaç yerel gün sürdüyse o kadar gün sürer ve sihirbaz gibi
 günün son milisaniyesinde biter. Önceden "şimdi + eski süre" ile düğmeye basılan saatte bitiyordu;
 yarıda kesilen son günün sonradan gelen telefon sayısı bitişten sonra atılan adımları da taşırdı.
 Beş dakika sonra başlar; check-in çelıncında o beş dakikanın sonunda açanın saatiyle bugünün son
-saati geçmiş oluyorsa ertesi gün türün açılış saatinde başlar (`nextDayStartTime`, yukarıda): akşam
-22:00'de açılan Erken Kalkan Koyar rövanşı 22:05'te başlasaydı ilk günü kimsenin oynayamadığı bir
-gün olurdu.
+saati geçmiş oluyorsa ertesi gün sihirbazın "Yarın"ı gibi başlar (`nextDayStartTime`, yukarıda:
+Erken Kalkan Koyar 04:00'te, Erken Yatma Sözü 09:00'da): akşam 22:00'de açılan Erken Kalkan Koyar
+rövanşı 22:05'te başlasaydı ilk günü kimsenin oynayamadığı bir gün olurdu.
 Reddedilen (yani iptal olan) bir rövanş yenisini açmaya engel değildir.
 
 Bir çelıncın rövanşı bir tane olur. Rövanş düğmesi iki tarafta da kocaman durur; ikisi de basınca

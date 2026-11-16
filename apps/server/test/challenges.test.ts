@@ -764,6 +764,48 @@ describe('saying yes: who hears it', () => {
     expect(titles(harness, veli, 'challenge_started')).toEqual(['🍆 ÇELINC BAŞLADI']);
   });
 
+  it('starts a morning check-in çelınc at 04:00 without waking anybody up to say so', async () => {
+    harness = await makeApp({ now: '2026-12-31T19:00:00.000Z' }); // 22:00 in Istanbul
+    const { ali, veli } = await trio(harness);
+    const tokyo = await registerUser(harness.app, 'kenji', { displayName: 'Kenji', timezone: 'Asia/Tokyo' });
+    befriend(harness.app, ali.me.id, tokyo.me.id);
+    // the wizard's "Yarın 04:00" and "Yarın 09:00"
+    const morning = (
+      await createChallenge(harness, ali, {
+        typeKey: 'erken_kus',
+        participantIds: [veli.me.id, tokyo.me.id],
+        deadlineTime: '07:00',
+        startsAt: '2027-01-01T01:00:00.000Z',
+        endsAt: '2027-01-05T20:59:59.999Z',
+      })
+    ).json<Challenge>().id;
+    const evening = (
+      await createChallenge(harness, ali, {
+        typeKey: 'erken_yat',
+        participantIds: [veli.me.id],
+        deadlineTime: '23:00',
+        startsAt: '2027-01-01T06:00:00.000Z',
+        endsAt: '2027-01-05T20:59:59.999Z',
+      })
+    ).json<Challenge>().id;
+    for (const user of [veli, tokyo]) await accept(harness, user, morning);
+    await accept(harness, veli, evening);
+
+    harness.setNow('2027-01-01T01:00:20.000Z');
+    expect(runSchedulerOnce(harness.db, harness.now()).activated).toBe(1);
+    const started = (user: RegisteredUser) =>
+      listByType(harness!.db, user.me.id, 'challenge_started').map((row) => JSON.parse(row.data).challengeId as string);
+    // 04:00 in Istanbul: the 06:30 reminder is the first thing they hear; it is 10:00 in Tokyo
+    expect(started(ali)).toEqual([]);
+    expect(started(veli)).toEqual([]);
+    expect(started(tokyo)).toEqual([morning]);
+
+    harness.setNow('2027-01-01T06:00:20.000Z');
+    expect(runSchedulerOnce(harness.db, harness.now()).activated).toBe(1);
+    expect(started(ali)).toEqual([evening]);
+    expect(started(veli)).toEqual([evening]);
+  });
+
   it('lets nobody in past a block with a player, and says nothing to an account that is gone', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, cem } = await trio(harness);

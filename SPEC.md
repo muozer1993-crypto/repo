@@ -480,7 +480,9 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
 ### 2.4 Lifecycle (scheduler, every 30 s; also callable directly for tests: `runSchedulerOnce(db, now, { bootAt? })`)
 
 1. `pending` with `starts_at <= now`: if accepted count ≥ 2 → `active` + `challenge_started` notification to accepted
-   (a çelınc created `active` never comes through here: the accept that first makes it two says it, 2.2);
+   (a çelınc created `active` never comes through here: the accept that first makes it two says it, 2.2; on a check-in
+   çelınc not to a player for whom it is still before 07:00 in their pinned zone: a morning one starts at 04:00 or 05:00,
+   `nextDayStartTime` (1.2), and nobody is woken for that; the phone's reminder 30 min before the deadline speaks first);
    else if `ends_at <= now` → `cancelled` (`challenge_cancelled`). (Single-participant challenges wait; others can still accept.)
    Not a scheduler step but the same rule sooner: after a decline, a leave or an account deletion, a `pending`/`active`
    çelınc before its `ends_at` with fewer than two participants `accepted` or still `invited` is cancelled on the spot
