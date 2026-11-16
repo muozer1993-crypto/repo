@@ -563,6 +563,53 @@ describe('accept / decline / leave / cancel', () => {
     expect((await veliCall({ method: 'GET', url: '/challenges' })).json<unknown[]>()).toHaveLength(1);
   });
 
+  // Older apps show an invitee "Ayrıl" next to "Varım" and "Yokum". Stored as
+  // `left`, it locked the friend out: no "Katıl", and "Kanka ekle" hid them.
+  it('stores an invitee\'s "Ayrıl" as a no, which they can take back or be asked again', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const cem = await registerUser(harness.app, 'cem', { displayName: 'Cem' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, cem.me.id);
+    const id = (await createChallenge(harness, ali, { participantIds: [veli.me.id, cem.me.id] })).json<Challenge>().id;
+    const leave = (user: RegisteredUser) => authed(harness!.app, user.token)({ method: 'POST', url: `/challenges/${id}/leave` });
+
+    // Cem has not answered, so the çelınc goes on without Veli
+    const no = await leave(veli);
+    expect(no.statusCode).toBe(200);
+    expect(no.json<ChallengeDetail>().me?.status).toBe('declined');
+    expect(no.json<ChallengeDetail>().challenge.status).toBe('active');
+    // the inviter hears a no, and nobody a walk-out
+    expect(listByType(harness.db, ali.me.id, 'challenge_declined').map((row) => JSON.parse(row.data))).toEqual([
+      { challengeId: id, fromUserId: veli.me.id },
+    ]);
+    for (const user of [ali, veli, cem]) expect(listByType(harness.db, user.me.id, 'challenge_left')).toHaveLength(0);
+
+    // the app's "Katıl" takes it back
+    const back = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    expect(back.statusCode).toBe(200);
+    expect(back.json<ChallengeDetail>().me?.status).toBe('accepted');
+
+    // and the creator may ask again
+    expect((await leave(cem)).json<ChallengeDetail>().me?.status).toBe('declined');
+    const asked = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${id}/invite`,
+      payload: { userIds: [cem.me.id] },
+    });
+    expect(asked.statusCode).toBe(200);
+    expect(asked.json<ChallengeDetail>().participants.find((p) => p.user.id === cem.me.id)?.status).toBe('invited');
+    expect(listByType(harness.db, cem.me.id, 'challenge_invite')).toHaveLength(2);
+
+    // a player who walks out is still gone for good
+    const out = await leave(veli);
+    expect(out.json<ChallengeDetail>().me?.status).toBe('left');
+    expect(listByType(harness.db, ali.me.id, 'challenge_left').map((row) => JSON.parse(row.data))).toEqual([
+      { challengeId: id, fromUserId: veli.me.id },
+    ]);
+  });
+
   it('cancels a pending challenge as the creator only', async () => {
     harness = await makeApp({ now: NOW });
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });

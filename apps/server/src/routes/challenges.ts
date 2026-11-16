@@ -417,7 +417,8 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     if (membership.status === 'accepted') throw conflict('already_accepted', 'Bu çelıncı zaten kabul ettin.');
     // An invite, or a no taken back, opens the door. Somebody who played and
     // walked out was announced as gone and moved the itiraz majority; walking
-    // back in would undo both. ("Ayrıl" on an invite never joined: that is a no.)
+    // back in would undo both. (An invite's "Ayrıl" never joined: a no, stored
+    // as `declined` now and as `left` by older servers.)
     if (membership.status === 'left' && membership.joined_at !== null) {
       throw conflict('already_left', 'Bu çelınctan ayrıldın, geri dönemezsin.');
     }
@@ -511,20 +512,19 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       throw badRequest('challenge_ended', 'Süre bitti, sonuç birazdan. Artık ayrılamazsın.');
     }
 
+    // "Ayrıl" on an invite never joined the race: it is a no, stored as one. As
+    // `left` it read like a walk-out, so the app offered no "Katıl" and "Kanka
+    // ekle" never asked them again, though both routes would take them back.
+    // Older apps still show an invitee "Ayrıl".
+    const invitee = membership.status === 'invited';
     const run = db.transaction(() => {
-      db.prepare("UPDATE challenge_participants SET status = 'left' WHERE challenge_id = ? AND user_id = ?").run(
+      db.prepare('UPDATE challenge_participants SET status = ? WHERE challenge_id = ? AND user_id = ?').run(
+        invitee ? 'declined' : 'left',
         challenge.id,
         me.id,
       );
       if (!stillOpen(challenge, now)) return;
-      // "Ayrıl" on an invite never joined the race: to the others it is a no
-      tellWhoIsIn(
-        db,
-        challenge,
-        me.row,
-        membership.status === 'invited' ? 'challenge_declined' : 'challenge_left',
-        nowIso(now),
-      );
+      tellWhoIsIn(db, challenge, me.row, invitee ? 'challenge_declined' : 'challenge_left', nowIso(now));
       if (cancelIfAbandoned(db, challenge.id, now)) return;
       // one player fewer is a smaller itiraz majority: an entry it now reaches
       // gets its full 12 hours from here, and its owner hears it

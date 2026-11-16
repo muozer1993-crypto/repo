@@ -1222,6 +1222,8 @@ teke tek çelıncta kaybeden ayrılıp sonucu iptal ettirebilirdi.
 **Yanlışlıkla Reddet'e bastım.**
 Uygulama artık reddetmeden önce sorar. Yine de olduysa Gelen'deki davete dokun, çelınc açılır:
 "Reddetmiştin" kartındaki **Katıl** ile geri girersin (çelıncın bitmesine bir saat kalana kadar).
+Güncellemeyi almamış uygulamada davetin altında bir de **Ayrıl** durur; ona basmak da artık ret
+sayılır: aynı kart gelir, çelınctakiler de seni **Kanka ekle** ile yeniden çağırabilir.
 Teke tek çelıncta ret çelıncı anında iptal eder, dönecek bir şey kalmaz; soru da bunu söyler.
 O zaman rakibin yeni bir çelınc açsın. Genel kural: reddeden çelıncı açana, ayrılan içeride
 kalanlara haber verir; yarışacak iki kişi kalmayınca çelınc bitişi beklemeden "herkes kaçtı" diye

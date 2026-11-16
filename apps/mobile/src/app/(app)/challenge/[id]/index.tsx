@@ -816,8 +816,8 @@ function InvitePicker({
   const [picked, setPicked] = useState<string[]>(initial ? [initial] : []);
 
   // Whoever is in, still deciding, or walked out is not offered; a "Reddet" is,
-  // since asking again is the point. The server takes an invitee's "Ayrıl" back
-  // too, but the line-up cannot tell that one from a player who played and left.
+  // since asking again is the point. An invitee's "Ayrıl", which older apps
+  // offer, comes back as a "Reddet" too.
   const listed = new Set(participants.filter((p) => p.status !== 'declined').map((p) => p.user.id));
   const friends = (friendsQuery.data?.friends ?? []).filter((friend) => !listed.has(friend.id));
   const chosen = friends.filter((friend) => picked.includes(friend.id));
@@ -2445,9 +2445,11 @@ function FooterActions({
   const toast = useToast();
   const { challenge, me: mine } = detail;
 
+  // A player's: an invitee says no with "Yokum", and "Ayrıl" warned them about
+  // a score they never had
   const canLeave =
     (challenge.status === 'pending' || (challenge.status === 'active' && !settling)) &&
-    (mine?.status === 'accepted' || mine?.status === 'invited');
+    mine?.status === 'accepted';
   const canCancel = challenge.status === 'pending' && challenge.creatorId === meId;
   const finished = challenge.status === 'finished';
 

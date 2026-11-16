@@ -146,9 +146,12 @@ hiçbir şey gitmez. Bitişten sonra ikisi de sessizdir ve iptal etmez: o bekley
 zamanlayıcınındır, kaybeden kimse ayrılıp sonucu bozamaz.
 Reddetmek de son söz değildir: çelınc sürdükçe reddeden kabul edebilir, uygulama bunu çelınc
 ekranında "Katıl" diye sunar. Oynayıp ayrılan geri giremez (`already_left`): herkese "havlu attı"
-dendi, itiraz çoğunluğu da ona göre küçüldü. Sessiz bir davetli yüzünden bitişe kadar açık kalıp
-tek kişiyle biten çelınc da zamanlayıcıda "herkes kaçtı" diye kapanır, kabul edip giden biri
-varsa "kimse kabul etmedi" yazmaz.
+dendi, itiraz çoğunluğu da ona göre küçüldü. Davetlinin "Ayrıl"ı ise bir rettir, sunucu da onu öyle
+yazar (`declined`). Eski uygulamalar davetliye "Varım" ve "Yokum"un yanında "Ayrıl" da gösteriyordu;
+`left` yazılınca davetli ne "Katıl" görüyordu ne de "Kanka ekle" ile yeniden çağrılabiliyordu,
+oysa sunucu onu geri alırdı. Uygulama "Ayrıl"ı artık yalnızca kabul etmiş oyuncuya gösterir.
+Sessiz bir davetli yüzünden bitişe kadar açık kalıp tek kişiyle biten çelınc da zamanlayıcıda
+"herkes kaçtı" diye kapanır, kabul edip giden biri varsa "kimse kabul etmedi" yazmaz.
 
 Kabul de sessiz değildir. "Hemen" başlayan çelınc oluştuğu anda `active` olur ve içinde sadece
 açan vardır; zamanlayıcı yalnızca `pending` çelıncları başlattığı için böyle bir çelıncta

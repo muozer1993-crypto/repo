@@ -5414,7 +5414,7 @@ describe('saying no to a çelınc', () => {
   const CEM = { id: 'u-3', username: 'cem', displayName: 'Cem', avatarEmoji: '🦁', createdAt: '2026-09-01T00:00:00.000Z' };
 
   /** Ali's çelınc, the reader in it as `mine`; `crowd` adds Cem, still thinking about it. */
-  function aliInvites(mine: 'invited' | 'declined', crowd = false) {
+  function aliInvites(mine: 'invited' | 'declined' | 'accepted', crowd = false) {
     const detail = challengeDetail();
     const ali = { ...detail.me!, user: ALI };
     const me = { ...detail.me!, status: mine, score: 0, days: 0, rank: 0, lastEntryAt: null };
@@ -5485,6 +5485,27 @@ describe('saying no to a çelınc', () => {
     expect(api.declineChallenge).not.toHaveBeenCalled();
     await answerAlert('Reddet');
     expect(api.declineChallenge).toHaveBeenCalledWith('c-1');
+  });
+
+  // "Ayrıl" under "Varım" / "Yokum" warned an invitee about a score they never
+  // had, and the server stored it as a walk-out with no way back
+  it('gives an invitee "Varım" and "Yokum" but no "Ayrıl", which stays a player\'s', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => aliInvites('invited', true));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const invited = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(invited);
+    expect(text).toContain('VARIM');
+    expect(text).toContain('YOKUM');
+    expect(text).not.toContain('AYRIL');
+
+    api.challenge = jest.fn(async () => aliInvites('accepted', true));
+    const playing = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(rendered(playing)).toContain('AYRIL');
+    expect(rendered(playing)).not.toContain('YOKUM');
   });
 
   it('lets a declined invite back in with "Katıl"', async () => {
