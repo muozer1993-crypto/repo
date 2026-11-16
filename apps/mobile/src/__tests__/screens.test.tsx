@@ -2632,6 +2632,62 @@ describe('an itiraz on the feed', () => {
   });
 });
 
+describe('the note an entry was written with', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** Ali's typed row and mine, each with the note given (`undefined`: a row from an older server). */
+  function withNotes(his: string | null | undefined, mine: string | null | undefined) {
+    const detail = challengeDetail();
+    const row = (id: string, user: typeof ALI, value: number, note: string | null | undefined) => ({
+      id,
+      userId: user.id,
+      displayName: user.displayName,
+      dayKey: '2026-09-08',
+      value,
+      source: 'manual' as const,
+      status: 'ok' as const,
+      createdAt: new Date(Date.now() - 3_600_000).toISOString(),
+      proofUrl: null,
+      ...(note === undefined ? {} : { note }),
+    });
+    return {
+      ...detail,
+      participants: [detail.me!, { ...detail.me!, user: ALI, score: 11111, rank: 2 }],
+      feed: [row('e-1', ALI, 11111, his), row('e-2', detail.me!.user, 22222, mine)],
+    };
+  }
+
+  it('shows it in quotes under the row, to a friend and on the author\'s own row', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => withNotes('Kütüphanede bitirdim', 'Sabah sahilde,\nakşam da parkta'));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('“Kütüphanede bitirdim”');
+    expect(text).toContain('“Sabah sahilde,\nakşam da parkta”');
+    // a note keeps its line breaks, so the row bounds it rather than growing with it
+    const lines = tree.root.findAll(
+      (node) => node.props.children === '“Sabah sahilde,\nakşam da parkta”' && node.props.numberOfLines === 2
+    );
+    expect(lines.length).toBeGreaterThan(0);
+  });
+
+  it('adds nothing under a row without one, or from a server that does not send it', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => withNotes(null, undefined));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('11.111 adım');
+    expect(text).toContain('22.222 adım');
+    expect(text).not.toContain('“');
+  });
+});
+
 describe('a loser still waiting for the winner to talk', () => {
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
 

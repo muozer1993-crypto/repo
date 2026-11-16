@@ -2228,6 +2228,13 @@ function FeedRow({
           {formatDayKeyFriendly(item.dayKey, today, yesterday)} · {SOURCE_ICON[item.source] ?? '•'}{' '}
           {SOURCE_LABEL[item.source] ?? item.source} · {relativeTime(feedTime(item), new Date(now))}
         </Text>
+        {/* the owner's word on it is what a friend weighs before an itiraz; a
+            note keeps its line breaks, so two lines bound it */}
+        {item.note ? (
+          <Text variant="tiny" muted numberOfLines={2}>
+            {`“${item.note}”`}
+          </Text>
+        ) : null}
         {rejected ? (
           <Text variant="tiny" color={Colors.danger}>
             İptal edildi, skora sayılmıyor.

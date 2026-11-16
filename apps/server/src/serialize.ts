@@ -192,6 +192,7 @@ export function toFeedItem(
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     proofUrl: row.proof_url,
+    note: row.note,
     answerBy,
     disputeVotes,
   };

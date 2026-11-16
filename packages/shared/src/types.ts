@@ -469,6 +469,11 @@ export interface FeedItem {
   updatedAt?: string;
   proofUrl: string | null;
   /**
+   * What the owner wrote with the entry ("Kütüphanede bitirdim"), for the
+   * friends deciding whether to believe it. Older servers leave it out.
+   */
+  note?: string | null;
+  /**
    * Set while a majority disputes this entry: the moment it is thrown out
    * unless its owner adds a photo first. Older servers leave it out.
    */

@@ -849,6 +849,9 @@ iste-geri çek-iste biriyle bütün gün telefonunu öttürebilirdi.
 * **Az olan kazanır** — ekran süresi gibi; günlük ortalama yarışır, girmediğin gün en kötü değerden (1440 dk) sayılır. Bugün ortalamaya ancak gün bitince girer, Android'in öğlen gönderdiği yarım gün kimseyi öne geçirmez; yalnız ilk gün hiçbir şey girmeyen 1440 dk görünür. Hiçbir gün girmemiş kanka dürtülemez: o 1440 onun skoru değil, girmediği günün cezası. Android'in okuduğu bir gün sadece yukarı gider: aynı hesapla ikinci bir telefon ya da geçmişi silinmiş bir telefon o güne 300'ün ardından 5 gönderirse 300 kalır, yoksa bir telefon değiştirmek günü kazandırırdı. Elle yazılmış bir günü ise telefonun okuduğu sayı her durumda ezer. Yarışa sonradan çağrılan ("Kanka ekle"), çağrıldığı günün bir gün öncesinden itibaren sayılır; ondan önceki günler için ceza yemez. Baştan çağrılıp daveti bekleten ise beklediği günlerin cezasını öder. İleri bir saate kurulan çelınc, kuranın yanına biri "Varım" diyene kadar başlamaz; o güne kadar kimse yazamadığı için kimse o günlerden ceza yemez.
 * **Günlük evet/hayır** — sigara içmedim, şeker yemedim. Gün sayısı yarışır. Her türün kendi sorusu ve düğmeleri var: Dumansız Günler "Günün dumansız geçti mi?" diye sorar, sen "İçmedim ✅" ya da "İçtim ❌" dersin. Yanlış bastıysan diğerine dokunman yeter; dün için de, cevapladıktan sonra bile.
 
+Giriş ekranında yazdığın **not** ("Kütüphanede bitirdim" gibi) akışta girişinin altında tırnak
+içinde herkese görünür, uzunsa ilk iki satırı; kankaların itiraz etmeden önce ne dediğini okur.
+
 Şüpheli girişlere arkadaşlar **itiraz** edebilir; itirazın sebebi akışta o girişin altında herkese
 görünür. İtiraz tek başına girişi silmez: diğer oyuncuların çoğunluğu itiraz edince girişin sahibinin
 **12 saati** olur. O sürede "Kanıt ekle" deyip fotoğraf koyarsa itiraz kapanır, giriş sayılmaya devam

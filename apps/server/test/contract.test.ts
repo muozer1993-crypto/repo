@@ -282,6 +282,56 @@ describe('API contract as the mobile client consumes it', () => {
     await harness.close();
   });
 
+  it('carries the note an entry was written with to every feed row of it, for the friends reading', async () => {
+    const harness = await makeApp();
+    const { app } = harness;
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(app, 'veli', { displayName: 'Veli' });
+    befriend(app, ali.me.id, veli.me.id);
+    const now = harness.now().getTime();
+    const created = await authed(app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: {
+        typeKey: 'su_bardak',
+        startsAt: new Date(now).toISOString(),
+        endsAt: new Date(now + 3 * 86_400_000).toISOString(),
+        participantIds: [veli.me.id],
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().id as string;
+    expect((await authed(app, veli.token)({ method: 'POST', url: `/challenges/${id}/accept` })).statusCode).toBe(200);
+
+    const dayKey = harness.now().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+    const entry = (user: { token: string }, payload: Record<string, unknown>) =>
+      authed(app, user.token)({
+        method: 'POST',
+        url: `/challenges/${id}/entries`,
+        payload: { dayKey, source: 'manual', clientTime: harness.now().toISOString(), ...payload },
+      });
+    const withNote = await entry(veli, { value: 4, note: 'Kütüphanede bitirdim' });
+    expect(withNote.statusCode).toBe(201);
+    const plain = await entry(ali, { value: 2 });
+    expect(plain.statusCode).toBe(201);
+    const noted = withNote.json().entry.id as string;
+    const bare = plain.json().entry.id as string;
+
+    type Row = { id: string; note?: unknown };
+    const detail = (await authed(app, ali.token)({ method: 'GET', url: `/challenges/${id}` })).json().feed as Row[];
+    const page = (await authed(app, ali.token)({ method: 'GET', url: `/challenges/${id}/feed` })).json().items as Row[];
+    for (const feed of [detail, page]) {
+      expect(feed.find((row) => row.id === noted)?.note).toBe('Kütüphanede bitirdim');
+      // without one the field is still there, null: only an older server leaves it out
+      expect(feed.find((row) => row.id === bare)?.note).toBeNull();
+    }
+    // the author reads his own words under his row too
+    const own = (await authed(app, veli.token)({ method: 'GET', url: `/challenges/${id}` })).json().feed as Row[];
+    expect(own.find((row) => row.id === noted)?.note).toBe('Kütüphanede bitirdim');
+
+    await harness.close();
+  });
+
   it('lets a challenge of the minimum length still be accepted', async () => {
     const harness = await makeApp();
     const { app } = harness;

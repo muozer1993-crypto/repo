@@ -240,10 +240,12 @@ ChallengeDetail extends ChallengeSummary { myEntries: Entry[], feed: FeedItem[],
      score is only the missing-day penalty, the same rule as the mid-day nudge. `done` = still
      inside the 2h cooldown, so canPoke = pokeTargets.some(t => !t.done).
 Entry { id, challengeId, userId, dayKey, value, source, note, proofUrl, status, createdAt, late?: boolean }
-FeedItem { id, userId, displayName, dayKey, value, source, status, createdAt, updatedAt?: string, proofUrl, answerBy?: string | null, disputeVotes?: { open: number; needed: number } | null }
+FeedItem { id, userId, displayName, dayKey, value, source, status, createdAt, updatedAt?: string, proofUrl, note?: string | null, answerBy?: string | null, disputeVotes?: { open: number; needed: number } | null }
   -- updatedAt: the entry's `updated_at`, when the row last changed. A phone's row is created at the day's first
      sync and rewritten by later readings (steps only when they grow), so on one this is when its number came;
      an itiraz's turns (filed, taken back, answered, upheld) leave it alone there and move it on a typed row. The feed's order and cursor stay on `createdAt`. Older servers leave it out.
+  -- note: the entry's `note`, what its owner wrote with it, for everybody who reads the feed (null without one; a
+     deleted account's is cleared with its photos). Older servers leave it out.
   -- feed: the 40 most recent entries (`LIMITS.FEED_PAGE`) plus every `disputed` one, however old (it is where the owner answers).
      feedCursor: set when older entries exist than those 40: the `createdAt` and `id` of the 40th, where GET
      /challenges/:id/feed goes on (the feed's last item is no use for that, an old disputed row can sit there);
@@ -763,7 +765,8 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             my action area per metric type (see 3.4), feed of recent entries ("Bugün · 👟 sayaç · 10 dakika
                             önce": a phone's row (`pedometer`, `health_connect`, `usage_stats`) is timed by `updatedAt ??
                             createdAt`, a typed one by `createdAt`, both read against the screen's clock, the last fetch,
-                            as the standings' quiet-phone line is) with dispute button (only while
+                            as the standings' quiet-phone line is; under it the owner's `note`, “in quotes”, two lines
+                            at most, on the author's own row too) with dispute button (only while
                             the server takes one: `active` and before `endsAt`, plus the settle hour of a phone-counted type;
                             only to a reader who is `accepted`, and only on rows of players still `accepted`: an invitee
                             looking before "Varım" or a player who left would get 403 `not_participant`, and a leaver's row
