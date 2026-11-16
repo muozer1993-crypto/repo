@@ -773,10 +773,13 @@ uyarı düşer ve saatte bir yeniden dener; o günün yedeği yine `data\backups
 Komut yedeği yüklemeden önce sağlam mı diye bakar; bozuksa ya da KOYDUM'un değilse dokunmaz.
 Yüklediği yedekte kaç hesap olduğunu da yazar. "Bu yedekte hiç hesap yok" derse sunucuyu açma:
 eski bir sürüm boş sunucunun da yedeğini alıyordu, `npm run yonet -- yedekler` ile bak ve başka
-bir günü yükle (`npm run yonet -- geri-yukle 2026-10-03` gibi). Eski veritabanını silmez,
-`data\koydum-onceki-<tarih-saat>.db` diye kenara koyar ve yanlış yedeği seçtiysen onu nasıl geri
-koyacağını ekrana yazar. Eski `koydum.db-wal` ve `koydum.db-shm` dosyalarını kendisi halleder,
-elle bir şey silme. Kenara konan dosyalar birikir; işin bitince silebilirsin. Kenarda durdukça
+bir günü yükle (`npm run yonet -- geri-yukle 2026-10-03` gibi). Aynı gün `yedekler`'de BACKUP_DIR
+altında da görünüyorsa önce onu dene: tarihini ya da adını yazınca yine bu bilgisayardaki boş
+kopya yüklenir, BACKUP_DIR'dakini tam yoluyla yükle (`npm run yonet -- geri-yukle
+"C:\Users\ArisK\OneDrive\KOYDUM yedek\koydum-2026-10-03.db"` gibi; komut da bu satırı yazar).
+Eski veritabanını silmez, `data\koydum-onceki-<tarih-saat>.db` diye kenara koyar ve yanlış yedeği
+seçtiysen onu nasıl geri koyacağını ekrana yazar. Eski `koydum.db-wal` ve `koydum.db-shm`
+dosyalarını kendisi halleder, elle bir şey silme. Kenara konan dosyalar birikir; işin bitince silebilirsin. Kenarda durdukça
 içlerindeki girişlerin kanıt fotoğrafları da silinmez (aşağıda "Kullanılmayan kanıt
 fotoğrafları"): yanlış yedeği geri alınca fotoğraflar da yerinde olur.
 

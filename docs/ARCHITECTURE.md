@@ -1166,4 +1166,6 @@ boş klasörle açar, ancak sonra `geri-yukle`'yi hatırlar. O boş veritabanın
 `geri-yukle`'nin seçtiği en yeni gün olurdu, bir hafta açık kalınca da gerçek yedekleri
 `BACKUP_DIR`'dan budardı. Eski sürümlerin yazdığı boş kopyalar için `geri-yukle` yüklediği
 dosyadaki açık hesapları da sayar (yine veritabanının yanındaki kopyada, OneDrive'daki dosya hiç
-açılmaz) ve sıfırsa "sunucuyu aç" yerine başka bir gün seçmesini söyler.
+açılmaz) ve sıfırsa "sunucuyu aç" yerine başka bir gün seçmesini söyler. Aynı günün öbür
+klasörde de bir dosyası varsa (BACKUP_DIR'ın o günden kalan gerçek kopyası) önce onu, tam yoluyla,
+önerir: günü ya da adı yazılınca `findBackup` yine yerel kopyayı bulur.

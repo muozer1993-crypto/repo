@@ -251,7 +251,25 @@ async function restore(config: Config, wanted: string | undefined): Promise<numb
   // friend's login gets "Kullanıcı adı ya da şifre yanlış." Loaded all the same,
   // the old database aside as always, but no "open the server" under it.
   if (accounts === 0) {
-    console.log('\n! Bu yedekte hiç hesap yok. Sunucuyu açmadan önce başka bir günün yedeğini yükle.');
+    // The same day in the other folder may be the real one (BACKUP_DIR kept the
+    // copy taken before the data folder was lost). Its day or its name loads
+    // this computer's copy again (`findBackup`), so it is named by its full path.
+    const here = path.resolve(path.dirname(backup.file));
+    const twin = [backupDir(config), backupCopyDir(config)]
+      .filter((dir): dir is string => dir !== null && path.resolve(dir) !== here)
+      .map((dir) => path.join(dir, backup.name))
+      .find((file) => fs.existsSync(file));
+    console.log(
+      `\n! Bu yedekte hiç hesap yok. Sunucuyu açmadan önce başka bir ${twin ? 'yedek' : 'günün yedeğini'} yükle.`,
+    );
+    if (twin) {
+      // a day or a name finds this computer's copy first
+      const byDayAgain = here === path.resolve(backupDir(config));
+      console.log(
+        `  Aynı günün bir kopyası daha var, önce onu dene${byDayAgain ? ' (tarihini yazarsan yine bunu yükler)' : ''}:`,
+      );
+      console.log(`  npm run yonet -- geri-yukle "${twin}"`);
+    }
     console.log('  Hangileri var: npm run yonet -- yedekler');
     return 0;
   }

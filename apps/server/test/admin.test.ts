@@ -500,6 +500,37 @@ describe('npm run yonet', () => {
     expect(usersIn(dbPath).sort()).toEqual(['ali', 'veli']);
   }, 60_000);
 
+  // A same-day restart on an emptied data folder (Windows locks the open database,
+  // so the folder goes while the server is down) left this computer an empty
+  // koydum-<day>.db, and BACKUP_DIR the real one of that day under the same name:
+  // its day and its name load the empty one, and "başka bir günün yedeği" lost a day.
+  it('points to the same day\'s copy in BACKUP_DIR when the one it loaded is empty', async () => {
+    const dataDir = tempDataDir();
+    const copyDir = tempDataDir();
+    fs.mkdirSync(path.join(dataDir, 'backups'));
+    const empty = path.join(dataDir, 'backups', 'koydum-2026-11-16.db');
+    const real = path.join(copyDir, 'koydum-2026-11-16.db');
+    const db = openDb(path.join(tempDataDir(), 'koydum.db'));
+    await db.backup(empty);
+    createUser(db, { username: 'ali', displayName: 'Ali', passwordHash: 'x', timezone: 'Europe/Istanbul' });
+    await db.backup(real);
+    db.close();
+    const env = { BACKUP_DIR: copyDir, PORT: String(await freePort()) };
+
+    const byDay = await run(dataDir, ['geri-yukle', '2026-11-16'], env);
+    expect(byDay.err).toBe('');
+    expect(byDay.out).toContain(', 0 hesap)');
+    expect(byDay.out).toContain('Sunucuyu açmadan önce başka bir yedek yükle.');
+    expect(byDay.out).toContain('Aynı günün bir kopyası daha var, önce onu dene (tarihini yazarsan yine bunu yükler):');
+    expect(byDay.out).toContain(`npm run yonet -- geri-yukle "${real}"`);
+
+    const twin = await run(dataDir, ['geri-yukle', real], env);
+    expect(twin.err).toBe('');
+    expect(twin.out).toContain(', 1 hesap)');
+    expect(twin.out).toContain('Şimdi sunucuyu aç.');
+    expect(usersIn(path.join(dataDir, 'koydum.db'))).toEqual(['ali']);
+  }, 60_000);
+
   it('refuses geri-yukle while the server answers on its port', async () => {
     const { dataDir, dbPath } = await withBackups();
     const stub = http.createServer((_request, response) => {
