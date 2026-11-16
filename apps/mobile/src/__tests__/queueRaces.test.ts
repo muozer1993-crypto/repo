@@ -104,12 +104,16 @@ function heldServer() {
   return { posts, client };
 }
 
-/** "+1" on the water çelınc, through the hook the entry screen uses. */
-function tapper(client: ApiClient): (variables: AddEntryVariables) => Promise<AddEntryResult> {
+/** "+1" on the water çelınc (or a day's answer elsewhere), through the hook the entry screen uses. */
+function tapper(
+  client: ApiClient,
+  challengeId = 'su',
+  append = true
+): (variables: AddEntryVariables) => Promise<AddEntryResult> {
   mockApi.client = client;
   const hook: { mutationFn?: (variables: AddEntryVariables) => Promise<AddEntryResult> } = {};
   function Probe() {
-    Object.assign(hook, useAddEntry('su', { append: true }));
+    Object.assign(hook, useAddEntry(challengeId, { append }));
     return null;
   }
   let tree!: ReactTestRenderer;
@@ -190,5 +194,147 @@ describe('two entries parked at the same moment', () => {
     const B = glass('B', '2026-11-16T08:00:01.000Z');
     await Promise.all([enqueueEntry('su', A, 'su:A'), enqueueEntry('su', B, 'su:B')]);
     expect(sessions(await readQueue())).toEqual(['A', 'B']);
+  });
+});
+
+/**
+ * A server keeping one value a day, the last write winning (upsertDayEntry):
+ * each request reaches it the moment it is made, and its answer comes back
+ * when the test says. After `answerAll` every answer comes at once.
+ */
+function dayServer() {
+  const days = new Map<string, number>();
+  const sent: number[] = [];
+  const waiting: Answer[] = [];
+  let answerNow: unknown = null;
+  const client = {
+    addEntry: (_challengeId: string, body: { dayKey: string; value: number }) => {
+      days.set(body.dayKey, body.value);
+      sent.push(body.value);
+      if (answerNow) return Promise.resolve(answerNow);
+      const reply = answer();
+      waiting.push(reply);
+      return reply.promise;
+    },
+  } as unknown as ApiClient;
+  const answerAll = (value: unknown) => {
+    answerNow = value;
+    for (const reply of waiting.splice(0)) reply.resolve(value);
+  };
+  return { days, sent, waiting, client, answerAll };
+}
+
+const DAY = '2026-11-15';
+// "Yaptım" tapped in the metro and parked; above ground she puts it right to "Yapmadım"
+const didIt = { dayKey: DAY, value: 1, source: 'manual', clientTime: '2026-11-16T07:00:00.000Z' };
+const didNot = { ...didIt, value: 0, clientTime: '2026-11-16T07:10:00.000Z' };
+const dayId = `spor:${DAY}:manual:`;
+const values = (queue: PendingEntry[]) => queue.map((item) => [item.body.dayKey, item.body.value]);
+
+describe("a day's parked copy while her own write of that day is on its way", () => {
+  it('is not sent by a drain that starts meanwhile, so the day keeps the newer value', async () => {
+    const server = dayServer();
+    const write = tapper(server.client, 'spor', false);
+    await enqueueEntry('spor', didIt, dayId);
+
+    const written = write(didNot);
+    await ticks(20);
+    // the app comes to the front: the drain finds "Yaptım" still parked
+    const flush = flushQueue(server.client);
+    await ticks(20);
+    server.answerAll(landed);
+
+    expect((await written).queued).toBe(false);
+    await flush;
+    await ticks(20);
+    expect(server.sent).toEqual([0]);
+    expect(server.days.get(DAY)).toBe(0);
+    expect(await readQueue()).toEqual([]);
+  });
+
+  it('is skipped when a drain busy with an earlier one reaches it', async () => {
+    const server = dayServer();
+    const write = tapper(server.client, 'spor', false);
+    await enqueueEntry('spor', { ...didIt, dayKey: '2026-11-14' }, 'spor:2026-11-14:manual:');
+    await enqueueEntry('spor', didIt, dayId);
+
+    const flush = flushQueue(server.client);
+    await ticks(20);
+    expect(server.sent).toEqual([1]);
+    const written = write(didNot);
+    await ticks(20);
+    // the earlier day lands, and the drain moves on to hers
+    server.waiting[0]?.resolve(landed);
+    await ticks(20);
+    server.waiting[1]?.resolve(landed);
+    expect((await written).queued).toBe(false);
+    server.answerAll(landed);
+    await flush;
+    await ticks(20);
+
+    expect(server.sent).toEqual([1, 0]);
+    expect(server.days.get(DAY)).toBe(0);
+    expect(await readQueue()).toEqual([]);
+  });
+
+  it('gives way to the newer value parked when her write finds no signal', async () => {
+    const server = dayServer();
+    const write = tapper(server.client, 'spor', false);
+    await enqueueEntry('spor', didIt, dayId);
+
+    const written = write(didNot);
+    await ticks(20);
+    const flush = flushQueue(server.client);
+    await ticks(20);
+    server.waiting[0]?.reject(noSignal());
+    expect((await written).queued).toBe(true);
+    expect(values(await readQueue())).toEqual([[DAY, 0]]);
+    server.answerAll(landed);
+    await flush;
+
+    // let go once parked: the next drain sends the newer value
+    expect(await flushQueue(server.client)).toMatchObject({ sent: 1, remaining: 0 });
+    expect(server.sent).toEqual([0, 0]);
+    expect(server.days.get(DAY)).toBe(0);
+    expect(await readQueue()).toEqual([]);
+  });
+
+  it('goes as before once her write is refused', async () => {
+    const server = dayServer();
+    const write = tapper(server.client, 'spor', false);
+    await enqueueEntry('spor', didIt, dayId);
+
+    const written = write(didNot);
+    await ticks(20);
+    server.waiting[0]?.reject(new ApiError('validation', 'Gönderdiğin bilgiler geçersiz.', 400));
+    await expect(written).rejects.toThrow('Gönderdiğin bilgiler geçersiz.');
+    server.answerAll(landed);
+
+    expect(await flushQueue(server.client)).toMatchObject({ sent: 1, remaining: 0 });
+    expect(server.sent).toEqual([0, 1]);
+    expect(await readQueue()).toEqual([]);
+  });
+
+  it('stays held while a second write of the day is out after the first one parked', async () => {
+    const server = dayServer();
+    const write = tapper(server.client, 'spor', false);
+
+    const first = write(didIt);
+    await ticks(20);
+    const second = write(didNot);
+    await ticks(20);
+    server.waiting[0]?.reject(noSignal());
+    expect((await first).queued).toBe(true);
+    // the first parked "Yaptım" while "Yapmadım" is still on its way
+    const flush = flushQueue(server.client);
+    await ticks(20);
+    server.answerAll(landed);
+    expect((await second).queued).toBe(false);
+    await flush;
+    await ticks(20);
+
+    expect(server.sent).toEqual([1, 0]);
+    expect(server.days.get(DAY)).toBe(0);
+    expect(await readQueue()).toEqual([]);
   });
 });

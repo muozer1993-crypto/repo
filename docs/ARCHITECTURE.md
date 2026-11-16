@@ -679,6 +679,11 @@ arada açıktır: aynı gün doğrudan yazılmış (kuyruktaki kopyası silinmi�
 olabilir. Eskiden elindeki eski kopyayı yine gönderiyordu: "Yaptım" kaydedildi denen gün sessizce
 "Yapmadım"a dönüyordu. Şimdi her göndermeden hemen önce listeye yeniden bakar; giriş gitmişse ya da
 aynı anahtarla yeniden girmişse (`queuedAt` farklı) dokunmaz, yenisi sonraki boşaltmada gider.
+Kankanın o güne doğrudan yazdığı giriş henüz yoldayken de o günün kopyasına dokunmaz
+(`holdParked`). Eskiden kuyruk o arada eski kopyayı da gönderiyordu, o da yenisinden sonra
+varıyordu; sunucu günün son yazılanını tuttuğu için "Yapmadım"a düzeltilen gün yine "Yaptım"
+kalıyordu. Yazış cevabını alınca kopyayı siler, bağlantı yoksa kendi değerini onun yerine kuyruğa
+koyar; kuyruk o güne ancak ondan sonra dokunur.
 Sunucunun zaten yazdığı bir check-in'in tekrarı (409 `already_checked_in`) reddedilmiş değil,
 gitmiş sayılır: ilk gönderim varmış, sadece cevabı kaybolmuştu.
 

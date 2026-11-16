@@ -20,7 +20,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClie
 
 import { ApiError, type ApiClient } from '@/lib/api';
 import { qk } from '@/lib/query';
-import { dropParked, enqueueEntry, flushQueue, uploadLocalPhoto } from '@/services/offlineQueue';
+import { dropParked, enqueueEntry, flushQueue, holdParked, releaseParked, uploadLocalPhoto } from '@/services/offlineQueue';
 import { refreshReminders } from '@/services/reminders';
 import { dropSavedChallengeDetail, saveChallengeDetail, savedChallengeDetail } from '@/services/savedDetails';
 import { useApi } from '@/hooks/useApi';
@@ -470,6 +470,10 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
           return { entry: null, standings: null, queued: true };
         }
       }
+      // a drain already running (a foreground, a photo ahead in the queue) leaves
+      // this day's older parked copy alone until the copy is dropped or this
+      // value parked in its place: sent meanwhile, it landed last and stayed
+      holdParked(key);
       try {
         const result = await api.addEntry(id, send);
         // its own parked copy goes first, or the drain below replays it
@@ -483,6 +487,8 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
           return { entry: null, standings: null, queued: true };
         }
         throw error;
+      } finally {
+        releaseParked(key);
       }
     },
     onSuccess: () => invalidate.challenge(id),

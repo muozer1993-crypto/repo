@@ -198,6 +198,38 @@ async function stillParked(item: PendingEntry): Promise<boolean> {
   return (await readQueue()).some((stored) => sameParking(stored, item));
 }
 
+/**
+ * Days whose own write is on its way to the server right now, by the key
+ * useAddEntry builds (no owner in front: the writer is whoever is logged in).
+ * A count rather than a flag, so a second write of the same day started before
+ * the first answered still holds it once the first lets go.
+ */
+const held = new Map<string, number>();
+
+/**
+ * A write of this day is on its way directly: its parked copy must not
+ * overtake it. A flush sending the older copy meanwhile landed after the newer
+ * one, and the server keeps the last write of a day ("Yapmadım" put right back
+ * to "Yaptım", 120 dk back to 300). Released once that write is done with the
+ * copy: dropped it, parked its own value in its place, or was refused, leaving
+ * it to go as before (`releaseParked`).
+ */
+export function holdParked(id: string): void {
+  held.set(id, (held.get(id) ?? 0) + 1);
+}
+
+export function releaseParked(id: string): void {
+  const count = (held.get(id) ?? 0) - 1;
+  if (count > 0) held.set(id, count);
+  else held.delete(id);
+}
+
+/** Whether `item`'s day is held: its id without the owner `enqueueEntry` put in front. */
+function isHeld(item: PendingEntry): boolean {
+  const prefix = item.ownerId ? `${item.ownerId}/` : '';
+  return held.has(prefix && item.id.startsWith(prefix) ? item.id.slice(prefix.length) : item.id);
+}
+
 /** Removes `item` once it landed, but not a re-park that took its id meanwhile. */
 async function removeDelivered(item: PendingEntry): Promise<void> {
   await mutateQueue((queue) => queue.filter((stored) => !sameParking(stored, item)));
@@ -417,7 +449,10 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
 
     // A photo can take two minutes, and the app is open meanwhile: the same
     // day may have been written directly (and this one dropped) or parked anew.
-    if (!(await stillParked(queued))) continue;
+    // That write may also still be on its way (`holdParked`): left parked, the
+    // copy is dropped once it lands, or replaced if it parks. The hold is read
+    // after the queue, with nothing awaited between it and the POST.
+    if (!(await stillParked(queued)) || isHeld(queued)) continue;
 
     const landed = async () => {
       sent += 1;
