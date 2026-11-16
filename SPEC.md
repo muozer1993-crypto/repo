@@ -866,7 +866,11 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             (both `accepted`) until "Herkesle"; `show=<chip>` opens on that chip (the rövanş badge → Yediklerim);
                             tap → results (finished) or the çelınc (cancelled); pull-to-refresh
 (app)/user/[id].tsx         public profile (stats Koydu 🍆 / Yedi 🍽️ / Çelınc, at MY level 1 Galibiyet 🏆 / Yenilgi 😵; badges named by `badgeTitle` at MY level, not theirs) + head-to-head record vs me (finished çelınclar we both played, both `accepted`:
-                            one who declined or left sits at rank 0 and is no round; tap → history `with` them) + "Çelınc aç" shortcut; not friends yet →
+                            one who declined or left sits at rank 0 and is no round; tap → history `with` them) + a 🔥 line (for a çelınc
+                            still active or pending with me `accepted` in it (utils/history `liveRivalry`): one they are `accepted` in too, an
+                            active one first, ranks us ("şu an öndesin / geridesin / başa başsınız"; pending: "başlamak üzere, ikiniz de
+                            varsınız."); else one they are only `invited` to says "… daha kabul etmedi." and is never ranked (an invitee
+                            sits at rank 0), and the line above it drops "Bir çelınc aç"; one they declined or left gets no line) + "Çelınc aç" shortcut; not friends yet →
                             "Kanka isteği gönder", "Kanka isteğini kabul et" for an incoming one, "İsteği geri çek"
                             (confirm) for my own; "Diğer seçenekler": copy username, remove friend, report, block
                             (the toast says it can be undone under Ayarlar → Engellediklerin)

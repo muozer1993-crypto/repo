@@ -4959,6 +4959,45 @@ describe('the whole çelınc history', () => {
     expect(router.push).toHaveBeenCalledWith({ pathname: '/history', params: { with: ALI.id } });
   });
 
+  /** Ali's profile while "Adım Savaşı" runs with me at `myRank` and him as `ali`. */
+  async function profileWhileRunning(ali: 'invited' | 'accepted', myRank: number): Promise<string> {
+    const { challenge, participants } = challengeDetail();
+    const me = { ...participants[0]!, rank: myRank };
+    // the server lists an invitee at rank 0, ahead of anybody's 1
+    const him = { ...me, user: ALI, status: ali, rank: ali === 'invited' ? 0 : 1 };
+    const running = { challenge: { ...challenge, title: 'Adım Savaşı' }, participants: [me, him], me, unreadTaunts: 0 };
+    api.challenges = jest.fn(async (status?: string) => (status === 'active,pending' ? [running] : []));
+    searchParams.id = ALI.id;
+    api.userProfile = jest.fn(async () => ({
+      ...ALI,
+      stats: { wins: 0, losses: 0, challengesPlayed: 0 },
+      badges: [],
+    }));
+    api.friends = jest.fn(async () => ({ friends: [ALI], incoming: [], outgoing: [] }));
+    const UserScreen = require('@/app/(app)/user/[id]').default;
+    const tree = renderScreen(<UserScreen />);
+    await settle();
+    return rendered(tree);
+  }
+
+  it('a rival who has not said yes to the running çelınc is not ahead of me in it', async () => {
+    const text = await profileWhileRunning('invited', 1);
+
+    expect(text).toContain('"Adım Savaşı" sürüyor, Ali daha kabul etmedi.');
+    expect(text).not.toContain('geridesin');
+    expect(text).not.toContain('ilki sürüyor');
+    // the invite is already out: no "open one" on top of it
+    expect(text).toContain('Henüz karşı karşıya gelmediniz.');
+    expect(text).not.toContain('Bir çelınc aç da görelim');
+  });
+
+  it('a rival who did say yes is still ranked against me', async () => {
+    const text = await profileWhileRunning('accepted', 2);
+
+    expect(text).toContain('"Adım Savaşı" sürüyor, şu an geridesin.');
+    expect(text).toContain('Daha bitmiş bir çelıncınız yok, ilki sürüyor.');
+  });
+
   it('history `with` a rival keeps only the çelınclar the two of us played, until "Herkesle"', async () => {
     serve(seven());
     searchParams.with = ALI.id;

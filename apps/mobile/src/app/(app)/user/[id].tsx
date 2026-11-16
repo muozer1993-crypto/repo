@@ -27,7 +27,7 @@ import { qk } from '@/lib/query';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { confirmTr } from '@/utils/confirm';
-import { playedTogether } from '@/utils/history';
+import { liveRivalry, playedTogether } from '@/utils/history';
 
 interface HeadToHead {
   mine: number;
@@ -53,7 +53,8 @@ export default function UserProfileScreen() {
   const pull = usePullRefresh(() => profile.refetch());
   const friends = useFriends();
   const finished = useChallenges('finished');
-  // a çelınc still running between us is not "henüz karşı karşıya gelmediniz"
+  // a çelınc still running between us is not "henüz karşı karşıya gelmediniz",
+  // and one they are only asked to is not "Bir çelınc aç"
   const live = useChallenges('active,pending');
   const friendAction = useFriendAction();
   const newKanka = useNewKankaToast();
@@ -88,17 +89,19 @@ export default function UserProfileScreen() {
     else head.ties += 1;
   }
 
-  const shared = (live.data ?? []).filter(
-    (summary) =>
-      summary.challenge.status !== 'cancelled' &&
-      summary.participants.some((p) => p.user.id === myId && p.status === 'accepted') &&
-      summary.participants.some((p) => p.user.id === id && p.status !== 'declined')
-  );
+  const rivalry = liveRivalry(live.data ?? [], myId, id);
   const liveLine = (() => {
-    const current = shared.find((summary) => summary.challenge.status === 'active') ?? shared[0];
-    if (!current) return null;
+    if (!rivalry) return null;
+    const current = rivalry.summary;
     const title = current.challenge.title;
-    if (current.challenge.status !== 'active') return `"${title}" başlamak üzere, kabul bekliyor.`;
+    const running = current.challenge.status === 'active';
+    // only asked so far: their rank 0 is no place, so no öndesin/geridesin yet
+    if (!rivalry.joined) {
+      const name = profile.data?.displayName ?? 'kankan';
+      return `"${title}" ${running ? 'sürüyor' : 'başlamak üzere'}, ${name} daha kabul etmedi.`;
+    }
+    // both of us said yes; a pending one is only waiting for its start time
+    if (!running) return `"${title}" başlamak üzere, ikiniz de varsınız.`;
     const mineSide = current.participants.find((p) => p.user.id === myId);
     const theirSide = current.participants.find((p) => p.user.id === id);
     if (!mineSide || !theirSide) return `"${title}" şu an sürüyor.`;
@@ -107,11 +110,15 @@ export default function UserProfileScreen() {
     return `"${title}" sürüyor, şu an başa başsınız.`;
   })();
 
+  // a friend only asked so far is not in a first round with me yet, and with
+  // the invite out "Bir çelınc aç" would ask for a second one
   const headLine =
     head.total === 0
-      ? liveLine
+      ? rivalry?.joined
         ? 'Daha bitmiş bir çelıncınız yok, ilki sürüyor.'
-        : 'Henüz karşı karşıya gelmediniz. Bir çelınc aç da görelim.'
+        : rivalry
+          ? 'Henüz karşı karşıya gelmediniz.'
+          : 'Henüz karşı karşıya gelmediniz. Bir çelınc aç da görelim.'
       : head.mine > head.theirs
         ? `${head.mine}-${head.theirs} öndesin.`
         : head.mine < head.theirs

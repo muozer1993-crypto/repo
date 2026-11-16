@@ -43,3 +43,31 @@ export function playedTogether(summary: ChallengeSummary, meId: string | null, o
     summary.participants.some((p) => p.user.id === id && p.status === 'accepted');
   return played(meId) && played(otherId);
 }
+
+/**
+ * The running çelınc a friend's profile talks about: one we are both in (one
+ * already under way first), else one they have only been asked to. Anybody not
+ * `accepted` sits at rank 0, so ranking me against an invitee said "geridesin"
+ * about a race they never ran; one they said no to or left is none of theirs.
+ */
+export function liveRivalry(
+  list: readonly ChallengeSummary[],
+  meId: string | null,
+  otherId: string
+): { summary: ChallengeSummary; joined: boolean } | null {
+  const open = list.filter(
+    (s) =>
+      (s.challenge.status === 'active' || s.challenge.status === 'pending') &&
+      s.participants.some((p) => p.user.id === meId && p.status === 'accepted')
+  );
+  const both = (s: ChallengeSummary) => playedTogether(s, meId, otherId);
+  const asked = (s: ChallengeSummary) =>
+    s.participants.some((p) => p.user.id === otherId && p.status === 'invited');
+  const running = (s: ChallengeSummary) => s.challenge.status === 'active';
+  const pick =
+    open.find((s) => running(s) && both(s)) ??
+    open.find(both) ??
+    open.find((s) => running(s) && asked(s)) ??
+    open.find(asked);
+  return pick ? { summary: pick, joined: both(pick) } : null;
+}

@@ -1,8 +1,8 @@
-import type { ChallengeSummary, ParticipantView } from '@koydum/shared';
+import type { ChallengeStatus, ChallengeSummary, ParticipantStatus, ParticipantView } from '@koydum/shared';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { ChallengeCard } from '@/components/ChallengeCard';
-import { outcomeOf } from '@/utils/history';
+import { liveRivalry, outcomeOf } from '@/utils/history';
 
 /** Collects every string rendered anywhere in the tree. */
 function textIn(node: unknown): string[] {
@@ -70,6 +70,70 @@ describe('outcomeOf', () => {
     const summary = tiedAtTop('can');
     const invited = { ...summary, me: { ...summary.me!, status: 'invited' as const, rank: 0 } };
     expect(outcomeOf(invited, 'can')).toBe('none');
+  });
+});
+
+/**
+ * Ali's çelınc `id`, Ali in it and first; Veli is in it as `veli`, second when
+ * he plays and at rank 0 (as the server lists him) when he does not.
+ */
+function withVeli(id: string, status: ChallengeStatus, veli: ParticipantStatus): ChallengeSummary {
+  const base = tiedAtTop('ali');
+  const me = player('ali', 'Ali', 5, 1);
+  const him = { ...player('veli', 'Veli', veli === 'accepted' ? 3 : 0, veli === 'accepted' ? 2 : 0), status: veli };
+  return {
+    ...base,
+    challenge: { ...base.challenge, id, title: id, status, finalizedAt: null, isTie: false },
+    participants: [me, him],
+    me,
+  };
+}
+
+describe('liveRivalry', () => {
+  it('tells a çelınc Veli was only asked to as not joined yet', () => {
+    const rivalry = liveRivalry([withVeli('adim', 'active', 'invited')], 'ali', 'veli');
+    expect(rivalry?.summary.challenge.id).toBe('adim');
+    expect(rivalry?.joined).toBe(false);
+  });
+
+  it('knows nothing of one he left or said no to', () => {
+    expect(liveRivalry([withVeli('adim', 'active', 'left')], 'ali', 'veli')).toBeNull();
+    expect(liveRivalry([withVeli('adim', 'pending', 'declined')], 'ali', 'veli')).toBeNull();
+  });
+
+  it('knows nothing of one I am only asked to myself', () => {
+    const summary = withVeli('adim', 'active', 'accepted');
+    const mine = { ...summary.participants[0]!, status: 'invited' as const, rank: 0 };
+    expect(liveRivalry([{ ...summary, participants: [mine, summary.participants[1]!], me: mine }], 'ali', 'veli')).toBeNull();
+  });
+
+  it('picks the one we are both in over an invite he is sitting on', () => {
+    const rivalry = liveRivalry(
+      [withVeli('davet', 'active', 'invited'), withVeli('ortak', 'active', 'accepted')],
+      'ali',
+      'veli'
+    );
+    expect(rivalry?.summary.challenge.id).toBe('ortak');
+    expect(rivalry?.joined).toBe(true);
+  });
+
+  it('takes a shared one still waiting to start over a running invite, and the running invite only without it', () => {
+    const shared = withVeli('ortak', 'pending', 'accepted');
+    const invite = withVeli('davet', 'active', 'invited');
+    expect(liveRivalry([invite, shared], 'ali', 'veli')).toEqual({ summary: shared, joined: true });
+    expect(liveRivalry([withVeli('bekleyen', 'pending', 'invited'), invite], 'ali', 'veli')).toEqual({
+      summary: invite,
+      joined: false,
+    });
+  });
+
+  it('puts a shared one under way before one of ours still waiting to start', () => {
+    const rivalry = liveRivalry(
+      [withVeli('yakinda', 'pending', 'accepted'), withVeli('suruyor', 'active', 'accepted')],
+      'ali',
+      'veli'
+    );
+    expect(rivalry?.summary.challenge.id).toBe('suruyor');
   });
 });
 
