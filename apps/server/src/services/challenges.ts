@@ -30,8 +30,10 @@ import {
   dayKeysBetween,
   effectiveDeadline,
   hhmmToMinutes,
+  isBeforeOrEqualHHmm,
   localHour,
   localInstant,
+  localTimeHHmm,
   rankParticipants,
   requireChallengeType,
   scoreLabel,
@@ -1135,8 +1137,8 @@ export function finalizeEndedChallenges(
 
 /**
  * Step 3 — one daily reminder per user, at (or after) their own `reminder_hour` in
- * their own timezone, only while they have at least one active challenge, at most
- * once per local day (`reminders_sent`).
+ * their own timezone, only while they have at least one active challenge that can
+ * still take an entry today, at most once per local day (`reminders_sent`).
  *
  * The check is `localHour >= reminder_hour`, not equality: on a DST spring-forward
  * day the target hour never happens locally (02:xx does not exist in New York on
@@ -1164,6 +1166,28 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
     `SELECT 1 FROM entries e JOIN challenges c ON c.id = e.challenge_id
       WHERE e.user_id = ? AND e.day_key = ? AND c.status = 'active' AND e.status <> 'rejected' LIMIT 1`,
   );
+  // "Çelıncı unutma" has to point at something that still counts today. A
+  // check-in past its deadline does not: the tap is stored late with 0, so an
+  // erken_kus sleeper reminded at 20:00 would only meet "Bugünün check-in saati
+  // geçti". Judged as entries.ts judges the tap, in the zone pinned at join time;
+  // before its window opens (erken_yat before 19:00) the check-in is still ahead.
+  const live = db.prepare(
+    `SELECT c.*, p.timezone AS p_timezone FROM challenge_participants p
+       JOIN challenges c ON c.id = p.challenge_id AND c.status = 'active' AND c.ends_at > ?
+      WHERE p.user_id = ? AND p.status = 'accepted'`,
+  );
+  const canStillPlay = (user: UserRow): boolean =>
+    (live.all(iso, user.id) as (ChallengeRow & { p_timezone: string | null })[]).some((challenge) => {
+      if (challenge.metric_type !== 'checkin_deadline') return true;
+      try {
+        const tz = participantTimezone({ timezone: challenge.p_timezone }, user);
+        const deadline = effectiveDeadline(typeForChallenge(challenge), challenge.deadline_time);
+        return isBeforeOrEqualHHmm(localTimeHHmm(now, tz), deadline);
+      } catch {
+        // a zone this server cannot read: remind, as before
+        return true;
+      }
+    });
   let sent = 0;
 
   for (const user of candidates) {
@@ -1178,6 +1202,8 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
     }
     if (hour < Number(user.reminder_hour)) continue;
     if (loggedToday.get(user.id, dayKey)) continue;
+    // before the claim: a çelınc accepted later this evening still gets today's
+    if (!canStillPlay(user)) continue;
     if (claim.run(user.id, dayKey).changes === 0) continue;
 
     const level = levelOf(user);

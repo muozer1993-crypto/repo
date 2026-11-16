@@ -85,6 +85,32 @@ function addSteps(app: FastifyInstance, challengeId: string, userId: string, day
     .run(newId(), challengeId, userId, dayKey, value, at, at, at);
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** `creator` opens a çelınc starting now through the API and `invitee` says yes. */
+async function playTogether(
+  h: TestApp,
+  creator: RegisteredUser,
+  invitee: RegisteredUser,
+  payload: { typeKey: string; deadlineTime?: string },
+): Promise<string> {
+  const created = await authed(h.app, creator.token)({
+    method: 'POST',
+    url: '/challenges',
+    payload: {
+      ...payload,
+      startsAt: h.now().toISOString(),
+      endsAt: new Date(h.now().getTime() + 3 * DAY_MS).toISOString(),
+      participantIds: [invitee.me.id],
+    },
+  });
+  expect(created.statusCode).toBe(201);
+  const challengeId = created.json<Challenge>().id;
+  const accepted = await authed(h.app, invitee.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+  expect(accepted.statusCode).toBe(200);
+  return challengeId;
+}
+
 describe('challenge lifecycle', () => {
   it('activates, scores, finalizes and awards badges', async () => {
     harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
@@ -322,6 +348,77 @@ describe('challenge lifecycle', () => {
     // next local day → one more
     harness.setNow('2026-01-06T09:00:00.000Z');
     expect(sendReminders(db, app.now())).toBe(1);
+  });
+
+  describe('the daily reminder only points at something that still counts today', () => {
+    /** İlker and Ufuk (both reminded at 20:00 in Istanbul) on Monday 12:00. */
+    async function pair(): Promise<{ h: TestApp; ilker: RegisteredUser; ufuk: RegisteredUser }> {
+      const h = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+      harness = h;
+      const ilker = await registerUser(h.app, 'ilker', { reminderHour: 20 });
+      const ufuk = await registerUser(h.app, 'ufuk', { reminderHour: 20 });
+      befriend(h.app, ilker.me.id, ufuk.me.id);
+      return { h, ilker, ufuk };
+    }
+
+    it('skips a sleeper whose only çelınc is a morning check-in already past its deadline', async () => {
+      const { h, ilker, ufuk } = await pair();
+      const challengeId = await playTogether(h, ilker, ufuk, { typeKey: 'erken_kus', deadlineTime: '07:00' });
+      runSchedulerOnce(h.db, h.now());
+
+      h.setNow('2026-01-06T03:30:00.000Z'); // Tuesday 06:30: İlker is up, Ufuk sleeps through it
+      const checkin = await authed(h.app, ilker.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/entries`,
+        payload: { dayKey: '2026-01-06', value: 1, source: 'checkin', clientTime: h.now().toISOString() },
+      });
+      expect(checkin.statusCode).toBe(201);
+
+      // 20:00: a "Geldim" now is stored late with 0, so "Çelıncı unutma" has nothing to send him to
+      h.setNow('2026-01-06T17:00:30.000Z');
+      expect(runSchedulerOnce(h.db, h.now()).reminders).toBe(0);
+      expect(listByType(h.db, ufuk.me.id, 'reminder')).toHaveLength(0);
+      expect(listByType(h.db, ilker.me.id, 'reminder')).toHaveLength(0);
+
+      // nothing was claimed: a çelınc he joins at 20:30 still gets that evening's reminder
+      h.setNow('2026-01-06T17:30:00.000Z');
+      await playTogether(h, ilker, ufuk, { typeKey: 'kitap_sayfa' });
+      expect(runSchedulerOnce(h.db, h.now()).reminders).toBe(1);
+      expect(listByType(h.db, ufuk.me.id, 'reminder')).toHaveLength(1);
+      expect(listByType(h.db, ilker.me.id, 'reminder')).toHaveLength(0);
+    });
+
+    it('still reminds a bedtime check-in whose deadline is ahead', async () => {
+      const { h, ilker, ufuk } = await pair();
+      await playTogether(h, ilker, ufuk, { typeKey: 'erken_yat', deadlineTime: '23:00' });
+
+      h.setNow('2026-01-05T17:00:30.000Z'); // Monday 20:00, the 23:00 "Geldim" is still ahead
+      expect(runSchedulerOnce(h.db, h.now()).reminders).toBe(2);
+      expect(listByType(h.db, ufuk.me.id, 'reminder')).toHaveLength(1);
+    });
+
+    it('still reminds a player with another çelınc open beside the missed check-in', async () => {
+      const { h, ilker, ufuk } = await pair();
+      await playTogether(h, ilker, ufuk, { typeKey: 'erken_kus', deadlineTime: '07:00' });
+      await playTogether(h, ilker, ufuk, { typeKey: 'kitap_sayfa' });
+
+      h.setNow('2026-01-06T17:00:30.000Z'); // Tuesday 20:00, nothing entered anywhere
+      expect(runSchedulerOnce(h.db, h.now()).reminders).toBe(2);
+      expect(listByType(h.db, ufuk.me.id, 'reminder')).toHaveLength(1);
+    });
+
+    it('reads the deadline in the zone the çelınc was joined in', async () => {
+      const { h, ilker, ufuk } = await pair();
+      await playTogether(h, ilker, ufuk, { typeKey: 'erken_kus', deadlineTime: '07:00' });
+      // Ufuk flies to New York; his mornings in this çelınc stay Istanbul's
+      const moved = await authed(h.app, ufuk.token)({ method: 'PATCH', url: '/me', payload: { timezone: 'America/New_York' } });
+      expect(moved.statusCode).toBe(200);
+
+      // 20:00 in New York is 04:00 in Istanbul: his 07:00 check-in is still ahead
+      h.setNow('2026-01-06T01:00:30.000Z');
+      expect(runSchedulerOnce(h.db, h.now()).reminders).toBe(1);
+      expect(listByType(h.db, ufuk.me.id, 'reminder')).toHaveLength(1);
+    });
   });
 
   it('runSchedulerOnce reports what it did and never throws', async () => {
