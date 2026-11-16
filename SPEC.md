@@ -840,6 +840,9 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             kalanlarda, sen arkada kaldın. Rövanş aç." (L1 "Mesaj hakkı…", L3 "…öndekilerde…"), no "bekliyor" card
                             and no answer button, "Öndekilerle aranda … fark var." against the shared top score, the Ceza card
                             ("Öndekilerin ödülü: …", no `challenge_finished_lost` line) and the loser's rematch label;
+                            anybody else (outside a tie) gets "ÇELINC BİTTİ": "Sen bu çelınca girmedin, sadece izledin." for
+                            somebody who never said yes (invited, declined, not in it), "Sen ayrılmıştın zaten, sonuç bu." for whoever is `left`
+                            (a player who walked out, whose entries the detail still shows, or an invitee's "Ayrıl");
                             every player (not a watcher) also gets "Gruba at" (level 1 "Sonucu paylaş"): resultShareText
                             (utils/shareText.ts) writes "🚶 Haftalık Adım bitti (7 Eylül – 10 Eylül)", one line per player
                             who raced (🥇🥈🥉 by rank, so a tie has two 🥇, then "4." on; display name · score), a verdict at

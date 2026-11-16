@@ -80,6 +80,18 @@ const WATCHER_SUB: Record<VulgarityLevel, string> = {
   3: 'Sen kenardan izledin, iş bitti 🍆',
 };
 
+/**
+ * In place of the watcher's line for somebody who walked out: they may have
+ * played for days (their entries still show on the detail), so "only watched"
+ * would be a lie. An invitee's "Ayrıl" is `left` too, with nothing played, so
+ * nothing here claims they did either.
+ */
+const LEFT_SUB: Record<VulgarityLevel, string> = {
+  1: 'Bu çelınctan ayrılmıştın, sonuç aşağıda.',
+  2: 'Sen ayrılmıştın zaten, sonuç bu.',
+  3: 'Sen kaçmıştın, iş bitti 🍆',
+};
+
 const NO_REWARD: Record<VulgarityLevel, string> = {
   1: 'Ödül yazılmamış ama laf hakkı senin.',
   2: 'Ödül yok lan ama laf hakkı senin, kullan.',
@@ -489,7 +501,7 @@ export default function ResultsScreen() {
       ) : (
         <NeutralHeader
           title="ÇELINC BİTTİ"
-          subtitle={WATCHER_SUB[level]}
+          subtitle={mine?.status === 'left' ? LEFT_SUB[level] : WATCHER_SUB[level]}
           emoji="🏁"
         />
       )}

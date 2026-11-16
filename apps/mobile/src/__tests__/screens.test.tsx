@@ -3412,6 +3412,81 @@ describe('a result sent to the WhatsApp group', () => {
   });
 });
 
+describe('the results of a çelınc the reader walked out of', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const VELI = { id: 'u-3', username: 'veli', displayName: 'Veli', avatarEmoji: '🦊', createdAt: '2026-09-01T00:00:00.000Z' };
+  const LEFT = {
+    1: 'Bu çelınctan ayrılmıştın, sonuç aşağıda.',
+    2: 'Sen ayrılmıştın zaten, sonuç bu.',
+    3: 'Sen kaçmıştın, iş bitti 🍆',
+  } as const;
+  const WATCHED = {
+    1: 'Bu çelıncta yarışmadın, sonuç aşağıda.',
+    2: 'Sen bu çelınca girmedin, sadece izledin.',
+    3: 'Sen kenardan izledin, iş bitti 🍆',
+  } as const;
+
+  /**
+   * Ali beat Veli; the reader's row is what the server sends for them, as
+   * captured: a player who left keeps `lastEntryAt` but drops to rank 0.
+   * `null` leaves them out of the standings altogether.
+   */
+  function finished(reader: { status: 'left' | 'declined'; lastEntryAt: string | null } | null) {
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    return {
+      challenge: { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: ALI.id },
+      standings: [
+        { ...detail.me!, user: ALI, score: 15000, rank: 1, isWinner: true },
+        { ...detail.me!, user: VELI, score: 3000, rank: 2 },
+        ...(reader ? [{ ...detail.me!, ...reader, score: 0, days: 0, rank: 0 }] : []),
+      ],
+      taunts: [],
+    };
+  }
+
+  it.each([1, 2, 3] as const)('tells a player who left at level %s that they left, not that they only watched', async (level) => {
+    mockLevel.value = level;
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => finished({ status: 'left', lastEntryAt: '2026-09-08T09:00:00.000Z' }));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('ÇELINC BİTTİ');
+    expect(text).toContain(LEFT[level]);
+    expect(text).not.toContain('yarışmadın');
+    expect(text).not.toContain('sadece izledin');
+    expect(text).not.toContain('kenardan izledin');
+  });
+
+  it('says the same to an invitee whose "Ayrıl" left nothing played', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => finished({ status: 'left', lastEntryAt: null }));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    expect(rendered(tree)).toContain(LEFT[2]);
+  });
+
+  it('still tells somebody who said no, or was never in it, that they watched', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => finished({ status: 'declined', lastEntryAt: null }));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const declined = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(rendered(declined)).toContain(WATCHED[2]);
+    expect(rendered(declined)).not.toContain(LEFT[2]);
+
+    api.results = jest.fn(async () => finished(null));
+    const outsider = renderScreen(<ResultsScreen />);
+    await settle();
+    expect(rendered(outsider)).toContain(WATCHED[2]);
+  });
+});
+
 describe('the itiraz chip once the çelınc is over', () => {
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
 
