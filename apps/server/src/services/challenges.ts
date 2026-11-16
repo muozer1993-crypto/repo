@@ -28,7 +28,10 @@ import {
   formatScore,
   dayKeyInTz,
   dayKeysBetween,
+  effectiveDeadline,
+  hhmmToMinutes,
   localHour,
+  localInstant,
   rankParticipants,
   requireChallengeType,
   scoreLabel,
@@ -621,7 +624,8 @@ function tauntFollowupCopy(level: VulgarityLevel, losers: string[]): { title: st
  * (`nextDayStartTime`), so that its first morning counts. Nobody wants to be
  * woken for that: before this hour where the player lives its "başladı" is not
  * sent, and the phone's check-in reminder half an hour before the deadline is
- * the first thing they hear.
+ * the first thing they hear (only where the phone has that reminder:
+ * `startsQuietly`).
  */
 const STARTED_QUIET_UNTIL_HOUR = 7;
 
@@ -633,10 +637,49 @@ function stillNight(now: Date, timezone: string): boolean {
   }
 }
 
+/** How long before a check-in deadline the phone's reminder rings (the app's services/reminders.ts). */
+const PHONE_REMINDER_MINUTES = 30;
+
+/**
+ * Whether a check-in çelınc may start without a "başladı" to this player: it
+ * is still night where they are (`stillNight`) AND their phone could have set
+ * the reminder for the first deadline, which then speaks first.
+ *
+ * A phone sets that reminder only for a çelınc with a second yes (an invite,
+ * or a `pending` one with only its creator in it, gets none), and only half
+ * an hour before a deadline that comes after the start. So when the second yes
+ * came after the start (Veli says yes at 05:45 to Ali's "Yarın 04:00"; this
+ * step starts it within 30 s), Ali's phone had nothing for it, and when the
+ * deadline is under half an hour after the start (erken_kus at 04:20 started
+ * at 04:00), nobody's phone rings before it. Holding "başladı" back then left
+ * the first morning to whoever happened to open the app: it goes out whatever
+ * the hour.
+ */
+function startsQuietly(challenge: ChallengeRow, accepted: ParticipantRow[], timezone: string, now: Date): boolean {
+  if (challenge.metric_type !== 'checkin_deadline' || !stillNight(now, timezone)) return false;
+  const startsAt = Date.parse(challenge.starts_at);
+  // a row from before `joined_at` was always set counts as in from the creation (`playableFrom`)
+  const inBeforeStart = accepted.filter((p) => Date.parse(p.joined_at ?? challenge.created_at) <= startsAt);
+  if (inBeforeStart.length < 2) return false;
+  try {
+    const minutes = hhmmToMinutes(effectiveDeadline(typeForChallenge(challenge), challenge.deadline_time));
+    const deadlineOn = (dayKey: string) =>
+      localInstant(dayKey, Math.floor(minutes / 60), minutes % 60, timezone).getTime();
+    const startDay = dayKeyInTz(new Date(startsAt), timezone);
+    let first = deadlineOn(startDay);
+    // started after that day's deadline: its first one is the next morning
+    if (first < startsAt) first = deadlineOn(addDays(startDay, 1));
+    return first - PHONE_REMINDER_MINUTES * 60_000 >= startsAt;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Step 1a — `pending` challenges whose start time has passed and that have at least
  * two accepted participants become `active` and notify everyone who accepted (on a
- * check-in çelınc, not before 07:00 where they are: `STARTED_QUIET_UNTIL_HOUR`).
+ * check-in çelınc, not before 07:00 where they are when their phone's reminder
+ * speaks first: `startsQuietly`).
  */
 export function activateDueChallenges(db: Database, now: Date = new Date()): number {
   const iso = nowIso(now);
@@ -655,9 +698,7 @@ export function activateDueChallenges(db: Database, now: Date = new Date()): num
       for (const participant of accepted) {
         const user = users.get(participant.user_id);
         if (!user) continue;
-        if (challenge.metric_type === 'checkin_deadline' && stillNight(now, participantTimezone(participant, user))) {
-          continue;
-        }
+        if (startsQuietly(challenge, accepted, participantTimezone(participant, user), now)) continue;
         const copy = startedCopy(levelOf(user), challenge.title);
         notify(db, {
           userId: user.id,

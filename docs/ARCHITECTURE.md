@@ -53,7 +53,13 @@ Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
   sunucu eski uygulamaların gönderdiği 09:00 başlangıcını yine kabul eder. 04:00'te başlayan çelınc
   için kimse uykusundan uyandırılmaz: zamanlayıcı check-in çelıncını başlatırken oyuncunun saatiyle
   daha 07:00 olmadıysa ona "başladı" göndermez; ilk duyduğu, telefonun son saatten yarım saat önce
-  çalan hatırlatması olur.
+  çalan hatırlatması olur (`startsQuietly`). Bu ancak telefonun o hatırlatmayı kurabildiği yerde
+  geçerli: telefon onu iki kişinin kabul ettiği çelınca kurar, başlangıçtan önceki bir saate de
+  kurmaz. İkinci "varım" başlangıçtan sonra geldiyse (Veli 05:45'te kabul etti, zamanlayıcı 30 sn
+  içinde başlattı; Ali'nin telefonu tek başına beklediği çelıncı listeden atmıştı) ya da ilk son saat
+  başlangıçtan yarım saatten az sonraysa (04:20), "başladı" saat kaç olursa olsun gider: yoksa ilk
+  sabah oyunculardan biri hiçbir şey duymadan kaybederdi. "Hemen" çelıncını iki kişi yapan kabulün
+  "başladı"sı da saate bakmaz.
 * Sunucunun duyamadığı zamanlar da olur: bilgisayar uyur, kapanır, pencere kapanır. Zamanlayıcı
   bunları `server_pauses`'a yazar: iki vuruşu arasında beş dakikadan uzun bir boşluk, ya da açılırken
   kapanmadan önceki son vuruşundan (`server_state`; düzgün kapanış onu kapanış anında yazar) bu yana

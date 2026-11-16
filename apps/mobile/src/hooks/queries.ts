@@ -21,8 +21,10 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClie
 import { ApiError, type ApiClient } from '@/lib/api';
 import { qk } from '@/lib/query';
 import { dropParked, enqueueEntry, flushQueue, uploadLocalPhoto } from '@/services/offlineQueue';
+import { refreshReminders } from '@/services/reminders';
 import { useApi } from '@/hooks/useApi';
-import { useAuth } from '@/store/auth';
+import { useTimezone } from '@/hooks/useTimezone';
+import { useAuth, useLevel } from '@/store/auth';
 import { noteServerTime } from '@/utils/serverClock';
 
 /* --------------------------------------------------------------- reads */
@@ -342,9 +344,19 @@ export function useCreateChallenge() {
   });
 }
 
+/**
+ * A yes, a no, a walk-out or a cancel also re-plans the phone's own reminders.
+ * A yes to a morning check-in çelınc that opens at 04:00 is often the last
+ * thing done on the phone that evening, and the refresh that ran when the app
+ * came up saw an invite, which gets no reminder: the first morning's 06:30
+ * alarm was left to the background task, and the server says no "başladı"
+ * before 07:00 to a çelınc that had its yeses before the start.
+ */
 export function useChallengeAction(id: string) {
   const api = useApi();
   const invalidate = useInvalidator();
+  const level = useLevel();
+  const tz = useTimezone();
   return useMutation<unknown, Error, 'accept' | 'decline' | 'leave' | 'cancel'>({
     mutationFn: (action) => {
       if (action === 'accept') return api.acceptChallenge(id);
@@ -352,7 +364,10 @@ export function useChallengeAction(id: string) {
       if (action === 'leave') return api.leaveChallenge(id);
       return api.cancelChallenge(id);
     },
-    onSuccess: () => invalidate.challenge(id),
+    onSuccess: () => {
+      invalidate.challenge(id);
+      refreshReminders(api, level, tz).catch(() => {});
+    },
   });
 }
 

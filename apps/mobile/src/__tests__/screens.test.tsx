@@ -939,6 +939,40 @@ describe('saying yes to a çelınc the phone counts', () => {
     expect(api.acceptChallenge).toHaveBeenCalledWith('c-1');
     expect(steps.getDailySteps).toHaveBeenCalledWith(LIMITS.STEPS_BACKFILL_DAYS);
   });
+
+  // A yes to a "Yarın 04:00" Erken Kalkan Koyar at 23:00 is the last thing done
+  // on the phone that night, and the refresh that ran when the app came up saw
+  // an invite: the first morning's 06:30 alarm was never set.
+  it('plans the phone\'s check-in reminders again right after "Varım"', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    const morning = {
+      ...detail.challenge,
+      creatorId: 'u-2',
+      status: 'pending' as const,
+      typeKey: 'erken_kus',
+      metricType: 'checkin_deadline' as const,
+      unit: 'gün',
+      title: 'Sabah Kalkma',
+      deadlineTime: '07:00',
+      startsAt: new Date(Date.now() + 5 * 3_600_000).toISOString(),
+    };
+    const invited = { ...detail.me, status: 'invited' as const, score: 0, rank: 0 };
+    const creator = { ...detail.me, user: { ...detail.me.user, id: 'u-2', username: 'ali', displayName: 'Ali' } };
+    api.challenge = jest.fn(async () => ({ ...detail, challenge: morning, participants: [creator, invited], me: invited }));
+    api.acceptChallenge = jest.fn(async () => ({ ...detail, challenge: morning, participants: [creator, detail.me] }));
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    mockReminders.refresh.mockClear();
+
+    press(tree, 'Varım');
+    await settle();
+    expect(api.acceptChallenge).toHaveBeenCalledWith('c-1');
+    expect(mockReminders.refresh).toHaveBeenCalledTimes(1);
+    expect(mockReminders.refresh).toHaveBeenCalledWith(api, 2, 'Europe/Istanbul');
+  });
 });
 
 describe('an invite, before and after the door closes', () => {

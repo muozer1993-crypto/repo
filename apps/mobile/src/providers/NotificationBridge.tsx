@@ -48,6 +48,15 @@ import { formatDayKeyFriendly } from '@/utils/format';
  * the welcome slides are up: the last slide asks for both, with a reason.
  */
 
+/**
+ * Rows that change which çelınclar the phone's own reminders cover: a kanka's
+ * yes can be the second one (a `pending` çelınc with one yes gets none), a
+ * start or a cancel moves them too. Ali's phone last refreshed while he sat
+ * alone in his "Yarın 04:00" Erken Kalkan Koyar, and nothing but the
+ * background task would have set its first 06:30 alarm.
+ */
+const REPLANS_REMINDERS = new Set(['challenge_accepted', 'challenge_started', 'challenge_cancelled']);
+
 /** The screen a notification opens: the same for a push tap, its toast and the poll's toast. */
 function openRoute(route: Exclude<NotificationRoute, null>): void {
   if (route.kind === 'inbox') router.push('/(app)/(tabs)/inbox');
@@ -73,6 +82,8 @@ export function NotificationBridge() {
   const queryClient = useQueryClient();
   /** `${session token}|${device push token}` the server last accepted */
   const pushTokenSent = useRef<string | null>(null);
+  /** The reminder refresh with the current level and zone, once the bridge runs one (below). */
+  const replanReminders = useRef<(() => Promise<void>) | null>(null);
 
   // --- push registration -------------------------------------------------
   useEffect(() => {
@@ -183,6 +194,7 @@ export function NotificationBridge() {
     const received = addReceivedListener((title, body, data) => {
       const payload = (data ?? {}) as { type?: string };
       invalidateForNotifications(queryClient, [{ type: payload.type, data }]);
+      if (payload.type && REPLANS_REMINDERS.has(payload.type)) void replanReminders.current?.();
       // the toast opens what a tap on the push would: a finished çelınc and the
       // winner's "hâlâ bekliyor" go to the results, not the çelınc screen
       const route = routeForNotificationData(data) ?? { kind: 'inbox' };
@@ -214,6 +226,7 @@ export function NotificationBridge() {
         // Without push this poll is the only one that hears of a new row, on
         // screen or not; the lists it touches refetch now, not on the next pull.
         if (delivery.items.length > 0) invalidateForNotifications(queryClient, delivery.items);
+        if (delivery.items.some((item) => REPLANS_REMINDERS.has(item.type))) void replanReminders.current?.();
         const [newest] = delivery.items;
         if (delivery.surface !== 'in-app' || !newest) return;
         // one toast at a time: a second one would only replace the first
@@ -336,6 +349,7 @@ export function NotificationBridge() {
       }
     };
 
+    replanReminders.current = scheduleReminders;
     void syncSteps();
     void drain();
     void scheduleReminders();
@@ -365,6 +379,7 @@ export function NotificationBridge() {
     return () => {
       stopTracking();
       setBackgroundHandler(null);
+      if (replanReminders.current === scheduleReminders) replanReminders.current = null;
       sub.remove();
     };
   }, [token, serverUrl, makeClient, queryClient, level, tz, refreshMe, toast, onboarding]);

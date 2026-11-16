@@ -918,9 +918,14 @@ dedi" ya da "Ali sahaya indi 🍆"). İleri bir tarihte başlayan çelıncta kab
 (sonradan **Kankaları Çağır** ile gelen birinin kabulünü onu çağıran da duyar), başlangıç saatinde
 herkese "başladı" gider. Sabah check-in'leri bunun dışında: Erken Kalkan Koyar 04:00'te, Yatak
 Toplama Sabahı 05:00'te başlar ve saat 07:00 olmadan kimse "başladı" bildirimiyle uyandırılmaz;
-ilk öten, telefonun check-in hatırlatması olur. Başlangıç saatinde senden başka kabul eden yoksa
-çelınc ekranı "Kabul bekleniyor, 1/2 kişi" der: ikinci kişi kabul edince başlar ama bitiş tarihi
-kaymaz. Adım çelıncında telefonların saydığı adımlar o arada da yazılır; başka çelınclarda giriş,
+ilk öten, telefonun check-in hatırlatması olur. Bu, ikinci "varım" başlangıçtan önce geldiyse
+böyle: telefon hatırlatmayı ancak iki kişinin kabul ettiği bir çelınc için kurar. İkinci kabul
+başlangıçtan sonra gelirse (Veli 05:45'te kalkıp **Varım** derse) ya da son saat başlangıçtan
+yarım saatten az sonraysa (04:20), "başladı" saat kaç olursa olsun hemen gider, yoksa ilk sabah
+kimseye haber gitmeden geçerdi; **Hemen** açılan çelıncın ilk kabulü de ikinize hemen "başladı"
+der. Başlangıç saatinde senden başka kabul eden yoksa çelınc ekranı "Kabul bekleniyor, 1/2
+kişi" der: ikinci kişi kabul edince başlar ama bitiş tarihi kaymaz. Adım çelıncında telefonların
+saydığı adımlar o arada da yazılır; başka çelınclarda giriş,
 başlayana kadar açılmaz. Kimse katılmazsa çelınc bitişte iptal olur. Çelıncta kabul etmiş biriyle
 arasında engel olan (kim kimi engellemiş olursa olsun) kabul edemez, "Bu çelınca katılamazsın."
 görür: engelli iki kişi aynı çelıncta oynamaz. Çelınc sürerken konan engel ise iki oyuncuyu da

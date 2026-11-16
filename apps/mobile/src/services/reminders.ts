@@ -189,7 +189,9 @@ async function refresh(client: Pick<ApiClient, 'challenges'>, level: 1 | 2 | 3, 
     // server answers `challenge_not_active`) and is cancelled at its end if
     // nobody joins: "30 dakikan kaldı" and "Skorunu girmediysen yersin" rang
     // every morning for a race that had not started. The yes that makes it two
-    // is picked up by the next refresh (foreground, background task, drain).
+    // is picked up by the refresh it sets off (the yes itself on this phone, a
+    // kanka's arriving as a push or through the poll), or else the next one
+    // (foreground, background task, drain).
     .filter(
       (summary) =>
         !(

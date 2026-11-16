@@ -53,8 +53,9 @@ jest.mock('@/services/background', () => ({
   registerBackgroundSync: async () => {},
   setBackgroundHandler: () => {},
 }));
+const mockRefreshReminders = jest.fn(async (..._args: unknown[]) => 0);
 jest.mock('@/services/reminders', () => ({
-  refreshReminders: async () => 0,
+  refreshReminders: (...args: unknown[]) => mockRefreshReminders(...args),
   clearReminders: async () => {},
 }));
 jest.mock('@/services/stepSync', () => ({ syncStepsNow: async () => ({ days: 0, updated: 0 }) }));
@@ -177,5 +178,28 @@ describe("the inbox poll's toast", () => {
 
     expect(mockPush).toHaveBeenCalledWith('/(app)/(tabs)/inbox');
     expect(markRead).not.toHaveBeenCalled();
+  });
+});
+
+describe("the phone's reminders and the inbox poll", () => {
+  // Ali sat alone in his "Yarın 04:00" Erken Kalkan Koyar when the phone last
+  // planned its alarms; Veli's yes made it a race with a first morning to play.
+  it('plans them again when a kanka\'s yes comes in', async () => {
+    mockDelivery.items = [
+      row('n3', { type: 'challenge_accepted', title: 'Veli kabul etti', body: 'Veli katıldı.', data: { challengeId: 'c1' } }),
+    ];
+    const { NotificationBridge } = require('@/providers/NotificationBridge');
+    render(<NotificationBridge />);
+    await settle();
+    // once on the way in, once for the yes
+    expect(mockRefreshReminders).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves them alone for a laf', async () => {
+    mockDelivery.items = [row('n4')];
+    const { NotificationBridge } = require('@/providers/NotificationBridge');
+    render(<NotificationBridge />);
+    await settle();
+    expect(mockRefreshReminders).toHaveBeenCalledTimes(1);
   });
 });
