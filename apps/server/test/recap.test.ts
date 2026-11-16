@@ -3,13 +3,13 @@
  * the week's koydun / yedin, the steps and the king of the week.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Me, RecapData } from '@koydum/shared';
+import { LIMITS, type Challenge, type Entry, type Me, type RecapData } from '@koydum/shared';
 
 import { newId, nowIso } from '../src/db/index.js';
 import { runSchedulerOnce } from '../src/services/challenges.js';
 import { listInbox } from '../src/services/notifications.js';
 import { recapWeekFor, sendWeeklyRecaps } from '../src/services/recap.js';
-import { authed, befriend, makeApp, registerUser, type TestApp } from './helpers.js';
+import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 import type { FastifyInstance } from 'fastify';
 
 let harness: TestApp | null = null;
@@ -389,5 +389,154 @@ describe('weekly recap', () => {
 
     expect(runSchedulerOnce(app.db, app.now()).recaps).toBe(3);
     expect(recapsOf(can.me.id)[0].body).toContain('👑 Haftanın kralı Ali');
+  });
+});
+
+describe('weekly recap steps typed with "Beyan et"', () => {
+  /** Monday 2026-01-05, 12:00 in Istanbul: the week the recap on SUNDAY sums up. */
+  const MONDAY_NOON = '2026-01-05T09:00:00.000Z';
+  const DAYS = ['2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10', SUNDAY];
+
+  /** `HH:mm` on `dayKey` in Istanbul (UTC+3, no DST) as an ISO instant. */
+  function istanbul(dayKey: string, hhmm: string): string {
+    return new Date(`${dayKey}T${hhmm}:00.000+03:00`).toISOString();
+  }
+
+  /** An adım yarışı from now until the end of SUNDAY, accepted by everybody invited. */
+  async function stepRace(app: FastifyInstance, creator: RegisteredUser, invited: RegisteredUser[]): Promise<string> {
+    const created = await authed(app, creator.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: {
+        typeKey: 'adim_yarisi',
+        startsAt: nowIso(app.now()),
+        endsAt: '2026-01-11T20:59:59.999Z',
+        participantIds: invited.map((friend) => friend.me.id),
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json<Challenge>().id;
+    for (const friend of invited) {
+      expect((await authed(app, friend.token)({ method: 'POST', url: `/challenges/${id}/accept` })).statusCode).toBe(200);
+    }
+    return id;
+  }
+
+  /** What the phone read, through the route the app syncs with. */
+  async function syncSteps(app: FastifyInstance, user: RegisteredUser, days: Record<string, number>): Promise<void> {
+    const synced = await authed(app, user.token)({
+      method: 'POST',
+      url: '/me/steps',
+      payload: { days: Object.entries(days).map(([dayKey, steps]) => ({ dayKey, steps, source: 'pedometer' })) },
+    });
+    expect(synced.statusCode).toBe(200);
+  }
+
+  /** "Beyan et": the day's real number typed into the çelınc, that evening. */
+  async function typeSteps(app: FastifyInstance, user: RegisteredUser, challengeId: string, dayKey: string, steps: number): Promise<Entry> {
+    harness!.setNow(istanbul(dayKey, '19:00'));
+    const typed = await authed(app, user.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey, value: steps, source: 'manual', clientTime: nowIso(app.now()) },
+    });
+    expect(typed.statusCode).toBeLessThan(300);
+    return typed.json<{ entry: Entry }>().entry;
+  }
+
+  function sundayRecaps(app: FastifyInstance): void {
+    harness!.setNow(SUNDAY_EVENING);
+    sendWeeklyRecaps(app.db, app.now());
+  }
+
+  it('counts the days a friend without Health Connect typed, and names the right walker', async () => {
+    const { app, ali, veli, can } = await gang(MONDAY_NOON);
+    befriend(app, veli.me.id, can.me.id);
+    const race = await stepRace(app, ali, [veli, can]);
+
+    await syncSteps(app, veli, Object.fromEntries(DAYS.map((day, i) => [day, [11_000, 14_500, 11_500, 9_000, 9_000, 9_000, 9_000][i]])));
+    await syncSteps(app, ali, Object.fromEntries(DAYS.map((day, i) => [day, [12_430, 15_002, 9_871, 8_000, 8_000, 8_000, 8_000][i]])));
+    // Can's phone counts only while KOYDUM is open; from Thursday on he types the real number
+    await syncSteps(app, can, { '2026-01-05': 4_201, '2026-01-06': 3_000 });
+    for (const day of DAYS.slice(3)) await typeSteps(app, can, race, day, 20_000);
+
+    sundayRecaps(app);
+
+    const [forCan] = recapsOf(can.me.id);
+    expect(dataOf(forCan).steps).toBe(87_201);
+    expect(forCan.body).toContain('87.201 adım yürümüşsün, en iyi günün Perşembe (20.000).');
+    expect(forCan.body).toContain('🚶 Kankalar arasında en çok sen yürüdün');
+
+    const [forAli] = recapsOf(ali.me.id);
+    expect(dataOf(forAli).steps).toBe(69_303);
+    expect(forAli.body).toContain('🚶 En çok Can yürüdü: 87.201 adım.');
+    expect(forAli.body).not.toContain('En çok Veli');
+
+    const [forVeli] = recapsOf(veli.me.id);
+    expect(dataOf(forVeli).steps).toBe(73_000);
+    expect(forVeli.body).toContain('🚶 En çok Can yürüdü: 87.201 adım.');
+  });
+
+  it('names a friend who only ever typed his steps over one whose phone counted', async () => {
+    const { app, ali, veli, can } = await gang(MONDAY_NOON);
+    const race = await stepRace(app, ali, [veli, can]);
+
+    await syncSteps(app, veli, { '2026-01-09': 12_000, '2026-01-10': 13_000 });
+    await typeSteps(app, can, race, '2026-01-10', 15_000);
+    await typeSteps(app, can, race, SUNDAY, 15_000);
+
+    sundayRecaps(app);
+
+    expect(recapsOf(ali.me.id)[0].body).toContain('🚶 En çok Can yürüdü: 30.000 adım.');
+    expect(dataOf(recapsOf(can.me.id)[0]).steps).toBe(30_000);
+  });
+
+  it('leaves out a typed day friends threw out, and keeps what the phone read that day', async () => {
+    const { app, ali, veli, can } = await gang(MONDAY_NOON);
+    const race = await stepRace(app, ali, [veli, can]);
+
+    // Wednesday the phone read 3.000 and Can typed 20.000 over it; Thursday he only typed
+    harness!.setNow(istanbul('2026-01-07', '18:00'));
+    await syncSteps(app, can, { '2026-01-07': 3_000 });
+    const wednesday = await typeSteps(app, can, race, '2026-01-07', 20_000);
+    const thursday = await typeSteps(app, can, race, '2026-01-08', 20_000);
+    for (const entry of [wednesday, thursday]) {
+      const disputed = await authed(app, veli.token)({
+        method: 'POST',
+        url: `/challenges/${race}/entries/${entry.id}/dispute`,
+        payload: { reason: 'yirmi bin adım mı, hadi oradan' },
+      });
+      expect(disputed.statusCode).toBe(201);
+    }
+    harness!.advance(LIMITS.DISPUTE_ANSWER_MS);
+    expect(runSchedulerOnce(app.db, app.now()).disputes).toBe(2);
+    const statusOf = app.db.prepare('SELECT status FROM entries WHERE id = ?');
+    expect(statusOf.get(thursday.id)).toEqual({ status: 'rejected' });
+
+    sundayRecaps(app);
+
+    const [forCan] = recapsOf(can.me.id);
+    expect(dataOf(forCan).steps).toBe(3_000);
+    expect(forCan.body).toContain('3.000 adım yürümüşsün, en iyi günün Çarşamba (3.000).');
+  });
+
+  it('takes each day once, at the larger of the phone and the typed number', async () => {
+    const { app, ali, veli, can } = await gang(MONDAY_NOON);
+    const withVeli = await stepRace(app, ali, [veli]);
+    const withCan = await stepRace(app, ali, [can]);
+
+    // the same Thursday typed into both races is one walk
+    await typeSteps(app, ali, withVeli, '2026-01-08', 20_000);
+    await typeSteps(app, ali, withCan, '2026-01-08', 20_000);
+    // Friday the phone read 3.000 (mirrored into both races) and Ali typed the real 5.000
+    harness!.setNow(istanbul('2026-01-09', '18:00'));
+    await syncSteps(app, ali, { '2026-01-09': 3_000 });
+    await typeSteps(app, ali, withVeli, '2026-01-09', 5_000);
+
+    sundayRecaps(app);
+
+    const [forAli] = recapsOf(ali.me.id);
+    expect(dataOf(forAli).steps).toBe(25_000);
+    expect(forAli.body).toContain('25.000 adım yürümüşsün, en iyi günün Perşembe (20.000).');
   });
 });

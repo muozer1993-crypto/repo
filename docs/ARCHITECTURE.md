@@ -519,6 +519,15 @@ pazartesi sabahki laf atışmasını pazar akşamı başlatan kısım.
   oradan başlar; ancak 9 günden eskiyse, yani bir hafta tamamen atlanmışsa, son 7 güne bakılır.
 * Pazartesi sabahı giden telafi özeti yeni haftada okunur, o yüzden "bu hafta" yerine "geçen
   hafta", "haftaya rövanş" yerine "bu hafta rövanş" der.
+* Haftalık adımda pazartesiden pazara her gün, telefonun okuduğu sayıyla o gün adım çelıncına elle
+  yazılan ("Beyan et") sayıdan büyük olanı sayılır. Health Connect'i olmayan Android sadece uygulama
+  açıkken sayar, çelınc da ona günün gerçek sayısını yazmasını söyler; özet yalnız telefona
+  baksaydı ona haftasının küçük bir parçasını gösterir, en çok yürüyen diye de başkasının adını
+  verirdi. Toplanmaz, büyüğü alınır: elle yazılan sayı o günün tamamıdır, telefonun okuduğu sayı her
+  adım çelıncına aynı günün girişi olarak da yazılır, iki çelınc da aynı yürüyüşü iki kere tutar.
+  İtirazla atılan (`rejected`) elle yazılmış gün sayılmaz, telefonun o gün okuduğu sayılır. Adım
+  rozetleri yine sadece telefona bakar: rozet geri alınmaz, elle yazılan gün ise sonradan itirazla
+  atılabilir.
 * Kral önce galibiyete, eşitse haftalık adıma bakar; ikisi de birebir eşitse taht paylaşılır.
   En çok yürüyen ise sadece tek başına öndeyse söylenir. Kral o hafta yediyse ya da berabere
   kaldıysa 3. seviye ona "hepsine koydun" demez, "N kere koydun" der: bir üst satır "1 kere

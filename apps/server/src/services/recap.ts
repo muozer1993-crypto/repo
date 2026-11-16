@@ -58,6 +58,41 @@ function weekdayOf(dayKey: string): number {
   return dayKeyToUtcDate(dayKey).getUTCDay();
 }
 
+interface StepDay {
+  day_key: string;
+  steps: number;
+}
+
+/**
+ * Reads somebody's step days between two day keys: per day the larger of what
+ * the phone read (`steps_daily`) and what they typed into a step çelınc with
+ * "Beyan et". An Android without Health Connect only counts while KOYDUM is
+ * open, and the çelınc tells that friend to type the day's real number; read
+ * from the phone alone, the recap gave them a sliver of their week and named
+ * the wrong walker while the çelınc itself had them first.
+ *
+ * The larger, not the sum: a typed number is the whole day, a phone reading is
+ * mirrored into every step çelınc as an entry of the same day, and two
+ * çelınclar hold the same walk twice. A typed day friends threw out by itiraz
+ * (`rejected`) does not count; the phone's own reading of it still does.
+ *
+ * The step badges (stats.ts) keep reading the phone alone: a badge is never
+ * taken back, and a typed day can still be thrown out after it.
+ */
+function stepDayReader(db: Database): (userId: string, from: string, to: string) => StepDay[] {
+  const statement = db.prepare(
+    `SELECT day_key, MAX(steps) AS steps FROM (
+       SELECT day_key, steps FROM steps_daily WHERE user_id = @userId AND day_key >= @from AND day_key <= @to
+       UNION ALL
+       SELECT e.day_key, CAST(ROUND(e.value) AS INTEGER) AS steps FROM entries e
+         JOIN challenges c ON c.id = e.challenge_id
+        WHERE e.user_id = @userId AND e.day_key >= @from AND e.day_key <= @to
+          AND c.metric_type = 'auto_steps' AND e.status <> 'rejected'
+     ) GROUP BY day_key ORDER BY day_key`,
+  );
+  return (userId, from, to) => statement.all({ userId, from, to }) as StepDay[];
+}
+
 /**
  * The Sunday whose week is due for a recap at `now` in `timezone`, or null when
  * it is not recap time there. Throws on an unknown timezone (callers skip).
@@ -126,12 +161,10 @@ export function buildWeeklyRecap(
     else if (row.winner_id) losses += 1;
   }
 
-  const stepDays = db
-    .prepare('SELECT day_key, steps FROM steps_daily WHERE user_id = ? AND day_key >= ? AND day_key <= ?')
-    .all(user.id, weekStart, weekEnd) as { day_key: string; steps: number }[];
+  const stepDaysOf = stepDayReader(db);
   let steps = 0;
   let bestDay: WeeklyRecap['bestDay'] = null;
-  for (const day of stepDays) {
+  for (const day of stepDaysOf(user.id, weekStart, weekEnd)) {
     const value = Math.max(0, Number(day.steps) || 0);
     steps += value;
     if (value > 0 && (!bestDay || value > bestDay.steps)) bestDay = { dayKey: day.day_key, steps: value };
@@ -152,16 +185,13 @@ export function buildWeeklyRecap(
     `SELECT COUNT(*) AS n FROM challenges
       WHERE status = 'finished' AND is_tie = 0 AND winner_id = ? AND finalized_at > ? AND finalized_at <= ?`,
   );
-  const stepsOf = db.prepare(
-    'SELECT COALESCE(SUM(steps), 0) AS n FROM steps_daily WHERE user_id = ? AND day_key >= ? AND day_key <= ?',
-  );
   const candidates: Candidate[] = [
     { id: user.id, displayName: user.display_name, wins, steps },
     ...friends.map((friend) => ({
       id: friend.id,
       displayName: friend.display_name,
       wins: (winsOf.get(friend.id, since, until) as { n: number }).n,
-      steps: Math.max(0, Number((stepsOf.get(friend.id, weekStart, weekEnd) as { n: number }).n) || 0),
+      steps: stepDaysOf(friend.id, weekStart, weekEnd).reduce((sum, day) => sum + Math.max(0, Number(day.steps) || 0), 0),
     })),
   ];
 
