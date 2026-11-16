@@ -486,7 +486,8 @@ kurduğu saatli uyarıları (check-in'e yarım saat kala, çelıncın son saati)
 Saatli uyarılar ayarı sadece o telefonda geçerli. Check-in uyarısı sadece katıldığın çelınclarda,
 çelınc sürdüğü günlerde ve o gün daha "Geldim" demediysen çalar; çelınc bitince ya da iptal olunca
 kendiliğinden susar. İleri bir tarihe açtığın çelıncı senden başka kimse kabul etmediyse o daha
-başlamamıştır: ne check-in ne de son saat uyarısı çalar, ikinci kişi kabul edince kurulur.
+başlamamıştır: ne check-in ne de son saat uyarısı çalar. Telefon bu uyarıları ikinci kişi kabul
+ettikten sonraki ilk yenilemede kurar (uygulamayı açınca ya da arka planda kendini yenileyince).
 "KOYDUM MU?" lafları, kankanın elle dürtmesi, davetler ve sonuçlar her zaman gelir.
 
 **Anlık olsun istersen** (laf atıldığı saniye telefon titresin), Android'e Google'ın push servisi
@@ -892,8 +893,9 @@ sonradan katılan her kanka için içeridekilere "Ali kabul etti" gelir (seviyen
 dedi" ya da "Ali sahaya indi 🍆"). İleri bir tarihte başlayan çelıncta kabulleri sadece açan duyar
 (sonradan **Kankaları Çağır** ile gelen birinin kabulünü onu çağıran da duyar), başlangıç saatinde
 herkese "başladı" gider. Başlangıç saatinde senden başka kabul eden yoksa çelınc ekranı "Kabul
-bekleniyor, 1/2 kişi" der: ikinci kişi kabul edince başlar ama bitiş tarihi kaymaz, adımları
-telefonlar o arada da yazar. Kimse katılmazsa çelınc bitişte iptal olur. Çelıncta kabul etmiş biriyle
+bekleniyor, 1/2 kişi" der: ikinci kişi kabul edince başlar ama bitiş tarihi kaymaz. Adım
+çelıncında telefonların saydığı adımlar o arada da yazılır; başka çelınclarda giriş, başlayana kadar
+açılmaz. Kimse katılmazsa çelınc bitişte iptal olur. Çelıncta kabul etmiş biriyle
 arasında engel olan (kim kimi engellemiş olursa olsun) kabul edemez, "Bu çelınca katılamazsın."
 görür: engelli iki kişi aynı çelıncta oynamaz.
 
@@ -1016,7 +1018,7 @@ yerel gece yarısına göre gün gün toplanıyor. Dijital Denge'nin gösterdiğ
 * **Android 15 ve sonrasında anahtar gri kalabilir.** APK'yı Play Store dışından (`/indir`'den,
   WhatsApp'tan) kuran telefonda Android bu izni "kısıtlanmış ayar" sayar: KOYDUM'un yanındaki
   anahtar gri durur, dokununca **Kısıtlanmış ayar** der. Çıkış yolu şu: anahtara bir kere dokun
-  (aşağıdaki seçenek ancak ondan sonra çıkar), sonra Ayarlar → Uygulamalar → KOYDUM → sağ üstteki
+  (⋮ menüsündeki seçenek ancak ondan sonra çıkar), sonra Ayarlar → Uygulamalar → KOYDUM → sağ üstteki
   **⋮** → **Kısıtlanmış ayarlara izin ver**, ardından kullanım erişimini yeniden aç. Bazı
   telefonlarda menünün yeri ya da adı biraz farklıdır. Uygulama bunu Android 15 ve sonrasında, izin
   yokken Ayarlar'daki ekran süresi kartında ve Ekran Süresi çelıncının "Kullanım erişimi ver"
