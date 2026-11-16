@@ -490,8 +490,8 @@ kalan, en çok geride olduğu çelıncı duyar, gerisi aynı bildirimde sayılı
 gerideysin"). Dürtme, önündekilerden arana engel girmemiş en iyisini söyler; önündekilerin
 hepsiyle aranda engel varsa yine gelir ama isim vermez ("Bir rakibin sana 9 bardak fark koymuş").
 Evet/hayır çelıncında o günü işaretlediysen, cevabın ne olursa olsun, o çelınc için dürtme gelmez;
-o günün yapılacak işi kalmadı. Sayı girilen çelıncta bugün bir şey girdiysen "girişini unutma"
-demez, "biraz daha" ister.
+o gün yapacağın bir şey kalmadı. Sayı girilen çelıncta bugün bir şey girdiysen "girişini unutma"
+demez, "biraz daha" ister; günlük sınırı doldurduysan o çelınc için hiç gelmez.
 
 Bazı bildirimler fazla geliyorsa kanalı kapatma, uygulamada **Ayarlar → Bildirim tercihleri**'ne
 gir: gün ortası dürtmeyi ("sana fark koymuş"), pazar akşamı haftalık özeti ve telefonun kendi

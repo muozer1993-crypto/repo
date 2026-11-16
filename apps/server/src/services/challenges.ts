@@ -1265,7 +1265,8 @@ interface NudgeCandidate {
  * deadline reminder and "you are behind" means nothing there. And somebody who
  * switched it off (`users.nudges_enabled`) gets none at all, nor does a
  * screen-time player with nothing reported yet: their gap is the missing-day
- * penalty. A yes/no çelınc the reader has already marked today is left out too.
+ * penalty. A yes/no çelınc the reader has already marked today is left out too,
+ * and so is a count çelınc whose daily cap they have already filled.
  *
  * The one nudge names the çelınc with the biggest gap for its size and counts
  * the others. All of them are claimed in `nudges_sent`, and any row of the
@@ -1284,7 +1285,8 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
 
   const candidates = new Map<string, NudgeCandidate[]>();
   const loggedOn = db.prepare(
-    `SELECT 1 FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ? AND status <> 'rejected' LIMIT 1`,
+    `SELECT COUNT(*) AS n, COALESCE(SUM(value), 0) AS total FROM entries
+      WHERE challenge_id = ? AND user_id = ? AND day_key = ? AND status <> 'rejected'`,
   );
 
   for (const challenge of active) {
@@ -1339,13 +1341,18 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
         continue;
       }
       if (hour < NUDGE_FROM_HOUR || hour >= NUDGE_UNTIL_HOUR) continue;
-      const logged = loggedOn.get(challenge.id, user.id, dayKey) !== undefined;
+      const today = loggedOn.get(challenge.id, user.id, dayKey) as { n: number; total: number };
+      const logged = today.n > 0;
       // A marked day is all a yes/no çelınc takes from today: nothing the reader
       // does this afternoon moves that gap, and "Bugünü işaretlemeyi unutma" at
       // noon to somebody who marked it at breakfast only teaches the switch in
       // Ayarlar. Before the claim, so the day stays free for a çelınc they can
       // still do something about.
       if (challenge.metric_type === 'daily_boolean' && logged) continue;
+      // The same goes for a count çelınc whose daily cap is full: "Biraz daha
+      // eklersen" would ask for a set the server refuses (daily_cap). Under a
+      // cent left is what the entry form already calls "tavan doldu".
+      if (challenge.metric_type === 'manual_count' && typeForChallenge(challenge).maxPerDay - today.total < 0.01) continue;
 
       const mine = candidates.get(user.id) ?? [];
       mine.push({

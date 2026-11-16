@@ -510,7 +510,9 @@ dürtme oradan gelir, işaretlenmiş çelınc "bir çelıncta daha" diye sayılm
 Kapanış cümlesi metriğe göre değişir: "kalk da iki dolaş" odak çelıncında saçmadır, orada
 "telefonu bırak da bir seans yap" der. Sayı çelıncında (`manual_count`) bugün girişi olana
 "Bugünkü girişini yapmayı unutma" denmez, daha fazlası istenir: "Biraz daha eklersen fark
-kapanır." / "Biraz daha yap da gir şuraya." / "Bu kadarla olmaz, biraz daha koy."
+kapanır." / "Biraz daha yap da gir şuraya." / "Bu kadarla olmaz, biraz daha koy." Günlük sınırı
+dolmuş olana (giriş ekranının "tavan doldu" dediği gün) bu da denmez, o çelınc için hiç
+dürtülmez: sunucu fazlasını `daily_cap` ile geri çevirir. Bu kontrol de kayıttan önce yapılır.
 
 ## Haftanın hesabı
 

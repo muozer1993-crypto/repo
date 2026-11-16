@@ -487,6 +487,37 @@ describe('mid-day nudges on a day the reader already logged', () => {
     );
   });
 
+  it('leaves alone somebody whose day is already at the cap, where "biraz daha" would be refused', async () => {
+    harness = await makeApp({ now: NOON });
+    const app = harness.app;
+    const tz = { timezone: 'Europe/Istanbul' };
+    const ayse = await registerUser(app, 'ayse', { displayName: 'Ayşe', ...tz });
+    const mert = await registerUser(app, 'mert', { displayName: 'Mert', vulgarityMax: 1, ...tz });
+    const deniz = await registerUser(app, 'deniz', { displayName: 'Deniz', vulgarityMax: 1, ...tz });
+    // sinav_sayisi takes 300 a day
+    const id = seedActive(app, {
+      creatorId: ayse.me.id,
+      accepted: [ayse.me.id, mert.me.id, deniz.me.id],
+      ...week,
+      typeKey: 'sinav_sayisi',
+      metricType: 'manual_count',
+      unit: 'tekrar',
+    });
+    addSteps(app, id, ayse.me.id, MONDAY, 300, 'manual');
+    addSteps(app, id, ayse.me.id, TUESDAY, 300, 'manual');
+    // Mert did his whole 300 this morning in two sets; Deniz has 150 still to go
+    addSteps(app, id, mert.me.id, TUESDAY, 150, 'manual');
+    addSteps(app, id, mert.me.id, TUESDAY, 150, 'manual');
+    addSteps(app, id, deniz.me.id, TUESDAY, 150, 'manual');
+
+    expect(sendNudges(app.db, app.now())).toBe(1);
+    expect(nudgesOf(harness, mert.me.id)).toHaveLength(0);
+    expect(claimedBy(app, mert.me.id)).toEqual([]);
+    expect(nudgesOf(harness, deniz.me.id)[0].body).toBe(
+      'Ayşe önde, aradaki fark 450 tekrar. Biraz daha eklersen fark kapanır.',
+    );
+  });
+
   it('names the çelınc the reader can still do something about, and does not count the marked one', async () => {
     harness = await makeApp({ now: NOON });
     const app = harness.app;
