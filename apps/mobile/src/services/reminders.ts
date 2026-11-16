@@ -5,7 +5,7 @@ import type { ApiClient } from '@/lib/api';
 import { StorageKeys, getItem, removeItem, setItem } from '@/lib/storage';
 import { localNotifications, type LocalNotifications } from '@/services/expoNotifications';
 import { ANDROID_CHANNEL_ID, ensureAndroidChannel, installNotificationHandler } from '@/services/notifications';
-import { safeDayKey, safeDayKeysBetween, safeTodayKey, zonedInstant } from '@/utils/datetime';
+import { resolveTimezone, safeDayKey, safeDayKeysBetween, safeTodayKey, zonedInstant } from '@/utils/datetime';
 
 /**
  * Local reminders scheduled on the device itself.
@@ -106,6 +106,11 @@ export interface ReminderChallenge {
   deadlineTime: string | null;
   /** true when the reader has already done today's check-in */
   doneToday: boolean;
+  /**
+   * The zone the reader's days are counted in on this çelınc (`myTimezone`):
+   * the deadline is that zone's 23:00, not the one the phone moved to since.
+   */
+  tz: string;
 }
 
 const MINUTES_BEFORE_DEADLINE = 30;
@@ -146,6 +151,9 @@ let refreshQueue: Promise<unknown> = Promise.resolve();
  * One run at a time: the bridge refreshes on every foreground and Ayarlar right
  * after the switch flips, and a run still waiting on the list would otherwise
  * schedule after the one that has just cleared everything.
+ *
+ * `tz` is the account's zone. Each çelınc counts in its own `myTimezone`, the
+ * one pinned when the reader joined; `tz` is only for an older server's list.
  */
 export function refreshReminders(
   client: Pick<ApiClient, 'challenges'>,
@@ -175,8 +183,6 @@ async function refresh(client: Pick<ApiClient, 'challenges'>, level: 1 | 2 | 3, 
     return 0;
   }
   const summaries = await client.challenges('active,pending');
-  // day keys are counted in the ACCOUNT's zone, both here and on the server
-  const today = safeTodayKey(tz);
   const reminders: ReminderChallenge[] = summaries
     .filter((summary) => summary.me?.status === 'accepted')
     // A `pending` çelınc with the reader alone in it takes no check-in (the
@@ -191,16 +197,21 @@ async function refresh(client: Pick<ApiClient, 'challenges'>, level: 1 | 2 | 3, 
           summary.participants.filter((p) => p.status === 'accepted').length < 2
         )
     )
-    .map((summary) => ({
-      id: summary.challenge.id,
-      title: summary.challenge.title,
-      startsAt: summary.challenge.startsAt,
-      endsAt: summary.challenge.endsAt,
-      metricType: summary.challenge.metricType,
-      deadlineTime: summary.challenge.deadlineTime,
-      doneToday: safeDayKey(summary.me?.lastEntryAt, tz) === today,
-    }));
-  return syncReminders(reminders, level, tz);
+    .map((summary) => {
+      // this çelınc's days as the server counts them (see refreshReminders)
+      const zone = resolveTimezone(summary.myTimezone, tz);
+      return {
+        id: summary.challenge.id,
+        title: summary.challenge.title,
+        startsAt: summary.challenge.startsAt,
+        endsAt: summary.challenge.endsAt,
+        metricType: summary.challenge.metricType,
+        deadlineTime: summary.challenge.deadlineTime,
+        doneToday: safeDayKey(summary.me?.lastEntryAt, zone) === safeTodayKey(zone),
+        tz: zone,
+      };
+    });
+  return syncReminders(reminders, level);
 }
 
 /**
@@ -208,6 +219,7 @@ async function refresh(client: Pick<ApiClient, 'challenges'>, level: 1 | 2 | 3, 
  * Without it a check-in at 06:05 still got "30 dakikan kaldı" at 06:30,
  * because nothing refreshed the reminders in between. A parked one keeps it:
  * it has not counted yet, and the poke brings the app (and the queue) back.
+ * `tz` is the çelınc's zone (`useChallengeTimezone`), the one its slots are keyed by.
  *
  * Waits its turn behind a refresh that may be about to schedule that very slot.
  */
@@ -235,7 +247,6 @@ export function skipTodayCheckinReminder(challengeId: string, tz: string): Promi
 export async function syncReminders(
   challenges: ReminderChallenge[],
   level: 1 | 2 | 3,
-  tz: string,
   now: Date = new Date()
 ): Promise<number> {
   const api = await ready();
@@ -245,7 +256,7 @@ export async function syncReminders(
   const channel = Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : {};
   const planned: { at: number; request: NotificationRequest }[] = [];
   for (const challenge of challenges) {
-    for (const slot of checkinSlots(challenge, tz, now)) {
+    for (const slot of checkinSlots(challenge, now)) {
       const identifier = checkinIdentifier(challenge.id, slot.dayKey);
       if (checkedInHere.has(identifier)) continue;
       planned.push({
@@ -304,13 +315,14 @@ export async function syncReminders(
 
 /**
  * When a check-in çelınc should be poked: 30 minutes before the deadline on
- * each remaining day, counted in the account's zone like the server counts it.
+ * each remaining day, counted in the çelınc's zone like the server counts it.
  *
  * This used to be one repeating daily alarm, which knew nothing about the
  * çelınc's window: it kept ringing every morning after the end (or a cancel)
  * until the app was next opened. One dated alarm per day cannot outlive it.
  */
-function checkinSlots(challenge: ReminderChallenge, tz: string, now: Date): { dayKey: string; at: Date }[] {
+function checkinSlots(challenge: ReminderChallenge, now: Date): { dayKey: string; at: Date }[] {
+  const { tz } = challenge;
   if (challenge.metricType !== 'checkin_deadline' || !challenge.deadlineTime) return [];
   const deadline = minusMinutes(challenge.deadlineTime, 0);
   const at = minusMinutes(challenge.deadlineTime, MINUTES_BEFORE_DEADLINE);

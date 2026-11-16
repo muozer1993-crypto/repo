@@ -424,6 +424,15 @@ export interface ChallengeSummary {
   participants: ParticipantView[];
   me: ParticipantView | null;
   unreadTaunts: number;
+  /**
+   * The zone the reader's days are counted in on this çelınc: the one pinned
+   * when they joined, their profile's for an invite not answered yet. A change
+   * of `me.timezone` (a login after travel, "Cihazdan güncelle") does not move
+   * it, so the app counts "today" with this one, or it would send a day the
+   * server refuses. Null when the reader has no row in it. Older servers leave
+   * it out; the app falls back to `me.timezone` then.
+   */
+  myTimezone?: string | null;
 }
 
 export interface Entry {

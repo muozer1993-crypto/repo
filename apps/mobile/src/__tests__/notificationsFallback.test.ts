@@ -98,10 +98,10 @@ describe('when expo-notifications refuses to load', () => {
           metricType: 'checkin_deadline',
           deadlineTime: '07:00',
           doneToday: false,
+          tz: 'Europe/Istanbul',
         },
       ],
       3,
-      'Europe/Istanbul',
       now
     );
     expect(count).toBe(2);

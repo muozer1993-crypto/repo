@@ -677,6 +677,35 @@ describe('checkin_deadline entries', () => {
     );
   });
 
+  it('reads today in the zone pinned at join, so the app has to send the day of `myTimezone`', async () => {
+    harness = await makeApp({ now: '2027-01-01T16:00:00.000Z' }); // 19:00 in Istanbul
+    const { ali, challengeId } = await liveChallenge(harness, 'erken_yat', { deadlineTime: '23:00' });
+    // a login in Tokyo moves the profile; the çelınc keeps Istanbul
+    await authed(harness.app, ali.token)({ method: 'PATCH', url: '/me', payload: { timezone: 'Asia/Tokyo' } });
+    const detail = (await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>();
+    expect(detail.myTimezone).toBe('Europe/Istanbul');
+
+    // 01:30 on the 3rd in Tokyo is 19:30 on the 2nd in Istanbul, inside 19:00–23:00
+    harness.setNow('2027-01-02T16:30:00.000Z');
+    const tokyoDay = await post(harness, ali, challengeId, {
+      dayKey: todayKey('Asia/Tokyo', harness.now()),
+      value: 1,
+      source: 'checkin',
+      clientTime: iso(harness),
+    });
+    expect(tokyoDay.statusCode).toBe(400);
+    expect(errorCode(tokyoDay)).toBe('day_in_future');
+
+    const pinnedDay = await post(harness, ali, challengeId, {
+      dayKey: todayKey(detail.myTimezone ?? DEFAULT_TIMEZONE, harness.now()),
+      value: 1,
+      source: 'checkin',
+      clientTime: iso(harness),
+    });
+    expect(pinnedDay.statusCode).toBe(201);
+    expect(pinnedDay.json<{ entry: Entry }>().entry).toMatchObject({ dayKey: '2027-01-02', value: 1 });
+  });
+
   it('only accepts today and only the checkin source', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await liveChallenge(harness, 'erken_kus', { deadlineTime: '23:00' });

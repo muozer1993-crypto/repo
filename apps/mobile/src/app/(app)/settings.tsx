@@ -1048,7 +1048,8 @@ export default function SettingsScreen() {
               {me?.timezone ?? deviceTz}
             </Text>
             <Text variant="tiny" muted>
-              Günler bu saat dilimine göre sayılıyor. Cihazın: {deviceTz}
+              Yeni çelınclarda günler bu saat dilimine göre sayılır. İçinde olduğun çelınclar, katıldığın
+              andaki saat diliminde kalır. Cihazın: {deviceTz}
             </Text>
           </View>
           <Button

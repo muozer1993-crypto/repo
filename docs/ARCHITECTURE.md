@@ -26,8 +26,15 @@ değiştirdiğinde iki taraf da aynı anda derlenmez, hata anında ortaya çıka
 
 Bir çelınc "gün" üzerinden puanlanır ve gün, **kullanıcının kendi saat dilimine** göre hesaplanır
 (`users.timezone`). İstanbul'daki biriyle Berlin'deki biri aynı çelıncta yarışırken herkesin
-günü kendi yerel gece yarısında döner. Sunucu istemcinin gönderdiği saate, tek bir istisna dışında,
-güvenmez:
+günü kendi yerel gece yarısında döner. Bu saat dilimi çelınca katılınca o çelınc için sabitlenir
+(`challenge_participants.timezone`): profil sonradan değişirse (yolculuktan sonra giriş, "Cihazdan
+güncelle") bu sadece yeni çelıncları etkiler, yoksa `PATCH /me` geç kalmış bir check-in'i zamanında
+gösterebilirdi. Uygulama da bir çelıncın "bugün"ünü o sabit saat diliminden sayar
+(`ChallengeSummary.myTimezone`, `useChallengeTimezone`): yeni saat dilimiyle saydığında Tokyo'ya
+uçan birinin "Geldim"i, evet/hayır günü ve odak dakikaları sunucuya "Gelecek bir gün" olarak gidip
+geri dönüyordu. Ana sayfa, gelen kutusu, sihirbaz ve haftalık özet hesabın saat dilimiyle kalır.
+
+Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
 
 * `clientTime` kayıt içindir, doğrulamada kullanılmaz. İstisnası sunucu yokken basılan check-in
   (aşağıda).
@@ -848,10 +855,11 @@ Check-in uyarısı eskiden her gün tekrarlayan tek bir alarmdı ve çelıncın 
 öterdi. Onu susturmak için kanalı kapatan "KOYDUM MU?" laflarını da susturmuş olurdu. Şimdi
 çelıncın kalan her günü için ayrı, tarihli bir alarm kurulur (en fazla 14 gün ileriye, toplamda en
 fazla 60 bildirim; iPhone en yakın 64'ünü tutup gerisini sessizce atar). Başlangıçtan önce ya da
-bitişten sonra alarm yoktur, gün anahtarları da sunucunun saydığı gibi hesabın saat diliminde
-sayılır. Sadece kabul edilmiş çelınclara kurulur, cevaplanmamış bir davet çalmaz. "Geldim"
-sunucuya varınca o günün alarmı silinir; listeyi ondan hemen önce okumuş bir yenileme de, uygulama
-açık kaldıkça, o günü geri kurmaz. Sıraya alınan check-in'in alarmı kalır: check-in henüz sayılmadı
+bitişten sonra alarm yoktur, gün anahtarları da sunucunun saydığı gibi o çelıncın saat diliminde
+(`myTimezone`, katılırken sabitlenen) sayılır. Sadece kabul edilmiş çelınclara kurulur,
+cevaplanmamış bir davet çalmaz. "Geldim" sunucuya varınca o günün alarmı silinir; listeyi ondan
+hemen önce okumuş bir yenileme de, uygulama açık kaldıkça, o günü geri kurmaz. Sıraya alınan
+check-in'in alarmı kalır: check-in henüz sayılmadı
 (ekran eskiden yine de "Saatinde geldin" diyordu, şimdi "Check-in gitmedi, sırada" der). Alarm
 çalınca uygulama öne gelir ve kuyruk boşalır; bir şey gönderen her boşaltmadan sonra alarmlar bir
 kez daha kurulur, yerine varan check-in kendi alarmını da götürür. Alarmlar her ön plana dönüşte, arka plan görevinde (uygulama kapalıyken

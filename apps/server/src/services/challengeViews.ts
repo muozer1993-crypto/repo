@@ -25,7 +25,7 @@ import type {
 import { countOf, type ChallengeRow, type Database, type DisputeRow, type EntryRow, type ParticipantRow, type TauntRow, type UserRow } from '../db/index.js';
 import { badRequest, forbidden, notFound } from '../errors.js';
 import { asVulgarityLevel, toChallenge, toDispute, toEntry, toFeedItem, toTaunt } from '../serialize.js';
-import { computeStandings, disputesOpenUntil, getChallengeRow } from './challenges.js';
+import { computeStandings, disputesOpenUntil, getChallengeRow, participantTimezone } from './challenges.js';
 import { disputeDeadlines, disputeThreshold, disputedEntries } from './entries.js';
 import { canonicalInstant } from './notifications.js';
 
@@ -334,11 +334,16 @@ export function pokeTargetList(
 
 export function buildSummary(db: Database, challenge: ChallengeRow, userId: string, now: Date = new Date()): ChallengeSummary {
   const participants: ParticipantView[] = computeStandings(db, challenge, now);
+  const membership = getParticipant(db, challenge.id, userId);
   return {
     challenge: toChallenge(challenge),
     participants,
     me: participants.find((p) => p.user.id === userId) ?? null,
     unreadTaunts: unreadTauntCount(db, userId, challenge.id),
+    // The zone entry validation reads this reader's days in. Their profile's
+    // follows the phone (login after travel, "Cihazdan güncelle"), and an app
+    // counting "today" there sends a day this çelınc refuses.
+    myTimezone: membership ? participantTimezone(membership, getUserRow(db, userId)) : null,
   };
 }
 

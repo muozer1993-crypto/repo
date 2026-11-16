@@ -22,12 +22,17 @@ import { refreshReminders } from '@/services/reminders';
 import { startForegroundStepTracking } from '@/services/steps';
 import { syncStepsNow } from '@/services/stepSync';
 import { syncScreenTimeNow } from '@/services/screenTimeSync';
-import { cachedChallengeTitle, invalidateForNotifications, invalidateFriendships } from '@/hooks/queries';
+import {
+  cachedChallengeTimezone,
+  cachedChallengeTitle,
+  invalidateForNotifications,
+  invalidateFriendships,
+} from '@/hooks/queries';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { applyPendingInvite } from '@/services/invite';
 import { deliverNewInbox } from '@/services/inboxNotifier';
-import { safeTodayKey } from '@/utils/datetime';
+import { resolveTimezone, safeTodayKey } from '@/utils/datetime';
 import { formatDayKeyFriendly } from '@/utils/format';
 
 /**
@@ -298,7 +303,8 @@ export function NotificationBridge() {
         if (first) {
           // the server refused these for good; say so once, then stop holding them
           const title = first.challengeTitle ?? cachedChallengeTitle(queryClient, first.challengeId);
-          const today = safeTodayKey(tz);
+          // "Bugün" as that çelınc counts it, the day the entry was written for
+          const today = safeTodayKey(resolveTimezone(cachedChallengeTimezone(queryClient, first.challengeId), tz));
           const day = formatDayKeyFriendly(first.body.dayKey, today, addDays(today, -1));
           const reason = first.failedReason ?? 'Sunucu kabul etmedi.';
           const more = failed.length > 1 ? `\n${failed.length - 1} giriş daha gitmedi.` : '';

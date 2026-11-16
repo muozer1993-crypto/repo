@@ -61,7 +61,7 @@ import { useProofPhoto } from '@/hooks/useProofPhoto';
 import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
-import { useTimezone } from '@/hooks/useTimezone';
+import { useChallengeTimezone } from '@/hooks/useTimezone';
 import { openAppSettings } from '@/services/deviceHealth';
 import { syncDeviceNow } from '@/services/deviceSyncNow';
 import { pendingForChallenge } from '@/services/offlineQueue';
@@ -190,12 +190,13 @@ export default function ChallengeDetailScreen() {
   const level = useLevel();
   const me = useAuth((s) => s.me);
   const meId = me?.id ?? null;
-  const tz = useTimezone();
   const serverUrl = useAuth((s) => s.serverUrl);
 
   const query = useChallenge(id);
   const pull = usePullRefresh(() => query.refetch());
   const detail = query.data;
+  // today, the window and the check-in poke in the zone the server judges this çelınc by
+  const tz = useChallengeTimezone(detail);
   const type = detail ? getChallengeType(detail.challenge.typeKey) : undefined;
 
   const api = useApi();

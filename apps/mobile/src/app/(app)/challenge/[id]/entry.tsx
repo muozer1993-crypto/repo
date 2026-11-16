@@ -17,7 +17,7 @@ import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import { useAddEntry, useChallenge } from '@/hooks/queries';
 import { useProofPhoto } from '@/hooks/useProofPhoto';
-import { useTimezone } from '@/hooks/useTimezone';
+import { useChallengeTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
@@ -50,7 +50,6 @@ export default function EntryModalScreen() {
   const params = useLocalSearchParams<{ id: string; day?: string; proof?: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
   const level = useLevel();
-  const tz = useTimezone();
   const serverUrl = useAuth((s) => s.serverUrl);
   const toast = useToast();
   const photo = useProofPhoto({ keepOffline: true });
@@ -58,6 +57,7 @@ export default function EntryModalScreen() {
   const query = useChallenge(id);
   const detail = query.data;
   const type: ChallengeType | undefined = detail ? getChallengeType(detail.challenge.typeKey) : undefined;
+  const tz = useChallengeTimezone(detail);
 
   const today = safeTodayKey(tz);
   const yesterday = addDays(today, -1);

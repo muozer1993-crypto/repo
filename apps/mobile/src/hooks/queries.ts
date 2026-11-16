@@ -439,6 +439,17 @@ export function cachedChallengeTitle(qc: QueryClient, id: string): string | unde
   return undefined;
 }
 
+/** A çelınc's `myTimezone` from the cache the same way, for a parked entry's day. */
+export function cachedChallengeTimezone(qc: QueryClient, id: string): string | undefined {
+  const detail = qc.getQueryData<ChallengeDetail>(qk.challenge(id));
+  if (detail?.myTimezone) return detail.myTimezone;
+  for (const [, list] of qc.getQueriesData<ChallengeSummary[]>({ queryKey: ['challenges'] })) {
+    const row = Array.isArray(list) ? list.find((summary) => summary.challenge.id === id) : undefined;
+    if (row?.myTimezone) return row.myTimezone;
+  }
+  return undefined;
+}
+
 export interface AddEntryResult {
   entry: Entry | null;
   standings: ParticipantView[] | null;

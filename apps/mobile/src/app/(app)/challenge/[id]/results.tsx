@@ -21,7 +21,7 @@ import { useChallenge, useRematch, useResults } from '@/hooks/queries';
 import { ApiError } from '@/lib/api';
 import { useInviteLink } from '@/hooks/useInviteLink';
 import { usePullRefresh } from '@/hooks/usePullRefresh';
-import { useTimezone } from '@/hooks/useTimezone';
+import { useChallengeTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { USE_NATIVE_DRIVER, useAnimatedValue } from '@/utils/animation';
@@ -225,7 +225,6 @@ export default function ResultsScreen() {
   const level = useLevel();
   const me = useAuth((s) => s.me);
   const meId = me?.id ?? null;
-  const tz = useTimezone();
   const toast = useToast();
   const { link: inviteLink } = useInviteLink();
 
@@ -233,6 +232,8 @@ export default function ResultsScreen() {
   // the detail query is the authority on "one taunt per loser"; it is usually
   // already cached because we arrive from the challenge screen
   const detail = useChallenge(id);
+  // the dates as the çelınc screen shows them: in the zone it was played in
+  const tz = useChallengeTimezone(detail.data);
   const rematch = useRematch(id);
   const pull = usePullRefresh(() => Promise.all([query.refetch(), detail.refetch()]));
 

@@ -32,7 +32,7 @@ import {
   watchAppState,
   type FocusSession,
 } from '@/services/focus';
-import { useTimezone } from '@/hooks/useTimezone';
+import { useChallengeTimezone } from '@/hooks/useTimezone';
 import { USE_NATIVE_DRIVER, useAnimatedValue } from '@/utils/animation';
 import { useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
@@ -53,10 +53,11 @@ export default function FocusScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
   const level = useLevel();
-  const tz = useTimezone();
 
   const query = useChallenge(id);
   const detail = query.data;
+  // the day a session is written to: the çelınc's, not wherever the phone is now
+  const tz = useChallengeTimezone(detail);
   const type = detail ? getChallengeType(detail.challenge.typeKey) : undefined;
   // an end that cannot be read caps nothing, rather than every session at NaN
   const parsedEnd = detail ? Date.parse(detail.challenge.endsAt) : NaN;

@@ -9,7 +9,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_PASSWORD, authed, makeApp, registerUser } from './helpers.js';
+import { buildSummary, requireChallengeRow } from '../src/services/challengeViews.js';
+import { DEFAULT_PASSWORD, authed, befriend, makeApp, registerUser } from './helpers.js';
 
 function isPublicUser(value: unknown): boolean {
   const user = value as Record<string, unknown> | null;
@@ -316,6 +317,54 @@ describe('API contract as the mobile client consumes it', () => {
       headers: auth(friend.token),
     });
     expect(accept.statusCode).toBe(200);
+
+    await harness.close();
+  });
+
+  it('names the zone each reader\'s days are counted in on a çelınc, which a profile change does not move', async () => {
+    const harness = await makeApp();
+    const { app } = harness;
+    const ali = await registerUser(app, 'ali');
+    const veli = await registerUser(app, 'veli');
+    const ayse = await registerUser(app, 'ayse', { timezone: 'America/New_York' });
+    befriend(app, ali.me.id, veli.me.id);
+    befriend(app, ali.me.id, ayse.me.id);
+    const now = harness.now().getTime();
+    const created = await authed(app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: {
+        typeKey: 'erken_yat',
+        deadlineTime: '23:00',
+        startsAt: new Date(now).toISOString(),
+        endsAt: new Date(now + 3 * 86_400_000).toISOString(),
+        participantIds: [veli.me.id, ayse.me.id],
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().id as string;
+    expect((await authed(app, veli.token)({ method: 'POST', url: `/challenges/${id}/accept` })).statusCode).toBe(200);
+
+    // Ali flies to Tokyo and the login moves his profile there; his çelınc stays where he joined it
+    const moved = await authed(app, ali.token)({ method: 'PATCH', url: '/me', payload: { timezone: 'Asia/Tokyo' } });
+    expect(moved.json().timezone).toBe('Asia/Tokyo');
+    const detail = await authed(app, ali.token)({ method: 'GET', url: `/challenges/${id}` });
+    expect(detail.json().myTimezone).toBe('Europe/Istanbul');
+    const list = await authed(app, ali.token)({ method: 'GET', url: '/challenges' });
+    expect(list.json().find((row: { challenge: { id: string } }) => row.challenge.id === id).myTimezone).toBe(
+      'Europe/Istanbul',
+    );
+
+    // an invite not answered yet has nothing pinned: it reads in the invitee's own zone
+    const invited = await authed(app, ayse.token)({ method: 'GET', url: `/challenges/${id}` });
+    expect(invited.json().myTimezone).toBe('America/New_York');
+
+    // Every route that hands out a summary 404s a reader with no row first, so
+    // only the builder itself can be asked for one.
+    const stranger = await registerUser(app, 'kemal', { timezone: 'Asia/Tokyo' });
+    expect((await authed(app, stranger.token)({ method: 'GET', url: `/challenges/${id}` })).statusCode).toBe(404);
+    const outside = buildSummary(harness.db, requireChallengeRow(harness.db, id), stranger.me.id, harness.now());
+    expect(outside.myTimezone).toBeNull();
 
     await harness.close();
   });

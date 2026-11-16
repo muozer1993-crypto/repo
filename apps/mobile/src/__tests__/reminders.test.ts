@@ -133,6 +133,8 @@ function checkinSummary(
     /** the çelınc's own status, and everybody's answer, the reader's included */
     challengeStatus?: 'pending' | 'active';
     players?: ('invited' | 'accepted')[];
+    /** the zone the server reads the reader's days in on this çelınc; an older server sends none */
+    myTimezone?: string;
   } = {}
 ): ChallengeSummary {
   return {
@@ -147,6 +149,7 @@ function checkinSummary(
     },
     ...(overrides.players ? { participants: overrides.players.map((status) => ({ status })) } : {}),
     me: { status: overrides.status ?? 'accepted', lastEntryAt: overrides.lastEntryAt ?? null },
+    ...(overrides.myTimezone ? { myTimezone: overrides.myTimezone } : {}),
   } as unknown as ChallengeSummary;
 }
 
@@ -266,6 +269,31 @@ describe('which days get a check-in poke', () => {
     const checkins = checkinRequests();
     expect(checkins[0]?.identifier).toBe('koydum-checkin-c1-2026-10-06');
     expect(checkins[0]?.trigger.date?.toISOString()).toBe('2026-10-05T20:40:00.000Z');
+  });
+
+  it('pokes in the zone the reader joined the çelınc in, not the one the account moved to since', async () => {
+    // joined in Istanbul, then a login in New York moved the profile: the
+    // server still wants the check-in by 23:00 Istanbul
+    const client = listOf(
+      checkinSummary({
+        deadlineTime: '23:00',
+        endsAt: new Date(NOW.getTime() + 2 * DAY_MS),
+        myTimezone: 'Europe/Istanbul',
+      })
+    );
+
+    await refreshReminders(client, 2, 'America/New_York');
+
+    const checkins = checkinRequests();
+    expect(checkins.map((request) => request.identifier)).toEqual([
+      'koydum-checkin-c1-2026-10-05',
+      'koydum-checkin-c1-2026-10-06',
+    ]);
+    // 22:30 in Istanbul, where 22:30 in New York would be 02:30Z the next day
+    expect(checkins.map((request) => request.trigger.date?.toISOString())).toEqual([
+      '2026-10-05T19:30:00.000Z',
+      '2026-10-06T19:30:00.000Z',
+    ]);
   });
 
   it('takes back only today\'s poke after a check-in, and a refresh does not put it back', async () => {

@@ -2043,6 +2043,127 @@ describe('a yes/no day', () => {
   });
 });
 
+describe('a çelınc joined in another zone than the account has now', () => {
+  // Joined in Istanbul, then a login in Tokyo moved the profile there. 01:30 on
+  // the 3rd in Tokyo is 19:30 on the 2nd in Istanbul, and the server reads the
+  // çelınc in Istanbul: the 3rd is "Gelecek bir gün" to it.
+  const NOW = new Date('2027-01-02T16:30:00.000Z').getTime();
+  const PINNED_TODAY = '2027-01-02';
+
+  /** The same çelınc of `challengeDetail`, as the server reads it for this reader. */
+  function pinned(challenge: Record<string, unknown>) {
+    const detail = challengeDetail();
+    return {
+      ...detail,
+      challenge: { ...detail.challenge, ...challenge },
+      myTimezone: 'Europe/Istanbul',
+    };
+  }
+
+  beforeEach(() => {
+    // only the clock is faked: the query and settle() still need real timers
+    jest.useFakeTimers({
+      now: NOW,
+      doNotFake: [
+        'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',
+        'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval',
+        'clearInterval', 'setTimeout', 'clearTimeout',
+      ],
+    });
+    ME.timezone = 'Asia/Tokyo';
+    mockReminders.skipToday.mockClear();
+  });
+
+  afterEach(async () => {
+    ME.timezone = 'Mars/Olympus';
+    jest.useRealTimers();
+    const { saveSession } = require('@/services/focus') as typeof import('@/services/focus');
+    await act(async () => {
+      await saveSession(null);
+    });
+  });
+
+  it('checks in for the day the çelınc is on, and takes back that day\'s poke', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () =>
+      pinned({ typeKey: 'erken_yat', metricType: 'checkin_deadline', unit: 'gün', deadlineTime: '23:00' })
+    );
+    api.addEntry = jest.fn(async () => ({ entry: { value: 1, late: false }, standings: [] }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    await act(async () => {
+      await findWith(tree, 'title', 'Geldim', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(api.addEntry).toHaveBeenCalledWith(
+      'c-1',
+      expect.objectContaining({ dayKey: PINNED_TODAY, source: 'checkin' })
+    );
+    expect(mockReminders.skipToday).toHaveBeenCalledWith('c-1', 'Europe/Istanbul');
+  });
+
+  it('answers "Bugün" of a yes/no çelınc for that day too', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () =>
+      pinned({ typeKey: 'sigara_yok', metricType: 'daily_boolean', unit: 'gün', title: 'Dumansız Günler' })
+    );
+    api.addEntry = jest.fn(async () => ({ entry: null, standings: [] }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const [todayYes] = tree.root.findAll(
+      (node) => node.props.title === 'İçmedim ✅' && typeof node.props.onPress === 'function'
+    );
+    await act(async () => {
+      await todayYes!.props.onPress();
+    });
+    await settle();
+
+    expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ dayKey: PINNED_TODAY, value: 1 }));
+  });
+
+  it('writes a typed count to that day from the entry modal', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => pinned({ typeKey: 'su_bardak', metricType: 'manual_count', unit: 'bardak' }));
+    api.addEntry = jest.fn(async () => ({ entry: null, standings: [] }));
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    act(() => {
+      findWith(tree, 'placeholder', '0', 'onChangeText').props.onChangeText('3');
+    });
+    await act(async () => {
+      await findWith(tree, 'title', 'Kaydet', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ dayKey: PINNED_TODAY, value: 3 }));
+  });
+
+  it('posts a finished focus session to that day', async () => {
+    const { createSession, saveSession, tick } = require('@/services/focus') as typeof import('@/services/focus');
+    // 45 minutes that ran out just now, waiting to be posted
+    const startedAt = NOW - 45 * 60_000;
+    await saveSession(tick(createSession('c-1', 45, 'session-1', startedAt), NOW));
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => pinned({ typeKey: 'odak_seansi', metricType: 'focus_minutes', unit: 'dk' }));
+    api.addEntry = jest.fn(async () => ({ entry: null, standings: [] }));
+    const FocusScreen = require('@/app/(app)/focus/[id]').default;
+    renderScreen(<FocusScreen />);
+    await settle();
+
+    expect(api.addEntry).toHaveBeenCalledWith(
+      'c-1',
+      expect.objectContaining({ dayKey: PINNED_TODAY, value: 45, source: 'focus', sessionId: 'session-1' })
+    );
+  });
+});
+
 describe('an itiraz on the feed', () => {
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
 

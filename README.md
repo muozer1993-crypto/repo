@@ -1236,7 +1236,11 @@ hesap açar.
 
 **Saat farkı.**
 Günler kullanıcının kendi saat dilimine göre hesaplanır. Yurt dışına çıkarsan Ayarlar
-ekranındaki "cihazdan güncelle" düğmesine bas.
+ekranındaki "Cihazdan güncelle" düğmesine bas (yeniden giriş yapınca uygulama bunu kendisi de yapar).
+Yeni saat dilimi sadece bundan sonra katıldığın çelınclarda geçerli. Devam eden bir çelınc, ona
+katıldığın andaki saat diliminde sayılmaya devam eder: İstanbul'da katıldığın "Erken Yatma Sözü"
+çelıncında Tokyo'dayken de İstanbul saatiyle 23:00'ten önce "Geldim" demen gerekir. Uygulama o
+çelıncın gününü ve hatırlatmasını buna göre hesaplar, senin bir şey yapmana gerek yok.
 
 **Uygulama "Saatler tutmuyor" ya da "Başlangıç sunucunun saatine göre geçmişte kalıyor" diyor.**
 Sunucu her şeye kendi saatiyle karar verir: çelıncın ne zaman başlayıp biteceğine, check-in'in
