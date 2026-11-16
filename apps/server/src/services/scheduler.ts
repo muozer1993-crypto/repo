@@ -229,6 +229,17 @@ export function startScheduler(
     });
   };
 
+  // The first request after a wake can come before the interval's next beat
+  // (the phones' queues send the moment the tunnel answers again), so it runs
+  // the beat the wake is owed first (the `onRequest` hook in `app.ts`).
+  // Between beats it does nothing. It cannot write a sleep twice or start a
+  // second pass: `run` moves the last beat to now, so whichever of the request
+  // and the interval comes second finds no gap, and `run` never starts a pass
+  // while one is still going.
+  app.schedulerBootAt.catchUp = (): void => {
+    if (app.now().getTime() - lastBeatMs > RESUME_GAP_MS) run();
+  };
+
   // the first copy right at start, not 30 seconds later
   run();
 
@@ -237,6 +248,8 @@ export function startScheduler(
 
   return async () => {
     clearInterval(timer);
+    // nor does a request during the shutdown start a pass on a closing database
+    app.schedulerBootAt.catchUp = undefined;
     // the pause the next start writes down begins now, not at the last beat:
     // up to 30 s in which this server was still here to hear a tap
     remember(() => writeLastBeat(db, app.now()));

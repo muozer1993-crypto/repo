@@ -8,7 +8,8 @@
  * çelınc once the phones have had their hour) with the right winner (or no winner
  * at all), telling every participant, handing out badges, throwing out a disputed
  * entry whose owner never answered (and holding the result for one who still may),
- * giving both an hour after the owner's PC wakes from a night asleep, and
+ * giving both an hour after the owner's PC wakes from a night asleep (also when
+ * a phone's request gets there before the interval's first beat after the wake), and
  * cancelling a pending challenge nobody joined, and sweeping the proof photos no
  * entry shows once a day. The last block is `startScheduler`'s stop, which a
  * clean shutdown awaits before closing the database.
@@ -18,7 +19,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_TIMEZONE, LIMITS, todayKey, type Challenge } from '@koydum/shared';
+import { DEFAULT_TIMEZONE, LIMITS, todayKey, type Challenge, type Entry } from '@koydum/shared';
 import { runSchedulerOnce } from '../src/services/challenges.js';
 import { challengeFeed, disputeUpheldCopy, entryReplacedCopy } from '../src/services/challengeViews.js';
 import { listByType } from '../src/services/notifications.js';
@@ -1081,8 +1082,12 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
       await new Promise((resolve) => setImmediate(resolve));
       expect(challengeRow(harness, challengeId).status).toBe('active');
 
-      // 08:05: Veli's phone finally sends the last day
+      // 08:05: Veli's phone finally sends the last day. Awake now, so the
+      // interval beats on: ten minutes without one would be another sleep,
+      // which the next request catches up on and the hour starts again
       at(harness, wokeAt, 5 * MINUTE);
+      await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
+      await new Promise((resolve) => setImmediate(resolve));
       await phoneSync(harness, veli, { '2026-01-06': 45_000 });
       const veliDay = harness.db
         .prepare('SELECT id FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ?')
@@ -1243,6 +1248,289 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
     at(harness, extended);
     expect(pass()).toMatchObject({ disputes: 1 });
     expect(entryStatus(harness, entryId)).toBe('rejected');
+  });
+
+  // The phones' queues send what they parked the moment the tunnel answers
+  // again, which can be before the interval's first beat after the wake: the
+  // first request has to find the sleep written down and the çelınclar moved on.
+
+  /** One beat of the interval, and the pass it starts run to its end. */
+  const nextBeat = async (): Promise<void> => {
+    await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+
+  /** Ali and Veli, both in a check-in çelınc of `typeKey` that runs until Friday night. */
+  async function checkinRace(h: TestApp, typeKey: string, deadlineTime: string, startsAt = iso(h)) {
+    const ali = await registerUser(h.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(h.app, 'veli', { displayName: 'Veli' });
+    befriend(h.app, ali.me.id, veli.me.id);
+    const created = await authed(h.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey, deadlineTime, startsAt, endsAt: '2026-01-09T20:59:59.999Z', participantIds: [veli.me.id] },
+    });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    expect((await authed(h.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    return { ali, veli, challengeId };
+  }
+
+  /** "Geldim" for `dayKey` as the phone's queue sends it: tapped at `tappedAt`. */
+  function geldim(h: TestApp, user: RegisteredUser, challengeId: string, dayKey: string, tappedAt: string) {
+    return authed(h.app, user.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey, value: 1, source: 'checkin', clientTime: tappedAt },
+    });
+  }
+
+  it('counts a "Geldim" from the night at its tap when it is the first thing to reach the server after it wakes', async () => {
+    harness = await makeApp({ now: NOW });
+    const { veli, challengeId } = await checkinRace(harness, 'erken_yat', '23:30');
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      // up at 23:00, and the lid shut right after that beat
+      at(harness, '2026-01-05T20:00:00.000Z');
+      const slept = iso(harness);
+      stop = startScheduler(harness.app, harness.db, harness.config, asleepWithClock(harness));
+      // 08:05: Veli's phone sends the 23:10 tap before the interval beats again
+      at(harness, '2026-01-06T05:05:00.000Z');
+      const woke = iso(harness);
+      const response = await geldim(harness, veli, challengeId, '2026-01-05', '2026-01-05T20:10:00.000Z');
+      expect(response.statusCode).toBe(201);
+      const { entry } = response.json<{ entry: Entry }>();
+      expect(entry).toMatchObject({ dayKey: '2026-01-05', value: 1 });
+      expect(entry.late).toBeUndefined();
+      expect(pauses(harness)).toEqual([{ started_at: slept, ended_at: woke }]);
+
+      // the beat that comes after has no sleep left to write down
+      at(harness, woke, SCHEDULER_INTERVAL_MS);
+      await nextBeat();
+      expect(pauses(harness)).toEqual([{ started_at: slept, ended_at: woke }]);
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
+  it('counts a morning tap from the sleep on time, not as a late 0 for good', async () => {
+    harness = await makeApp({ now: NOW });
+    const { veli, challengeId } = await checkinRace(harness, 'erken_kus', '07:00');
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      // asleep from 22:00 until 08:05; Veli got up at 06:30
+      at(harness, '2026-01-05T19:00:00.000Z');
+      stop = startScheduler(harness.app, harness.db, harness.config, asleepWithClock(harness));
+      at(harness, '2026-01-06T05:05:00.000Z');
+      const response = await geldim(harness, veli, challengeId, '2026-01-06', '2026-01-06T03:30:00.000Z');
+      expect(response.statusCode).toBe(201);
+      const { entry } = response.json<{ entry: Entry }>();
+      expect(entry.value).toBe(1);
+      expect(entry.late).toBeUndefined();
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
+  it('takes an itiraz sent right after it wakes, in the hour that starts at the wake', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+    at(harness, '2026-01-06T19:00:00.000Z');
+    await phoneSync(harness, ali, { '2026-01-06': 10_000 });
+    await phoneSync(harness, veli, { '2026-01-06': 45_000 });
+    const veliDay = harness.db
+      .prepare('SELECT id FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ?')
+      .get(challengeId, veli.me.id, '2026-01-06') as { id: string };
+
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      // running at 23:00, asleep through the end until 08:00
+      at(harness, MIDNIGHT_END, -HOUR);
+      stop = startScheduler(harness.app, harness.db, harness.config, asleepWithClock(harness));
+      at(harness, MIDNIGHT_END, 8 * HOUR);
+      const woke = iso(harness);
+      // Ali's itiraz is the first request, ahead of the interval
+      await dispute(harness, ali, challengeId, veliDay.id);
+      expect(entryStatus(harness, veliDay.id)).toBe('disputed');
+      const detail = await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+      expect(detail.json<{ disputesCloseAt: string }>().disputesCloseAt).toBe(
+        new Date(Date.parse(woke) + LIMITS.DEVICE_SETTLE_MS).toISOString(),
+      );
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts a morning çelınc whose start it slept through before the first "Geldim" lands', async () => {
+    harness = await makeApp({ now: NOW });
+    // the wizard's "Yarın 04:00", and Veli said yes in the evening
+    const { veli, challengeId } = await checkinRace(harness, 'erken_kus', '07:00', '2026-01-06T01:00:00.000Z');
+    expect(challengeRow(harness, challengeId).status).toBe('pending');
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      at(harness, '2026-01-05T20:00:00.000Z'); // 23:00
+      stop = startScheduler(harness.app, harness.db, harness.config, asleepWithClock(harness));
+      // the start's pass is long over by the time the lid comes down
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(challengeRow(harness, challengeId).status).toBe('pending');
+      // 08:00: tapped at 06:30, while the PC slept
+      at(harness, '2026-01-06T05:00:00.000Z');
+      const response = await geldim(harness, veli, challengeId, '2026-01-06', '2026-01-06T03:30:00.000Z');
+      expect(response.statusCode).toBe(201);
+      expect(response.json<{ entry: Entry }>().entry.value).toBe(1);
+      expect(challengeRow(harness, challengeId).status).toBe('active');
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts it for that "Geldim" even while the pass from before the sleep still waits on Expo', async () => {
+    harness = await makeApp({ now: NOW });
+    const { veli, challengeId } = await checkinRace(harness, 'erken_kus', '07:00', '2026-01-06T01:00:00.000Z');
+    const held = heldPush();
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      at(harness, '2026-01-05T20:00:00.000Z');
+      stop = startScheduler(harness.app, harness.db, harness.config, {
+        push: held.push,
+        uptimeMs: () => harness!.now().getTime(),
+      });
+      // the flush went out at 23:00 and the lid came down on it
+      expect(held.flushing()).toBe(true);
+      at(harness, '2026-01-06T05:00:00.000Z');
+      const response = await geldim(harness, veli, challengeId, '2026-01-06', '2026-01-06T03:30:00.000Z');
+      expect(response.statusCode).toBe(201);
+      expect(response.json<{ entry: Entry }>().entry.value).toBe(1);
+      expect(pauses(harness)).toHaveLength(1);
+    } finally {
+      held.release();
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
+  it('takes a clock put forward for what it is on the first request too', async () => {
+    harness = await makeApp({ now: NOW });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const warn = vi.spyOn(harness.app.log, 'warn');
+    let uptime = 1_000_000;
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      stop = startScheduler(harness.app, harness.db, harness.config, { push: quietPush, uptimeMs: () => uptime });
+      // w32tm /resync puts it three hours forward, and a phone asks something ten seconds later
+      at(harness, NOW, 3 * HOUR);
+      uptime += 10_000;
+      expect((await harness.app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(200);
+      expect(pauses(harness)).toEqual([]);
+      expect(warn).toHaveBeenCalledWith({ minutes: 180 }, 'clock moved forward');
+      expect(harness.app.schedulerBootAt.at?.toISOString()).toBe(iso(harness));
+
+      at(harness, NOW, 3 * HOUR + SCHEDULER_INTERVAL_MS);
+      uptime += SCHEDULER_INTERVAL_MS;
+      await nextBeat();
+      expect(pauses(harness)).toEqual([]);
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
+  it('runs one pass for a wake, whatever arrives first, and never two at once', async () => {
+    harness = await makeApp({ now: NOW });
+    let flushes = 0;
+    let holdNext = false;
+    let release: () => void = () => {};
+    const push: PushSender = {
+      flush: () => {
+        flushes += 1;
+        if (!holdNext) return Promise.resolve({ sent: 0, failed: 0 });
+        holdNext = false;
+        return new Promise<FlushResult>((resolve) => {
+          release = () => resolve({ sent: 0, failed: 0 });
+        });
+      },
+    };
+    const health = () => harness!.app.inject({ method: 'GET', url: '/health' });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const warn = vi.spyOn(harness.app.log, 'warn');
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      stop = startScheduler(harness.app, harness.db, harness.config, { push, uptimeMs: () => harness!.now().getTime() });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(flushes).toBe(1);
+
+      // awake: a request between two beats costs the scheduler nothing
+      at(harness, NOW, 4 * MINUTE);
+      expect((await health()).statusCode).toBe(200);
+      expect(readLastBeat(harness.db)?.toISOString()).toBe(NOW);
+      expect(flushes).toBe(1);
+
+      // asleep until the next morning; three phones knock at once, and the
+      // pass the first one starts hangs on Expo
+      holdNext = true;
+      at(harness, NOW, 20 * HOUR);
+      const woke = iso(harness);
+      const answers = await Promise.all([health(), health(), health()]);
+      expect(answers.map((answer) => answer.statusCode)).toEqual([200, 200, 200]);
+      expect(flushes).toBe(2);
+      // from the last beat, not from the request that came after it
+      expect(pauses(harness)).toEqual([{ started_at: NOW, ended_at: woke }]);
+
+      // the interval's beats find that pass still running and leave it alone
+      for (let beats = 1; beats <= 3; beats += 1) {
+        at(harness, woke, beats * SCHEDULER_INTERVAL_MS);
+        await nextBeat();
+        expect((await health()).statusCode).toBe(200);
+      }
+      expect(flushes).toBe(2);
+
+      release();
+      at(harness, woke, 4 * SCHEDULER_INTERVAL_MS);
+      await new Promise((resolve) => setImmediate(resolve));
+      await nextBeat();
+      expect(flushes).toBe(3);
+      expect(pauses(harness)).toHaveLength(1);
+      expect(warn.mock.calls.filter((call) => call[1] === 'scheduler resumed after a pause')).toHaveLength(1);
+    } finally {
+      release();
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
+  it('answers the request when catching up fails', async () => {
+    harness = await makeApp({ now: NOW });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const error = vi.spyOn(harness.app.log, 'error');
+    let broken = false;
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      stop = startScheduler(harness.app, harness.db, harness.config, {
+        push: quietPush,
+        uptimeMs: () => {
+          if (broken) throw new Error('uptime unreadable');
+          return harness!.now().getTime();
+        },
+      });
+      at(harness, NOW, 2 * HOUR);
+      broken = true;
+      expect((await harness.app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(200);
+      expect(error).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'scheduler catch-up failed');
+    } finally {
+      broken = false;
+      await stop?.();
+      vi.useRealTimers();
+    }
   });
 });
 

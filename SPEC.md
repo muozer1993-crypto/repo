@@ -324,7 +324,10 @@ src/services/scheduler.ts   setInterval 30s: activate due, finalize ended, cance
                             more than RESUME_GAP_MS (5 min) after the last one moves bootAt to now and, when the
                             machine's uptime (os.uptime: runs through a sleep, never jumps with the clock) moved as
                             much, writes the gap to server_pauses (services/pauses.ts); a gap the uptime did not see
-                            is a clock put forward (warn 'clock moved forward', no pause). A start writes the whole
+                            is a clock put forward (warn 'clock moved forward', no pause). The first request more
+                            than RESUME_GAP_MS after the last beat runs that beat itself before it is handled (an
+                            onRequest hook in app.ts calls app.schedulerBootAt.catchUp; between beats one
+                            subtraction, never a second pass while one runs). A start writes the whole
                             time since the last beat a stopped process left in server_state, however short, and
                             stop() writes a last beat itself; the first pass of each day sweeps the proof photos no
                             entry shows (services/photos.ts)
@@ -461,7 +464,10 @@ rather than rejected, so a client that always sets `Content-Type: application/js
 
 ### 2.3 Entry validation (`services/entries.ts`)
 
-Common: user must be `accepted` participant; challenge `active`; from `endsAt` on this endpoint takes
+Common: user must be `accepted` participant; challenge `active` (the route first starts every `pending` çelınc
+whose start has passed and that has two players, as the scheduler's step 1 would: after a sleep the pass from
+before it can still hang on a push flush, and a parked "Geldim" for a "Yarın 04:00" çelınc must not get
+`challenge_not_active`); from `endsAt` on this endpoint takes
 nothing, a device source included (400 `challenge_ended`; a replayed `sessionId` and a day already checked in
 are answered before the state and the end are looked at, after the finish too, since they were written in time): a phone-counted çelınc's last syncs, while it waits for them (2.4), arrive through
 `POST /me/steps` and `/me/screen-time` (the device fan-out below), never here; `dayKey` must be in
@@ -538,7 +544,11 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    asleep at the end is the same as off at the end. Either way the gap goes to `server_pauses` (a start reads the
    last beat a stopped process, or its stop(), left in `server_state`, and writes any gap; a running one writes a gap
    only when the machine's uptime moved as much, so a clock put forward is no pause), where a check-in tapped
-   meanwhile is judged (2.3). While
+   meanwhile is judged (2.3). The phones' queues send what they parked the moment the server answers again, often
+   before the interval's next beat, so a request that comes more than `RESUME_GAP_MS` after the last beat runs that
+   beat first (`catchUp`, from an `onRequest` hook): the pause is written, `bootAt` moved and the pass run (a due
+   `pending` çelınc started) before it is handled. Whichever of the request and the interval comes second finds no
+   gap, and a pass still running is never joined by another. While
    settling, device syncs still fan out into the last day and `POST /challenges/:id/entries` gets `challenge_ended` (2.3); the
    app shows "Sonuç birazdan" instead of the countdown, hides the entry buttons and sends its own count once.
    Every other type finalizes right at `ends_at` — unless, whatever the type, one of its entries is inside a

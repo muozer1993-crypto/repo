@@ -85,6 +85,17 @@ Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
   sunucu o saatte ayaktaydı ve basılsaydı duyardı. Bedeli: kayıtlı bir kesintinin içinde saatini
   geri almış bir telefon o aralığın herhangi bir dakikasını iddia edebilir; dışında hiçbir şey
   kazanmaz.
+* Telefonların kuyruğu bekleyenleri tünel yeniden cevap verdiği an gönderir, bu da çoğu zaman
+  zamanlayıcının uyanıştan sonraki ilk vuruşundan öncedir. 23:10'da basılıp 08:05'te ilk gelen
+  "Geldim" henüz yazılmamış bir uykuya çarpıp "sadece bugün" diye reddediliyor, uykuda başlaması
+  gereken çelınc "aktif değil" diyor, uykuda biten bir adım çelıncında itiraz "Süre bitti"
+  alıyordu. Bu yüzden son vuruştan beş dakikadan uzun süre sonra gelen istek o vuruşu önce kendisi
+  çalıştırır (`app.ts`'teki `onRequest` kancası `catchUp`'ı çağırır): kesinti yazılır, `bootAt`
+  taşınır, tur döner, istek ondan sonra cevaplanır. Vuruşlar arasında bu tek bir çıkarmadır;
+  istekle zamanlayıcıdan hangisi ikinci gelirse boşluk bulmaz, süren bir turun üstüne ikincisi de
+  başlamaz. Uykudan önceki tur bir push gönderiminde asılı kaldıysa uyanışın vuruşu tur başlatmaz;
+  "Yarın 04:00" çelıncına gelen "Geldim" yine "aktif değil" almasın diye giriş rotası da başlama
+  vakti gelmiş çelıncları başlatır (`activateDueChallenges`).
 * Sunucu çelınc bittikten sonra odak dakikası almaz. Odak ekranı seansı kalan süreye sığdırır,
   molalarla uzayan seansı da bitişe 30 saniye kala kapatıp tam dakikalarını gönderir.
 * Geçmiş güne giriş penceresi (manuel 2 gün, adım 7 gün) sunucunun "şimdi"sine göredir.

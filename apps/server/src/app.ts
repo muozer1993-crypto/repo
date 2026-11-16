@@ -45,10 +45,12 @@ declare module 'fastify' {
     /**
      * When the scheduler started, or last woke from sleep (`startScheduler`
      * keeps `at` up to date): the phones' hour after an end runs from here
-     * too, and an itiraz may be filed in it (`disputesOpenUntil`). Unset while
-     * no scheduler runs (tests, `/dev/advance`).
+     * too, and an itiraz may be filed in it (`disputesOpenUntil`). `catchUp`
+     * runs the beat a wake is still owed before a request is handled (the
+     * `onRequest` hook below). Both unset while no scheduler runs (tests,
+     * `/dev/advance`).
      */
-    schedulerBootAt: { at?: Date };
+    schedulerBootAt: { at?: Date; catchUp?: () => void };
   }
 }
 
@@ -105,7 +107,21 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
   app.decorate('db', db);
   app.decorate('config', config);
   app.decorate('now', now);
-  app.decorate('schedulerBootAt', {} as { at?: Date });
+  app.decorate('schedulerBootAt', {} as { at?: Date; catchUp?: () => void });
+
+  // A PC that wakes keeps this process, and the phones send what they parked
+  // the moment the tunnel answers again, which can be before the scheduler's
+  // next beat: a "Geldim" from the night would find no sleep written down, a
+  // çelınc that started meanwhile still pending, an itiraz the hour already
+  // gone. The beat the wake is owed runs first; between beats this is one
+  // subtraction. Nothing it does may cost the friend their request.
+  app.addHook('onRequest', async () => {
+    try {
+      app.schedulerBootAt.catchUp?.();
+    } catch (err) {
+      app.log.error({ err }, 'scheduler catch-up failed');
+    }
+  });
 
   app.setErrorHandler(errorHandler);
   app.setNotFoundHandler(notFoundHandler);

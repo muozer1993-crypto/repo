@@ -23,7 +23,13 @@ import {
 } from '@koydum/shared';
 import { badRequest, forbidden, notFound, parseBody } from '../errors.js';
 import { countOf, nowIso, type ChallengeRow, type EntryRow, type UserRow } from '../db/index.js';
-import { acceptedParticipants, computeStandings, disputesOpenUntil, typeForChallenge } from '../services/challenges.js';
+import {
+  acceptedParticipants,
+  activateDueChallenges,
+  computeStandings,
+  disputesOpenUntil,
+  typeForChallenge,
+} from '../services/challenges.js';
 import { notify } from '../services/notifications.js';
 import { awardBadges } from '../services/stats.js';
 import {
@@ -140,6 +146,12 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
     const me = request.user;
     const { id } = request.params as IdParams;
     const body = parseBody(EntryBodySchema, request.body);
+    // A çelınc whose start has passed is started here too, not only by the
+    // scheduler: after a night asleep the pass that went out before the lid
+    // came down may still hang on a push flush, the wake's beat then runs none,
+    // and a "Geldim" parked for a "Yarın 04:00" çelınc got "aktif değil". An
+    // indexed lookup that finds nothing almost every time.
+    activateDueChallenges(db, app.now());
     const challenge = requireChallengeRow(db, id);
     // A stranger must not be able to tell an existing challenge from a made-up id,
     // so membership answers 404 here; `validateAndUpsertEntry` keeps the 403
