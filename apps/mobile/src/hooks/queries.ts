@@ -436,9 +436,13 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
   return useMutation<AddEntryResult, Error, AddEntryVariables>({
     mutationFn: async ({ proofLocalUri, ...body }) => {
       const key = `${id}:${body.dayKey}:${body.source}:${body.sessionId ?? ''}${append ? `:${body.clientTime}` : ''}`;
-      // a page from a Wi-Fi portal or a proxy is not our server saying no (lib/api.ts)
+      // a page from a Wi-Fi portal or a proxy is not our server saying no (lib/api.ts).
+      // A 507 is: the photo's disk is nearly full, the connection is fine, and the
+      // form shows its message (remove the photo, or tell the owner) rather than
+      // "Sıraya alındı · bağlantı gelince gönderilecek".
       const parkable = (error: unknown) =>
-        error instanceof ApiError && (error.isNetwork || error.status >= 500 || error.code === 'not_koydum');
+        error instanceof ApiError &&
+        (error.isNetwork || (error.status >= 500 && error.status !== 507) || error.code === 'not_koydum');
       let send = body;
       if (proofLocalUri && !body.proofUrl) {
         try {

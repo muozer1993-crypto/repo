@@ -52,6 +52,12 @@ export interface PendingEntry {
    * `SLOW_PHOTO_TRIES` the entry goes without it.
    */
   photoSlowTries?: number;
+  /**
+   * When the server first held this entry's photo back for a while (its disk
+   * nearly full, an upload cap spent). No try is spent on it; `PHOTO_HOLD_MS`
+   * on, the entry goes without the photo.
+   */
+  photoHeldSince?: string;
   queuedAt: string;
   attempts: number;
   /** set once the server refused it for good, so we stop retrying */
@@ -67,6 +73,15 @@ const MAX_ATTEMPTS = 8;
  * entry running out of days while it waits for its photo.
  */
 const SLOW_PHOTO_TRIES = 3;
+/**
+ * How long a photo the server holds back (507 `disk_full`, 429 `upload_limit`)
+ * keeps its entry waiting. An hour outlasts the hourly caps, whose wait is the
+ * usual one; a full disk waits for the owner and the day's budget up to a day,
+ * and the entry's days would run out first. Time, not flushes: every foreground
+ * and every saved entry flushes, eight of them came in minutes, and spending a
+ * try on each threw the entry away while the server still had room for it.
+ */
+const PHOTO_HOLD_MS = 60 * 60 * 1000;
 
 /** Who is logged in on this phone, from storage: the background task has no store. */
 export async function currentOwnerId(): Promise<string | null> {
@@ -203,8 +218,10 @@ type PhotoOutcome =
   | { kind: 'offline' }
   /** the upload ran out of time but the server answers: this photo is too heavy for the connection, the rest may go */
   | { kind: 'slow' }
-  /** the server is struggling or rate-limiting: count an attempt */
+  /** the server is struggling: count an attempt */
   | { kind: 'later' }
+  /** the server will take no photo for a while (a nearly full disk, an upload cap): wait, spend no try */
+  | { kind: 'held'; reason: string }
   /** it will never go up; `reason` is told to the user if the entry is refused without it */
   | { kind: 'lost'; reason: string }
   /** the session ended (a password change elsewhere): stop, keep everything for the next sign-in */
@@ -220,8 +237,10 @@ async function sendQueuedPhoto(client: ApiClient, uri: string): Promise<PhotoOut
       if (!(error instanceof ApiError)) return { kind: 'later' };
       // before any status: a portal's 404 or a proxy's 401 is not about the photo
       if (serverAbsent(error)) return { kind: 'offline' };
-      // 429 upload_limit says "in N minutes", not "never"
-      if (error.status === 429 || error.status >= 500) return { kind: 'later' };
+      // 429 upload_limit says "in N minutes", not "never", and 507 disk_full
+      // lasts until the owner clears the disk: neither is the entry's fault
+      if (error.status === 429 || error.status === 507) return { kind: 'held', reason: error.message };
+      if (error.status >= 500) return { kind: 'later' };
       // the file's own problems: too big, not an image, empty
       if (error.status === 400 || error.status === 413) return { kind: 'lost', reason: error.message };
       if (error.status === 401) return { kind: 'signedOut' };
@@ -270,9 +289,9 @@ export interface FlushResult {
  * the user can be told. A network error stops the flush and leaves the rest.
  *
  * An entry parked with a photo still on the phone uploads it first. A photo
- * that can never go up (the file is gone, the server refused it, or it ran out
- * of time on a working connection `SLOW_PHOTO_TRIES` flushes running) is
- * dropped from the entry, which then goes on its own: an optional photo costs
+ * that can never go up (the file is gone, the server refused it, it ran out
+ * of time on a working connection `SLOW_PHOTO_TRIES` flushes running, or the
+ * server held photos back for `PHOTO_HOLD_MS`) is dropped from the entry, which then goes on its own: an optional photo costs
  * nothing more, and a çelınc that requires one refuses the entry, whose reason
  * then says what happened to the photo. A photo still getting its tries does
  * not hold up the entries behind it.
@@ -337,6 +356,17 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
       if (photo.kind === 'later') {
         retryLater(item);
         continue;
+      }
+      if (photo.kind === 'held') {
+        const now = Date.now();
+        const since = item.photoHeldSince ?? new Date(now).toISOString();
+        if (now - Date.parse(since) < PHOTO_HOLD_MS) {
+          // not offline either: the entries behind this one may carry no photo
+          touched.set(item.id, { ...item, photoHeldSince: since });
+          continue;
+        }
+        // held back for an hour: the entry goes without it, and says why if refused
+        photoLost = photo.reason;
       }
       if (photo.kind === 'slow') {
         const photoSlowTries = (item.photoSlowTries ?? 0) + 1;

@@ -918,7 +918,9 @@ telefonda tuttuğu geçici bir kopyadır; telefon yer açmak için onu silerse g
 fotoğraf zorunluysa düşer ve uygulama "Kanıt fotoğrafı telefonda bulunamadı" der. Bağlantı var
 ama çok yavaşsa fotoğrafa iki dakika verilir; o da yetmezse arkadaki girişler onu beklemez, üç
 denemede gidemeyen fotoğraf bırakılır ve giriş onsuz gider (fotoğraf zorunluysa uygulama "Kanıt
-fotoğrafı gitmedi, bağlantı çok yavaştı" der). Bağlantı
+fotoğrafı gitmedi, bağlantı çok yavaştı" der). Sunucunun diski dolmak üzereyse ya da saatlik
+fotoğraf sınırı dolduysa fotoğraf girişiyle bir saat bekler, sonra giriş onsuz gider; fotoğraf
+zorunluysa uygulama sunucunun söylediğini iletir. Bağlantı
 koptuğunda açık olan çelınc ekranı kapanmaz, son bilinen hali gösterir; yazdığın sayı silinmez.
 Check-in çelınclarının son hali telefonda da saklanır: telefon uygulamayı gece kapatmış olsa bile
 sabah hatırlatmaya dokununca, bilgisayar uyuyor ya da telefon çekmiyorsa ekran o hali gösterir ve

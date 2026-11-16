@@ -1770,6 +1770,39 @@ describe('a proof photo with no connection', () => {
     expect(JSON.stringify((api.addEntry as jest.Mock).mock.calls[0])).not.toContain('file://');
     expect(await readQueue()).toEqual([]);
   });
+
+  it("says the server's disk is full when it answers by Kaydet, instead of parking the entry", async () => {
+    const diskFull = 'Sunucunun diski dolmak üzere, şimdilik fotoğraf alınmıyor. Sunucuyu açan kankana haber ver.';
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => runDetail());
+    api.uploadPhoto = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    api.addEntry = jest.fn(async () => ({ entry: {}, standings: [] }));
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    act(() => {
+      findWith(tree, 'placeholder', '0', 'onChangeText').props.onChangeText('5');
+    });
+    await act(async () => {
+      await findWith(tree, 'title', 'Galeri', 'onPress').props.onPress();
+    });
+    api.uploadPhoto = jest.fn(async () => {
+      throw new ApiError('disk_full', diskFull, 507);
+    });
+    await act(async () => {
+      await findWith(tree, 'title', 'Kaydet', 'onPress').props.onPress();
+    });
+    await settle();
+
+    // the connection is fine: no "bağlantı gelince", and nothing waits in the queue
+    expect(rendered(tree)).toContain(diskFull);
+    expect(rendered(tree)).not.toContain('Sıraya alındı');
+    expect(api.addEntry).not.toHaveBeenCalled();
+    expect(await readQueue()).toEqual([]);
+  });
 });
 
 describe('a proof photo over the upload limit', () => {

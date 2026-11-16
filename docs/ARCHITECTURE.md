@@ -703,10 +703,14 @@ gitmiyor, iki gün sonra "süre bitti" diye düşüyordu. Şimdi fotoğraf yükl
 sorar: cevap yoksa bağlantı yoktur ve tur durur; cevap varsa bağlantı bu fotoğrafa yetmiyordur,
 giriş fotoğrafıyla bekler ama arkasındakiler gider (`photoSlowTries`). Üçüncü yavaş turda fotoğraf
 bırakılır, giriş onsuz gider; fotoğraf zorunluysa kullanıcı "Kanıt fotoğrafı gitmedi, bağlantı çok
-yavaştı." diye duyar. 5 MB'tan büyük bir fotoğraf iPhone'da ve tarayıcıda yüklenmeye hiç başlamaz,
-"Fotoğraf çok büyük" denir. Android'de fotoğraf seçicinin bildirdiği boyut, kendi sıkıştırmasından
-önceki asıl dosyanınkidir: 7 MB görünen bir kamera fotoğrafı sıkıştırılıp 2 MB gider. Orada kararı
-sunucunun 413'ü verir.
+yavaştı." diye duyar. Sunucu fotoğrafı bir süre almıyorsa (507 `disk_full`, 429 `upload_limit`)
+giriş fotoğrafıyla bekler, deneme harcanmaz, arkasındakiler gider; ilk böyle cevaptan bir saat
+sonra (`photoHeldSince`, `PHOTO_HOLD_MS`) fotoğraf bırakılır ve giriş onsuz gider, zorunluysa ret
+sunucunun mesajıyla başlar. Sayaç tur değil zamandır: her öne gelişte ve her kaydedilen girişte
+tur döner, sekiz deneme dakikalar içinde biter. 5 MB'tan büyük bir fotoğraf iPhone'da ve
+tarayıcıda yüklenmeye hiç başlamaz, "Fotoğraf çok büyük" denir. Android'de fotoğraf seçicinin
+bildirdiği boyut, kendi sıkıştırmasından önceki asıl dosyanınkidir: 7 MB görünen bir kamera
+fotoğrafı sıkıştırılıp 2 MB gider. Orada kararı sunucunun 413'ü verir.
 
 Ekranlar da bağlantı gidince ellerindekini bırakmaz. TanStack Query başarısız bir arka plan
 yenilemesinden sonra `isError` der ama son veriyi tutar; çelınc ekranı, giriş ekranı ve odak
@@ -1189,8 +1193,12 @@ süreçtedir, yeniden başlatma onları sıfırlar.
 
 Sunucuyu açan durumu pencerede okur: dolmak üzere olan disk için de dolan gün için de saatte bir
 `warn` satırı. Bir 507 ayrıca "istek patladı" diye yazılmaz, yoksa reddedilen her fotoğraf bir
-satır olurdu. Uygulamada değişiklik gerekmedi: 507 bizim zarfımızla gelir, `useProofPhoto`
-mesajı olduğu gibi gösterir, çevrimdışı kuyruk onu her 5xx gibi sonra yine dener.
+satır olurdu. 507 bizim zarfımızla gelir, `useProofPhoto` mesajı olduğu gibi gösterir. Kuyruk
+onu önce her 5xx gibi sonra yine deniyor, her turda sekiz denemeden birini harcıyordu: disk dolu
+kaldıkça bodrumda sıraya giren girişler fotoğrafıyla birlikte "çok denedim" diye düşüyordu. Artık
+507 ve 429 deneme saymaz, fotoğraf bir saat bekler, sonra giriş onsuz gider (bkz. Bağlantı
+yokken). Telefonda kalan bir fotoğrafla bağlantı varken **Kaydet**'e basılırsa da 507 sıraya
+girmez: giriş formu disk mesajını gösterir, fotoğraf kaldırılıp giriş hemen gönderilebilir.
 
 Arkadaşı olmayanı fotoğraftan men etmek işe yaramazdı: yeni bir hesap iletilmiş bir davet
 bağlantısıyla hemen arkadaş olur. Fotoğrafın içine de bakılmaz: başı JPG, PNG ya da WEBP gibi

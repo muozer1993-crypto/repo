@@ -254,7 +254,90 @@ describe('an entry parked with a photo still on the phone', () => {
     expect(result).toEqual({ sent: 0, dropped: 0, remaining: 1 });
     const [item] = await readQueue();
     expect(item?.proofLocalUri).toBe(PHOTO);
+    // a wait the server named, not a try toward giving up
+    expect(item?.attempts).toBe(0);
+    expect(item?.photoHeldSince).toEqual(expect.any(String));
+  });
+});
+
+describe('a photo the server holds back for a while', () => {
+  const PHOTO = 'file:///data/user/0/com.koydum.app/cache/ImagePicker/abc.jpeg';
+  const DISK_FULL = 'Sunucunun diski dolmak üzere, şimdilik fotoğraf alınmıyor. Sunucuyu açan kankana haber ver.';
+  const diskFull = () => new ApiError('disk_full', DISK_FULL, 507);
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  /** As if the server had first held the photo back `ms` ago. */
+  async function heldFor(ms: number): Promise<void> {
+    const since = new Date(Date.now() - ms).toISOString();
+    await setJson(
+      'koydum.pendingEntries',
+      (await readQueue()).map((item) => ({ ...item, photoHeldSince: since }))
+    );
+  }
+
+  it('keeps the entry and its photo however many flushes run on a nearly full disk', async () => {
+    await enqueueEntry('cA', body('2026-09-08', 30), 'a', PHOTO);
+    await enqueueEntry('cB', body('2026-09-08', 7), 'b');
+    const uploadPhoto = jest.fn().mockRejectedValue(diskFull());
+    const addEntry = jest.fn().mockResolvedValue({});
+    const client = fakeClient(addEntry, { uploadPhoto });
+
+    // every foreground, every saved entry and the background task flush
+    for (let run = 0; run < 12; run += 1) await flushQueue(client);
+
+    // the entry without a photo behind it went at once
+    expect(addEntry).toHaveBeenCalledTimes(1);
+    expect(addEntry).toHaveBeenCalledWith('cB', body('2026-09-08', 7));
+    const [item] = await readQueue();
+    expect(item).toMatchObject({ id: 'a', proofLocalUri: PHOTO, attempts: 0 });
+    expect(item?.failedReason).toBeUndefined();
+  });
+
+  it('sends the entry without it after an hour where the photo is optional', async () => {
+    await enqueueEntry('cA', body('2026-09-08', 30), 'a', PHOTO);
+    const uploadPhoto = jest.fn().mockRejectedValue(diskFull());
+    const addEntry = jest.fn().mockResolvedValue({});
+    const client = fakeClient(addEntry, { uploadPhoto });
+
+    await flushQueue(client);
+    await heldFor(60 * 60 * 1000);
+    const result = await flushQueue(client);
+
+    expect(addEntry).toHaveBeenCalledWith('cA', body('2026-09-08', 30));
+    expect(result).toEqual({ sent: 1, dropped: 0, remaining: 0 });
+    expect(await readQueue()).toEqual([]);
+  });
+
+  it("says it was the server's disk when a çelınc that requires a photo refuses the entry without it", async () => {
+    await enqueueEntry('cA', body('2026-09-08', 30), 'a', PHOTO);
+    const uploadPhoto = jest.fn().mockRejectedValue(diskFull());
+    const addEntry = jest
+      .fn()
+      .mockRejectedValue(new ApiError('proof_required', 'Bu çelıncta kanıt fotoğrafı zorunlu.', 400));
+    const client = fakeClient(addEntry, { uploadPhoto });
+
+    await flushQueue(client);
+    await heldFor(61 * 60 * 1000);
+    const result = await flushQueue(client);
+
+    expect(result).toEqual({ sent: 0, dropped: 1, remaining: 0 });
+    const [item] = await readQueue();
+    expect(item?.failedReason).toBe(`${DISK_FULL} Bu çelıncta kanıt fotoğrafı zorunlu.`);
+  });
+
+  it('still counts a try for a server that fails some other way', async () => {
+    await enqueueEntry('cA', body('2026-09-08', 30), 'a', PHOTO);
+    const uploadPhoto = jest
+      .fn()
+      .mockRejectedValue(new ApiError('internal', 'Sunucuda bir şeyler ters gitti.', 500));
+    await flushQueue(fakeClient(jest.fn(), { uploadPhoto }));
+
+    const [item] = await readQueue();
     expect(item?.attempts).toBe(1);
+    expect(item?.photoHeldSince).toBeUndefined();
   });
 });
 
