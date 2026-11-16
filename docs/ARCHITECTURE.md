@@ -1036,11 +1036,19 @@ yani sunucu açıkken çalışır. Yeni şifre o hesabın bütün açık oturuml
 Oturumlar); kanka yeni şifreyle bir daha girer. Şikayetler de aynı yoldan okunur (`sikayetler`): uygulamada onları okuyan bir ekran yok,
 sunucu her yeni şikayette kendi penceresine bir `warn` satırı düşer.
 
+Kökteki `npm run yonet` işi sunucu paketinin aynı adlı betiğine `npm run --silent` ile verir.
+Komut bir şeyi yapamayınca nedenini `✗` ile başlayan Türkçe bir satırda yazar ve 1 ile çıkar; npm
+de bunun altına kendi İngilizce bloğunu basıyordu (``npm error Lifecycle script `yonet` failed``,
+`command failed`…). Sahibin ekranında kırmızı bir çökme gibi duruyordu, oysa çoğu zaman yanlış
+yazılmış bir kullanıcı adıydı, o kadar. `--silent` yalnızca npm'in kendi satırlarını susturur:
+komutun yazdıkları da çıkış kodu da aynı kalır, onu çağıran bir betik hatayı yine anlar.
+
 Şikayetin cevabı da burada: davet bağlantısı WhatsApp gruplarında elden ele geçer; tanımadığı biri
 kaydolduysa sunucuyu açan onun hesabını `npm run yonet -- sil <kullanici>` ile kapatır. İş
 uygulamadaki "Hesabı sil"in kendisidir (`softDeleteUser`, `services/accounts.ts`): satır silinmez,
 adı "Silinen kanka" olur, `authenticate` silinmiş satıra hemen 401 verir. Geri alınamadığı için
 komut önce adını sorar; cevap verecek bir terminal yoksa `--evet` olmadan hiçbir şey yapmaz.
+Soruya "hayır" demek ise hata değil, sahibin cevabı: hesaba dokunmadığını söyler ve 0 ile çıkar.
 
 Silinen hesabın kanıt fotoğrafları ve notları da gider. Eskiden "Hesabı sil" her şeyin gideceğini
 söylüyordu, oysa fotoğraflar diskte duruyor, adresini bilen herkese açılıyordu. Şimdi kullanıcının

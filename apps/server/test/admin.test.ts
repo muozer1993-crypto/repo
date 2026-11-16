@@ -4,7 +4,7 @@
  * who is still around and a stranger who signed up can be closed out. The CLI
  * itself is spawned against a throwaway DATA_DIR, the way npm runs it.
  */
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -22,6 +22,7 @@ import { backupIfDue, copyBackupIfDue } from '../src/services/backup.js';
 import { authed, befriend, DEFAULT_PASSWORD, makeApp, registerUser, type TestApp } from './helpers.js';
 
 const serverRoot = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(serverRoot, '../..');
 const tsxCli = createRequire(import.meta.url).resolve('tsx/cli');
 
 let h: TestApp;
@@ -218,23 +219,44 @@ describe('listUsers', () => {
 });
 
 describe('npm run yonet', () => {
-  function run(
-    dataDir: string,
-    args: string[],
-    env: NodeJS.ProcessEnv = {},
-  ): Promise<{ code: number | null; out: string; err: string }> {
+  type Result = { code: number | null; out: string; err: string };
+
+  /** Everything the child printed; 'close', not 'exit', so a grandchild's last lines are in too. */
+  function printed(child: ChildProcess, input?: string): Promise<Result> {
     return new Promise((resolve) => {
-      const child = spawn(process.execPath, [tsxCli, 'src/cli/yonet.ts', ...args], {
-        cwd: serverRoot,
-        env: { ...process.env, DATA_DIR: dataDir, JWT_SECRET: '', BACKUP_DIR: '', ...env },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
       let out = '';
       let err = '';
-      child.stdout.on('data', (d) => (out += d.toString()));
-      child.stderr.on('data', (d) => (err += d.toString()));
-      child.on('exit', (code) => resolve({ code, out, err }));
+      child.stdout!.on('data', (d) => (out += d.toString()));
+      child.stderr!.on('data', (d) => (err += d.toString()));
+      child.on('close', (code) => resolve({ code, out, err }));
+      if (input !== undefined) child.stdin!.end(input);
     });
+  }
+
+  function run(dataDir: string, args: string[], env: NodeJS.ProcessEnv = {}, input?: string): Promise<Result> {
+    const child = spawn(process.execPath, [tsxCli, 'src/cli/yonet.ts', ...args], {
+      cwd: serverRoot,
+      env: { ...process.env, DATA_DIR: dataDir, JWT_SECRET: '', BACKUP_DIR: '', ...env },
+      stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+    });
+    return printed(child, input);
+  }
+
+  /**
+   * The root script, typed the owner's way, so whatever npm itself prints around
+   * the CLI is on screen too. The npm running these tests when there is one, else
+   * the one on PATH (npm.cmd on Windows, which only starts through a shell).
+   */
+  function runFromRoot(dataDir: string, args: string[]): Promise<Result> {
+    const npmCli = process.env.npm_execpath;
+    const viaNode = npmCli !== undefined && /npm-cli\.c?js$/.test(npmCli);
+    const child = spawn(viaNode ? process.execPath : 'npm', [...(viaNode ? [npmCli] : []), 'run', 'yonet', '--', ...args], {
+      cwd: repoRoot,
+      env: { ...process.env, DATA_DIR: dataDir, JWT_SECRET: '', BACKUP_DIR: '' },
+      shell: !viaNode && process.platform === 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return printed(child);
   }
 
   function tempDataDir(): string {
@@ -332,6 +354,29 @@ describe('npm run yonet', () => {
     expect(again.err).toContain('"veli" diye bir kullanıcı yok');
   }, 60_000);
 
+  it('sil takes a "hayır" at the prompt as an answer, not a failure', async () => {
+    const dataDir = tempDataDir();
+    const dbPath = path.join(dataDir, 'koydum.db');
+    const db = openDb(dbPath);
+    createUser(db, { username: 'veli', displayName: 'Veli', passwordHash: 'x', timezone: 'Europe/Istanbul' });
+    db.close();
+    // sil only asks on a terminal: a pipe that says it is one stands in for the owner's keyboard
+    const fakeTerminal = '--import=data:text/javascript,process.stdin.isTTY=true';
+    const env = { UPLOAD_DIR: '', NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} ${fakeTerminal}`.trim() };
+
+    const declined = await run(dataDir, ['sil', 'veli'], env, 'hayır\n');
+    expect(declined.out).toContain('Veli (@veli) silinsin mi? Geri alınamaz. (evet/hayır)');
+    expect(declined.out).toContain('Peki, hesaba dokunmadım.');
+    expect(declined.err).toBe('');
+    expect(declined.code).toBe(0);
+    expect(usersIn(dbPath)).toEqual(['veli']);
+
+    const agreed = await run(dataDir, ['sil', 'veli'], env, 'evet\n');
+    expect(agreed.code).toBe(0);
+    expect(agreed.out).toContain('Tamam, @veli kapatıldı.');
+    expect(usersIn(dbPath)).not.toContain('veli');
+  }, 60_000);
+
   it('answers an unknown command with the help and a failure', async () => {
     const result = await run(tempDataDir(), ['sil-her-seyi']);
     expect(result.code).toBe(1);
@@ -345,6 +390,28 @@ describe('npm run yonet', () => {
     expect(result.code).toBe(1);
     expect(result.err).toContain('Veritabanı bulunamadı');
     expect(fs.readdirSync(dataDir)).toEqual([]);
+  }, 60_000);
+
+  /** npm's own block after a non-zero exit: English, red, and reads like a crash. */
+  function expectNoNpmError(result: Result): void {
+    for (const line of ['npm error', 'Lifecycle script', 'command failed']) {
+      expect(result.out + result.err).not.toContain(line);
+    }
+  }
+
+  it('fails through the root script with its own Turkish lines and no npm error block under them', async () => {
+    const dataDir = tempDataDir();
+    openDb(path.join(dataDir, 'koydum.db')).close();
+
+    const unknown = await runFromRoot(dataDir, ['sifre', 'yokboyle']);
+    expect(unknown.code).toBe(1);
+    expect(unknown.err).toContain('✗ "yokboyle" diye bir kullanıcı yok');
+    expectNoNpmError(unknown);
+
+    const missing = await runFromRoot(tempDataDir(), ['kullanicilar']);
+    expect(missing.code).toBe(1);
+    expect(missing.err).toContain('✗ Veritabanı bulunamadı');
+    expectNoNpmError(missing);
   }, 60_000);
 
   /** A database with ali in its backup and veli only after it, the backup also in BACKUP_DIR. */

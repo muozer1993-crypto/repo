@@ -16,7 +16,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "apk:yayinla": "node apps/server/scripts/publish-apk.mjs",
     "internet": "node apps/server/scripts/internet.mjs",
-    "yonet": "npm run yonet --workspace apps/server --"
+    "yonet": "npm run --silent yonet --workspace apps/server --"
   },
   "engines": {
     "node": ">=20"

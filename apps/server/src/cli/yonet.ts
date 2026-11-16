@@ -166,8 +166,9 @@ async function closeAccount(db: Database, uploadDir: string, args: string[]): Pr
       return 1;
     }
     if (!(await ask(`${account.displayName} (@${account.username}) silinsin mi? Geri alınamaz. (evet/hayır)`))) {
+      // the owner's own answer, so nothing failed; only a terminal gets this far
       console.log('\nPeki, hesaba dokunmadım.');
-      return 1;
+      return 0;
     }
   }
   const closed = deleteAccount(db, account.username, new Date(), path.resolve(uploadDir));
