@@ -237,8 +237,13 @@ ChallengeDetail extends ChallengeSummary { myEntries: Entry[], feed: FeedItem[],
   -- pokeTargets: while a çelınc runs, talking is earned. Only whoever is AHEAD gets entries,
      and only for the rivals they are strictly ahead of (a tie earns nothing). On
      manual_lower_is_better a rival with no counted day (`days` 0) is nobody's target: their
-     score is only the missing-day penalty, the same rule as the mid-day nudge. `done` = still
-     inside the 2h cooldown, so canPoke = pokeTargets.some(t => !t.done).
+     score is only the missing-day penalty, the same rule as the mid-day nudge. Nor is a rival with a
+     block between the two, either way (a block mid-race leaves both in; the poke route's 403 `blocked`
+     stays as the backstop). `done` = still inside the 2h cooldown, so canPoke = pokeTargets.some(t => !t.done).
+  -- canTaunt: for the winner of a finished çelınc only, one row per accepted loser (`done` = already
+     taunted), leaving out a loser with a block between the two, either way (POST …/taunt answers 403
+     `blocked` there). The results screen and the picker offer the winner's laf only to these once the
+     finished detail is loaded; empty for everybody else
 Entry { id, challengeId, userId, dayKey, value, source, note, proofUrl, status, createdAt, late?: boolean }
 FeedItem { id, userId, displayName, dayKey, value, source, status, createdAt, updatedAt?: string, proofUrl, note?: string | null, answerBy?: string | null, disputeVotes?: { open: number; needed: number } | null }
   -- updatedAt: the entry's `updated_at`, when the row last changed. A phone's row is created at the day's first
@@ -817,7 +822,7 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             a failed refetch keeps the last detail with a faint "Sunucuya ulaşamıyorum, gördüğün son bilinen hali."
                             line ("Girişin sıraya alınır…" while I can enter); "Çelınc gelmedi" is only for a çelınc never loaded,
                             and a 404 still shows "Bu çelınc sende yok"
-(app)/challenge/[id]/results.tsx   winner view: podium + "KOYDUM MU?" CTA per loser (or "Hepsine koy") → taunt picker; loser view: shame screen
+(app)/challenge/[id]/results.tsx   winner view: podium + "KOYDUM MU?" CTA per loser in `canTaunt` (or "Hepsine koy"; a loser behind a block keeps the row, without a button) → taunt picker; loser view: shame screen
                             (big TauntBubble if received, else "bekliyor..." — and 24 h after `finalizedAt`, counted from the
                             last fetch, "unuttu galiba, rövanş aç, bu sefer sen koy" instead; the header only says the laf is
                             "aşağıda" once there is one; under a received laf "Cevap ver" (L1 "Cevap yaz", L3 "Lafı geri sok 🍆") →

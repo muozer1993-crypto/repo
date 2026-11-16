@@ -297,6 +297,7 @@ export default function TauntPickerScreen() {
 
   // the winner talks to every loser, a loser only back to the winner, a tie's
   // co-leaders only to each other
+  const tauntable = detail.data?.challenge.status === 'finished' ? detail.data.canTaunt : undefined;
   const targets =
     mode === 'reply'
       ? winnerView
@@ -306,7 +307,9 @@ export default function TauntPickerScreen() {
           (p) =>
             p.status === 'accepted' &&
             p.user.id !== meId &&
-            (mode === 'tie' ? p.rank === 1 : !p.isWinner)
+            (mode === 'tie' ? p.rank === 1 : !p.isWinner) &&
+            // the winner's `canTaunt` leaves out a loser behind a block (403 `blocked`)
+            (mode !== 'win' || !tauntable || tauntable.some((row) => row.toUserId === p.user.id))
         );
   const taunted = new Set<string>();
   for (const row of detail.data?.canTaunt ?? []) if (row.done) taunted.add(row.toUserId);

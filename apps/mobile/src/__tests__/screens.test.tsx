@@ -3107,6 +3107,62 @@ describe('the winner\'s taunt picker', () => {
   });
 });
 
+describe('a loser the winner has a block with', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const VELI = { id: 'u-3', username: 'veli', displayName: 'Veli', avatarEmoji: '🦊', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /**
+   * The reader beat Ali and Veli; Veli has a block with the reader, so the
+   * server's `canTaunt` names Ali only (a laf at Veli is 403 `blocked`).
+   */
+  function wonOverBoth() {
+    const detail = challengeDetail();
+    const finalizedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    const challenge = { ...detail.challenge, status: 'finished' as const, endsAt: finalizedAt, finalizedAt, winnerId: 'me-1' };
+    const standings = [
+      { ...detail.me!, isWinner: true },
+      { ...detail.me!, user: ALI, score: 9000, rank: 2 },
+      { ...detail.me!, user: VELI, score: 4000, rank: 3 },
+    ];
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge,
+      participants: standings,
+      me: standings[0],
+      canTaunt: [{ toUserId: ALI.id, done: false }],
+    }));
+    api.results = jest.fn(async () => ({ challenge, standings, taunts: [] }));
+  }
+
+  it('offers the results screen\'s "KOYDUM MU?" only to the loser it can reach', async () => {
+    searchParams.id = 'c-1';
+    wonOverBoth();
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    // Veli still stands on the podium and in the list, with nothing to press
+    expect(text).toContain('Veli');
+    expect(tree.root.findAll((node) => node.props.title === 'KOYDUM MU?' && typeof node.props.onPress === 'function')).toHaveLength(1);
+    expect(text).not.toContain('HEPSİNE KOY');
+    expect(text).not.toContain('Hepsine koydun');
+  });
+
+  it('leaves him out of the picker, so "HEPSİ" never sends one the server refuses', async () => {
+    searchParams.id = 'c-1';
+    wonOverBoth();
+    const TauntScreen = require('@/app/(app)/challenge/[id]/taunt').default;
+    const tree = renderScreen(<TauntScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Ali');
+    expect(text).not.toContain('Veli');
+    expect(text).not.toContain('HEPSİ (');
+  });
+});
+
 describe('a group rival who is not a friend', () => {
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
   const VELI = { id: 'u-3', username: 'veli', displayName: 'Veli', avatarEmoji: '🦊', createdAt: '2026-09-01T00:00:00.000Z' };

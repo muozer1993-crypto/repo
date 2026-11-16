@@ -384,6 +384,51 @@ describe('poke / taunt / rematch across a block', () => {
     expect(harness.db.prepare('SELECT COUNT(*) AS n FROM pokes').get()).toEqual({ n: 0 });
   });
 
+  it('does not offer "Dürt" or a taunt to a rival behind a block, either way', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await livePair(harness, 'adim_yarisi');
+    const detailOf = async (user: RegisteredUser) =>
+      (await authed(harness!.app, user.token)({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>();
+    await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: today(harness), value: 12_000, source: 'pedometer', clientTime: iso(harness) },
+    });
+    expect((await detailOf(ali)).pokeTargets).toEqual([{ toUserId: veli.me.id, done: false }]);
+
+    // the one behind blocks the leader: the leader is offered nobody, and the route still says why
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/users/${ali.me.id}/block` });
+    const blockedOn = await detailOf(ali);
+    expect(blockedOn.pokeTargets).toEqual([]);
+    expect(blockedOn.canPoke).toBe(false);
+    const poke = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/poke`,
+      payload: { toUserId: veli.me.id },
+    });
+    expect(poke.statusCode).toBe(403);
+    expect(errorCode(poke)).toBe('blocked');
+
+    // the leader's own block shuts the same door
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/users/${ali.me.id}/unblock` });
+    expect((await detailOf(ali)).pokeTargets).toEqual([{ toUserId: veli.me.id, done: false }]);
+    await authed(harness.app, ali.token)({ method: 'POST', url: `/users/${veli.me.id}/block` });
+    expect((await detailOf(ali)).pokeTargets).toEqual([]);
+
+    // after the finish the winner's list of losers to taunt leaves Veli out too
+    expect((await harness.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` })).statusCode).toBe(200);
+    expect((await detailOf(ali)).canTaunt).toEqual([]);
+    const taunt = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/taunt`,
+      payload: { toUserId: veli.me.id, templateId: 'l2_win_01' },
+    });
+    expect(taunt.statusCode).toBe(403);
+    expect(errorCode(taunt)).toBe('blocked');
+    await authed(harness.app, ali.token)({ method: 'POST', url: `/users/${veli.me.id}/unblock` });
+    expect((await detailOf(ali)).canTaunt).toEqual([{ toUserId: veli.me.id, done: false }]);
+  });
+
   it('refuses a taunt and a rematch after the loser blocked the winner', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await finishedPair(harness);

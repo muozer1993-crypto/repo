@@ -27,6 +27,7 @@ import { badRequest, forbidden, notFound } from '../errors.js';
 import { asVulgarityLevel, toChallenge, toDispute, toEntry, toFeedItem, toTaunt } from '../serialize.js';
 import { computeStandings, disputesOpenUntil, getChallengeRow, participantTimezone } from './challenges.js';
 import { disputeDeadlines, disputeThreshold, disputedEntries } from './entries.js';
+import { isBlockedBetween } from './friends.js';
 import { canonicalInstant } from './notifications.js';
 
 /** How many recent entries the detail feed carries (SPEC 2.2). */
@@ -254,7 +255,12 @@ export function tauntsForUser(db: Database, challengeId: string, userId: string)
   return rows.map(toTaunt);
 }
 
-/** One row per loser when the caller is the winner of a finished challenge. */
+/**
+ * One row per loser when the caller is the winner of a finished challenge.
+ * A loser with a block between the two (either way) is left out: the taunt
+ * route refuses them with 403 `blocked`, and the follow-up reminder does not
+ * count them (`sendTauntFollowups`).
+ */
 export function canTauntList(db: Database, challenge: ChallengeRow, userId: string): CanTaunt[] {
   if (challenge.status !== 'finished' || challenge.winner_id !== userId) return [];
   const losers = db
@@ -271,7 +277,9 @@ export function canTauntList(db: Database, challenge: ChallengeRow, userId: stri
         .all(challenge.id, userId) as { to_user_id: string }[]
     ).map((row) => row.to_user_id),
   );
-  return losers.map((row) => ({ toUserId: row.user_id, done: done.has(row.user_id) }));
+  return losers
+    .filter((row) => !isBlockedBetween(db, userId, row.user_id))
+    .map((row) => ({ toUserId: row.user_id, done: done.has(row.user_id) }));
 }
 
 // ---------------------------------------------------------------------------
@@ -296,6 +304,10 @@ export function canTauntList(db: Database, challenge: ChallengeRow, userId: stri
  * score is the missing-day penalty, so "Ali 180 dk, sen 1.440" would quote a
  * number they never wrote. The scheduler's nudge skips them for the same
  * reason (`sendNudges`); once they write a day they are fair game.
+ *
+ * Nor is a rival with a block between the two, either way: a block mid-race
+ * leaves both in, but the poke route refuses them with 403 `blocked`, so
+ * offering "Dürt" would only earn that.
  */
 export function pokeTargetList(
   db: Database,
@@ -324,6 +336,7 @@ export function pokeTargetList(
     if (view.user.id === userId || view.status !== 'accepted') continue;
     if (challenge.metric_type === 'manual_lower_is_better' && view.days === 0) continue;
     if (!ahead(view.score)) continue;
+    if (isBlockedBetween(db, userId, view.user.id)) continue;
     const last = lastPoke.get(challenge.id, userId, view.user.id) as { created_at: string } | undefined;
     const elapsed = last ? now.getTime() - Date.parse(last.created_at) : Number.POSITIVE_INFINITY;
     const cooling = Number.isFinite(elapsed) && elapsed >= 0 && elapsed < LIMITS.POKE_COOLDOWN_MS;

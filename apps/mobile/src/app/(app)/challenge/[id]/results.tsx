@@ -395,7 +395,12 @@ export default function ResultsScreen() {
   const taunted = new Set<string>();
   for (const row of detail.data?.canTaunt ?? []) if (row.done) taunted.add(row.toUserId);
   for (const sent of taunts) if (sent.fromUserId === meId) taunted.add(sent.toUserId);
-  const pendingLosers = losers.filter((l) => !taunted.has(l.user.id));
+  // The finished detail's `canTaunt` is who the winner can still reach: a loser
+  // with a block between us is not in it, and a laf at them only earns 403
+  // `blocked`. Until that detail is here, everybody is offered as before.
+  const tauntable = detail.data?.challenge.status === 'finished' ? detail.data.canTaunt : undefined;
+  const reachable = (userId: string) => !tauntable || tauntable.some((row) => row.toUserId === userId);
+  const pendingLosers = losers.filter((l) => !taunted.has(l.user.id) && reachable(l.user.id));
 
   // the winner's laf to me; replies and a tie's lafs travel the other ways
   const received: Taunt | undefined =
@@ -640,13 +645,13 @@ export default function ResultsScreen() {
                         color={Colors.success}
                         size="sm"
                       />
-                    ) : (
+                    ) : reachable(loser.user.id) ? (
                       <Button
                         title={TAUNT_CTA[level]}
                         size="sm"
                         onPress={() => openTaunt(loser.user.id)}
                       />
-                    )}
+                    ) : null}
                   </View>
                 );
               })}
@@ -664,7 +669,7 @@ export default function ResultsScreen() {
               onPress={() => openTaunt('all')}
             />
           ) : null}
-          {losers.length > 0 && pendingLosers.length === 0 ? (
+          {losers.some((loser) => reachable(loser.user.id)) && pendingLosers.length === 0 ? (
             <Text variant="small" color={Colors.success} bold style={styles.gap}>
               {TAUNT_ALL_DONE[level]}
             </Text>
