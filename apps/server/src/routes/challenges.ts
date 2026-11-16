@@ -51,6 +51,7 @@ import {
 } from '../services/challengeViews.js';
 import {
   acceptedParticipants,
+  activateDueChallenges,
   cancelIfAbandoned,
   participantRows,
   startedCopy,
@@ -655,6 +656,10 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const me = request.user;
     const now = app.now();
     const { id } = request.params as IdParams;
+    // A çelınc past its start with two yeses has started by rule, even before the
+    // scheduler's next pass (or while the owner's PC slept through it): activate
+    // it first, as the entry route does, so "pending" here is never stale.
+    activateDueChallenges(db, now);
     const challenge = requireChallengeRow(db, id);
     requireMembership(db, challenge, me.id);
 

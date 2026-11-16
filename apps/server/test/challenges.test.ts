@@ -681,6 +681,26 @@ describe('accept / decline / leave / cancel', () => {
     );
   });
 
+  it('refuses to cancel one whose start passed with two yeses, before the scheduler gets to it', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const created = await createChallenge(harness, ali, {
+      participantIds: [veli.me.id],
+      startsAt: iso(harness, 2 * 60 * 60 * 1000),
+      endsAt: iso(harness, 48 * 60 * 60 * 1000),
+    });
+    const id = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${id}/accept` });
+    // past the start, no scheduler pass yet (the owner's PC just woke)
+    harness.advance(3 * 60 * 60 * 1000);
+
+    const response = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${id}/cancel` });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('challenge_started');
+  });
+
   it('refuses to cancel a started challenge', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await twoPlayerChallenge(harness);
