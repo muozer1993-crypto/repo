@@ -1,3 +1,5 @@
+import { formatNumberTr } from '@koydum/shared';
+
 import {
   clockGapTr,
   dateRange,
@@ -23,9 +25,16 @@ describe('Turkish formatting', () => {
     expect(formatNumber(1234567)).toBe('1.234.567');
   });
 
-  it('rounds fractions to one decimal', () => {
-    expect(formatNumber(5.24)).toBe('5,2');
+  it('matches the shared formatter (two decimals)', () => {
+    // a typed 2,25 km read "2,3" in the toast and "2,25" on the feed beside it
+    expect(formatNumber(5.24)).toBe('5,24');
+    expect(formatNumber(2.25)).toBe('2,25');
+    expect(formatNumber(0.125)).toBe('0,13');
+    expect(formatNumber(5.375)).toBe('5,38');
     expect(formatNumber(5.0)).toBe('5');
+    expect(formatNumber(12430)).toBe('12.430');
+    expect(formatNumber(-1.5)).toBe('-1,5');
+    for (const n of [0, 1, 2.25, 5.375, 583.333, 12430, 1234567.891]) expect(formatNumber(n)).toBe(formatNumberTr(n));
   });
 
   it('survives nonsense input', () => {

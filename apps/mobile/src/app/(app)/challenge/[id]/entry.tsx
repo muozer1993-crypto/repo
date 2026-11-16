@@ -39,6 +39,18 @@ function parseValue(text: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+/**
+ * What is left of a day's cap, cut to the two decimals formatNumber prints:
+ * 100 - 5.375 km is 94.625, which would print as "94,63", and typing that is
+ * refused as over the cap. The epsilon keeps 0.29 (28.999... cents in floating
+ * point) at 0.29; the step back covers a sum whose noise leaves the cap a hair
+ * under a whole cent, so the number shown is always one the check takes.
+ */
+function floorCents(value: number): number {
+  const cents = Math.floor(value * 100 + 1e-9);
+  return cents / 100 <= value ? cents / 100 : (cents - 1) / 100;
+}
+
 function quickAdds(maxPerEntry: number): number[] {
   const cap = Math.max(1, Math.floor(maxPerEntry));
   const presets = cap >= 400 ? [10, 25, 50] : cap >= 100 ? [5, 10, 25] : [1, 5, 10];
@@ -183,6 +195,8 @@ export default function EntryModalScreen() {
     : 0;
   const remaining = appends ? Math.max(0, type.maxPerDay - dayTotal) : type.maxPerEntry;
   const ceiling = Math.min(type.maxPerEntry, remaining);
+  // what the screen says is left: never a cent more than the check below takes
+  const left = floorCents(remaining);
 
   const bump = (delta: number) => {
     const next = Math.min(ceiling, (value ?? 0) + delta);
@@ -226,9 +240,9 @@ export default function EntryModalScreen() {
     }
     if (appends && value > remaining) {
       setError(
-        remaining <= 0
+        left <= 0
           ? `${dayLabel} için günlük tavan doldu (${formatNumber(type.maxPerDay)} ${type.unitTr}).`
-          : `${dayLabel} için ${formatNumber(remaining)} ${type.unitTr} kaldı. Günlük tavan ${formatNumber(type.maxPerDay)} ${type.unitTr}.`
+          : `${dayLabel} için ${formatNumber(left)} ${type.unitTr} kaldı. Günlük tavan ${formatNumber(type.maxPerDay)} ${type.unitTr}.`
       );
       return;
     }
@@ -344,11 +358,11 @@ export default function EntryModalScreen() {
         {appends ? (
           <Text
             variant="tiny"
-            color={remaining <= 0 ? Colors.danger : Colors.textFaint}
+            color={left <= 0 ? Colors.danger : Colors.textFaint}
             style={styles.hint}>
-            {remaining <= 0
+            {left <= 0
               ? `${dayLabel} için tavan doldu (${formatNumber(dayTotal)} ${type.unitTr} girdin).`
-              : `${dayLabel} için kalan: ${formatNumber(remaining)} ${type.unitTr}.`}
+              : `${dayLabel} için kalan: ${formatNumber(left)} ${type.unitTr}.`}
           </Text>
         ) : null}
       </Card>

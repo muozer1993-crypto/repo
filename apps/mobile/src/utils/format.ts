@@ -1,13 +1,16 @@
-import { diffDayKeys, formatDayKeyTr } from '@koydum/shared';
+import { diffDayKeys, formatDayKeyTr, formatNumberTr } from '@koydum/shared';
 
 import { safeDayKey } from '@/utils/datetime';
 
 /** Turkish-locale formatting helpers shared by every screen. */
 
+/**
+ * `12430` -> "12.430", `2.25` -> "2,25": the shared formatter the standings,
+ * the feed, the push and the taunts print with. Rounding to one decimal here
+ * put "Yazıldı 2,3 km" under a feed row saying "2,25 km".
+ */
 export function formatNumber(value: number): string {
-  if (!Number.isFinite(value)) return '0';
-  const rounded = Math.abs(value % 1) < 1e-9 ? Math.round(value) : Math.round(value * 10) / 10;
-  return rounded.toLocaleString('tr-TR');
+  return formatNumberTr(value);
 }
 
 /** 90 -> "1sa 30dk", 45 -> "45dk" */

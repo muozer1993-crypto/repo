@@ -1523,6 +1523,42 @@ describe('the entry modal', () => {
     expect(text).not.toContain('sadece telefonun saydığı');
     expect(findWith(tree, 'title', 'Kaydet', 'onPress').props.disabled).toBe(true);
   });
+
+  it('prints a run in two decimals like the standings, and never rounds what is left up', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    const ran: Entry = {
+      id: 'e-1', challengeId: 'c-1', userId: 'me-1', dayKey: today(), value: 5.375, source: 'manual',
+      note: null, proofUrl: null, status: 'ok', createdAt: new Date().toISOString(),
+    };
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge: { ...detail.challenge, typeKey: 'kosu_km', metricType: 'manual_count' as const, unit: 'km', title: 'Koşu haftası' },
+      myEntries: [ran],
+    }));
+    api.addEntry = jest.fn(async () => ({ entry: {}, standings: [] }));
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    // 100 - 5,375 is 94,625: "94,63" would be refused as over the cap if typed
+    const text = rendered(tree);
+    expect(text).toContain('Bugün için kalan: 94,62 km.');
+    expect(text).not.toContain('94,6 km');
+    expect(text).not.toContain('94,63');
+
+    act(() => {
+      findWith(tree, 'placeholder', '0', 'onChangeText').props.onChangeText('2,25');
+    });
+    await act(async () => {
+      await findWith(tree, 'title', 'Kaydet', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ value: 2.25 }));
+    expect(rendered(tree)).toContain('2,25 km · bugün');
+    expect(rendered(tree)).not.toContain('2,3 km');
+  });
 });
 
 describe('the screen-time card', () => {
