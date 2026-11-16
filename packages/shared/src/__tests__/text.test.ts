@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { approximateGraphemeCount, countGraphemes, foldUsername, hasVisibleChar, singleLine, stripInvisible } from '../text';
+import {
+  approximateGraphemeCount,
+  countGraphemes,
+  foldUsername,
+  hasVisibleChar,
+  singleLine,
+  stripEscapeSequences,
+  stripInvisible,
+} from '../text';
 
 const ZWJ = String.fromCharCode(0x200d);
 const ZWSP = String.fromCharCode(0x200b);
@@ -42,6 +50,27 @@ describe('stripInvisible / hasVisibleChar', () => {
     }
     expect(hasVisibleChar(`${String.fromCharCode(0x3164)}a`)).toBe(true);
     expect(hasVisibleChar('한')).toBe(true);
+  });
+});
+
+describe('stripEscapeSequences', () => {
+  const ESC = String.fromCharCode(0x1b);
+  const BEL = String.fromCharCode(0x07);
+
+  it('takes the whole sequence, not just its ESC', () => {
+    // clear screen, hidden text, colour, cursor up: "[2J" left behind is litter in a reason
+    expect(stripEscapeSequences(`a${ESC}[2Jb${ESC}[8mc${ESC}[1;31md${ESC}[3Ae`)).toBe('abcde');
+    // a window title and a hyperlink, ended by BEL and by ST
+    expect(stripEscapeSequences(`a${ESC}]0;başlık${BEL}b`)).toBe('ab');
+    expect(stripEscapeSequences(`${ESC}]8;;https://x.example${ESC}\\link${ESC}]8;;${ESC}\\`)).toBe('link');
+    // 8-bit CSI, a reset, a character-set switch
+    expect(stripEscapeSequences(`a${String.fromCharCode(0x9b)}31mb${ESC}cc${ESC}(Bd`)).toBe('abcd');
+  });
+
+  it('leaves text alone, and a lone or unfinished ESC to stripInvisible', () => {
+    expect(stripEscapeSequences('[2J ve ÇĞİÖŞÜ çğıöşü 🍆')).toBe('[2J ve ÇĞİÖŞÜ çğıöşü 🍆');
+    expect(stripInvisible(stripEscapeSequences(`a${ESC}`))).toBe('a');
+    expect(stripInvisible(stripEscapeSequences(`a${ESC}]bitmeyen`))).toBe('abitmeyen');
   });
 });
 

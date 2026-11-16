@@ -685,9 +685,14 @@ verdiğin şifreyle kalır.
   çalışıyordur; yeni şifre onu da boşa çıkarır.
 
 **Şikayetler.** Uygulamada biri birini şikayet edince sunucu penceresine `YENİ ŞİKAYET` diye bir
-satır düşer, `npm run yonet -- sikayetler` de hepsini listeler. Gerisi sana kalmış: konuşursunuz,
-gerekirse engellemesini söylersin. Tanımadığın biri girdiyse `npm run yonet -- sil <kullanici>`
-ile hesabını kapat.
+satır düşer, `npm run yonet -- sikayetler` de en yeni 200 şikayeti listeler (daha fazlası varsa
+toplam kaç tane olduğunu altına yazar). Gerisi sana kalmış: konuşursunuz, gerekirse engellemesini
+söylersin. Bir hesap saatte en fazla 10 şikayet gönderebilir, fazlasına uygulama "Çok fazla şikayet
+gönderdin" der. Aynı kişiyi bir gün içinde yeniden şikayet ederse uygulama yine "alındı" der ama
+sana yeni bir satır gelmez. Böylece kimse pencereni şikayetle doldurup tünel adresini ve gerçek
+hataları ekrandan kaydıramaz. Sebebin içindeki satır sonları ve PowerShell'de ekranı silen ya da
+yazıyı gizleyen kaçış kodları atılır: liste hep düz yazı çıkar. Tanımadığın biri girdiyse
+`npm run yonet -- sil <kullanici>` ile hesabını kapat.
 
 **Hesap kapatmak.** `npm run yonet -- sil ali` önce "Ali (@ali) silinsin mi?" diye sorar, `evet`
 yazarsan kapatır. Uygulamadaki **Hesabı sil** ne yapıyorsa o olur: telefonundaki oturum hemen

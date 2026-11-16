@@ -6,18 +6,38 @@
  * as `requester_id` (SPEC 2.2). A blocked pair is invisible to each other: no search
  * hit, no profile, no friend request, no challenge invite. A block also retires the
  * blocker's invite code: the old davet links stop working.
+ *
+ * Every stored report is a `YENİ ŞİKAYET` line in the owner's server window: an
+ * account files at most `REPORTS_PER_USER` an hour, and a repeat of the same
+ * person within a day is not stored again.
  */
 import type { FastifyInstance } from 'fastify';
 import { foldUsername, ReportBodySchema, UserSearchQuerySchema, type PublicUser } from '@koydum/shared';
 import { newId, nowIso, type Database, type UserRow } from '../db/index.js';
-import { badRequest, notFound, parseBody, parseQuery } from '../errors.js';
+import { badRequest, notFound, parseBody, parseQuery, tooMany } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { toPublicProfile, toPublicUser } from '../serialize.js';
 import { renewInviteCode } from '../services/accounts.js';
 import { blockedByMe, isBlockedBetween, recordRefusal, removeBlock, upsertBlock } from '../services/friends.js';
+import { AttemptLimiter, retryAfterText } from '../services/throttle.js';
 
 /** Max hits returned to the app (SPEC 2.2). */
 const SEARCH_LIMIT = 20;
+
+/**
+ * Reports one account may file in an hour. Each is a line in the window the
+ * README tells the owner to watch, and one account wrote 3,000 in two and a half
+ * seconds: the tunnel address and every real error scrolled out of it. Somebody
+ * who has had enough of a few people still fits in it.
+ */
+export const REPORTS_PER_USER = { max: 10, windowMs: 60 * 60 * 1000 };
+
+/**
+ * A second report of the same person from the same account this soon is not
+ * stored: the owner has the first one to read, and the phone hears "alındı"
+ * either way.
+ */
+export const REPORT_REPEAT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /** Turkish casing: `I → ı`, `İ → i`. `toLowerCase()` gets both of those wrong. */
 function trLower(value: string): string {
@@ -90,6 +110,7 @@ function matchesPrefix(row: Pick<UserRow, 'username' | 'display_name'>, query: s
 export default async function userRoutes(app: FastifyInstance): Promise<void> {
   const { db } = app;
   const auth = { preHandler: app.authenticate };
+  const reportsPerUser = new AttemptLimiter(REPORTS_PER_USER.max, REPORTS_PER_USER.windowMs);
 
   // `matchesPrefix` as an SQL function (see `searchHits`). A function belongs to
   // the connection it is made on, so every app makes it once, on its own `db`.
@@ -156,13 +177,23 @@ export default async function userRoutes(app: FastifyInstance): Promise<void> {
     const target = loadTarget(db, request.params.id);
     if (target.id === me.id) throw badRequest('cannot_report_self', 'Kendini şikayet edemezsin.');
 
+    const now = app.now();
+    const waitMs = reportsPerUser.retryAfterMs(me.id, now);
+    if (waitMs > 0) throw tooMany('too_many_requests', `Çok fazla şikayet gönderdin. ${retryAfterText(waitMs)}`);
+    const repeat = db
+      .prepare('SELECT 1 FROM reports WHERE reporter_id = ? AND reported_id = ? AND created_at >= ?')
+      .get(me.id, target.id, nowIso(new Date(now.getTime() - REPORT_REPEAT_WINDOW_MS)));
+    if (repeat) return reply.code(201).send({ ok: true });
+
     db.prepare('INSERT INTO reports (id, reporter_id, reported_id, reason, created_at) VALUES (?, ?, ?, ?, ?)').run(
       newId(),
       me.id,
       target.id,
       body.reason,
-      nowIso(app.now()),
+      nowIso(now),
     );
+    // only a stored report counts: a repeat costs the owner nothing to read
+    reportsPerUser.record(me.id, now);
     // Nobody in the app reads reports; this line lands in the owner's server window.
     request.log.warn(
       { reporter: me.row.username, reported: target.username, reason: body.reason },

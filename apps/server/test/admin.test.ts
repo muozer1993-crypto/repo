@@ -17,7 +17,15 @@ import type { Challenge } from '@koydum/shared';
 import { hashPassword } from '../src/auth/password.js';
 import { newId, openDb, type Database } from '../src/db/index.js';
 import { createUser } from '../src/services/accounts.js';
-import { accountToDelete, deleteAccount, listReports, listUsers, resetPassword } from '../src/services/admin.js';
+import {
+  accountToDelete,
+  countReports,
+  deleteAccount,
+  listReports,
+  listUsers,
+  REPORTS_LISTED,
+  resetPassword,
+} from '../src/services/admin.js';
 import { backupIfDue, copyBackupIfDue } from '../src/services/backup.js';
 import { authed, befriend, DEFAULT_PASSWORD, makeApp, registerUser, type TestApp } from './helpers.js';
 
@@ -175,6 +183,21 @@ describe('listReports', () => {
       { reporter: 'veli', reported: 'ali', reason: 'Küfür', createdAt: '2026-01-05T09:01:00.000Z' },
       { reporter: 'ali', reported: 'veli', reason: 'Adımları elle şişiriyor', createdAt: '2026-01-05T09:00:00.000Z' },
     ]);
+  });
+
+  it(`lists only the newest ${REPORTS_LISTED}, and counts them all`, async () => {
+    const ali = await registerUser(h.app, 'ali');
+    const veli = await registerUser(h.app, 'veli');
+    const insert = h.db.prepare('INSERT INTO reports (id, reporter_id, reported_id, reason, created_at) VALUES (?, ?, ?, ?, ?)');
+    for (let i = 0; i < REPORTS_LISTED + 5; i++) {
+      insert.run(newId(), ali.me.id, veli.me.id, `şikayet ${i}`, new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString());
+    }
+
+    const listed = listReports(h.db);
+    expect(listed).toHaveLength(REPORTS_LISTED);
+    expect(listed[0]!.reason).toBe(`şikayet ${REPORTS_LISTED + 4}`);
+    expect(listed.at(-1)!.reason).toBe('şikayet 5');
+    expect(countReports(h.db)).toBe(REPORTS_LISTED + 5);
   });
 });
 
@@ -375,6 +398,30 @@ describe('npm run yonet', () => {
     expect(agreed.code).toBe(0);
     expect(agreed.out).toContain('Tamam, @veli kapatıldı.');
     expect(usersIn(dbPath)).not.toContain('veli');
+  }, 60_000);
+
+  it('sikayetler prints a reason stored with escape sequences as plain text, and says how many it left out', async () => {
+    const dataDir = tempDataDir();
+    const db = openDb(path.join(dataDir, 'koydum.db'));
+    const ali = createUser(db, { username: 'ali', displayName: 'Ali', passwordHash: 'x', timezone: 'Europe/Istanbul' });
+    const veli = createUser(db, { username: 'veli', displayName: 'Veli', passwordHash: 'x', timezone: 'Europe/Istanbul' });
+    const insert = db.prepare('INSERT INTO reports (id, reporter_id, reported_id, reason, created_at) VALUES (?, ?, ?, ?, ?)');
+    for (let i = 0; i < REPORTS_LISTED; i++) {
+      insert.run(newId(), ali.id, veli.id, `eski ${i}`, new Date(Date.UTC(2025, 11, 1, 0, i)).toISOString());
+    }
+    // stored raw by an earlier version: clear screen, cursor home, a window title, hidden text
+    const raw = 'spam\u001b[2J\u001b[H\nkötü\u001b]0;başlık\u0007 \u009b8m';
+    insert.run(newId(), veli.id, ali.id, raw, '2026-01-05T09:00:00.000Z');
+    db.close();
+
+    const result = await run(dataDir, ['sikayetler']);
+    expect(result.err).toBe('');
+    expect(result.code).toBe(0);
+    expect(result.out).toMatch(/veli\s+ali\s+spam kötü\n/);
+    // nothing that moves the cursor or changes a colour, on any line
+    expect(result.out).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/);
+    expect(result.out).toContain(`Toplam ${REPORTS_LISTED + 1} şikayet var, en yeni ${REPORTS_LISTED} tanesini gösterdim.`);
+    expect(result.out).not.toContain('eski 0\n');
   }, 60_000);
 
   it('answers an unknown command with the help and a failure', async () => {

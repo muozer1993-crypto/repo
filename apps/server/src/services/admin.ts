@@ -94,7 +94,13 @@ export function listUsers(db: Database): AdminUser[] {
   }));
 }
 
-/** Every report, newest first (rowid breaks a tie within the same millisecond). */
+/**
+ * How many reports `sikayetler` lists. Thousands of them (a script filed 3,000
+ * before the per-account cap) were thousands of lines nobody reads past the top.
+ */
+export const REPORTS_LISTED = 200;
+
+/** The newest `REPORTS_LISTED` reports, newest first (rowid breaks a tie within the same millisecond). */
 export function listReports(db: Database): AdminReport[] {
   return db
     .prepare(
@@ -102,9 +108,23 @@ export function listReports(db: Database): AdminReport[] {
          FROM reports r
          JOIN users reporter ON reporter.id = r.reporter_id
          JOIN users reported ON reported.id = r.reported_id
-        ORDER BY r.created_at DESC, r.rowid DESC`,
+        ORDER BY r.created_at DESC, r.rowid DESC
+        LIMIT ?`,
     )
-    .all() as AdminReport[];
+    .all(REPORTS_LISTED) as AdminReport[];
+}
+
+/** All the reports `listReports` would show without its cap, so the owner knows when it stops short. */
+export function countReports(db: Database): number {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n
+         FROM reports r
+         JOIN users reporter ON reporter.id = r.reporter_id
+         JOIN users reported ON reported.id = r.reported_id`,
+    )
+    .get() as { n: number };
+  return Number(row.n);
 }
 
 /**

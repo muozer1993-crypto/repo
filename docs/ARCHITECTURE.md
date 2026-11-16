@@ -1182,6 +1182,21 @@ yani sunucu açıkken çalışır. Yeni şifre o hesabın bütün açık oturuml
 Oturumlar); kanka yeni şifreyle bir daha girer. Şikayetler de aynı yoldan okunur (`sikayetler`): uygulamada onları okuyan bir ekran yok,
 sunucu her yeni şikayette kendi penceresine bir `warn` satırı düşer.
 
+README sahibe o pencereyi izlemesini söylüyor, ama şikayetin bir sınırı yoktu: tek bir hesap
+2,4 saniyede 3.000 şikayet yazdı, tünel adresi de gerçek hatalar da ekrandan kaydı. `listReports`
+da hepsini döküyordu. Şimdi bir hesap saatte en çok 10 şikayet kaydeder (`REPORTS_PER_USER`,
+`routes/users.ts`; sayaç giriş sayaçları gibi süreçte durur). Aynı hesap aynı kişiyi 24 saat içinde
+yeniden şikayet ederse 201 alır, ama ne satır ne log yazılır, sayaç da işlemez: sahibin okuyacağı
+yeni bir şey yok, telefon yine "alındı" der. `sikayetler` en yeni 200 şikayeti (`REPORTS_LISTED`)
+gösterir, fazlası varsa toplamı söyler.
+
+Sebep de sahibin konsolunda okunur. `ESC[2J` ekranı silip listeyi boşaltıyordu, `ESC[8m`
+arkasındakini gizliyordu. Sunucu penceresi bunları zaten boşluğa çeviriyordu (`src/log.ts`),
+`yonet` ise olduğu gibi basıyordu. Artık `ReportBodySchema` kaçış dizilerini bütünüyle
+(`stripEscapeSequences`, `packages/shared/src/text.ts`), görünmez karakterleri ve satır sonlarını
+kayıttan önce atar. `yonet` basarken aynısını bir daha yapar, önceden kaydedilmiş sebepler için.
+Migration gerekmedi.
+
 Kökteki `npm run yonet` işi sunucu paketinin aynı adlı betiğine `npm run --silent` ile verir.
 Komut bir şeyi yapamayınca nedenini `✗` ile başlayan Türkçe bir satırda yazar ve 1 ile çıkar; npm
 de bunun altına kendi İngilizce bloğunu basıyordu (``npm error Lifecycle script `yonet` failed``,

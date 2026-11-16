@@ -18,6 +18,7 @@ import {
 } from '@koydum/shared';
 import { loadConfig } from '../src/config.js';
 import { newId, nowIso, type ChallengeRow, type EntryRow, type UserRow } from '../src/db/index.js';
+import { REPORTS_PER_USER } from '../src/routes/users.js';
 import { clearDeletedTraces } from '../src/services/accounts.js';
 import { createPushSender } from '../src/services/push.js';
 import { GPS_MARKER, JPEG_1X1, JPEG_WITH_GPS, authed, makeApp, multipart, registerUser, type TestApp } from './helpers.js';
@@ -1694,6 +1695,53 @@ describe('block / unblock / report', () => {
     const empty = await call({ method: 'POST', url: `/users/${other.me.id}/report`, payload: { reason: '' } });
     expect(empty.statusCode).toBe(400);
     expect(empty.json<{ error: { code: string } }>().error.code).toBe('validation');
+  });
+
+  it('stores a reason without the escape sequences and line breaks that wiped the owner\'s console', async () => {
+    const h = await boot();
+    const me = await registerUser(h.app, 'mustafa');
+    const other = await registerUser(h.app, 'kemal');
+
+    const response = await authed(h.app, me.token)({
+      method: 'POST',
+      url: `/users/${other.me.id}/report`,
+      payload: { reason: 'spam\u001b[8m\nkötü\u001b[2J' },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(h.db.prepare('SELECT reason FROM reports').all()).toEqual([{ reason: 'spam kötü' }]);
+  });
+
+  it('takes ten reports an hour from one account, and stores one per person a day', async () => {
+    const h = await boot();
+    const me = await registerUser(h.app, 'mustafa');
+    const call = authed(h.app, me.token);
+    const others = [];
+    for (let i = 0; i < REPORTS_PER_USER.max + 1; i++) others.push(await registerUser(h.app, `kisi${i}`));
+    const report = (id: string, reason = 'Küfür ediyor.') =>
+      call({ method: 'POST', url: `/users/${id}/report`, payload: { reason } });
+    const stored = () => (h.db.prepare('SELECT COUNT(*) AS n FROM reports').get() as { n: number }).n;
+
+    // the same person again within the day: "alındı" on the phone, nothing new for the owner
+    expect((await report(others[0]!.me.id)).statusCode).toBe(201);
+    expect((await report(others[0]!.me.id, 'Bir de fotoğrafı sahte.')).statusCode).toBe(201);
+    expect(stored()).toBe(1);
+
+    for (const other of others.slice(1, REPORTS_PER_USER.max)) expect((await report(other.me.id)).statusCode).toBe(201);
+    expect(stored()).toBe(REPORTS_PER_USER.max);
+
+    const over = await report(others[REPORTS_PER_USER.max]!.me.id);
+    expect(over.statusCode).toBe(429);
+    expect(over.json<{ error: { code: string; message: string } }>().error).toEqual({
+      code: 'too_many_requests',
+      message: 'Çok fazla şikayet gönderdin. 60 dakika sonra tekrar dene.',
+    });
+    expect(stored()).toBe(REPORTS_PER_USER.max);
+
+    // a day on, the same person can be reported again, and the hour's budget is back
+    h.advance(25 * 60 * 60 * 1000);
+    expect((await report(others[0]!.me.id)).statusCode).toBe(201);
+    expect((await report(others[REPORTS_PER_USER.max]!.me.id)).statusCode).toBe(201);
+    expect(stored()).toBe(REPORTS_PER_USER.max + 2);
   });
 });
 

@@ -20,11 +20,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline/promises';
-import { DEFAULT_TIMEZONE, dayKeyInTz, localTimeHHmm } from '@koydum/shared';
+import { DEFAULT_TIMEZONE, dayKeyInTz, localTimeHHmm, singleLine, stripEscapeSequences, stripInvisible } from '@koydum/shared';
 import { loadConfig, type Config } from '../config.js';
 import { openDb, type Database } from '../db/index.js';
 import { loadDotEnv } from '../env.js';
-import { accountToDelete, deleteAccount, listReports, listUsers, resetPassword } from '../services/admin.js';
+import { accountToDelete, countReports, deleteAccount, listReports, listUsers, resetPassword } from '../services/admin.js';
 import {
   backupCopyDir,
   backupDir,
@@ -108,6 +108,15 @@ function printUsers(db: Database): void {
   console.log(`\n${users.length - deleted} kişi${deleted > 0 ? `, ${deleted} silinmiş hesap` : ''}.`);
 }
 
+/**
+ * A reason as the owner's console may print it: one line, no control character and
+ * no escape sequence (one cleared the whole listing, another hid what followed).
+ * The API cleans reasons as they come in; this covers the ones stored before.
+ */
+function plainReason(reason: string): string {
+  return singleLine(stripInvisible(stripEscapeSequences(reason)));
+}
+
 function printReports(db: Database): void {
   const reports = listReports(db);
   if (reports.length === 0) {
@@ -117,10 +126,11 @@ function printReports(db: Database): void {
   console.log(
     table(
       ['ne zaman', 'şikayet eden', 'şikayet edilen', 'sebep'],
-      // a reason typed on a phone can hold line breaks; one report, one line
-      reports.map((r) => [when(r.createdAt), r.reporter, r.reported, r.reason.replace(/\s+/g, ' ')]),
+      reports.map((r) => [when(r.createdAt), r.reporter, r.reported, plainReason(r.reason)]),
     ),
   );
+  const total = countReports(db);
+  if (total > reports.length) console.log(`\nToplam ${total} şikayet var, en yeni ${reports.length} tanesini gösterdim.`);
 }
 
 async function printPassword(db: Database, username: string | undefined): Promise<number> {

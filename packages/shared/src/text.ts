@@ -27,6 +27,25 @@ export function stripInvisible(text: string): string {
 }
 
 /**
+ * Terminal escape sequences, whole: CSI (`ESC [ 2 J` clears the screen, `ESC [ 8 m`
+ * hides what follows), the OSC/DCS/SOS/PM/APC strings up to their BEL or ST, their
+ * 8-bit C1 forms, and the short `ESC x` ones. A payload never crosses another
+ * control character, which keeps a run of unterminated introducers linear.
+ */
+const ESCAPE_SEQUENCE_REGEX =
+  /\u001b\[[0-?]*[ -/]*[@-~]|\u009b[0-?]*[ -/]*[@-~]|(?:\u001b[\]PX^_]|[\u0090\u0098\u009d-\u009f])[^\u0000-\u001f\u007f-\u009f]*(?:\u0007|\u009c|\u001b\\)|\u001b[ -/]*[0-~]/g;
+
+/**
+ * Remove terminal escape sequences, for text the owner reads in a console
+ * (`npm run yonet -- sikayetler`). `stripInvisible` alone drops the ESC and leaves
+ * "[2J" behind in the text; this takes the sequence with it, and `stripInvisible`
+ * still catches a lone control character that starts none.
+ */
+export function stripEscapeSequences(text: string): string {
+  return text.replace(ESCAPE_SEQUENCE_REGEX, '');
+}
+
+/**
  * Turkish letters to their plain Latin twins (plus the circumflexed ones of
  * loanwords). Shared by the banned-word filter and `foldUsername`.
  */

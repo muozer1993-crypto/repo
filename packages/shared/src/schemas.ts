@@ -10,7 +10,7 @@ import {
 } from './types';
 import { LIMITS } from './scoring';
 import { DAY_KEY_REGEX, HHMM_REGEX, DEFAULT_TIMEZONE, isValidDayKey, isValidHHmm, isValidTimeZone } from './time';
-import { countGraphemes, foldUsername, hasVisibleChar, singleLine, stripInvisible } from './text';
+import { countGraphemes, foldUsername, hasVisibleChar, singleLine, stripEscapeSequences, stripInvisible } from './text';
 import { deadlineFitsWindow, getChallengeType } from './catalog';
 
 export { DAY_KEY_REGEX, HHMM_REGEX };
@@ -468,8 +468,16 @@ export const TauntBodySchema = z
   });
 export type TauntBody = z.infer<typeof TauntBodySchema>;
 
+/**
+ * The owner reads a reason in a console (`npm run yonet -- sikayetler`), where an
+ * escape sequence in it cleared or hid the listing: escape sequences and invisible
+ * characters go, and line breaks fold into one space, as in a name.
+ */
 export const ReportBodySchema = z.object({
-  reason: z.string().trim().min(1, 'Sebep boş olamaz').max(LIMITS.REPORT_REASON_MAX),
+  reason: z
+    .string()
+    .transform((s) => singleLine(stripInvisible(stripEscapeSequences(s))))
+    .pipe(z.string().min(1, 'Sebep boş olamaz').max(LIMITS.REPORT_REASON_MAX)),
 });
 export type ReportBody = z.infer<typeof ReportBodySchema>;
 

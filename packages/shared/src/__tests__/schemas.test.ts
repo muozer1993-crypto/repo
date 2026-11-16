@@ -376,6 +376,9 @@ describe('small bodies', () => {
     expect(DisputeBodySchema.safeParse({ reason: 'x'.repeat(141) }).success).toBe(false);
     expect(ReportBodySchema.safeParse({ reason: 'x'.repeat(300) }).success).toBe(true);
     expect(ReportBodySchema.safeParse({ reason: 'x'.repeat(301) }).success).toBe(false);
+    // the owner reads it in a console: no escape sequence, one line
+    expect(ReportBodySchema.safeParse({ reason: ' spam\u001b[8m\nkötü\u200b ' }).data).toEqual({ reason: 'spam kötü' });
+    expect(ReportBodySchema.safeParse({ reason: '\u001b[2J\u001b[H' }).success).toBe(false);
   });
 
   it('EntryProofBody takes the same addresses an entry photo does', () => {
