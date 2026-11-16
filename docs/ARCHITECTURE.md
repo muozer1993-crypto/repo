@@ -741,10 +741,13 @@ giriş sayılır, zorunluysa sunucu reddeder ve kullanıcı "Kanıt fotoğrafı 
 diye duyar. React Native okuyamadığı dosyayı bağlantı yokmuş gibi bildirir; kuyruk ikisini
 `/health`'e sorarak ayırır: sunucu cevap verdiği halde fotoğraf iki kez gitmiyorsa sorun dosyadadır.
 İtiraza "Kanıt ekle" ile verilen cevabın arkasında kuyruk yok, o sadece bağlantı varken çalışır.
-Kuyruktaki her giriş, kuyruğa girdiği anda telefonda oturum açmış hesabı taşır (`ownerId`). Aynı
-telefonda başka bir hesap açılınca kuyruk onun girişlerini gönderir, öncekinin girişine ve
-fotoğrafına dokunmaz: yoksa Ali'nin günü ve fotoğrafı Veli'nin anahtarıyla, Veli'nin girişi olarak
-giderdi. Ali geri girince onunkiler gider. Reddedilen girişin haberi de sahibine gider: Ali'nin
+Kuyruktaki her giriş, kaydedildiği anda telefonda oturum açmış hesabı taşır (`ownerId`). Hesap
+istek yola çıkarken okunur, cevap gelince değil (`useAddEntry`): giriş ekranı istek yoldayken
+kapatılabilir; Ali o arada çıkış yapsa ya da Veli girse de cevabı gelen giriş Ali'nin adına kuyruğa
+girer, Ali'nin bekleyen kopyasını siler, ardından başlayan kuyruk turu da Ali'nin anahtarıyla
+Veli'nin girişlerini göndermez. Aynı telefonda başka bir hesap açılınca kuyruk onun girişlerini
+gönderir, öncekinin girişine ve fotoğrafına dokunmaz: yoksa Ali'nin günü ve fotoğrafı Veli'nin
+anahtarıyla, Veli'nin girişi olarak giderdi. Ali geri girince onunkiler gider. Reddedilen girişin haberi de sahibine gider: Ali'nin
 reddedilen girişi Veli'ye söylenmez, Ali geri girene kadar kuyrukta bekler. Eskiden telefona sonra
 giren hesaba söylenip siliniyordu: Veli Ali'nin çelıncını görüyor, Ali hiç duymuyordu. Sıradaki
 bir "Geldim"in üstüne basılan ikincisi ilk basışın saatini korur (`pendingForChallenge`); başka

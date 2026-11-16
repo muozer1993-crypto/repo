@@ -4,7 +4,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { useAddEntry, type AddEntryResult, type AddEntryVariables } from '@/hooks/queries';
 import { ApiError, type ApiClient } from '@/lib/api';
-import { StorageKeys } from '@/lib/storage';
+import { StorageKeys, removeItem, setJson } from '@/lib/storage';
 import { enqueueEntry, flushQueue, readQueue, type PendingEntry } from '@/services/offlineQueue';
 
 /**
@@ -336,5 +336,71 @@ describe("a day's parked copy while her own write of that day is on its way", ()
     expect(server.sent).toEqual([1, 0]);
     expect(server.days.get(DAY)).toBe(0);
     expect(await readQueue()).toEqual([]);
+  });
+});
+
+/** Who is logged in on the phone changes while her write is out: the form closed, the write runs on. */
+const signOut = () => removeItem(StorageKeys.me);
+const signIn = (id: string) => setJson(StorageKeys.me, { id });
+
+describe('an entry still on its way when the account logs out', () => {
+  it('parks under the account that tapped, and waits for her rather than going up as the next one', async () => {
+    const server = dayServer();
+    const write = tapper(server.client, 'spor', false);
+
+    const written = write(didIt);
+    await ticks(20);
+    await signOut();
+    server.waiting[0]?.reject(noSignal());
+    expect((await written).queued).toBe(true);
+    expect((await readQueue()).map((item) => [item.id, item.ownerId])).toEqual([[`u1/${dayId}`, 'u1']]);
+
+    // Veli signs in on the same phone: his drain leaves her day alone
+    await signIn('u2');
+    server.answerAll(landed);
+    expect(await flushQueue(server.client)).toMatchObject({ sent: 0, remaining: 0 });
+    expect(server.sent).toEqual([1]);
+    // she signs back in: it goes as hers
+    await signIn('u1');
+    expect(await flushQueue(server.client)).toMatchObject({ sent: 1, remaining: 0 });
+    expect(await readQueue()).toEqual([]);
+  });
+
+  it('spends her parked copy of the day when her correction lands after the logout', async () => {
+    const server = dayServer();
+    const write = tapper(server.client, 'spor', false);
+    await enqueueEntry('spor', didIt, dayId);
+
+    const written = write(didNot);
+    await ticks(20);
+    await signOut();
+    server.answerAll(landed);
+    expect((await written).queued).toBe(false);
+    await ticks(20);
+    expect(await readQueue()).toEqual([]);
+
+    // her next sign-in has nothing older to put back over "Yapmadım"
+    await signIn('u1');
+    expect(await flushQueue(server.client)).toMatchObject({ sent: 0 });
+    expect(server.sent).toEqual([0]);
+    expect(server.days.get(DAY)).toBe(0);
+  });
+
+  it("does not drain the next account's parked entries with her token", async () => {
+    const server = dayServer();
+    const write = tapper(server.client, 'spor', false);
+
+    const written = write(didNot);
+    await ticks(20);
+    await signOut();
+    await signIn('u2');
+    await enqueueEntry('kitap', didIt, `kitap:${DAY}:manual:`);
+    server.answerAll(landed);
+    expect((await written).queued).toBe(false);
+    await ticks(40);
+
+    // only her own write went up with her client; Veli's day waits for his
+    expect(server.sent).toEqual([0]);
+    expect((await readQueue()).map((item) => item.ownerId)).toEqual(['u2']);
   });
 });

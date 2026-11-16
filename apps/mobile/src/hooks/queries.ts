@@ -20,7 +20,15 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClie
 
 import { ApiError, type ApiClient } from '@/lib/api';
 import { qk } from '@/lib/query';
-import { dropParked, enqueueEntry, flushQueue, holdParked, releaseParked, uploadLocalPhoto } from '@/services/offlineQueue';
+import {
+  currentOwnerId,
+  dropParked,
+  enqueueEntry,
+  flushQueue,
+  holdParked,
+  releaseParked,
+  uploadLocalPhoto,
+} from '@/services/offlineQueue';
 import { refreshReminders } from '@/services/reminders';
 import { dropSavedChallengeDetail, saveChallengeDetail, savedChallengeDetail } from '@/services/savedDetails';
 import { useApi } from '@/hooks/useApi';
@@ -452,6 +460,10 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
   return useMutation<AddEntryResult, Error, AddEntryVariables>({
     mutationFn: async ({ proofLocalUri, ...body }) => {
       const key = `${id}:${body.dayKey}:${body.source}:${body.sessionId ?? ''}${append ? `:${body.clientTime}` : ''}`;
+      // The account that tapped, once: the request goes with its token, and a
+      // logout while it is out (the form closes, the write runs on) must not
+      // park, drop or drain it under whoever is logged in when it answers.
+      const owner = useAuth.getState().me?.id ?? (await currentOwnerId());
       // a page from a Wi-Fi portal or a proxy is not our server saying no (lib/api.ts).
       // A 507 is: the photo's disk is nearly full, the connection is fine, and the
       // form shows its message (remove the photo, or tell the owner) rather than
@@ -466,7 +478,7 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
           send = { ...body, proofUrl: url };
         } catch (error) {
           if (!parkable(error)) throw error;
-          await enqueueEntry(id, body, key, proofLocalUri, cachedChallengeTitle(qc, id));
+          await enqueueEntry(id, body, key, proofLocalUri, cachedChallengeTitle(qc, id), owner);
           return { entry: null, standings: null, queued: true };
         }
       }
@@ -477,13 +489,14 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
       try {
         const result = await api.addEntry(id, send);
         // its own parked copy goes first, or the drain below replays it
-        await dropParked(key).catch(() => {});
-        // a successful write is a good moment to drain anything parked earlier
-        void flushQueue(api).catch(() => {});
+        await dropParked(key, owner).catch(() => {});
+        // a successful write is a good moment to drain anything parked earlier,
+        // while the same account is logged in: this client carries its token
+        if ((await currentOwnerId()) === owner) void flushQueue(api).catch(() => {});
         return { ...result, queued: false };
       } catch (error) {
         if (parkable(error)) {
-          await enqueueEntry(id, send, key, undefined, cachedChallengeTitle(qc, id));
+          await enqueueEntry(id, send, key, undefined, cachedChallengeTitle(qc, id), owner);
           return { entry: null, standings: null, queued: true };
         }
         throw error;

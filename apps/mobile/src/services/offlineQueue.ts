@@ -35,7 +35,8 @@ export interface PendingEntry {
    */
   proofLocalUri?: string;
   /**
-   * The account that wrote it (the stored profile's id when it was parked). A
+   * The account that wrote it (the signed-in profile's id when its write
+   * started, even if it parked after a logout). A
    * flush under another account on the same phone leaves it for its owner:
    * it would go up as that account's entry, with that account's photo upload.
    * Items parked before this field existed go with whoever is logged in.
@@ -130,14 +131,20 @@ function mutateQueue(change: (queue: PendingEntry[]) => PendingEntry[]): Promise
   return run;
 }
 
+/**
+ * `ownerId` is the account that tapped, taken when its write started
+ * (useAddEntry): a logout or another sign-in before the answer must not park
+ * the entry under whoever is logged in by then. Left out, it is read here.
+ */
 export async function enqueueEntry(
   challengeId: string,
   body: PendingEntry['body'],
   id: string,
   proofLocalUri?: string,
-  challengeTitle?: string
+  challengeTitle?: string,
+  owner?: string | null
 ): Promise<PendingEntry> {
-  const ownerId = await currentOwnerId();
+  const ownerId = owner === undefined ? await currentOwnerId() : owner;
   // two accounts on one phone in the same çelınc build the same id for a day
   const key = ownerId ? `${ownerId}/${id}` : id;
   const item: PendingEntry = {
@@ -169,8 +176,9 @@ export async function removeFromQueue(id: string): Promise<void> {
  * right. Replayed after it, the check-in came back "Bugün zaten check-in
  * yaptın." and was told as a refused entry, and the day got its older number.
  */
-export async function dropParked(id: string): Promise<void> {
-  const ownerId = await currentOwnerId();
+export async function dropParked(id: string, owner?: string | null): Promise<void> {
+  // the account whose write landed (`enqueueEntry`'s `owner`), not whoever is logged in now
+  const ownerId = owner === undefined ? await currentOwnerId() : owner;
   await removeFromQueue(ownerId ? `${ownerId}/${id}` : id);
 }
 
