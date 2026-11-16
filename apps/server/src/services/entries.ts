@@ -297,9 +297,6 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
   if (!membership || membership.status !== 'accepted') {
     throw forbidden('not_participant', 'Bu çelınca katılmadın.');
   }
-  if (challenge.status !== 'active') {
-    throw badRequest('challenge_not_active', 'Bu çelınc şu an aktif değil.');
-  }
 
   // Day keys and the check-in deadline are read in the timezone PINNED when this
   // user joined, never in the one their profile currently says: `PATCH /me` must not
@@ -310,7 +307,9 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
   // a timeout on the way back, the offline queue replaying) returns the row that was
   // already written instead of double counting. Focus sessions and manual counts
   // append, so they carry one; the upsert metrics key on the day already and ignore
-  // (never store) the field.
+  // (never store) the field. Answered whatever the çelınc's state: a session
+  // written in its last minutes whose answer was lost comes back after the
+  // scheduler finished it, and "aktif değil" would tell the friend it did not count.
   const appendsWithKey = type.metricType === 'focus_minutes' || type.metricType === 'manual_count';
   const sessionId = appendsWithKey ? (body.sessionId ?? null) : null;
   if (sessionId) {
@@ -318,6 +317,21 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
       .prepare('SELECT * FROM entries WHERE challenge_id = ? AND user_id = ? AND session_id = ?')
       .get(challenge.id, user.id, sessionId) as EntryRow | undefined;
     if (replay) return { entry: replay, created: false };
+  }
+
+  // One check-in per day, told first, whenever it arrives: a check-in the
+  // server wrote but whose answer was lost comes back from the phone's queue,
+  // often the next morning, after the end too, and "sadece bugün", "süre
+  // bitti" or "aktif değil" would tell the friend a counted night did not count.
+  if (type.metricType === 'checkin_deadline' && selectDayEntry(db, challenge.id, user.id, body.dayKey)) {
+    throw conflict(
+      'already_checked_in',
+      body.dayKey === todayKey(tz, now) ? 'Bugün zaten check-in yaptın.' : 'O gün zaten check-in yapmıştın.',
+    );
+  }
+
+  if (challenge.status !== 'active') {
+    throw badRequest('challenge_not_active', 'Bu çelınc şu an aktif değil.');
   }
 
   // Past its end a phone-counted çelınc stays `active` for up to an hour so the
@@ -449,15 +463,7 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
       // check (erken_yat at 00:00) is read as the type's default, or no check-in
       // in that çelınc could ever count.
       const deadline = checkinDeadline ?? effectiveDeadline(type, challenge.deadline_time);
-      // First, whenever it arrives: a check-in the server wrote but whose answer
-      // was lost comes back from the phone's queue, often the next morning, and
-      // "sadece bugün" would tell the friend a counted night did not count.
-      if (selectDayEntry(db, challenge.id, user.id, body.dayKey)) {
-        throw conflict(
-          'already_checked_in',
-          body.dayKey === todayKey(tz, now) ? 'Bugün zaten check-in yaptın.' : 'O gün zaten check-in yapmıştın.',
-        );
-      }
+      // one per day: told before anything else (above)
       if (body.dayKey !== todayKey(tz, at)) {
         throw badRequest('checkin_today_only', 'Check-in sadece bugün için yapılır.');
       }

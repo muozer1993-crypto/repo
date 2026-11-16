@@ -162,7 +162,8 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
     // The 1.0 app has no "Kanıt ekle": its owner answers an itiraz by sending
     // the day again with a photo. That is a photo answer like /proof. When the
     // number changed with it, the disputers may say "yalan" to the new one.
-    if (!created && body.proofUrl && before?.status === 'disputed' && before.id === entry.id) {
+    // (Only while it is played: a replay is answered after the finish too.)
+    if (!created && body.proofUrl && challenge.status === 'active' && before?.status === 'disputed' && before.id === entry.id) {
       const outcome = answerDisputeWithProof(db, { entry, byUserId: me.id, proofUrl: body.proofUrl, now });
       if (Number(before.value) !== Number(outcome.entry.value)) forgetDismissedDisputes(db, entry.id);
       tellDisputers(outcome.disputerIds, me.row, challenge, entry, now);

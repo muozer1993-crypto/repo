@@ -1001,7 +1001,8 @@ Elle yazılan bir adım günü itirazla düştüyse o gün sıfırda kalmaz: tel
 yazılandan az da olsa, yerine geçer ve sayılır. Telefon o günü zaten gönderdiyse itiraz düştüğü
 anda olur (çelınc bittikten sonra düşse de, gün bir haftadan eski olsa da sonuca telefonun sayısı
 girer); bildirim de "skorundan düştü" demez, yazdığın sayıyı ve yerine geçen telefon sayısını
-söyler. Göndermediyse ilk senkronda olur. İtiraz sürerken telefon elle yazılan sayıya dokunmaz,
+söyler. Göndermediyse ilk senkronda olur; ama telefon sadece son 7 günü gönderir, bir haftadan
+eski bir günü sonradan getiremez, o gün 0 kalır. İtiraz sürerken telefon elle yazılan sayıya dokunmaz,
 karar itirazındır. O güne artık elle sayı yazılmaz, sadece telefon yazar; itirazı kazanan kanka
 telefonun sayısına da bir kere itiraz edebilir. Telefonun kendi saydığı bir gün itirazla düştüyse
 geri gelmez.

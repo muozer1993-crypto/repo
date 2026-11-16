@@ -26,9 +26,11 @@
  * A typed day friends threw out (`rejected` after an upheld itiraz) is not a
  * day off for good: the phone's own reading takes its place, whatever its
  * size, and counts again — right when the itiraz is upheld if the phone
- * already reported that day (`restoreFromPhone`), else at its next sync. Only
- * a typed one comes back — a device row that was thrown out stays out, or a
- * sync would undo the itiraz on it. The upheld itirazlar stay on the row as
+ * already reported that day (`restoreFromPhone`), else at its next sync, as
+ * long as the day is inside the device backfill limit a sync sends (an older
+ * day the phone never reported stays out). Only a typed one comes back — a
+ * device row that was thrown out stays out, or a sync would undo the itiraz
+ * on it. The upheld itirazlar stay on the row as
  * history, and their owners may file one again on the phone's number
  * (`recordDispute`); from then on only the phone writes that day
  * (`day_rejected` in `validateAndUpsertEntry`).
@@ -156,7 +158,12 @@ export function fanOutDeviceDays(
           type.direction === 'higher'
             ? Number(existing.value) >= value
             : isDeviceSource(existing.source) && Number(existing.value) >= value;
-        if (!keepExisting) updateEntry.run(value, day.source, at, existing.id);
+        if (!keepExisting) {
+          updateEntry.run(value, day.source, at, existing.id);
+          // a photo that answered an itiraz backed the old number; in a 1v1 the
+          // rival is the only one who could ever challenge the new one
+          if (Number(existing.value) !== value) forgetDismissedDisputes(db, existing.id);
+        }
       } else {
         insertEntry.run(newId(), challenge.id, user.id, day.dayKey, value, day.source, at, at, at);
       }

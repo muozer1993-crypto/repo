@@ -54,8 +54,9 @@ güvenmez:
   saatiyle yazılan dünkü check-in o akşamın hatırlatmasını susturuyordu. Tek istisna çelıncın son
   gecesi: süre bittikten sonra gelen check-in, uykuda basılmış olsa da reddedilir (sonuç o arada
   belli olur). Sunucunun zaten yazdığı bir check-in'in tekrarı (cevabı kaybolmuş, kuyruk sabah yine
-  gönderiyor) "sadece bugün" diye değil "O gün zaten check-in yapmıştın." diye cevaplanır; kuyruk onu
-  gitmiş sayar. 22:00 yazan bir check-in'e güvenilmez,
+  gönderiyor) "sadece bugün" diye değil "O gün zaten check-in yapmıştın." diye cevaplanır; bu kontrol
+  çelıncın durumundan ve bitişten de önce çalışır, son gecenin tekrarı çelınc bittikten sonra gelse de
+  böyle cevaplanır. Kuyruk onu gitmiş sayar. 22:00 yazan bir check-in'e güvenilmez,
   sunucu o saatte ayaktaydı ve basılsaydı duyardı. Bedeli: kayıtlı bir kesintinin içinde saatini
   geri almış bir telefon o aralığın herhangi bir dakikasını iddia edebilir; dışında hiçbir şey
   kazanmaz.
@@ -194,7 +195,9 @@ olurdu.
 İtiraz tek başına bir girişi silmez. Diğer oyuncuların çoğunluğu itiraz edince girişin sahibine
 12 saat (`LIMITS.DISPUTE_ANSWER_MS`) tanınır ve giriş bu sürede sayılmaya devam eder; yoksa teke tek
 çelıncta kaybeden taraf rakibinin her gününü tek dokunuşla sıfırlayabilirdi. Sahibi fotoğraf eklerse
-itirazlar `dismissed` olur. Eklemezse zamanlayıcının `resolveDisputes` adımı (bitirmeden hemen önce
+itirazlar `dismissed` olur. Girişin sayısı sonradan değişirse (elle ya da telefonun senkronuyla) bu
+itirazlar unutulur (`forgetDismissedDisputes`), kanka yeni sayıya yine itiraz edebilir: fotoğraf
+eski sayıyı destekliyordu, teke tekte de yeni sayıya itiraz edebilecek tek kişi rakiptir. Eklemezse zamanlayıcının `resolveDisputes` adımı (bitirmeden hemen önce
 çalışır) girişi `rejected` yapar ve itiraz edenlerin `disputesWon` sayısı artar. Haberi iki taraf da
 alır: sahibine `entry_rejected`, itiraz edenlere `dispute` (`kind: 'upheld'`); fotoğrafla kapanan
 itirazda olduğu gibi, işi başlatan da nasıl bittiğini duyar (sahibiyle arasında engel olan ya da
@@ -278,7 +281,9 @@ toplama girmez; ortalama her girişi pencerenin gün sayısına böldüğü içi
 bozarlardı. İkincisi: `manual_count` ve `focus_minutes` girişleri
 bir `sessionId` taşır ve aynı kimlikle gelen ikinci istek yeni bir satır değil, ilk satırın kendisidir. Telefon her dokunuşta
 yeni bir kimlik üretir; zaman aşımına uğrayıp çevrimdışı kuyruğundan tekrar gönderilen istek
-böylece bir bardak suyu iki kez saymaz.
+böylece bir bardak suyu iki kez saymaz. Tekrar, çelıncın durumuna bakılmadan cevaplanır: son
+dakikalarda yazılıp cevabı kaybolan seans zamanlayıcı çelıncı bitirdikten sonra gelirse "aktif değil"
+diye reddedilmiş görünmez, yazılan satır döner.
 
 Odak günü kataloğun dediği gibi 360 dakikada kesilir (`maxPerDay`, itirazla düşen seanslar
 sayılmaz). Kalanı aşan seans reddedilmez, kalana kırpılarak yazılır: eski APK seansın tamamını
@@ -685,7 +690,8 @@ telefon sayısını birlikte söyler, itiraz edenlere de telefonun sayısı gide
 zaten duran sayı için değil. 14 günlük bir yarışın ilk gününe onuncu gün haklı çıkan itiraz da,
 bilgisayar pazar gecesinden salıya uyurken süresi dolan itiraz da o günü 0'a indirmez; sonraki
 hiçbir senkron da onu geri getiremezdi. Çelıncın gün aralığı ve bitiş kuralı (`dayOverByEnd`)
-yine geçerlidir. Telefon o günü göndermediyse gün ilk senkronda geri gelir. İtiraz sürerken
+yine geçerlidir. Telefon o günü göndermediyse gün, senkronun 7 günlük sınırı içindeyse ilk
+senkronda geri gelir; daha eskiyse hiçbir senkron göndermez, gün düşmüş kalır. İtiraz sürerken
 telefon elle yazılmış satıra hiç dokunmaz; üstüne yazsaydı satır
 "telefonun saydığı" olur, itiraz haklı çıkınca da gün bir daha geri gelmezdi. Değer ve kaynak
 telefonunki olur, durum `ok`, kanıt fotoğrafı ve `answer_by` silinir; geri çekilmiş ya da

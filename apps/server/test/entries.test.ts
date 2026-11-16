@@ -536,6 +536,31 @@ describe('focus_minutes entries', () => {
     expect(replay.json<{ entry: Entry }>().entry).toMatchObject({ id: first.json<{ entry: Entry }>().entry.id, value: 180 });
   });
 
+  it('still answers a session written in time once the scheduler has finished the çelınc', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await liveChallenge(harness, 'odak_seansi', {}, 1);
+    const sessionId = randomUUID();
+
+    // the last ten minutes: the session lands, its answer does not
+    harness.advance(DAY_MS - 10 * 60_000);
+    const first = await focusSession(harness, ali, challengeId, 30, sessionId);
+    expect(first.statusCode).toBe(201);
+    harness.advance(11 * 60_000);
+    runSchedulerOnce(harness.db, harness.now());
+    expect(harness.db.prepare('SELECT status FROM challenges WHERE id = ?').get(challengeId)).toEqual({ status: 'finished' });
+
+    // the offline queue sends it again: it counted, so it is not "refused"
+    const body = { dayKey: first.json<{ entry: Entry }>().entry.dayKey, value: 30, source: 'focus', clientTime: iso(harness), sessionId };
+    const replay = await post(harness, ali, challengeId, body);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json<{ entry: Entry }>().entry).toMatchObject({ id: first.json<{ entry: Entry }>().entry.id, value: 30 });
+
+    // a new session is still refused
+    const fresh = await post(harness, ali, challengeId, { ...body, sessionId: randomUUID() });
+    expect(fresh.statusCode).toBe(400);
+    expect(errorCode(fresh)).toBe('challenge_not_active');
+  });
+
   it('gives back the minutes of a session friends threw out', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await liveChallenge(harness, 'odak_seansi');
@@ -765,6 +790,25 @@ describe('checkin_deadline entries', () => {
       const body = { dayKey: NIGHT, value: 1, source: 'checkin', clientTime: iso(harness) };
       expect((await post(harness, ali, challengeId, body)).statusCode).toBe(201);
       harness.setNow(SENT);
+      const replay = await post(harness, ali, challengeId, body);
+      expect(replay.statusCode).toBe(409);
+      expect(errorCode(replay)).toBe('already_checked_in');
+      expect((replay.json() as { error: { message: string } }).error.message).toBe('O gün zaten check-in yapmıştın.');
+    });
+
+    it('answers the last night as counted after the çelınc finished too', async () => {
+      // the çelınc's last night: in at 23:10, answer lost, the end and the
+      // scheduler come before the queue sends it again
+      harness = await makeApp({ now: '2026-01-04T20:10:00.000Z' });
+      // ends at 05:10 on the morning after
+      const { ali, challengeId } = await liveChallenge(harness, 'erken_yat', { deadlineTime: '23:30' }, 1.25);
+      harness.setNow('2026-01-05T20:10:00.000Z');
+      const body = { dayKey: NIGHT, value: 1, source: 'checkin', clientTime: iso(harness) };
+      expect((await post(harness, ali, challengeId, body)).statusCode).toBe(201);
+      harness.setNow(SENT);
+      runSchedulerOnce(harness.db, harness.now());
+      expect(harness.db.prepare('SELECT status FROM challenges WHERE id = ?').get(challengeId)).toEqual({ status: 'finished' });
+
       const replay = await post(harness, ali, challengeId, body);
       expect(replay.statusCode).toBe(409);
       expect(errorCode(replay)).toBe('already_checked_in');
@@ -1485,6 +1529,34 @@ describe('POST /challenges/:id/entries/:entryId/proof', () => {
 
     await post(harness, ali, challengeId, { dayKey: day, value: 30000, source: 'manual', clientTime: iso(harness) });
     const fresh = await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'otuz bin hiç değil' } });
+    expect(fresh.statusCode).toBe(201);
+  });
+
+  it.each([
+    { typeKey: 'ekran_suresi_beyani', typed: 240, synced: 5, url: '/me/screen-time', reading: { minutes: 5 }, source: 'usage_stats' },
+    { typeKey: 'adim_yarisi', typed: 20000, synced: 90000, url: '/me/steps', reading: { steps: 90000, source: 'pedometer' }, source: 'pedometer' },
+  ])('opens the door again when a $typeKey sync replaces a number closed with a photo', async ({ typeKey, typed, synced, url, reading, source }) => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await liveChallenge(harness, typeKey);
+    const day = today(harness);
+    const first = await post(harness, ali, challengeId, { dayKey: day, value: typed, source: 'manual', proofUrl: '/uploads/a.jpg', clientTime: iso(harness) });
+    const entryId = first.json<{ entry: Entry }>().entry.id;
+    const disputeUrl = `/challenges/${challengeId}/entries/${entryId}/dispute`;
+    expect((await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'yok artık' } })).statusCode).toBe(201);
+    const answered = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/proof`,
+      payload: { proofUrl: '/uploads/b.jpg' },
+    });
+    expect(answered.statusCode).toBe(200);
+
+    // a sync, honest or typed by hand, puts a different number on the row
+    const sync = await authed(harness.app, ali.token)({ method: 'POST', url, payload: { days: [{ dayKey: day, ...reading }] } });
+    expect(sync.statusCode).toBe(200);
+    expect(getEntryRow(harness.db, entryId)).toMatchObject({ value: synced, source, status: 'ok' });
+
+    // the photo answered the old number: Veli may call the new one a lie
+    const fresh = await authed(harness.app, veli.token)({ method: 'POST', url: disputeUrl, payload: { reason: 'bu da ne' } });
     expect(fresh.statusCode).toBe(201);
   });
 
