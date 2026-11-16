@@ -1155,6 +1155,47 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
     expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: veli.me.id });
   });
 
+  it("gives a typed day thrown out after a long sleep the phone's number, which still wins the race", async () => {
+    // Monday 00:30 to Sunday midnight in Istanbul
+    harness = await makeApp({ now: '2026-01-04T21:30:00.000Z' });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'adim_yarisi', startsAt: iso(harness), endsAt: '2026-01-11T20:59:59.999Z', participantIds: [veli.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    expect((await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+
+    // Monday night: Ali types 30.000 over his phone's 9.000
+    at(harness, '2026-01-05T19:00:00.000Z');
+    await phoneSync(harness, ali, { '2026-01-05': 9_000 });
+    await phoneSync(harness, veli, { '2026-01-05': 5_000 });
+    const typed = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: '2026-01-05', value: 30_000, source: 'manual', clientTime: iso(harness) },
+    });
+    const entryId = typed.json<{ entry: { id: string } }>().entry.id;
+
+    // Sunday 22:00 Veli calls it out, and the PC sleeps from then until Tuesday 18:00
+    at(harness, '2026-01-11T19:00:00.000Z');
+    await dispute(harness, veli, challengeId, entryId);
+    const bootAt = new Date('2026-01-13T15:00:00.000Z');
+    at(harness, bootAt.toISOString());
+    expect(runSchedulerOnce(harness.db, harness.now(), { bootAt })).toMatchObject({ disputes: 0, finalized: 0 });
+
+    // Ali's hour after the wake runs out: Monday is eight days old, the phone's 9.000 still counts
+    at(harness, bootAt.toISOString(), LIMITS.DEVICE_SETTLE_MS + MINUTE);
+    expect(runSchedulerOnce(harness.db, harness.now(), { bootAt })).toMatchObject({ disputes: 1, finalized: 1 });
+    expect(entryStatus(harness, entryId)).toBe('ok');
+    expect(participant(harness, challengeId, ali.me.id)).toMatchObject({ final_score: 9_000, final_rank: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+    expect(listByType(harness.db, ali.me.id, 'entry_rejected')[0]?.body).not.toContain('skorundan düştü');
+  });
+
   it('throws out on time an itiraz that ran out while the server was up', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await endingAtMidnight(harness, 'su_bardak');

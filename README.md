@@ -970,11 +970,12 @@ Telefon sonradan o güne daha fazlasını sayarsa telefonunki geçer.
 
 Elle yazılan bir adım günü itirazla düştüyse o gün sıfırda kalmaz: telefonun o gün saydığı adım,
 yazılandan az da olsa, yerine geçer ve sayılır. Telefon o günü zaten gönderdiyse itiraz düştüğü
-anda olur (çelınc bittikten sonra düşse de sonuca telefonun sayısı girer); bildirim de "skorundan
-düştü" demez, yazdığın sayıyı ve yerine geçen telefon sayısını söyler. Göndermediyse ilk
-senkronda olur. İtiraz sürerken telefon elle yazılan sayıya dokunmaz, karar itirazındır. O güne artık
-elle sayı yazılmaz, sadece telefon yazar; itirazı kazanan kanka telefonun sayısına da bir kere
-itiraz edebilir. Telefonun kendi saydığı bir gün itirazla düştüyse geri gelmez.
+anda olur (çelınc bittikten sonra düşse de, gün bir haftadan eski olsa da sonuca telefonun sayısı
+girer); bildirim de "skorundan düştü" demez, yazdığın sayıyı ve yerine geçen telefon sayısını
+söyler. Göndermediyse ilk senkronda olur. İtiraz sürerken telefon elle yazılan sayıya dokunmaz,
+karar itirazındır. O güne artık elle sayı yazılmaz, sadece telefon yazar; itirazı kazanan kanka
+telefonun sayısına da bir kere itiraz edebilir. Telefonun kendi saydığı bir gün itirazla düştüyse
+geri gelmez.
 
 ### Ekran süresi nereden geliyor?
 

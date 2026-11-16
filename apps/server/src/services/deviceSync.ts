@@ -7,11 +7,14 @@
  * The fan-out obeys exactly the same day rules as `POST /challenges/:id/entries`
  * (`dayWindowIssue`): a day outside the challenge window, in the future, or older
  * than the device backfill limit is skipped instead of banked — otherwise a phone
- * could pre-fill a whole 30-day race with the daily maximum on day one. The window
- * is read in the timezone pinned when the user joined that challenge. Past the
- * end (the phones' hour, a dispute's wait) only days that were over by `ends_at`
- * still move (`dayOverByEnd`): a later reading of a day the end cut in half would
- * add the steps walked after the whistle.
+ * could pre-fill a whole 30-day race with the daily maximum on day one. The one
+ * exception is the age limit for a reading the server already holds, put back on
+ * a typed day friends threw out (`restoreFromPhone`): an itiraz may be upheld on
+ * any day of the race, and day one's phone number must not become a 0 because it
+ * was upheld on day ten. The window is read in the timezone pinned when the user
+ * joined that challenge. Past the end (the phones' hour, a dispute's wait) only
+ * days that were over by `ends_at` still move (`dayOverByEnd`): a later reading
+ * of a day the end cut in half would add the steps walked after the whistle.
  *
  * On a higher-is-better metric (steps) a device reading only ever raises a
  * day's entry; on lower-is-better (screen time) it replaces a typed value
@@ -77,7 +80,9 @@ export function deviceChallengesFor(db: Database, userId: string, metric: Device
  * Mirrors the given days into every matching challenge as an upserted entry
  * (only `onlyChallengeId` when given). Returns how many entries were touched.
  * Runs inside the caller's transaction when there is one; otherwise each
- * statement is its own.
+ * statement is its own. `storedReading`: the days come from what the server
+ * already holds for a day friends threw out (`restoreFromPhone`), so their age
+ * is no reason to skip them.
  */
 export function fanOutDeviceDays(
   db: Database,
@@ -86,6 +91,7 @@ export function fanOutDeviceDays(
   days: readonly DeviceDay[],
   now: Date,
   onlyChallengeId?: string,
+  options: { storedReading?: boolean } = {},
 ): number {
   const at = nowIso(now);
   const challenges = deviceChallengesFor(db, user.id, metric).filter(
@@ -117,7 +123,9 @@ export function fanOutDeviceDays(
   let updated = 0;
   for (const day of days) {
     for (const { challenge, tz, window, type } of rules) {
-      if (dayWindowIssue(window, type.metricType, tz, day.dayKey, now, day.source) !== null) continue;
+      const issue = dayWindowIssue(window, type.metricType, tz, day.dayKey, now, day.source);
+      // the backfill limit is for what a phone sends; a stored reading is already here
+      if (issue !== null && !(options.storedReading && issue === 'day_too_old')) continue;
       if (now.getTime() >= Date.parse(challenge.ends_at) && !dayOverByEnd(challenge, tz, day.dayKey)) continue;
       const value = Math.min(day.value, type.maxPerDay);
       const existing = findEntry.get(challenge.id, user.id, day.dayKey) as
@@ -187,7 +195,11 @@ export function phoneDays(db: Database, userId: string, metric: DeviceMetric, fr
  * from what it already reported (`steps_daily`, `screen_time_daily`). Without
  * it the day waits for the next sync, and an itiraz upheld past the end would
  * never get one: the same pass finishes the çelınc, and the fan-out stops at
- * `finished`. Same rules as a sync (`fanOutDeviceDays`). True when it counts again.
+ * `finished`. Same rules as a sync (`fanOutDeviceDays`) but the device backfill
+ * limit: an itiraz upheld more than a week after its day (a 14-day race, a PC
+ * asleep from Sunday night to Tuesday) still gets the phone's number, and no
+ * later sync could bring it back, the day being too old for one as well. The
+ * window and the end still apply. True when it counts again.
  */
 export function restoreFromPhone(db: Database, challenge: ChallengeRow, entry: EntryRow, now: Date): boolean {
   const metric = typeForChallenge(challenge).deviceMetric;
@@ -196,7 +208,7 @@ export function restoreFromPhone(db: Database, challenge: ChallengeRow, entry: E
   if (!owner || owner.deleted_at !== null) return false;
   const reading = phoneDays(db, owner.id, metric, entry.day_key, entry.day_key);
   if (reading.length === 0) return false;
-  fanOutDeviceDays(db, owner, metric, reading, now, challenge.id);
+  fanOutDeviceDays(db, owner, metric, reading, now, challenge.id, { storedReading: true });
   const after = db.prepare('SELECT status FROM entries WHERE id = ?').get(entry.id) as { status: string } | undefined;
   return after?.status === 'ok';
 }

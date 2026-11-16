@@ -676,8 +676,13 @@ yazılandan az da olsa, yerine geçer. Telefon o günü zaten gönderdiyse bu, i
 zamanlayıcı turunda olur (`restoreFromPhone`, bitirmeden önce): bitişten sonra düşen bir gün de
 sonuca telefonun sayısıyla girer. Bu, `upholdDisputes`'un kendi işleminde, bildirimlerden önce
 yapılır: sahibine "skorundan düştü" demek yalan olurdu, bildirim yazdığı sayıyla yerine geçen
-telefon sayısını birlikte söyler, itiraz edenlere de telefonun sayısı gider. Göndermediyse ilk
-senkronda olur. İtiraz sürerken telefon elle yazılmış satıra hiç dokunmaz; üstüne yazsaydı satır
+telefon sayısını birlikte söyler, itiraz edenlere de telefonun sayısı gider. Burada günün kaç gün
+önce olduğuna bakılmaz: senkrondaki 7 günlük sınır telefonun gönderdiği günler içindir, sunucuda
+zaten duran sayı için değil. 14 günlük bir yarışın ilk gününe onuncu gün haklı çıkan itiraz da,
+bilgisayar pazar gecesinden salıya uyurken süresi dolan itiraz da o günü 0'a indirmez; sonraki
+hiçbir senkron da onu geri getiremezdi. Çelıncın gün aralığı ve bitiş kuralı (`dayOverByEnd`)
+yine geçerlidir. Telefon o günü göndermediyse gün ilk senkronda geri gelir. İtiraz sürerken
+telefon elle yazılmış satıra hiç dokunmaz; üstüne yazsaydı satır
 "telefonun saydığı" olur, itiraz haklı çıkınca da gün bir daha geri gelmezdi. Değer ve kaynak
 telefonunki olur, durum `ok`, kanıt fotoğrafı ve `answer_by` silinir; geri çekilmiş ya da
 fotoğrafla kapanmış itirazlar unutulur, haklı çıkan (`upheld`) itirazlar `disputesWon` için

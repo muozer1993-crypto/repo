@@ -24,6 +24,7 @@ import {
 } from '@koydum/shared';
 import { loadConfig } from '../src/config.js';
 import { runSchedulerOnce, sendNudges, sendReminders } from '../src/services/challenges.js';
+import { entryReplacedCopy } from '../src/services/challengeViews.js';
 import { awardBadges, computeUserStats, getBadges } from '../src/services/stats.js';
 import { sendTaunt } from '../src/services/taunts.js';
 import type { ChallengeRow, UserRow } from '../src/db/index.js';
@@ -916,6 +917,64 @@ describe('device readings versus typed declarations', () => {
     const challenge = harness.db.prepare('SELECT status, winner_id FROM challenges WHERE id = ?').get(challengeId);
     expect(challenge).toEqual({ status: 'finished', winner_id: veli.me.id });
     expect(stepRow(harness, challengeId, veli.me.id)).toMatchObject({ value: 11800, source: 'pedometer', status: 'ok' });
+  });
+
+  it('a step day thrown out more than a week later still gets the phone reading, not a 0', async () => {
+    // a 14-day race: Veli only gets round to day one's 30.000 on day ten
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await livePair(harness, 'adim_yarisi', {}, 14);
+    const call = authed(harness.app, ali.token);
+    const day = today(harness);
+
+    await call({ method: 'POST', url: '/me/steps', payload: { days: [{ dayKey: day, steps: 9000, source: 'pedometer' }] } });
+    await call({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 30000, source: 'manual', clientTime: iso(harness) },
+    });
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ value: 30000, source: 'manual' });
+
+    harness.advance(9 * DAY_MS);
+    await throwOut(harness, veli, challengeId, stepRow(harness, challengeId, ali.me.id).id);
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ value: 9000, source: 'pedometer', status: 'ok' });
+    const detail = (await call({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>();
+    expect(detail.participants.find((p) => p.user.id === ali.me.id)?.score).toBe(9000);
+
+    // the day did not drop off: Ali hears both numbers
+    const told = harness.db
+      .prepare("SELECT title, body FROM notifications WHERE user_id = ? AND type = 'entry_rejected'")
+      .all(ali.me.id);
+    expect(told).toEqual([entryReplacedCopy(ali.me.vulgarityMax, detail.challenge.title, day, '30.000 adım', '9.000 adım')]);
+  });
+
+  it('a typed screen time thrown out after a week asleep comes back as the phone reading, not the missing-day penalty', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await livePair(harness, 'ekran_suresi_beyani', {}, 14);
+    const call = authed(harness.app, ali.token);
+    const day = today(harness);
+    await call({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: day, value: 30, source: 'manual', proofUrl: '/uploads/x.jpg', clientTime: iso(harness) },
+    });
+    const entryId = stepRow(harness, challengeId, ali.me.id).id;
+    const disputed = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+      payload: { reason: 'yarım saat mi, hiç sanmam' },
+    });
+    expect(disputed.statusCode).toBe(201);
+    // the phone reports the day meanwhile; the typed row stays the itiraz's
+    await call({ method: 'POST', url: '/me/screen-time', payload: { days: [{ dayKey: day, minutes: 240 }] } });
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ value: 30, source: 'manual', status: 'disputed' });
+
+    // the owner's PC sleeps for eight days; Ali gets his hour after it wakes, then the itiraz holds
+    const bootAt = new Date(harness.now().getTime() + 8 * DAY_MS);
+    harness.setNow(bootAt);
+    expect(runSchedulerOnce(harness.db, harness.now(), { bootAt })).toMatchObject({ disputes: 0 });
+    harness.advance(LIMITS.DEVICE_SETTLE_MS + 60_000);
+    expect(runSchedulerOnce(harness.db, harness.now(), { bootAt })).toMatchObject({ disputes: 1 });
+    expect(stepRow(harness, challengeId, ali.me.id)).toMatchObject({ value: 240, source: 'usage_stats', status: 'ok' });
   });
 
   it('a typed screen time is always replaced by the phone reading (lower is better, the phone is honest)', async () => {
