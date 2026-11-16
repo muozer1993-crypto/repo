@@ -4200,6 +4200,10 @@ describe('the focus timer on a short phone', () => {
 describe('effort that would not count', () => {
   /** A focus çelınc that ends `msLeft` from now. */
   function focusEndingIn(msLeft: number) {
+    return focusEndingAt(new Date(Date.now() + msLeft));
+  }
+
+  function focusEndingAt(endsAt: Date) {
     const detail = challengeDetail();
     return {
       ...detail,
@@ -4208,7 +4212,7 @@ describe('effort that would not count', () => {
         typeKey: 'odak_seansi',
         metricType: 'focus_minutes' as const,
         unit: 'dk',
-        endsAt: new Date(Date.now() + msLeft).toISOString(),
+        endsAt: endsAt.toISOString(),
       },
     };
   }
@@ -4308,7 +4312,8 @@ describe('effort that would not count', () => {
     if (!lastNight) throw new Error('günün sonu hesaplanamadı');
     searchParams.id = 'c-1';
     api.challenge = jest.fn(async () => ({
-      ...focusEndingIn(lastNight.getTime() - Date.now()),
+      // the exact end of today: going through Date.now() twice let a passing millisecond push it into tomorrow
+      ...focusEndingAt(lastNight),
       myEntries: focusedToday(180, 180),
     }));
     const FocusScreen = require('@/app/(app)/focus/[id]').default;
