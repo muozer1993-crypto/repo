@@ -34,6 +34,7 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
    */
   const endsMs = Date.parse(challenge.endsAt);
   const ended = challenge.status === 'active' && Number.isFinite(endsMs) && endsMs <= checkedAt;
+  const accepted = participants.filter((p) => p.status === 'accepted').length;
 
   return (
     <Card onPress={onPress} edgeColor={status.color} glow={status.key === 'losing' && !ended}>
@@ -44,7 +45,7 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
             {challenge.title || type?.nameTr || 'Çelınc'}
           </Text>
           <Text variant="tiny" muted numberOfLines={1}>
-            {participants.filter((p) => p.status === 'accepted').length} kişi
+            {accepted} kişi
             {challenge.rewardText ? ` · 🎁 ${challenge.rewardText}` : ''}
           </Text>
         </View>
@@ -77,11 +78,13 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
             onFinish={() => setCheckedAt(Date.now())}
           />
         ) : challenge.status === 'pending' ? (
-          // past its start a pending çelınc is waiting for a second yes, not over
+          // Past its start a pending çelınc is waiting for a second yes, not
+          // over. With two it is starting: the server flips it on its next pass,
+          // and a list read before that (the PC asleep) still says pending.
           <Countdown
             target={challenge.startsAt}
             prefix="🚦 başlıyor:"
-            finishedLabel="🚦 kabul bekleniyor"
+            finishedLabel={accepted >= 2 ? '🚦 başlıyor' : '🚦 kabul bekleniyor'}
             variant="tiny"
             muted
           />

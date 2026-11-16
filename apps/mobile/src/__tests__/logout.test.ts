@@ -13,6 +13,7 @@ jest.mock('@/services/reminders', () => ({ clearReminders: () => mockClearRemind
 
 import type { Me } from '@koydum/shared';
 
+import { StorageKeys, getItem, setJson } from '@/lib/storage';
 import { useAuth } from '@/store/auth';
 import { clockSkewMs, noteServerTime } from '@/utils/serverClock';
 
@@ -27,6 +28,16 @@ describe('logout', () => {
 
     expect(useAuth.getState().token).toBeNull();
     expect(mockClearReminders).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes the check-in çelıncs kept for a start with no connection with it', async () => {
+    // the next account on this phone must never be drawn this one's çelınc
+    await setJson(StorageKeys.savedDetails, { ownerId: ME.id, details: [{ challenge: { id: 'c-1' }, participants: [] }] });
+    useAuth.setState({ token: 'tok', me: ME });
+
+    await useAuth.getState().logout();
+
+    expect(await getItem(StorageKeys.savedDetails)).toBeNull();
   });
 
   it('still logs out when cancelling the alarms fails', async () => {

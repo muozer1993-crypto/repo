@@ -1,5 +1,6 @@
 import type { ApiClient } from '@/lib/api';
 import { StorageKeys, getJson, removeItem, setJson } from '@/lib/storage';
+import { forgetSavedChallengeDetails } from '@/services/savedDetails';
 
 /**
  * Keeps a session alive without anybody typing their password again.
@@ -18,10 +19,12 @@ export const RENEW_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 /**
  * Removes what a session keeps on the phone: the token and its renewal stamp,
  * the stored profile, the server id it vouched for, the push token it
- * registered, and the inbox cursor (otherwise the next account's first poll
- * replays this one's history as local notifications). The store's logout and
- * the headless task after a 401 both end a session with it. The offline queue
- * is not part of it: it waits for the next sign-in (services/offlineQueue).
+ * registered, the inbox cursor (otherwise the next account's first poll
+ * replays this one's history as local notifications), and the check-in
+ * çelıncs kept for a start with no connection (services/savedDetails). The
+ * store's logout, account deletion included, and the headless task after a
+ * 401 all end a session with it. The offline queue is not part of it: it
+ * waits for the next sign-in (services/offlineQueue).
  */
 export async function forgetStoredSession(): Promise<void> {
   await Promise.all([
@@ -31,6 +34,7 @@ export async function forgetStoredSession(): Promise<void> {
     removeItem(StorageKeys.serverId),
     removeItem(StorageKeys.pushToken),
     removeItem(StorageKeys.lastInboxId),
+    forgetSavedChallengeDetails(),
   ]);
 }
 

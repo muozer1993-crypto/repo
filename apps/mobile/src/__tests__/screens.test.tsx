@@ -2003,6 +2003,208 @@ describe('a check-in', () => {
   });
 });
 
+/**
+ * The morning check-in is pressed in the app the reminder opens, and the
+ * owner's PC may be asleep then: the phone has only what it saw last. A
+ * çelınc that was still `pending` then, or that the phone only has on disk
+ * after a night killed, must still take the tap and park it.
+ */
+describe('a morning check-in with the server out of reach', () => {
+  const { readQueue, removeFromQueue } = require('@/services/offlineQueue') as typeof import('@/services/offlineQueue');
+  const { StorageKeys, getJson, setJson } = require('@/lib/storage') as typeof import('@/lib/storage');
+  const { saveChallengeDetail } = require('@/services/savedDetails') as typeof import('@/services/savedDetails');
+
+  /** Mustafa and Ali in an Erken Kalkan Koyar; `status` and `startsAt` as the phone last saw them. */
+  function morning(options: { status?: 'pending' | 'active'; startsAgo?: number; aliSaidYes?: boolean } = {}) {
+    const detail = challengeDetail();
+    const yes = options.aliSaidYes ?? true;
+    const ali = {
+      ...detail.me,
+      user: { ...detail.me.user, id: 'u-2', username: 'ali', displayName: 'Ali' },
+      status: yes ? ('accepted' as const) : ('invited' as const),
+      score: 0,
+      rank: yes ? 1 : 0,
+    };
+    return {
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        typeKey: 'erken_kus',
+        metricType: 'checkin_deadline' as const,
+        unit: 'gün',
+        title: 'Erken Kalkan Koyar',
+        deadlineTime: '07:00',
+        status: options.status ?? ('pending' as const),
+        startsAt: new Date(Date.now() - (options.startsAgo ?? 2 * 3_600_000)).toISOString(),
+      },
+      participants: [detail.me, ali],
+    };
+  }
+
+  /** Every "Geldim" a finger could press. */
+  function geldim(tree: ReactTestRenderer) {
+    return tree.root.findAll((node) => node.props.title === 'Geldim' && typeof node.props.onPress === 'function');
+  }
+
+  async function refetch(tree: ReactTestRenderer): Promise<void> {
+    await act(async () => {
+      await clientOf(tree).refetchQueries({ queryKey: ['challenge', 'c-1'] });
+    });
+    await settle();
+  }
+
+  beforeEach(async () => {
+    // the account the phone has stored, as after a sign-in
+    await setJson(StorageKeys.me, ME);
+  });
+
+  afterEach(async () => {
+    for (const item of await readQueue()) await removeFromQueue(item.id);
+    await AsyncStorage.multiRemove([StorageKeys.me, StorageKeys.savedDetails]);
+  });
+
+  it('parks the "Geldim" of a çelınc the server has not started yet', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => morning());
+    api.addEntry = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    api.challenge = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    await refetch(tree);
+
+    const text = rendered(tree);
+    expect(text).toContain('Sunucuya ulaşamıyorum, gördüğün son bilinen hali.');
+    expect(text).toContain('Girişin sıraya alınır');
+    expect(text).toContain('Başlamış olmalı, sunucuya ulaşınca burada da görünür.');
+    expect(text).not.toContain('KABUL BEKLENİYOR');
+    expect(text).not.toContain('Başlayana kadar giriş yapılamaz');
+    expect(geldim(tree)).toHaveLength(1);
+
+    await act(async () => {
+      await geldim(tree)[0]!.props.onPress();
+    });
+    await settle();
+
+    const queue = await readQueue();
+    expect(queue).toHaveLength(1);
+    expect(queue[0]).toMatchObject({ challengeId: 'c-1', body: { source: 'checkin', value: 1 } });
+    expect(rendered(tree)).toContain('Check-in gitmedi, sırada');
+  });
+
+  it('still waits for a second yes when nobody else said one', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => morning({ aliSaidYes: false }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    api.challenge = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    await refetch(tree);
+
+    const text = rendered(tree);
+    expect(text).toMatch(/KABUL BEKLENİYOR 1 ?\/2 kişi/);
+    expect(text).toContain('Başlayana kadar giriş yapılamaz.');
+    expect(text).not.toContain('Başlamış olmalı');
+    expect(geldim(tree)).toHaveLength(0);
+  });
+
+  it('keeps the detail it read on the phone for the next start', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => morning({ status: 'active' }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const stored = await getJson<{ ownerId: string; details: { challenge: { id: string } }[] }>(StorageKeys.savedDetails);
+    expect(stored?.ownerId).toBe('me-1');
+    expect(stored?.details.map((detail) => detail.challenge.id)).toEqual(['c-1']);
+  });
+
+  it('opens cold from the copy on the phone and parks the tap in the çelınc\'s own zone', async () => {
+    searchParams.id = 'c-1';
+    // 15:00 in Istanbul on the 9th is already 02:00 on the 10th on Kiritimati
+    const now = new Date('2026-09-09T12:00:00.000Z').getTime();
+    // only the clock is faked: the query and settle() still need real timers
+    jest.useFakeTimers({
+      now,
+      doNotFake: [
+        'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',
+        'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval',
+        'clearInterval', 'setTimeout', 'clearTimeout',
+      ],
+    });
+    try {
+      // what the phone saw last night, before it killed the app
+      await saveChallengeDetail({ ...morning({ status: 'active' }), myTimezone: 'Pacific/Kiritimati' } as never);
+      api.challenge = jest.fn(async () => {
+        throw NETWORK_ERROR;
+      });
+      api.addEntry = jest.fn(async () => {
+        throw NETWORK_ERROR;
+      });
+      const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+      const tree = renderScreen(<ChallengeScreen />);
+      await settle();
+
+      const text = rendered(tree);
+      expect(api.challenge).toHaveBeenCalled();
+      expect(text).toContain('Erken Kalkan Koyar');
+      expect(text).toContain('Sunucuya ulaşamıyorum, gördüğün son bilinen hali.');
+      expect(text).not.toContain('Çelınc gelmedi');
+      expect(geldim(tree)).toHaveLength(1);
+
+      await act(async () => {
+        await geldim(tree)[0]!.props.onPress();
+      });
+      await settle();
+
+      const [parked] = await readQueue();
+      expect(parked?.body).toMatchObject({
+        source: 'checkin',
+        dayKey: '2026-09-10',
+        clientTime: '2026-09-09T12:00:00.000Z',
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("never draws another account's çelınc from the phone", async () => {
+    searchParams.id = 'c-1';
+    await saveChallengeDetail(morning({ status: 'active' }) as never);
+    // Mustafa signed out, Veli signed in on the same phone
+    await setJson(StorageKeys.me, { ...ME, id: 'u-3', username: 'veli' });
+    api.challenge = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Çelınc gelmedi');
+    expect(text).not.toContain('Erken Kalkan Koyar');
+  });
+
+  it('home says a çelınc with its two yeses is starting, not waiting for one', async () => {
+    const { challenge, participants, me } = morning();
+    api.challenges = jest.fn(async () => [{ challenge, participants, me, unreadTaunts: 0 }]);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('🚦 başlıyor');
+    expect(text).not.toContain('kabul bekleniyor');
+  });
+});
+
 describe('a yes/no day', () => {
   // ME.timezone is unusable, so the screens fall back to the device zone
   const today = () => todayKey('Europe/Istanbul');

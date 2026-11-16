@@ -22,6 +22,7 @@ import { ApiError, type ApiClient } from '@/lib/api';
 import { qk } from '@/lib/query';
 import { dropParked, enqueueEntry, flushQueue, uploadLocalPhoto } from '@/services/offlineQueue';
 import { refreshReminders } from '@/services/reminders';
+import { dropSavedChallengeDetail, saveChallengeDetail, savedChallengeDetail } from '@/services/savedDetails';
 import { useApi } from '@/hooks/useApi';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useAuth, useLevel } from '@/store/auth';
@@ -79,11 +80,39 @@ export function useChallenges(status?: string) {
   });
 }
 
+/**
+ * A check-in çelınc's detail is also kept on the phone (services/savedDetails).
+ * An app opened cold, from the morning reminder after the phone killed it in
+ * the night, has nothing in memory: the copy goes in before the server is
+ * asked, so a fetch that fails (the PC asleep, no signal) leaves the screen on
+ * it with its "son bilinen hali" line, and a "Geldim" to park, instead of
+ * "Çelınc gelmedi".
+ */
 export function useChallenge(id: string | undefined) {
   const api = useApi();
+  const qc = useQueryClient();
   return useQuery<ChallengeDetail>({
     queryKey: qk.challenge(id ?? ''),
-    queryFn: () => api.challenge(id as string),
+    queryFn: async () => {
+      const challengeId = id as string;
+      const key = qk.challenge(challengeId);
+      if (qc.getQueryData(key) === undefined) {
+        const saved = await savedChallengeDetail(challengeId).catch(() => null);
+        // `updatedAt: 0` never passes for fresh, so every screen still asks the server
+        if (saved && qc.getQueryData(key) === undefined) qc.setQueryData(key, saved, { updatedAt: 0 });
+      }
+      try {
+        const detail = await api.challenge(challengeId);
+        void saveChallengeDetail(detail).catch(() => {});
+        return detail;
+      } catch (error) {
+        // gone, or never mine: its copy must not come back on the next cold start
+        if (error instanceof ApiError && error.status === 404) {
+          void dropSavedChallengeDetail(challengeId).catch(() => {});
+        }
+        throw error;
+      }
+    },
     enabled: !!id,
     refetchInterval: 45_000,
   });

@@ -915,6 +915,10 @@ ama çok yavaşsa fotoğrafa iki dakika verilir; o da yetmezse arkadaki girişle
 denemede gidemeyen fotoğraf bırakılır ve giriş onsuz gider (fotoğraf zorunluysa uygulama "Kanıt
 fotoğrafı gitmedi, bağlantı çok yavaştı" der). Bağlantı
 koptuğunda açık olan çelınc ekranı kapanmaz, son bilinen hali gösterir; yazdığın sayı silinmez.
+Check-in çelınclarının son hali telefonda da saklanır: telefon uygulamayı gece kapatmış olsa bile
+sabah hatırlatmaya dokununca, bilgisayar uyuyor ya da telefon çekmiyorsa ekran o hali gösterir ve
+**Geldim** sıraya girer. Bu kopya sadece o hesabındır; çıkış yapınca ya da hesabı silince telefondan
+silinir, aynı telefona giren başka bir hesap onu görmez.
 
 ### Davet gelince
 
@@ -948,7 +952,10 @@ kimseye haber gitmeden geçerdi; **Hemen** açılan çelıncın ilk kabulü de i
 der. Başlangıç saatinde senden başka kabul eden yoksa çelınc ekranı "Kabul bekleniyor, 1/2
 kişi" der: ikinci kişi kabul edince başlar ama bitiş tarihi kaymaz. Adım çelıncında telefonların
 saydığı adımlar o arada da yazılır; başka çelınclarda giriş,
-başlayana kadar açılmaz. Kimse katılmazsa çelınc bitişte iptal olur. Çelıncta kabul etmiş biriyle
+başlayana kadar açılmaz. Kimse katılmazsa çelınc bitişte iptal olur. İki kişi kabul etmişse çelınc
+başlangıç saatinde başlar; bilgisayar o sırada uyuyorsa telefon bunu henüz duymamış olabilir. O
+zaman ekran "Başlamış olmalı" der ve giriş yine yapılır: sunucuya ulaşamayan **Geldim** sıraya
+girer. Ana sayfadaki kart da "🚦 başlıyor" yazar. Çelıncta kabul etmiş biriyle
 arasında engel olan (kim kimi engellemiş olursa olsun) kabul edemez, "Bu çelınca katılamazsın."
 görür: engelli iki kişi aynı çelıncta oynamaz. Çelınc sürerken konan engel ise iki oyuncuyu da
 çelınctan çıkarmaz, birbirlerinin girişine yine itiraz edebilirler: yoksa elle 99.000 adım yazıp

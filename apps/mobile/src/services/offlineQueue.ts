@@ -69,7 +69,7 @@ const MAX_ATTEMPTS = 8;
 const SLOW_PHOTO_TRIES = 3;
 
 /** Who is logged in on this phone, from storage: the background task has no store. */
-async function currentOwnerId(): Promise<string | null> {
+export async function currentOwnerId(): Promise<string | null> {
   const me = await getJson<{ id?: unknown }>(StorageKeys.me);
   return me && typeof me.id === 'string' ? me.id : null;
 }

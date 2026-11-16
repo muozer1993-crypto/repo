@@ -709,6 +709,21 @@ yenilemesinden sonra `isError` der ama son veriyi tutar; çelınc ekranı, giri�
 seansı bu durumda son bilinen hali göstermeye devam eder (ilk ikisi bunu küçük bir satırla söyler).
 Hata ekranı yalnızca hiç yüklenmemiş, ya da sunucunun 404 dediği çelınc içindir.
 
+Sabah check-in'i bunun yetmediği yer: telefon uygulamayı gece kapatır, hatırlatmaya dokunulunca
+uygulama sıfırdan açılır ve TanStack Query'nin belleği boştur. Bilgisayar uyuyorsa ekran "Çelınc
+gelmedi" diyordu ve **Geldim** sıraya alınamıyordu. Bu yüzden oynadığım, bitmemiş check-in
+çelınclarının son detayı telefonda da durur (`services/savedDetails.ts`, en fazla beş). Bellek
+boşken `useChallenge` sunucuya sormadan önce bu kopyayı koyar; istek düşerse ekran onu "son bilinen
+hali" satırıyla gösterir, dokunuş da basıldığı saatle ve çelıncın kendi saat dilimindeki günüyle
+sıraya girer. Kopya hesabındır: üstünde hangi hesabın okuduğu yazar, başka hesaba gösterilmez;
+çıkışta, hesap silinince ve arka plan görevinin 401'inde `forgetStoredSession` onu da siler.
+
+Aynı sabahın bir başka hali: başlangıç saati geçmiş, iki kişi kabul etmiş ama telefonun son gördüğü
+detay hâlâ `pending`, çünkü sunucu onu bir sonraki turunda başlatacaktı ve o sırada uyuyordu. Çelınc
+ekranı bunu "kabul bekleniyor" saymaz: bitişe kalan süreyi ve "Başlamış olmalı" satırını gösterir,
+girişi de çalışan çelınctaki gibi alır. Sunucu giriş gelince önce vadesi gelen çelıncları başlattığı
+için (`activateDueChallenges`) giriş reddedilmez.
+
 Aşağı çekip yenilemenin çarkı yalnızca kullanıcı çektiğinde, o yenileme bitene kadar döner
 (`hooks/usePullRefresh.ts`). TanStack Query'nin `isRefetching`'i 45 ve 60 saniyelik yoklamalarda,
 push'un tazelettiği listelerde ve her adım senkronunda da doğrudur; çark ona bağlıyken her 45

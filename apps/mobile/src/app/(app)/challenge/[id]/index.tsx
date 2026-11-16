@@ -315,11 +315,20 @@ export default function ChallengeDetailScreen() {
    */
   // `renderedAt` is captured once per mount rather than read during render:
   // the React Compiler treats `Date.now()` in render as impure, and a start
-  // time that passes while the screen is open is picked up by the countdown's
-  // own refetch anyway.
+  // time that passes while the screen is open moves it when the countdown
+  // runs out.
   const startsAtMs = Date.parse(challenge.startsAt);
   const startPassed = Number.isFinite(startsAtMs) ? startsAtMs <= renderedAt : false;
-  const waitingForAccepts = challenge.status === 'pending' && startPassed;
+  const waitingForAccepts = challenge.status === 'pending' && startPassed && accepted.length < 2;
+  /**
+   * With two yeses it is started: the server flips it on its next pass, or on
+   * the first entry that reaches it (`activateDueChallenges`). Still `pending`
+   * here is a detail from before that, the last one the phone has while the
+   * owner's PC sleeps or there is no signal. The morning check-in is pressed
+   * right then, so it takes entries like a running one and parks them.
+   */
+  const startedUnseen = challenge.status === 'pending' && startPassed && accepted.length >= 2;
+  const overdueStart = startedUnseen && !(Number.isFinite(endsAtMs) && endsAtMs <= renderedAt);
   const isCreator = challenge.creatorId === meId;
   // The last fetch is a fresh enough clock for an answer window counted in
   // hours, and unlike `Date.now()` it is a pure read.
@@ -327,7 +336,7 @@ export default function ChallengeDetailScreen() {
   const awaitingProof = detail.feed.some(
     (item) => item.status === 'disputed' && !!item.answerBy && Date.parse(item.answerBy) > clock
   );
-  const canEnter = challenge.status === 'active' && !settling && isPlayer && !!type;
+  const canEnter = (challenge.status === 'active' || overdueStart) && !settling && isPlayer && !!type;
   /**
    * A "Hemen" çelınc is live from the moment it is made, with only its creator
    * in it. Until a rival says yes there is no race: no "öndesin" for leading a
@@ -396,6 +405,27 @@ export default function ChallengeDetailScreen() {
                 {isCreator ? ' İstersen aşağıdan şimdi iptal edebilirsin.' : ''}
               </Text>
             </>
+          ) : startedUnseen ? (
+            <>
+              <Text variant="label">Bitmesine</Text>
+              <Countdown
+                target={challenge.endsAt}
+                variant="big"
+                finishedLabel="Süre doldu"
+                onFinish={() => {
+                  setRenderedAt(Date.now());
+                  void query.refetch();
+                }}
+              />
+              <Text variant="tiny" faint>
+                {byLevel(
+                  level,
+                  'Başlama saati geçti, çelınc başlamış olmalı. Sunucuya ulaşınca burada da başlamış görünür.',
+                  'Başlamış olmalı, sunucuya ulaşınca burada da görünür.',
+                  'Başladı bile lan, sunucu ya uyuyor ya sen çekmiyorsun. Bağlanınca burada da görünür.'
+                )}
+              </Text>
+            </>
           ) : challenge.status === 'pending' ? (
             <>
               <Text variant="label">Başlamasına</Text>
@@ -403,7 +433,12 @@ export default function ChallengeDetailScreen() {
                 target={challenge.startsAt}
                 variant="big"
                 finishedLabel="Başlıyor"
-                onFinish={() => void query.refetch()}
+                onFinish={() => {
+                  // with no answer from the server the start still passes here,
+                  // and with it the "Geldim" of a morning check-in
+                  setRenderedAt(Date.now());
+                  void query.refetch();
+                }}
               />
             </>
           ) : settling ? (
