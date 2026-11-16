@@ -1694,6 +1694,27 @@ describe('the entry modal', () => {
     expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ value: 10 }));
   });
 
+  it('keeps the card\'s "+10" for the 10 km the day still has, and calls a day with under a cent left full', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => runs(14.4, 59.7, 15.9));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    expect(rendered(tree)).toMatch(/SENİN SIRAN 90 km\s+· bugün/);
+    expect(findWith(tree, 'label', '+10', 'onPress')).toBeDefined();
+    expect(rendered(tree)).not.toContain('Günlük tavan doldu');
+
+    // 5,375 + 94,62 is 99,995: printed "100 km · bugün", every chip over what is left
+    api.challenge = jest.fn(async () => runs(5.375, 94.62));
+    const full = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    expect(rendered(full)).toMatch(/SENİN SIRAN 100 km\s+· bugün/);
+    expect(() => findWith(full, 'label', '+1', 'onPress')).toThrow();
+    expect(rendered(full)).toMatch(/Günlük tavan doldu \(\s*100\s+km\s*\)\./);
+  });
+
   it('fills the field from the chips without float noise', async () => {
     searchParams.id = 'c-1';
     // 100 - (50,3 + 7,4) is 42.300000000000004 in JavaScript

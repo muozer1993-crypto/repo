@@ -1007,7 +1007,9 @@ of the app (home's greeting, the inbox, the wizard, the recap) keeps `me.timezon
   "Yaptım / Yapmadım" only for a type without its own), for today and, while inside the window, yesterday: labelled
   "Dün (boş kalmış)" while empty, "Dün" with its answer chip once answered, and still tappable so a wrong tap is put right
   (the server upserts the day). Toast after a 0, at the reader's level, says the other button changes it.
-- manual_count: "+ Giriş" → entry modal; quick-add chips.
+- manual_count: "+ Giriş" → entry modal; quick-add chips. A chip over what is left of today's cap is greyed out, the
+  remainder taken without float noise (`dropFloatNoise`, as in the entry form, so 14,4 + 59,7 + 15,9 km keeps "+10");
+  under a cent left reads "Günlük tavan doldu (100 km).", as the entry form says "tavan doldu" and the nudge skips it.
 - manual_lower_is_better: for `deviceMetric: 'screen_time'` on Android with usage access → today's minutes from the phone + "Senkronla" (POST /me/screen-time), no manual button; permission missing → "Kullanım erişimi ver" (opens system usage-access page, re-checked on AppState active), on Android 15+ USAGE_ACCESS_RESTRICTED_HINT + "Uygulama bilgilerini aç" (openAppSettings) under it, every time access is missing, + a ghost manual fallback; iPhone / Expo Go / other → "Bugünkü değeri gir" → entry modal (proof photo emphasized), and a day the phone already reported shows as locked (server 409 `device_locked`).
 
 ### 3.5 Notifications & polling

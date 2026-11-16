@@ -85,6 +85,7 @@ import { confirmTr } from '@/utils/confirm';
 import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import {
+  dropFloatNoise,
   formatDayKeyAttributive,
   formatDayKeyFriendly,
   formatMinutes,
@@ -1483,7 +1484,9 @@ function CountAction({ id, detail, type, today }: ActionProps) {
   const todayTotal = detail.myEntries
     .filter((entry) => entry.dayKey === today && entry.status !== 'rejected')
     .reduce((sum, entry) => sum + entry.value, 0);
-  const remaining = Math.max(0, type.maxPerDay - todayTotal);
+  // without JavaScript's float noise, like the entry form: 14,4 + 59,7 + 15,9
+  // km left a hair under 10 and greyed out a "+10" the server takes
+  const remaining = Math.max(0, dropFloatNoise(type.maxPerDay - todayTotal));
   const chips = quickAdds(type.maxPerEntry);
 
   const add = async (value: number) => {
@@ -1531,7 +1534,7 @@ function CountAction({ id, detail, type, today }: ActionProps) {
       ) : (
         <View style={styles.chipRow}>
           {chips.map((value) => {
-            const blocked = value > remaining;
+            const blocked = value > remaining + 1e-9;
             return (
               <Chip
                 key={value}
@@ -1541,7 +1544,8 @@ function CountAction({ id, detail, type, today }: ActionProps) {
               />
             );
           })}
-          {remaining <= 0 ? (
+          {/* under a cent left prints as a full day ("100 km · bugün"), and the entry form says "tavan doldu" */}
+          {remaining < 0.01 ? (
             <Text variant="tiny" faint>
               Günlük tavan doldu ({formatNumber(type.maxPerDay)} {type.unitTr}).
             </Text>
