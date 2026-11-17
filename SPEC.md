@@ -1179,7 +1179,9 @@ of the app (home's greeting, the inbox, the wizard, the recap) keeps `me.timezon
 - checkin_deadline: big "GELDİM" button visible only today, and only when today is a day I am scored on (`myDays`;
   else "Herkes aynı sayıda check-in yapsın diye bugün sende sayılmıyor, ilk check-in günün yarın." / "…, son check-in
   günün dündü."); shows deadline; after tap → success or late copy. A parked
-  one (no connection, server asleep) says "Check-in gitmedi, sırada" (toast, `danger`) and, under the still-enabled
+  one (no connection, server asleep) says "Check-in gitmedi, sırada" (toast, `danger`, "Bağlantı gelince
+  kendiliğinden gider. Emin olmak için Geldim’e tekrar bas.": a toast shows two lines, which cut the card's copy
+  before its advice) and, under the still-enabled
   button until the server's entry arrives, "Sunucuya ulaşamadım. Sunucu uyuyorsa bastığın saat sayılır, telefonun
   çekmiyorsa gittiği saat. Bağlantı gelince kendiliğinden gider; saat dolmadan emin olmak için Geldim’e tekrar bas."
   (an open app sends it itself within 15 s of the server answering, services/offlineQueue.ts). Another tap while one

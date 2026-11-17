@@ -2477,6 +2477,15 @@ describe('a check-in', () => {
     // neither tells someone looking at the app to open it
     expect(rendered(tree).split('Bağlantı gelince kendiliğinden gider').length - 1).toBe(2);
     expect(rendered(tree)).toContain('Geldim’e tekrar bas');
+    // the toast shows two lines: the card's copy was cut there before the advice
+    const [toastBody] = tree.root.findAll(
+      (node) =>
+        typeof node.type === 'string' &&
+        node.props.numberOfLines === 2 &&
+        typeof node.props.children === 'string' &&
+        node.props.children.includes('kendiliğinden gider')
+    );
+    expect(toastBody!.props.children).toBe('Bağlantı gelince kendiliğinden gider. Emin olmak için Geldim’e tekrar bas.');
     expect(rendered(tree)).not.toContain('Bağlanınca uygulamayı aç');
     expect(rendered(tree)).not.toContain('Saatinde geldin');
     expect(rendered(tree)).not.toContain('Geldin!');
@@ -2588,7 +2597,7 @@ describe('a check-in', () => {
         await findWith(tree, 'title', 'Geldim', 'onPress').props.onPress();
       });
       await settle();
-      const QUEUED = 'Sunucu uyuyorsa bastığın saat sayılır';
+      const QUEUED = 'Bağlantı gelince kendiliğinden gider';
       // under the button and in the toast
       const shown = () => rendered(tree).split(QUEUED).length - 1;
       expect(shown()).toBe(2);

@@ -1260,6 +1260,12 @@ function FocusAction({ id, detail, level, today }: ActionProps) {
  */
 const CHECKIN_QUEUED =
   'Sunucuya ulaşamadım. Sunucu uyuyorsa bastığın saat sayılır, telefonun çekmiyorsa gittiği saat. Bağlantı gelince kendiliğinden gider; saat dolmadan emin olmak için Geldim’e tekrar bas.';
+/**
+ * The toast's own, short: it shows two lines, which cut the card's copy before
+ * "kendiliğinden gider", and on a 360x640 phone the card is below the button,
+ * out of view.
+ */
+const CHECKIN_QUEUED_TOAST = 'Bağlantı gelince kendiliğinden gider. Emin olmak için Geldim’e tekrar bas.';
 
 function CheckinAction({ id, detail, level, today, tz, dayKeys }: ActionProps) {
   const addEntry = useAddEntry(id);
@@ -1308,7 +1314,7 @@ function CheckinAction({ id, detail, level, today, tz, dayKeys }: ActionProps) {
         // Not in yet, so today's 30-minutes-left poke stays: tapping it brings
         // the app to the front, which sends the queue before the deadline.
         setResult('queued');
-        toast({ title: 'Check-in gitmedi, sırada', body: CHECKIN_QUEUED, kind: 'danger' });
+        toast({ title: 'Check-in gitmedi, sırada', body: CHECKIN_QUEUED_TOAST, kind: 'danger' });
         return;
       }
       // the server has it: the poke must not ring
