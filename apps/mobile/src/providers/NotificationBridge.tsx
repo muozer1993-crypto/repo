@@ -111,7 +111,7 @@ export function NotificationBridge() {
     // A phone that booted without signal (or reached the server a second too
     // late) used to stay without push for the whole session: the POST ran once.
     // It now runs again every time the app comes to the foreground until the
-    // server has the token; once it does, it never repeats.
+    // server has the token; once it does, only when the server lost it (below).
     const register = async () => {
       if (busy || cancelled) return;
       busy = true;
@@ -142,13 +142,28 @@ export function NotificationBridge() {
     };
     void register();
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && !pushTokenSent.current?.startsWith(session)) void register();
+      if (state !== 'active') return;
+      if (!pushTokenSent.current?.startsWith(session)) {
+        void register();
+        return;
+      }
+      // The server can still lose it: the account has one slot, and a logout
+      // from an app older than the token it sends (store/auth) clears whatever
+      // is there. This phone then had neither push nor a notification of its
+      // own (a stored token means push delivers) until it was restarted. /me
+      // says whether the server holds a token, not whose, so a second phone of
+      // the account holding it is left alone.
+      void refreshMe().then((fresh) => {
+        if (cancelled || fresh?.hasPushToken !== false) return;
+        pushTokenSent.current = null;
+        void register();
+      });
     });
     return () => {
       cancelled = true;
       sub.remove();
     };
-  }, [token, serverUrl, makeClient, onboarding]);
+  }, [token, serverUrl, makeClient, refreshMe, onboarding]);
 
   // --- an invite link opened before this account existed -----------------
   useEffect(() => {

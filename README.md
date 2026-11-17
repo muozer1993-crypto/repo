@@ -1228,6 +1228,10 @@ bölümünde anlattım). Ana sayfada bildirimlerin kapalı olduğunu söyleyen k
 çıkıyorsa bildirim izni reddedilmiş: **Ayarları aç**'a bas, açılan sayfada KOYDUM'un bildirimlerini aç, geri dön; kart
 kendiliğinden gider. Android iki kere "izin verme" denince bir daha sormuyor, yol bu. Kartı
 **Kalsın** ile kapattıysan aynı düğme **Ayarlar → Bildirimler**'de de var.
+Yeni telefona geçen bir kanka eskisinden çıkış yaparsa yeni telefonun bildirimleri kesilmez:
+çıkış sadece o telefonun kendi kaydını siler. Eski telefondaki uygulama güncellemeyi hiç almamışsa
+yenisinin kaydını da siler; yeni telefonda KOYDUM'u bir kez öne getirmek (açmak ya da arka plandan
+dönmek) kaydı geri koyar.
 
 **Adımlar 0 görünüyor.**
 iOS'ta hareket izni verilmemiş olabilir (Ayarlar → Gizlilik → Hareket ve Fitness). Android'de

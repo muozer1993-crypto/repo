@@ -13,7 +13,8 @@ jest.mock('@/services/reminders', () => ({ clearReminders: () => mockClearRemind
 
 import type { Me } from '@koydum/shared';
 
-import { StorageKeys, getItem, setJson } from '@/lib/storage';
+import { ApiClient } from '@/lib/api';
+import { StorageKeys, getItem, setItem, setJson } from '@/lib/storage';
 import { useAuth } from '@/store/auth';
 import { clockSkewMs, noteServerTime } from '@/utils/serverClock';
 
@@ -38,6 +39,39 @@ describe('logout', () => {
     await useAuth.getState().logout();
 
     expect(await getItem(StorageKeys.savedDetails)).toBeNull();
+  });
+
+  it("asks the server to clear only this phone's push token", async () => {
+    // a friend moved to a new phone and is signing out of the old one: the
+    // account's push token may be the new phone's by now
+    await setItem(StorageKeys.pushToken, 'ExponentPushToken[x]');
+    useAuth.setState({ token: 'tok', me: ME });
+    const fetchMock = jest.fn(async () => new Response('{"ok":true,"hasPushToken":true}', { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const clear = jest.spyOn(ApiClient.prototype, 'clearPushToken');
+
+    await useAuth.getState().logout();
+
+    expect(clear).toHaveBeenCalledWith('ExponentPushToken[x]');
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toMatch(/\/me\/push-token$/);
+    expect(init.method).toBe('DELETE');
+    expect(JSON.parse(String(init.body))).toEqual({ token: 'ExponentPushToken[x]' });
+    // the session's copy is gone all the same
+    expect(await getItem(StorageKeys.pushToken)).toBeNull();
+    clear.mockRestore();
+  });
+
+  it('sends null when this phone never registered a push token', async () => {
+    useAuth.setState({ token: 'tok', me: ME });
+    const fetchMock = jest.fn(async () => new Response('{"ok":true,"hasPushToken":true}', { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await useAuth.getState().logout();
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    // null, never a missing body: that clears whatever the server holds
+    expect(JSON.parse(String(init.body))).toEqual({ token: null });
   });
 
   it('still logs out when cancelling the alarms fails', async () => {

@@ -300,8 +300,17 @@ export class ApiClient {
     return this.request<{ ok: true }>('POST', '/me/push-token', { body });
   }
 
-  clearPushToken() {
-    return this.request<{ ok: true }>('DELETE', '/me/push-token');
+  /**
+   * `token` is the one this phone registered (null: none), so the server clears
+   * only that and not the one the account's new phone holds. Without it no body
+   * is sent, and the server clears whatever it has, as it does for older apps.
+   */
+  clearPushToken(token?: string | null) {
+    return this.request<{ ok: true; hasPushToken?: boolean }>(
+      'DELETE',
+      '/me/push-token',
+      token === undefined ? {} : { body: { token } }
+    );
   }
 
   syncSteps(days: { dayKey: string; steps: number; source: 'pedometer' | 'health_connect' }[]) {

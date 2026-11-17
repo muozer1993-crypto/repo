@@ -15,6 +15,7 @@ import {
   LoginBodySchema,
   PokeBodySchema,
   PushTokenBodySchema,
+  PushTokenDeleteBodySchema,
   RegisterBodySchema,
   ReportBodySchema,
   ScreenTimeSyncBodySchema,
@@ -161,6 +162,16 @@ describe('PushTokenBody / StepsSyncBody', () => {
     expect(PushTokenBodySchema.safeParse({ token: 'ExponentPushToken[abc]', platform: 'ios' }).success).toBe(true);
     expect(PushTokenBodySchema.safeParse({ token: '', platform: 'ios' }).success).toBe(false);
     expect(PushTokenBodySchema.safeParse({ token: 'x', platform: 'windows' }).success).toBe(false);
+  });
+
+  it("validates logout's push token body, which older apps leave out", () => {
+    expect(PushTokenDeleteBodySchema.safeParse({ token: 'ExponentPushToken[abc]' }).data).toEqual({
+      token: 'ExponentPushToken[abc]',
+    });
+    expect(PushTokenDeleteBodySchema.safeParse({ token: null }).success).toBe(true);
+    expect(PushTokenDeleteBodySchema.safeParse({}).data).toEqual({});
+    expect(PushTokenDeleteBodySchema.safeParse({ token: '' }).success).toBe(false);
+    expect(PushTokenDeleteBodySchema.safeParse({ token: 'x'.repeat(513) }).success).toBe(false);
   });
 
   it('validates steps sync bodies', () => {

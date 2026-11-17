@@ -6,7 +6,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { Expo } from 'expo-server-sdk';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CHALLENGE_TYPES,
   SHARED_VERSION,
@@ -21,7 +22,17 @@ import { newId, nowIso, type ChallengeRow, type EntryRow, type UserRow } from '.
 import { REPORTS_PER_USER } from '../src/routes/users.js';
 import { clearDeletedTraces } from '../src/services/accounts.js';
 import { createPushSender } from '../src/services/push.js';
-import { GPS_MARKER, JPEG_1X1, JPEG_WITH_GPS, authed, makeApp, multipart, registerUser, type TestApp } from './helpers.js';
+import {
+  DEFAULT_PASSWORD,
+  GPS_MARKER,
+  JPEG_1X1,
+  JPEG_WITH_GPS,
+  authed,
+  makeApp,
+  multipart,
+  registerUser,
+  type TestApp,
+} from './helpers.js';
 
 let harness: TestApp | null = null;
 
@@ -344,6 +355,83 @@ describe('/me', () => {
     const cleared = await call({ method: 'DELETE', url: '/me/push-token' });
     expect(cleared.statusCode).toBe(200);
     expect((await call({ method: 'GET', url: '/me' })).json<Me>().hasPushToken).toBe(false);
+  });
+
+  it("keeps the new phone's push token when the old phone logs out", async () => {
+    const h = await boot();
+    const user = await registerUser(h.app, 'mustafa');
+    const login = await h.app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { username: 'mustafa', password: DEFAULT_PASSWORD },
+    });
+    const oldPhone = authed(h.app, user.token);
+    const newPhone = authed(h.app, login.json<{ token: string }>().token);
+
+    const register = (call: typeof oldPhone, token: string) =>
+      call({ method: 'POST', url: '/me/push-token', payload: { token, platform: 'android' } });
+    expect((await register(oldPhone, 'ExponentPushToken[old]')).statusCode).toBe(200);
+    expect((await register(newPhone, 'ExponentPushToken[new]')).statusCode).toBe(200);
+
+    // "Çıkış yap" on the old phone before it is given away
+    const logout = await oldPhone({ method: 'DELETE', url: '/me/push-token', payload: { token: 'ExponentPushToken[old]' } });
+    expect(logout.statusCode).toBe(200);
+    expect(logout.json()).toEqual({ ok: true, hasPushToken: true });
+    expect((await newPhone({ method: 'GET', url: '/me' })).json<Me>().hasPushToken).toBe(true);
+
+    // and the next laf still rings on the new one
+    const laf = newId();
+    h.db
+      .prepare(
+        "INSERT INTO notifications (id, user_id, type, title, body, data, read_at, created_at, pushed_at, push_error) VALUES (?, ?, 'taunt', 'Laf', 'Koydum', '{}', NULL, ?, NULL, NULL)",
+      )
+      .run(laf, user.me.id, nowIso(h.app.now()));
+    const send = vi
+      .spyOn(Expo.prototype, 'sendPushNotificationsAsync')
+      .mockImplementation(async (messages) => messages.map(() => ({ status: 'ok' as const, id: 'ticket' })));
+    try {
+      await expect(createPushSender(h.config).flush(h.db, h.app.now())).resolves.toEqual({ sent: 1, failed: 0 });
+      expect(send.mock.calls.flatMap(([messages]) => messages.map((message) => message.to))).toEqual([
+        'ExponentPushToken[new]',
+      ]);
+    } finally {
+      send.mockRestore();
+    }
+
+    // the new phone's own logout clears it
+    const own = await newPhone({ method: 'DELETE', url: '/me/push-token', payload: { token: 'ExponentPushToken[new]' } });
+    expect(own.json()).toEqual({ ok: true, hasPushToken: false });
+    expect(userRow(h, user.me.id).push_platform).toBeNull();
+  });
+
+  it('leaves the push token to a phone that never registered one, and to an older app clears it', async () => {
+    const h = await boot();
+    const user = await registerUser(h.app, 'mustafa', { pushToken: 'ExponentPushToken[telefon]' });
+    const call = authed(h.app, user.token);
+
+    // the web app, or a phone whose notification permission was refused
+    const web = await call({ method: 'DELETE', url: '/me/push-token', payload: { token: null } });
+    expect(web.json()).toEqual({ ok: true, hasPushToken: true });
+    expect(userRow(h, user.me.id).push_token).toBe('ExponentPushToken[telefon]');
+
+    const broken = await call({ method: 'DELETE', url: '/me/push-token', payload: { token: 42 } });
+    expect(broken.statusCode).toBe(400);
+    expect(userRow(h, user.me.id).push_token).toBe('ExponentPushToken[telefon]');
+
+    // an app from before the field sends no body at all
+    const older = await call({ method: 'DELETE', url: '/me/push-token' });
+    expect(older.json()).toEqual({ ok: true, hasPushToken: false });
+    expect(userRow(h, user.me.id).push_token).toBeNull();
+
+    // and one that sets the JSON header with nothing after it reads the same
+    await call({ method: 'POST', url: '/me/push-token', payload: { token: 'ExponentPushToken[telefon]', platform: 'android' } });
+    const empty = await call({
+      method: 'DELETE',
+      url: '/me/push-token',
+      headers: { 'content-type': 'application/json' },
+      payload: '',
+    });
+    expect(empty.json()).toEqual({ ok: true, hasPushToken: false });
   });
 
   it("gives a phone's push token to the last account that signed in on it", async () => {

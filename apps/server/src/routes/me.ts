@@ -16,6 +16,7 @@ import {
   InboxQuerySchema,
   InboxReadBodySchema,
   PushTokenBodySchema,
+  PushTokenDeleteBodySchema,
   ScreenTimeSyncBodySchema,
   StepsSyncBodySchema,
   UpdateMeBodySchema,
@@ -236,10 +237,28 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, hasPushToken: true };
   });
 
+  // Logout's. The account has one slot, and it belongs to the phone that sent
+  // its token last: a friend who moved to a new phone and then signed out of the
+  // old one cleared the new phone's token, and the new phone heard nothing (no
+  // laf, no invite, no itiraz warning) until it was restarted. So the app says
+  // which token it registered and only that one goes; null is a phone that never
+  // registered one (web, a refused permission) and has nothing here to clear. An
+  // app from before the field sends no body and clears the slot as it always
+  // did; a phone that loses its token that way sends it again at its next
+  // foreground, when /me says `hasPushToken: false` (NotificationBridge).
   app.delete('/me/push-token', auth, async (request) => {
     const { row } = requireUser(request);
-    db.prepare('UPDATE users SET push_token = NULL, push_platform = NULL WHERE id = ?').run(row.id);
-    return { ok: true, hasPushToken: false };
+    const body = parseBody(PushTokenDeleteBodySchema, request.body ?? {});
+    if (body.token === undefined) {
+      db.prepare('UPDATE users SET push_token = NULL, push_platform = NULL WHERE id = ?').run(row.id);
+    } else if (body.token !== null) {
+      db.prepare('UPDATE users SET push_token = NULL, push_platform = NULL WHERE id = ? AND push_token = ?').run(
+        row.id,
+        body.token,
+      );
+    }
+    const after = db.prepare('SELECT push_token FROM users WHERE id = ?').get(row.id) as Pick<UserRow, 'push_token'>;
+    return { ok: true, hasPushToken: after.push_token !== null };
   });
 
   // ---------------------------------------------------------------------------

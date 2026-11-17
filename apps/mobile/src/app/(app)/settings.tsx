@@ -41,7 +41,7 @@ import { useApi } from '@/hooks/useApi';
 import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { normalizeServerUrl, serverUrlIsEditable } from '@/lib/config';
-import { StorageKeys, getItem } from '@/lib/storage';
+import { StorageKeys, getItem, setItem } from '@/lib/storage';
 import {
   getBackgroundHealth,
   openAppSettings,
@@ -584,6 +584,8 @@ export default function SettingsScreen() {
       if (result.token) {
         try {
           await api.setPushToken({ token: result.token, platform: PLATFORM });
+          // as the bridge does: logout clears only the token stored here
+          await setItem(StorageKeys.pushToken, result.token);
         } catch {
           // the inbox still works without a registered token
         }
@@ -626,6 +628,7 @@ export default function SettingsScreen() {
       if (pushResult.token) {
         try {
           await api.setPushToken({ token: pushResult.token, platform: PLATFORM });
+          await setItem(StorageKeys.pushToken, pushResult.token);
         } catch {
           // the inbox still works without a registered token
         }

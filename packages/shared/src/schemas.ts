@@ -229,6 +229,17 @@ export const PushTokenBodySchema = z.object({
 });
 export type PushTokenBody = z.infer<typeof PushTokenBodySchema>;
 
+/**
+ * Logout's DELETE /me/push-token: the push token this phone registered (null:
+ * none), so only that one is cleared and not the one the account's new phone put
+ * there. Apps from before this field send no body, and then the token goes
+ * whichever phone it belongs to, as it always did.
+ */
+export const PushTokenDeleteBodySchema = z.object({
+  token: z.string().trim().min(1).max(512).nullable().optional(),
+});
+export type PushTokenDeleteBody = z.infer<typeof PushTokenDeleteBodySchema>;
+
 export const StepsSyncDaySchema = z.object({
   dayKey: DayKeySchema,
   steps: z.number().int().min(0).max(LIMITS.STEPS_PER_DAY_MAX),

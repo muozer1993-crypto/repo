@@ -500,6 +500,17 @@ ve okunmuşları atlar. Eskiden kuyruğun sonu yoktu: Firebase sonradan açılı
 aylarca birikmiş geçmiş 30 saniyede 200 satır yağardı, öteki kankaların taze "KOYDUM MU?"su da o
 yığının arkasında beklerdi.
 
+Hesapta push token için tek yer var ve o yer token'ı en son gönderen telefonundur. Çıkıştaki
+`DELETE /me/push-token` eskiden orada ne varsa silerdi: yeni telefona geçen kanka eskisini
+vermeden önce oradan çıkış yapınca yeni telefonu susardı, ne laf ne davet ne itiraz uyarısı
+gelirdi, uygulama yeniden başlatılana kadar. Artık uygulama kendi kaydettiği token'ı gövdede yollar
+(`{ token }`, hiç kaydetmediyse null: web, izin verilmemiş telefon) ve sunucu hesaptaki token ancak
+oysa siler; cevaptaki `hasPushToken` yerin son halini söyler. Alanı bilmeyen eski uygulama gövdesiz
+yollar, onun çıkışı eskisi gibi ne varsa siler. O yüzden NotificationBridge, token'ı bir kez
+yolladıktan sonra her öne gelişte `/me`'ye bakar; `hasPushToken: false` görürse aynı token'ı yine
+yollar. `/me` yerin dolu olup olmadığını söyler, kimin olduğunu değil: hesaba bağlı ikinci bir
+telefon yeri tutuyorsa ona dokunulmaz, iki telefon da birbirinin token'ını sürekli ezmez.
+
 Gelen kutusu 30'ar satırlık sayfalarla gelir; listenin dibine inince bir eski sayfa istenir.
 Sunucu `created_at < before` ile keser, zamanlayıcının tek bir turu da aynı kişiye aynı
 milisaniyede birkaç satır yazabilir (bitiş, rozet, laf). İmleç son satırın kendi anı olsaydı

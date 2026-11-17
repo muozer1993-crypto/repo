@@ -5,7 +5,7 @@ import { create } from 'zustand';
 import { ApiClient } from '@/lib/api';
 import { guessServerUrl, serverUrlIsEditable, stripTrailingSlash } from '@/lib/config';
 import { queryClient } from '@/lib/query';
-import { StorageKeys, getJson, setItem, setJson } from '@/lib/storage';
+import { StorageKeys, getItem, getJson, setItem, setJson } from '@/lib/storage';
 import { clearReminders } from '@/services/reminders';
 import { forgetStoredSession, markTokenRenewed, renewTokenIfDue } from '@/services/session';
 import { forgetServerTime } from '@/utils/serverClock';
@@ -169,15 +169,9 @@ export const useAuth = create<AuthState>((set, get) => ({
    */
   logout: async () => {
     const { token, serverUrl } = get();
-    if (token) {
-      // Best effort, and deliberately not awaited: the server has to stop
-      // pushing this account's taunts to the phone, but an unreachable server
-      // must never trap the user in a session. A bare client is used so a 401
-      // answer cannot re-enter `logout` through `onUnauthorized`.
-      void new ApiClient({ baseUrl: serverUrl, token })
-        .clearPushToken()
-        .catch(() => {});
-    }
+    // The push token this phone registered, read before forgetStoredSession
+    // below removes it. Started here so the session still ends at once.
+    const registered = token ? getItem(StorageKeys.pushToken) : Promise.resolve(null);
     set({ token: null, me: null, serverId: null });
     // the next sign-in may be on another server, with another clock
     forgetServerTime();
@@ -188,6 +182,19 @@ export const useAuth = create<AuthState>((set, get) => ({
     // (it would schedule them again). Not awaited, a failure only means one
     // stray alarm.
     void clearReminders().catch(() => {});
+    if (token) {
+      // Best effort, and deliberately not awaited: the server has to stop
+      // pushing this account's taunts to the phone, but an unreachable server
+      // must never trap the user in a session. A bare client is used so a 401
+      // answer cannot re-enter `logout` through `onUnauthorized`. Only this
+      // phone's token goes (null: it never registered one): a friend who moved
+      // to a new phone and signs out of the old one used to switch off the new
+      // one's push along with it.
+      const pushToken = await registered;
+      void new ApiClient({ baseUrl: serverUrl, token })
+        .clearPushToken(pushToken)
+        .catch(() => {});
+    }
     await forgetStoredSession();
   },
 
