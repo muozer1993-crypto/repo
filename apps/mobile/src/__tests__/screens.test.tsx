@@ -3259,6 +3259,36 @@ describe('a long title on a narrow phone', () => {
     const body = closestHolding(chip!, detail.challenge.title);
     expect(StyleSheet.flatten(body.props.style)?.flexDirection ?? 'column').toBe('column');
   });
+
+  it('puts the home card chip under the title, and gives an invite two lines', async () => {
+    // beside the chip a 360 dp phone left the card's title ~155 px: two lines
+    // still cut a 35-letter one, and the invite card's single line cut 30
+    const title = 'Günde sekiz bardak su içme maratonu';
+    const detail = challengeDetail();
+    const card = { ...detail, challenge: { ...detail.challenge, id: 'c-1', title }, unreadTaunts: 0 };
+    const invite = {
+      ...detail,
+      challenge: { ...detail.challenge, id: 'c-2', title: 'Kış boyunca en az bin sayfa kitap okuma' },
+      me: { ...detail.me!, status: 'invited' as const },
+      unreadTaunts: 0,
+    };
+    api.challenges = jest.fn(async () => [card, invite]);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    const [cardTitle] = tree.root.findAll((node) => typeof node.type === 'string' && node.props.children === title);
+    expect(cardTitle!.props.numberOfLines).toBe(2);
+    // the fixture plays alone: the card's chip says so
+    const [chip] = tree.root.findAll((node) => node.props.label === 'RAKİP YOK');
+    const body = closestHolding(chip!, title);
+    expect(StyleSheet.flatten(body.props.style)?.flexDirection ?? 'column').toBe('column');
+
+    const [inviteTitle] = tree.root.findAll(
+      (node) => typeof node.type === 'string' && node.props.children === invite.challenge.title
+    );
+    expect(inviteTitle!.props.numberOfLines).toBe(2);
+  });
 });
 
 describe('an itiraz on the feed', () => {

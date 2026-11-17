@@ -619,7 +619,8 @@ function InviteCard({
       <View style={styles.inviteHeader}>
         <Text style={styles.inviteEmoji}>{type?.emoji ?? '🎯'}</Text>
         <View style={styles.inviteBody}>
-          <Text variant="lead" numberOfLines={1}>
+          {/* the card a "Kabul" or a "Reddet" is decided on: one line cut a 30-letter title */}
+          <Text variant="lead" numberOfLines={2}>
             {summary.challenge.title || type?.nameTr || 'Çelınc'}
           </Text>
           <Text variant="tiny" muted numberOfLines={1}>

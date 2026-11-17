@@ -41,7 +41,9 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
       <View style={styles.header}>
         <Text style={styles.emoji}>{type?.emoji ?? '🎯'}</Text>
         <View style={styles.headerBody}>
-          {/* two lines: beside the emoji and the chip one cut "Sigarayı bırakıyoruz" on a 360 dp phone */}
+          {/* Two lines, and the chip under them, not beside: beside the emoji
+              and the chip one line cut "Sigarayı bırakıyoruz" on a 360 dp
+              phone, and two still cut a 40-letter title. */}
           <Text variant="lead" numberOfLines={2}>
             {challenge.title || type?.nameTr || 'Çelınc'}
           </Text>
@@ -49,8 +51,10 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
             {accepted} kişi
             {challenge.rewardText ? ` · 🎁 ${challenge.rewardText}` : ''}
           </Text>
+          <View style={styles.chip}>
+            <Chip label={status.label} color={status.color} size="sm" filled={status.key === 'won'} />
+          </View>
         </View>
-        <Chip label={status.label} color={status.color} size="sm" filled={status.key === 'won'} />
       </View>
 
       {challenge.status !== 'pending' ? (
@@ -168,6 +172,7 @@ function statusOf(summary: ChallengeSummary, level: VulgarityLevel): StatusView 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   headerBody: { flex: 1, gap: 2 },
+  chip: { alignSelf: 'flex-start', marginTop: Spacing.xs },
   emoji: { fontSize: 28 },
   standings: { marginTop: Spacing.lg },
   footer: {

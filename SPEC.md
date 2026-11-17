@@ -890,7 +890,8 @@ onboarding.tsx              4 slides (copy onboarding_1..4 under a title per lev
                             Each slide scrolls on its own (a short phone or a large font still reaches the two buttons)
 (app)/(tabs)/_layout.tsx    Tabs: index "Çelınclar", friends "Kankalar", inbox "Gelen Kutusu" (badge = unread), profile "Ben"
 (app)/(tabs)/index.tsx      header: today's steps + sync button + level chip; sections: Davetler (accept/decline inline;
-                            "Reddet" asks first, and says so when the no would cancel the çelınc; each card says who invited
+                            "Reddet" asks first, and says so when the no would cancel the çelınc; the title on up to two
+                            lines (one cut a 30-letter title on a 360 dp phone); each card says who invited
                             (`me.invitedBy`, from an older server the creator),
                             "📅 7 gün · 1 Eylül – 7 Eylül" in the account's zone (cut to `myDays`, 1.7), "· 📸 Kanıt lazım" when a typed number needs a
                             photo, and "🎁 … · 💀 …" on up to two lines; only invites still open: `stillJoinable`, pending/active
@@ -898,8 +899,9 @@ onboarding.tsx              4 slides (copy onboarding_1..4 under a title per lev
                             `challenge_pending_you` ("… Kabul edersen başlar.") only while pending, and on an active one says it
                             already started: 1 "Bu çelınc başladı bile. Kabul edersen hemen sıralamaya girersin.", 2 "Çelınc başladı
                             bile, atla da sıralamaya gir.", 3 "… katıl da gör kim kime koyuyor 🍆"),
-                            Aktif (cards: emoji, title on up to two lines (on one, a 360 dp phone cut "Sigarayı
-                            bırakıyoruz" beside the chip), countdown, mini standings, my rank; losing → red "yiyorsun" chip;
+                            Aktif (cards: emoji, title on up to two lines with the status chip under it and the
+                            "N kişi" line, not beside it (beside the chip a 360 dp phone left the title ~155 px: one line
+                            cut "Sigarayı bırakıyoruz", two anything past ~30 of the 40 characters), countdown, mini standings, my rank; losing → red "yiyorsun" chip;
                             fewer than two accepted → "RAKİP YOK" chip and no verdict line; past `endsAt` but still
                             `active` (the settle hour, an itiraz's 12 hours) → "⏳ Sonuç bekleniyor", the chip as it stands
                             but no verdict line and no red glow, as the çelınc screen; a pending card past its start
