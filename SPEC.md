@@ -671,7 +671,10 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    in the winner's name.
 4. Push queue: every unread notification row with `pushed_at IS NULL AND push_error IS NULL`, at most 1 h old
    (`PUSH_MAX_AGE_MS`, against the pass's `now`), for users with a token → Expo push (batched, oldest first, 200 a
-   pass); mark `pushed_at` or `push_error`. Uses `Expo.isExpoPushToken`. Each pass first marks the waiting rows older
+   pass); each chunk is claimed (`pushed_at`, one transaction) before Expo hears of it, and a failed send or ticket gives
+   the row back with its `push_error` (`pushed_at` cleared again). A claim that cannot be written (a full disk) ends the
+   pass with nothing sent: marked after the send, a failed mark left the row pending and every pass rang the same laf
+   again, about 120 times in its hour. Uses `Expo.isExpoPushToken`. Each pass first marks the waiting rows older
    than the hour `push_error = 'expired'`, whoever they belong to. So a row older than an hour, a read row and a row
    from before the token (`before_token`, see POST /me/push-token) are never pushed; they stay in the inbox. Turning
    Firebase on later rings nothing old, and one account's backlog never holds back another's fresh row.

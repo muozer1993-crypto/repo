@@ -1256,7 +1256,10 @@ dakikaya uzayan aralıklarla yeniden dener, yeni adres gelince sunucuyu onunla y
 Sunucuyu durdurmak için sinyal değil IPC mesajı gönderir: Windows'ta bir alt sürece sinyal
 göndermek TerminateProcess demektir, ne veritabanı kapanır ne yarım kalan iş biter. Sunucu da
 kapanırken zamanlayıcının o anki turunu bekler (en çok 10 saniye): yarıda kesilen bir push
-gönderimi satıra `pushed_at` yazamaz ve bir sonraki açılışta aynı KOYDUM ikinci kez gider.
+gönderimi, başarısız biletlerin hatasını kapanmış veritabanına yazamazdı. Satır gönderilmeden önce
+`pushed_at` ile sahiplenilir, gidemezse `push_error` ile geri verilir: disk dolup bu yazı
+yapılamazsa hiçbir şey gönderilmez. Sonradan işaretlendiği günlerde dolu bir disk aynı lafı her
+30 saniyede bir, bir saat boyunca yeniden çaldırıyordu.
 
 Güncelleme de aynı sebeple pencereyi kapatmadan olur. Betik stdin'i satır satır okur:
 `y` + Enter sunucuyu aynı tünelin arkasında yeni kodla yeniden açar, `dur` + Enter onu durdurup

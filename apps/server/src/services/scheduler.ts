@@ -83,8 +83,8 @@ function databaseMb(dbPath: string): number | null {
 
 /**
  * Starts the interval and returns the stop function. Await it before closing the
- * database: a flush cut off between Expo's answer and `pushed_at` leaves rows that
- * the next start sends again.
+ * database: a flush cut off after Expo's answer would write its failed tickets
+ * into a closed one (a row is claimed before it is sent, so it never goes twice).
  */
 export function startScheduler(
   app: FastifyInstance,

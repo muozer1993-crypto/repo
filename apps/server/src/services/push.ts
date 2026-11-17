@@ -8,6 +8,13 @@
  * `flush()` is safe to call on a machine with no network — every failure is
  * recorded as `push_error` on the row instead of being thrown, so the scheduler
  * never dies and a row is never retried forever.
+ *
+ * A row is claimed (`pushed_at`) before Expo hears of it, and given back with
+ * its `push_error` when the send fails. Marked after the send, a write that
+ * failed (a full disk) left it pending, and every 30-second pass rang the same
+ * laf on the friend's phone again, about 120 times in its hour. Now a disk that
+ * takes no write sends nothing, and one that fails after the send loses at most
+ * that row's error.
  */
 import { Expo, type ExpoPushMessage, type ExpoPushTicket } from 'expo-server-sdk';
 import type { Config } from '../config.js';
@@ -73,8 +80,17 @@ export function createPushSender(config: Config): PushSender {
 
   return {
     async flush(db: Database, now: Date = new Date()): Promise<FlushResult> {
-      const markSent = db.prepare('UPDATE notifications SET pushed_at = ? WHERE id = ?');
+      const claim = db.prepare('UPDATE notifications SET pushed_at = ? WHERE id = ? AND pushed_at IS NULL');
       const markFailed = db.prepare('UPDATE notifications SET push_error = ? WHERE id = ?');
+      // a claimed row that did not go: not pushed, so the inbox does not say it was
+      const giveBack = db.prepare('UPDATE notifications SET pushed_at = NULL, push_error = ? WHERE id = ?');
+      const failClaimed = (row: PendingRow, error: string): void => {
+        try {
+          giveBack.run(error, row.id);
+        } catch {
+          // it stays claimed: never sent again, only not marked as failed
+        }
+      };
       const clearToken = db.prepare('UPDATE users SET push_token = NULL, push_platform = NULL WHERE id = ?');
       const cutoff = nowIso(new Date(now.getTime() - PUSH_MAX_AGE_MS));
 
@@ -119,38 +135,55 @@ export function createPushSender(config: Config): PushSender {
       // Keep messages and their rows aligned across chunk boundaries.
       let offset = 0;
       for (const chunk of expo.chunkPushNotifications(messages)) {
-        const rows = deliverable.slice(offset, offset + chunk.length);
+        const chunkRows = deliverable.slice(offset, offset + chunk.length);
         offset += chunk.length;
+
+        // Claimed in one write before anything is sent. A disk that takes no
+        // write ends the flush here: nothing goes out that could go out again.
+        const at = new Date().toISOString();
+        let claimed: boolean[];
+        try {
+          claimed = db.transaction(() => chunkRows.map((row) => claim.run(at, row.id).changes > 0))();
+        } catch {
+          return { sent, failed };
+        }
+        const rows = chunkRows.filter((_, i) => claimed[i]);
+        const toSend = chunk.filter((_, i) => claimed[i]);
+        if (rows.length === 0) continue;
 
         let tickets: ExpoPushTicket[];
         try {
-          tickets = await expo.sendPushNotificationsAsync(chunk);
+          tickets = await expo.sendPushNotificationsAsync(toSend);
         } catch (err) {
           const message = err instanceof Error ? err.message.slice(0, 200) : 'push_failed';
           for (const row of rows) {
-            markFailed.run(message, row.id);
+            failClaimed(row, message);
             failed += 1;
           }
           continue;
         }
 
-        const at = new Date().toISOString();
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i]!;
           const ticket = tickets[i];
           if (!ticket) {
-            markFailed.run('no_ticket', row.id);
+            failClaimed(row, 'no_ticket');
             failed += 1;
             continue;
           }
           if (ticket.status === 'ok') {
-            markSent.run(at, row.id);
             sent += 1;
             continue;
           }
-          markFailed.run((ticket.details?.error ?? ticket.message ?? 'push_error').slice(0, 200), row.id);
+          failClaimed(row, (ticket.details?.error ?? ticket.message ?? 'push_error').slice(0, 200));
           failed += 1;
-          if (ticket.details?.error === 'DeviceNotRegistered') clearToken.run(row.user_id);
+          if (ticket.details?.error === 'DeviceNotRegistered') {
+            try {
+              clearToken.run(row.user_id);
+            } catch {
+              // the next failed ticket for this phone tries again
+            }
+          }
         }
       }
 

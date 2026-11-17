@@ -2,7 +2,8 @@
  * Lifecycle smoke tests for the services the route modules build on:
  * standings, activation, finalization, cancellation, reminders and the push queue.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Expo } from 'expo-server-sdk';
 import type { FastifyInstance } from 'fastify';
 import type { Challenge, ChallengeDetail } from '@koydum/shared';
 import {
@@ -823,6 +824,68 @@ describe('push queue', () => {
       .prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND push_error = 'expired'")
       .get(ali.me.id) as { n: number };
     expect(expired.n).toBe(300);
+  });
+
+  it('sends a row once while the disk takes no write, however many passes it waits', async () => {
+    harness = await makeApp();
+    const { app, db, config } = harness;
+    const ali = await registerUser(app, 'ali', { pushToken: 'ExponentPushToken[ali]' });
+    harness.advance(MINUTE);
+    const laf = queue(harness, ali.me.id);
+    const send = vi
+      .spyOn(Expo.prototype, 'sendPushNotificationsAsync')
+      .mockImplementation(async (messages) => messages.map(() => ({ status: 'ok' as const, id: 'ticket' })));
+    // marking a row pushed fails the way SQLite's writes do on a full disk:
+    // stubbed, never a real disk filled
+    type Run = (this: { source: string }, ...args: unknown[]) => unknown;
+    const proto = Object.getPrototypeOf(db.prepare('SELECT 1')) as { run: Run };
+    const run = proto.run;
+    let full = true;
+    const writes = vi.spyOn(proto, 'run').mockImplementation(function (this: { source: string }, ...args: unknown[]) {
+      if (full && /pushed_at\s*=\s*\?/.test(this.source)) {
+        throw Object.assign(new Error('database or disk is full'), { code: 'SQLITE_FULL' });
+      }
+      return run.apply(this, args);
+    });
+    try {
+      const sender = createPushSender(config);
+      for (let i = 0; i < 5; i += 1) {
+        harness.advance(30_000);
+        await sender.flush(db, app.now()).catch(() => undefined);
+      }
+      // nothing went out that could go out again
+      expect(send).not.toHaveBeenCalled();
+
+      full = false;
+      await expect(sender.flush(db, app.now())).resolves.toEqual({ sent: 1, failed: 0 });
+      await expect(sender.flush(db, app.now())).resolves.toEqual({ sent: 0, failed: 0 });
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(db.prepare('SELECT pushed_at IS NOT NULL AS pushed FROM notifications WHERE id = ?').get(laf)).toEqual({ pushed: 1 });
+    } finally {
+      writes.mockRestore();
+      send.mockRestore();
+    }
+  });
+
+  it('gives a row whose ticket failed back as not pushed, with the reason', async () => {
+    harness = await makeApp();
+    const { app, db, config } = harness;
+    const ali = await registerUser(app, 'ali', { pushToken: 'ExponentPushToken[ali]' });
+    harness.advance(MINUTE);
+    const laf = queue(harness, ali.me.id);
+    const send = vi.spyOn(Expo.prototype, 'sendPushNotificationsAsync').mockImplementation(async (messages) =>
+      messages.map(() => ({ status: 'error' as const, message: 'gone', details: { error: 'DeviceNotRegistered' as const } })),
+    );
+    try {
+      await expect(createPushSender(config).flush(db, app.now())).resolves.toEqual({ sent: 0, failed: 1 });
+      expect(db.prepare('SELECT pushed_at, push_error FROM notifications WHERE id = ?').get(laf)).toEqual({
+        pushed_at: null,
+        push_error: 'DeviceNotRegistered',
+      });
+      expect(db.prepare('SELECT push_token FROM users WHERE id = ?').get(ali.me.id)).toEqual({ push_token: null });
+    } finally {
+      send.mockRestore();
+    }
   });
 
   it('leaves the queue alone when the phone sends the same token again', async () => {
