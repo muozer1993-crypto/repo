@@ -342,6 +342,25 @@ describe('taunts fit the çelınc they land on', () => {
     }
   });
 
+  it('names an untitled çelınc once: its title is the type name, the same as {metric}', () => {
+    // created without a title, a çelınc is called by its type's name, so l2_poke_02
+    // read "Su Bardağı Yarışı bitmedi, Su Bardağı Yarışı tarafında bir hareket göreyim."
+    const name = 'Su Bardağı Yarışı';
+    for (const template of TAUNTS) {
+      const { title, body } = renderTaunt(template, {
+        winner: 'Can',
+        loser: 'Ali',
+        metric: name,
+        winnerScore: '12',
+        loserScore: '4',
+        diff: '8',
+        unit: 'bardak',
+        challenge: name,
+      });
+      expect(`${title} ${body}`.split(name).length - 1, template.id).toBeLessThanOrEqual(1);
+    }
+  });
+
   it('swaps a requested walking line for one that fits', () => {
     const swapped = resolveTauntForRecipient('l3_poke_07', 'poke', 3, 1, 'manual_lower_is_better');
     expect(swapped.id).not.toBe('l3_poke_07');

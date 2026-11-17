@@ -15,6 +15,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { Text } from '@/components/Text';
 import { ToastProvider } from '@/components/Toast';
 import { ApiClient } from '@/lib/api';
 import { useAuth } from '@/store/auth';
@@ -278,6 +279,35 @@ describe('the permission slide', () => {
     press(tree, 'BAŞLAYALIM');
     expect(useAuth.getState().onboarding).toBe(false);
     expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
+  });
+
+  // slide 1 read "Kankalarla çelınc aç" and then "Kankalarla çelınc aç. Adım at, …",
+  // and at level 3 "Kim kime koyacak?" over "… Bakalım kim kime koyacak."
+  it('never says a slide\'s title again in its text, at any level', () => {
+    const plain = (text: string) =>
+      text
+        .toLocaleLowerCase('tr-TR')
+        .replace(/[\s.,!?:…]+$/u, '')
+        .trim();
+    const tree = renderSlides();
+    for (const level of [1, 2, 3] as const) {
+      act(() => {
+        useAuth.setState({ me: { ...ME, vulgarityMax: level } });
+      });
+      const titles = tree.root.findAll((node) => node.type === Text && node.props.variant === 'huge');
+      const bodies = tree.root.findAll((node) => node.type === Text && node.props.variant === 'lead');
+      expect(titles).toHaveLength(4);
+      expect(bodies).toHaveLength(4);
+      titles.forEach((title, i) => {
+        // quoting it is fine: on slide 3 the text says who shouts "KOYDUM MU?"
+        const body = plain(String(bodies[i].props.children)).replace(/'[^']*'/g, '');
+        expect({ level, title: title.props.children, body }).toEqual({
+          level,
+          title: title.props.children,
+          body: expect.not.stringContaining(plain(String(title.props.children))),
+        });
+      });
+    }
   });
 
   it('shows a "Nazik" reader the winner slide without the 🍆', () => {

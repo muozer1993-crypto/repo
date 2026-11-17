@@ -80,7 +80,7 @@ export const TAUNTS: readonly TauntTemplate[] = [
   { id: "l2_tie_01", level: 2, context: "tie", title: "{winner} laf attı", body: "{winnerScore} - {loserScore}, berabere {loser}. Rövanşta ayırırız bu işi." },
   { id: "l2_tie_02", level: 2, context: "tie", title: "{winner} bırakmıyor", body: "Eşit bitti ama bu iş bitmedi {loser}. Rövanşı aç da kim koyuyor görelim lan." },
   { id: "l2_poke_01", level: 2, context: "poke", title: "Kalk yürü", body: "{winner} {winnerScore} {unit} yapmış, sen {loserScore} ile yatıyorsun. Koltuğa yapıştın.", metrics: ["auto_steps"] },
-  { id: "l2_poke_02", level: 2, context: "poke", title: "Dürtüldün", body: "{winner} seni dürttü. {challenge} bitmedi, {metric} tarafında bir hareket göreyim." },
+  { id: "l2_poke_02", level: 2, context: "poke", title: "Dürtüldün", body: "{winner} seni dürttü. {challenge} daha bitmedi, bir hareket göreyim." },
   { id: "l2_poke_03", level: 2, context: "poke", title: "Hayatta mısın {loser}?", body: "Tabloda hâlâ {loserScore} {unit} ile duruyorsun. {winner} soruyor: nabız var mı lan?", metrics: ADDITIVE },
   { id: "l2_poke_04", level: 2, context: "poke", title: "Aradaki fark {diff}", body: "{winner} ile aranda {diff} {unit} var. Böyle giderse akşam {winner} imzalı bir bildirim gelir." },
   { id: "l2_poke_05", level: 2, context: "poke", title: "Kanepe önde", body: "{loser}, {metric} tarafında kıpırtı yok. {winner} soruyor: kanepeyle mi çelınc yapıyorsun, benimle mi?", metrics: ["auto_steps"] },

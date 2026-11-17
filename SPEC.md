@@ -161,7 +161,8 @@ Unknown placeholders are left as-is. Numbers are formatted by `formatScore`, whi
 screen-time average reads the same in the preview and in the message that lands.
 A score in a taunt or poke is the çelınc's own (a multi-day sum, the screen-time daily average, a day count),
 never today's alone: no line says "sabahtan beri", and no line that reaches screen time asks for more. Every
-metric keeps at least five `poke` lines at every level.
+metric keeps at least five `poke` lines at every level. A çelınc created without a title carries its type's name,
+the same text as `{metric}`, so no line names both `{challenge}` and `{metric}`.
 
 ### 1.5 Copy (`copy.ts`)
 
@@ -814,7 +815,8 @@ _layout.tsx                 providers (QueryClientProvider, GestureHandlerRootVi
 (auth)/login.tsx            username/password, link to register, forgot-password hint (ask the server's owner), "Sunucu adresi" link; after a 401 logout shows the server's reason once (store `sessionEndReason`, e.g. "Şifren değişti, bu telefondaki oturum kapandı. Yeni şifreyle gir."), or "Oturumun düşmüş, bir daha gir." when it gave none (store `sessionEnded`, both cleared on mount); ChooseServerCard on top while no server is chosen (3.2)
 (auth)/register.tsx         + display name (the username field folds as typed: "Şeyma" shows as seyma), vulgarity level picker (with live preview of a taunt at that level); ChooseServerCard like login. A 409 `username_taken` for the very name and password of an earlier try that got no answer (status 0 or `server_down`) signs in with them through POST /auth/login and goes on as after a sign-up (onboarding): that try made the account, and the friend used to sign up as zeynep2 beside an empty zeynep. A wrong password there keeps "kapılmış"; no answer again says so
 (auth)/server.tsx           edit server URL or paste an invite link (parsePastedInvite; a code in it is parked as the pending invite on "Kaydet"), "Bağlantıyı test et" → GET /health; "Tahminimi kullan" hidden on a phone when the guess is loopback
-onboarding.tsx              4 slides (copy onboarding_1..4), shown once after register. The 4th explains the two permissions
+onboarding.tsx              4 slides (copy onboarding_1..4 under a title per level; the copy never says its title again,
+                            quoting it is fine), shown once after register. The 4th explains the two permissions
                             and asks for them: "Bildirim izni" → registerForPush, "Adım izni" → requestStepPermission, each
                             turning into a "✅ … verildi" chip once granted (a no keeps the button and says Ayarlar can do it
                             later). "Geç" before the last slide jumps to it; "Geç" / "BAŞLAYALIM" there → setOnboarding(false)

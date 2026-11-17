@@ -40,7 +40,7 @@ export const MICROCOPY: Record<MicrocopyKey, MicrocopyEntry> = {
   "proof_needed": { level1: "Bu giriş için fotoğraf gerekiyor.", level2: "Fotoğraf lazım. Yoksa kimse inanmaz.", level3: "Fotoğrafı at lan, palavraya kimse inanmıyor." },
   "dispute_button": { level1: "İtiraz Et", level2: "Yalan Bu", level3: "Palavra Bu" },
   "profile_record": { level1: "Kişisel rekor", level2: "En iyi koyuş", level3: "Rekor saplama 🍆" },
-  "onboarding_1": { level1: "Arkadaşlarınla çelınc aç: adım, odak, erken kalkma, su.", level2: "Kankalarla çelınc aç. Adım at, telefonu bırak, erken kalk.", level3: "Kankalarla çelınc aç. Bakalım kim kime koyacak." },
+  "onboarding_1": { level1: "Arkadaşlarınla çelınc aç: adım, odak, erken kalkma, su.", level2: "Adım at, telefonu bırak, erken kalk. Hangisinde iddialıysan oradan başla.", level3: "Adımda, odakta, erken kalkmada kankalarla kapış. Gevşeyen yer 🍆" },
   "onboarding_2": { level1: "Skorlar otomatik ya da beyanla sayılır. Arkadaşların itiraz edebilir.", level2: "Skorlar sayılır. Yalan atarsan kankalar itiraz eder.", level3: "Her skor sayılır. Sayıyı şişirirsen itiraz yersin." },
   "onboarding_3": { level1: "Kazanan ödülü alır, kaybedene bir mesaj gider.", level2: "Kazanan 'KOYDUM MU?' der, kaybedenin telefonu öter.", level3: "Kazanan 'KOYDUM MU?' der, kaybedenin telefonuna 🍆 iner." },
   "onboarding_4": { level1: "Bildirim izni verirsen kazanan sana yazınca haberin olur. Adım izni verirsen adımlarını telefon sayar, elle girmezsin.", level2: "Kanka sana koyunca duyman lazım, bildirime izin ver. Adımlarını da telefon saysın, elle yazmakla uğraşma.", level3: "Yediğin lafı duyman için bildirim, adımı elle sallamaman için adım izni. İkisini de ver 🍆" },
