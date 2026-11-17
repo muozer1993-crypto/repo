@@ -188,6 +188,21 @@ describe('a parked entry the server refuses for good', () => {
 
     expect(texts(tree)).toContain('“Su içme” · 8 Eylül: Süre bitti, artık giriş yok.');
   });
+
+  it("tells a step count an older app parked as 12,43 to be typed again, in the server's words", async () => {
+    // before the form read "12.430" as thousands it parked 12.43; the server now
+    // refuses the fraction instead of crowning the friend who walked less
+    addEntry.mockRejectedValue(new ApiError('not_whole', 'Küsurat olmaz, tam sayı yaz.', 400));
+    appState.currentState = 'active';
+    const day = { dayKey: '2026-09-08', value: 12.43, source: 'manual', clientTime: '2026-09-08T10:00:00.000Z' };
+    await enqueueEntry('c3', day, 'c3:gun', undefined, 'Adım savaşı');
+    const tree = render();
+    await settle();
+
+    expect(addEntry).toHaveBeenCalledWith('c3', expect.objectContaining({ value: 12.43 }));
+    expect(texts(tree)).toContain('“Adım savaşı” · 8 Eylül: Küsurat olmaz, tam sayı yaz.');
+    expect(await readQueue()).toEqual([]);
+  });
 });
 
 describe('a refusal parked by one account on a shared phone', () => {

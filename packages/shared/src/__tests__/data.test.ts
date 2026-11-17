@@ -101,6 +101,15 @@ describe('challenge catalog', () => {
     }
   });
 
+  it('marks the counts that have no fraction, and only those', () => {
+    // a step, a push-up, a floor, a page, a minute; 0,5 km, half a glass and
+    // half a portion mean something
+    const whole = CHALLENGE_TYPES.filter((type) => type.wholeNumbers).map((type) => type.key);
+    expect(whole.sort()).toEqual(
+      ['adim_yarisi', 'dil_pratigi', 'ekran_suresi_beyani', 'kitap_sayfa', 'merdiven_kati', 'sinav_sayisi'].sort()
+    );
+  });
+
   it('labels every category it uses', () => {
     for (const type of CHALLENGE_TYPES) {
       expect(CATEGORY_LABELS_TR[type.category]).toBeTruthy();

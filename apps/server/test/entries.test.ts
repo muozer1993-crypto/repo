@@ -390,6 +390,33 @@ describe('auto_steps entries', () => {
     expect(negative.statusCode).toBe(400);
     expect(errorCode(negative)).toBe('validation');
   });
+
+  it('refuses a fraction of a whole-number count and keeps one where half a unit means something', async () => {
+    // "12.430" typed the way the app prints it went in as 12,43 adım and lost the race
+    harness = await makeApp({ now: NOW });
+    const steps = await liveChallenge(harness, 'adim_yarisi', {}, 3, '_adim');
+    const day = today(harness);
+    const entries = () => harness!.db.prepare('SELECT value FROM entries WHERE challenge_id = ?').all(steps.challengeId);
+
+    const fraction = await post(harness, steps.ali, steps.challengeId, { dayKey: day, value: 12.43, source: 'manual', clientTime: iso(harness) });
+    expect(fraction.statusCode).toBe(400);
+    expect(fraction.json()).toEqual({ error: { code: 'not_whole', message: 'Küsurat olmaz, tam sayı yaz.' } });
+    expect(entries()).toEqual([]);
+
+    const whole = await post(harness, steps.ali, steps.challengeId, { dayKey: day, value: 12430, source: 'manual', clientTime: iso(harness) });
+    expect(whole.statusCode).toBe(201);
+    expect(entries()).toEqual([{ value: 12430 }]);
+
+    const run = await liveChallenge(harness, 'kosu_km', { proofRequired: false }, 3, '_kosu');
+    const km = await post(harness, run.ali, run.challengeId, { dayKey: day, value: 5.2, source: 'manual', clientTime: iso(harness) });
+    expect(km.statusCode).toBe(201);
+    expect(km.json<{ entry: Entry }>().entry.value).toBe(5.2);
+
+    const water = await liveChallenge(harness, 'su_bardak', {}, 3, '_su');
+    const glass = await post(harness, water.ali, water.challengeId, { dayKey: day, value: 0.5, source: 'manual', clientTime: iso(harness) });
+    expect(glass.statusCode).toBe(201);
+    expect(glass.json<{ entry: Entry }>().entry.value).toBe(0.5);
+  });
 });
 
 // ---------------------------------------------------------------------------

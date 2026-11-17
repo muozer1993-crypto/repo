@@ -364,6 +364,12 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
   if (body.value > type.maxPerEntry) {
     throw badRequest('value_too_large', `Tek girişte en fazla ${unitLabel(type, type.maxPerEntry)} girebilirsin.`);
   }
+  // "12.430" typed the way the app prints it was read by older apps as 12,43
+  // adım and crowned the friend who walked less. Refused here, it comes back to
+  // the form (or as the offline queue's refusal toast) to be typed again.
+  if (type.wholeNumbers && !Number.isInteger(body.value)) {
+    throw badRequest('not_whole', 'Küsurat olmaz, tam sayı yaz.');
+  }
 
   // A photo can back a NUMBER somebody typed. A yes/no day and a check-in have
   // no photo step in the app, so the flag must not lock them (it once made every

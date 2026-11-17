@@ -12,6 +12,7 @@ import {
   formatNumber,
   forHoursTr,
   hoursSince,
+  parseTypedNumber,
   relativeTime,
   withUnit,
 } from '@/utils/format';
@@ -164,5 +165,44 @@ describe('formatDayKeyAttributive', () => {
     expect(formatDayKeyAttributive('2026-09-08', '2026-09-08', '2026-09-07')).toBe('bugünkü');
     expect(formatDayKeyAttributive('2026-09-07', '2026-09-08', '2026-09-07')).toBe('dünkü');
     expect(formatDayKeyAttributive('2026-09-01', '2026-09-08', '2026-09-07')).toBe('1 Eylül günkü');
+  });
+});
+
+describe('parseTypedNumber', () => {
+  it('reads a whole-number count typed with thousands the way the app prints it', () => {
+    // "12.430" went in as 12,43 adım and lost the race to 9.000
+    expect(parseTypedNumber('12.430', true)).toBe(12430);
+    expect(parseTypedNumber('8.500', true)).toBe(8500);
+    expect(parseTypedNumber('100.000', true)).toBe(100000);
+    expect(parseTypedNumber('1.000', true)).toBe(1000);
+    expect(parseTypedNumber('12,430', true)).toBe(12430);
+    expect(parseTypedNumber(' 12 430 ', true)).toBe(12430);
+    expect(parseTypedNumber('9000', true)).toBe(9000);
+    expect(parseTypedNumber('8,0', true)).toBe(8);
+  });
+
+  it('calls a fraction of a whole-number count a fraction, not "not a number"', () => {
+    expect(parseTypedNumber('12,5', true)).toBe('fraction');
+    expect(parseTypedNumber('12.43', true)).toBe('fraction');
+    expect(parseTypedNumber('1.234,5', true)).toBe('fraction');
+  });
+
+  it('keeps one comma or dot as the decimal point where a fraction means something', () => {
+    expect(parseTypedNumber('5,2', false)).toBe(5.2);
+    expect(parseTypedNumber('5.2', false)).toBe(5.2);
+    expect(parseTypedNumber('0,5', false)).toBe(0.5);
+    expect(parseTypedNumber('1.234,5', false)).toBe(1234.5);
+    expect(parseTypedNumber('12', false)).toBe(12);
+  });
+
+  it('refuses what is not a number', () => {
+    expect(parseTypedNumber('', false)).toBeNull();
+    expect(parseTypedNumber('   ', true)).toBeNull();
+    expect(parseTypedNumber(',', false)).toBeNull();
+    expect(parseTypedNumber('abc', true)).toBeNull();
+    expect(parseTypedNumber('12a', true)).toBeNull();
+    expect(parseTypedNumber('1.2.3', true)).toBeNull();
+    expect(parseTypedNumber('1.2.3', false)).toBeNull();
+    expect(parseTypedNumber('-5', false)).toBeNull();
   });
 });

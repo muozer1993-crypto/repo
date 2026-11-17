@@ -155,6 +155,12 @@ export interface ChallengeType {
   maxPerEntry: number;
   /** Cap for the daily sum. */
   maxPerDay: number;
+  /**
+   * A count with no fractions (steps, push-ups, pages, minutes): the server
+   * refuses 12,43 adım (400 `not_whole`) and the entry form reads "12.430" as
+   * twelve thousand. Absent where half a unit means something (0,5 km, bardak).
+   */
+  wholeNumbers?: true;
   /** lower-is-better only: value assumed for unreported days. */
   missingDayPenalty?: number;
   /**

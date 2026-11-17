@@ -25,6 +25,44 @@ export function dropFloatNoise(value: number): number {
   return Math.round(value * 1e6) / 1e6;
 }
 
+const GROUPED_DOTS = /^\d{1,3}(\.\d{3})+$/;
+const GROUPED_COMMAS = /^\d{1,3}(,\d{3})+$/;
+const ONE_SEPARATOR = /^\d*[.,]\d*$/;
+const GROUPED_WITH_DECIMALS = /^\d{1,3}(\.\d{3})+,\d*$/;
+
+/**
+ * A number typed into the entry form, read the way a Turkish friend types it.
+ *
+ * `whole` (the type's `wholeNumbers`): "12.430" and "12,430" are thousands, the
+ * way the app itself prints 12.430 adım. Read as a decimal point, "12.430" went
+ * in as 12,43 adım and lost the race to 9.000. A real fraction ("12,5") comes
+ * back as `'fraction'` so the form can say why, not just "bir sayı yaz".
+ *
+ * Otherwise one "," or "." is the decimal point ("5,2" and "5.2" are 5.2: a
+ * Turkish keyboard gives the comma), and "1.234,5" is 1234.5.
+ *
+ * null: nothing typed, or not a number.
+ */
+export function parseTypedNumber(text: string, whole: boolean): number | 'fraction' | null {
+  const cleaned = text.replace(/\s/g, '');
+  if (!/\d/.test(cleaned)) return null;
+  let value: number;
+  if (/^\d+$/.test(cleaned)) {
+    value = Number(cleaned);
+  } else if (whole && (GROUPED_DOTS.test(cleaned) || GROUPED_COMMAS.test(cleaned))) {
+    value = Number(cleaned.replace(/[.,]/g, ''));
+  } else if (ONE_SEPARATOR.test(cleaned)) {
+    value = Number(cleaned.replace(',', '.'));
+  } else if (GROUPED_WITH_DECIMALS.test(cleaned)) {
+    value = Number(cleaned.replace(/\./g, '').replace(',', '.'));
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(value)) return null;
+  // "8,0" is still eight
+  return whole && !Number.isInteger(value) ? 'fraction' : value;
+}
+
 /** 90 -> "1sa 30dk", 45 -> "45dk" */
 export function formatMinutes(minutes: number): string {
   const total = Math.max(0, Math.round(minutes));

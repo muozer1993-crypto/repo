@@ -23,21 +23,12 @@ import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
 import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
-import { dropFloatNoise, formatDayKeyFriendly, formatNumber } from '@/utils/format';
+import { dropFloatNoise, formatDayKeyFriendly, formatNumber, parseTypedNumber } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
 import { runningUnseen } from '@/utils/joinWindow';
 import { resolveServerUrl } from '@/utils/url';
 
 /* ------------------------------------------------------------------ utils */
-
-/** "5,2" and "5.2" are both 5.2 — Turkish keyboards give the comma. */
-function parseValue(text: string): number | null {
-  const cleaned = text.trim().replace(/\s/g, '').replace(',', '.');
-  if (!cleaned) return null;
-  if (!/^\d*(\.\d*)?$/.test(cleaned)) return null;
-  const value = Number(cleaned);
-  return Number.isFinite(value) ? value : null;
-}
 
 /**
  * What is left of a day's cap, cut to the two decimals formatNumber prints:
@@ -158,7 +149,9 @@ export default function EntryModalScreen() {
   // catalog flag only seeded that switch in the wizard
   const proofRequired = challenge.proofRequired;
   const emphasiseProof = proofRequired || params.proof === '1' || type.metricType === 'manual_lower_is_better';
-  const value = parseValue(raw);
+  // "12.430" adım is twelve thousand; "12,5" adım is refused, not rounded
+  const parsed = parseTypedNumber(raw, type.wholeNumbers === true);
+  const value = typeof parsed === 'number' ? parsed : null;
   const chips = quickAdds(type.maxPerEntry);
   // two yeses past the start: running, the server just has not said so yet
   const notActive =
@@ -223,6 +216,10 @@ export default function EntryModalScreen() {
   };
 
   const submit = async () => {
+    if (parsed === 'fraction') {
+      setError('Küsurat olmaz, tam sayı yaz.');
+      return;
+    }
     if (value === null) {
       setError('Bir sayı yaz kanka.');
       return;

@@ -87,6 +87,7 @@ export interface ChallengeType {
   category: 'hareket'|'ekran'|'uyku'|'beslenme'|'zihin'|'kotu_aliskanlik'|'diger';
   maxPerEntry: number;        // anti-abuse cap for a single manual value
   maxPerDay: number;          // cap for the daily sum
+  wholeNumbers?: true;        // a count with no fractions (adim_yarisi, sinav_sayisi, merdiven_kati, ekran_suresi_beyani, kitap_sayfa, dil_pratigi): 400 `not_whole` on a fraction (2.3); absent where half a unit means something (km, bardak, porsiyon)
   missingDayPenalty?: number; // lower-is-better only: value assumed for unreported days
   askTr?: string; yesTr?: string; noTr?: string; // daily_boolean only: the question and the two answers (no ✅/❌); yesTr = value 1
 }
@@ -477,7 +478,9 @@ nothing, a device source included (400 `challenge_ended`; a replayed `sessionId`
 are answered before the state and the end are looked at, after the finish too, since they were written in time): a phone-counted çelınc's last syncs, while it waits for them (2.4), arrive through
 `POST /me/steps` and `/me/screen-time` (the device fan-out below), never here; `dayKey` must be in
 `dayKeysBetween(startsAt, endsAt, user.tz)`; `dayKey <= todayKey(user.tz)`; `dayKey >= todayKey − 2 days`
-(manual types) / `− 7 days` (steps); value ≤ `type.maxPerEntry`; proof required when
+(manual types) / `− 7 days` (steps); value ≤ `type.maxPerEntry`, and a whole number on a `wholeNumbers` type (400
+`not_whole` "Küsurat olmaz, tam sayı yaz.": a parked 12,43 adım from an app that read "12.430" as a decimal comes back as
+the offline queue's refusal, to be typed again); proof required when
 `challenge.proofRequired` and source is manual (400 `proof_required`) — and only for metrics where a photo can back a typed number (`manual_count`, `manual_lower_is_better`, `auto_steps`); a `daily_boolean` mark or a `checkin` has no photo step and ignores the flag. Device sources (`pedometer`, `health_connect`, `usage_stats`) never need proof; `usage_stats` gets the 7-day device backfill window.
 
 Per type:
@@ -945,6 +948,9 @@ onboarding.tsx              4 slides (copy onboarding_1..4), shown once after re
                             drop JavaScript's float noise first (`dropFloatNoise`, six decimals), as do the "+" chips' sums in the
                             field: 14,4 + 59,7 + 15,9 km is 90.00000000000001 in JS but 90 in the server's SUM, and "9,99 km kaldı"
                             refused the 10 the server takes;
+                            the value is read by `parseTypedNumber` (utils/format.ts): on a `wholeNumbers` type "12.430" and "12,430" are
+                            thousands (12430, as the app prints them) and a real fraction ("12,5") is refused on the spot ("Küsurat olmaz,
+                            tam sayı yaz.", nothing sent); elsewhere one "," or "." is the decimal point ("5,2" = "5.2" = 5.2) and "1.234,5" is 1234.5;
                             on a phone, a photo that cannot go up for lack of a connection (or `server_down`/`not_koydum`) stays on the phone ("Fotoğraf telefonda",
                             previewed with "henüz gitmedi"), counts as the required proof for Kaydet, and goes up with the entry:
                             right then if the connection is back, else from the offline queue (`proofLocalUri`). The feed's

@@ -26,6 +26,7 @@ export const CHALLENGE_TYPES: readonly ChallengeType[] = [
     category: "hareket",
     maxPerEntry: 100000,
     maxPerDay: 100000,
+    wholeNumbers: true,
     deviceMetric: "steps",
   },
   {
@@ -63,6 +64,7 @@ export const CHALLENGE_TYPES: readonly ChallengeType[] = [
     category: "hareket",
     maxPerEntry: 150,
     maxPerDay: 300,
+    wholeNumbers: true,
   },
   {
     key: "merdiven_kati",
@@ -81,6 +83,7 @@ export const CHALLENGE_TYPES: readonly ChallengeType[] = [
     category: "hareket",
     maxPerEntry: 30,
     maxPerDay: 60,
+    wholeNumbers: true,
   },
   {
     key: "odak_seansi",
@@ -117,6 +120,7 @@ export const CHALLENGE_TYPES: readonly ChallengeType[] = [
     category: "ekran",
     maxPerEntry: 1440,
     maxPerDay: 1440,
+    wholeNumbers: true,
     missingDayPenalty: 1440,
     deviceMetric: "screen_time",
   },
@@ -276,6 +280,7 @@ export const CHALLENGE_TYPES: readonly ChallengeType[] = [
     category: "zihin",
     maxPerEntry: 300,
     maxPerDay: 500,
+    wholeNumbers: true,
   },
   {
     key: "dil_pratigi",
@@ -294,6 +299,7 @@ export const CHALLENGE_TYPES: readonly ChallengeType[] = [
     category: "zihin",
     maxPerEntry: 120,
     maxPerDay: 240,
+    wholeNumbers: true,
   },
   {
     key: "gunluk_yazma",

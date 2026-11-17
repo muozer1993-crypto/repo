@@ -1731,6 +1731,47 @@ describe('the entry modal', () => {
     }
     expect(findWith(tree, 'placeholder', '0', 'onChangeText').props.value).toBe('42,3');
   });
+
+  it('reads steps typed with a thousands dot as thousands, the way the app prints them', async () => {
+    // "12.430" went in as 12,43 adım and lost the race to a friend's 9.000
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => challengeDetail());
+    api.addEntry = jest.fn(async () => ({ entry: {}, standings: [] }));
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    act(() => {
+      findWith(tree, 'placeholder', '0', 'onChangeText').props.onChangeText('12.430');
+    });
+    await act(async () => {
+      await findWith(tree, 'title', 'Kaydet', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ value: 12430 }));
+    expect(rendered(tree)).toContain('12.430 adım · bugün');
+  });
+
+  it('says a step count has no fraction and sends nothing', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => challengeDetail());
+    api.addEntry = jest.fn(async () => ({ entry: {}, standings: [] }));
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    act(() => {
+      findWith(tree, 'placeholder', '0', 'onChangeText').props.onChangeText('12,5');
+    });
+    await act(async () => {
+      await findWith(tree, 'title', 'Kaydet', 'onPress').props.onPress();
+    });
+    await settle();
+
+    expect(rendered(tree)).toContain('Küsurat olmaz, tam sayı yaz.');
+    expect(api.addEntry).not.toHaveBeenCalled();
+  });
 });
 
 describe('the screen-time card', () => {

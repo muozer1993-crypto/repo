@@ -363,6 +363,15 @@ yazdığı sayıyı gösterir. Eski APK'nın odak ekranı ise sunucu ne yazarsa 
 dakikalık seansın 60 dakikası yazıldı. Günde en fazla 360 dakika sayılıyor."). 360 dolduktan sonra
 eski APK seansı yine de başlatır, bitince sunucu reddeder.
 
+Adım, tekrar, kat, sayfa ve dakika türlerinde (katalogda `wholeNumbers`) küsurat yoktur: sunucu
+12,43 adımı 400 `not_whole` ile geri çevirir. Uygulama binlikleri noktayla yazar (12.430), kanka da
+öyle yazınca eski giriş ekranı noktayı ondalık sanıp 12,43 adım gönderiyordu ve 9.000 adımlık rakip
+kazanıyordu. Giriş ekranı bu türlerde artık "12.430"u da "12,430"u da binlik okur
+(`parseTypedNumber`), "12,5"i ise göndermeden "Küsurat olmaz, tam sayı yaz." der. Km, bardak ve
+porsiyonda yarım birim bir şey demektir, orada virgül ondalık kalır. Güncellemeden önce sıraya
+alınmış bir 12,43 adım sunucuya gidince çevrimdışı kuyruğunun reddi olarak kankaya döner ("“Adım
+savaşı” · Dün: Küsurat olmaz, tam sayı yaz."); sessizce yanlış kazanan seçilmez.
+
 ## Laf sokma zinciri
 
 1. Çelınc biter, `winner_id` yazılır.
