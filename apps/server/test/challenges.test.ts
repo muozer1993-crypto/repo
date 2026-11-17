@@ -3225,6 +3225,78 @@ describe('check-in çelınclar across zones', () => {
     expect(sendReminders(harness.db, harness.now())).toBe(1);
   });
 
+  /**
+   * Ali's Istanbul erken_yat from 00:30 on Monday 9 November to the end of
+   * Sunday, finished: Mert in New York had seven evenings too (the 8th from
+   * 16:30 to the 14th), and so did everybody in `others`.
+   */
+  async function finishedErkenYat(h: TestApp, others: RegisteredUser[]) {
+    const ali = await registerUser(h.app, 'ali', { displayName: 'Ali' });
+    const mert = await registerUser(h.app, 'mert', { displayName: 'Mert', timezone: 'America/New_York' });
+    const players = [mert, ...others];
+    for (const friend of players) befriend(h.app, ali.me.id, friend.me.id);
+    const created = await createChallenge(h, ali, {
+      typeKey: 'erken_yat',
+      deadlineTime: '23:00',
+      participantIds: players.map((p) => p.me.id),
+      endsAt: '2026-11-15T20:59:59.999Z',
+    });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    for (const friend of players) expect((await accept(h, friend, challengeId)).statusCode).toBe(200);
+    await h.app.inject({ method: 'POST', url: `/dev/finalize/${challengeId}` });
+    return { ali, mert, challengeId };
+  }
+
+  it('does not ask a friend into a check-in rematch their zone gives fewer deadlines, and lets them open their own', async () => {
+    harness = await makeApp({ now: '2026-11-08T21:30:00.000Z' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    const { ali, mert, challengeId } = await finishedErkenYat(harness, [veli]);
+
+    // Monday 14:00 in Istanbul: the rematch runs to Sunday 15:59 in New York, six evenings there
+    harness.setNow('2026-11-16T11:00:00.000Z');
+    const opened = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(opened.statusCode).toBe(201);
+    const rematchId = opened.json<Challenge>().id;
+    expect(rowOf(harness, rematchId, veli.me.id)?.status).toBe('invited');
+    expect(rowOf(harness, rematchId, mert.me.id)).toBeUndefined();
+    const pushed = harness.db
+      .prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND type = 'rematch'")
+      .get(mert.me.id) as { n: number };
+    expect(pushed.n).toBe(0);
+
+    // one an older server did invite him to: not a door he can go through
+    harness.db
+      .prepare(
+        `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at, final_score, final_rank, timezone)
+         VALUES (?, ?, 'invited', ?, NULL, NULL, NULL, NULL)`,
+      )
+      .run(rematchId, mert.me.id, iso(harness));
+    expect(errorOf(await accept(harness, mert, rematchId)).code).toBe('checkin_days_short');
+    const results = await authed(harness.app, mert.token)({ method: 'GET', url: `/challenges/${challengeId}/results` });
+    expect(results.json<ChallengeResults>().rematch).toBeNull();
+    // his own, from 06:00 in New York, has seven evenings for everybody
+    const own = await authed(harness.app, mert.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(own.statusCode).toBe(201);
+    const ownId = own.json<Challenge>().id;
+    expect(rowOf(harness, ownId, ali.me.id)?.status).toBe('invited');
+    expect((await accept(harness, ali, ownId)).statusCode).toBe(200);
+  });
+
+  it('says why when a check-in rematch has nobody its zone does not shortchange', async () => {
+    harness = await makeApp({ now: '2026-11-08T21:30:00.000Z' });
+    const { ali, challengeId } = await finishedErkenYat(harness, []);
+    harness.setNow('2026-11-16T11:00:00.000Z');
+    const refused = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    expect(refused.statusCode).toBe(400);
+    expect(errorOf(refused)).toEqual({
+      code: 'checkin_days_short',
+      message:
+        'Saat farkı yüzünden bu çelıncın check-in saati Mert için 6 güne denk geliyor, sende 7 gün. Eksik günle eklenemez.',
+    });
+    expect(harness.db.prepare('SELECT COUNT(*) AS n FROM challenges WHERE rematch_of_id = ?').get(challengeId)).toEqual({ n: 0 });
+  });
+
   it('changes nothing for friends in one zone, a first day past its deadline included', async () => {
     harness = await makeApp({ now: NOW }); // Monday 12:00 in Istanbul
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });

@@ -242,7 +242,7 @@ function forCreator(db: Database, challenge: ChallengeRow): string {
  * name: it follows the name's last vowel, and a display name can be "MSN" or
  * "🔥".
  */
-function invitedShortError(name: string, short: { days: number; creatorDays: number }, whose: string): HttpError {
+export function invitedShortError(name: string, short: { days: number; creatorDays: number }, whose: string): HttpError {
   return badRequest(
     'checkin_days_short',
     `Saat farkı yüzünden bu çelıncın check-in saati ${name} için ${checkinDaysTr(short.days)}, ${whose} ${short.creatorDays} gün. Eksik günle eklenemez.`,

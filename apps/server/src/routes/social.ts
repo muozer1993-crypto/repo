@@ -38,7 +38,16 @@ import {
 import { badRequest, conflict, forbidden, notFound, parseBody } from '../errors.js';
 import { newId, nowIso, type ChallengeRow, type Database, type ParticipantRow, type UserRow } from '../db/index.js';
 import { toPublicUser, toTaunt } from '../serialize.js';
-import { challengeWindow, computeStandings, creatorTimezone, dayOverByEnd, typeForChallenge } from '../services/challenges.js';
+import {
+  challengeWindow,
+  checkinDaysShort,
+  computeStandings,
+  creatorTimezone,
+  dayOverByEnd,
+  participantTimezone,
+  typeForChallenge,
+} from '../services/challenges.js';
+import { invitedShortError } from './challenges.js';
 import { notify } from '../services/notifications.js';
 import { toChallenge } from '../serialize.js';
 import { computeUserStats } from '../services/stats.js';
@@ -176,34 +185,35 @@ function rematchLineUp(
  * invite I can no longer take, the accept route's own refusals: past its
  * `acceptClosesAt` or over (I never played it, so I could not rematch from its
  * result either), or one a block came between since (opening mine leaves the
- * blocked creator out). It would only lead to a closed door and keep me from
- * opening mine.
+ * blocked creator out), or a check-in one my profile's zone gives fewer
+ * deadlines than its creator's (`checkinDaysShort`: a New York friend asked
+ * into an Istanbul erken_yat after 07:00 there has six evenings to seven, and
+ * as its creator he has seven). It would only lead to a closed door and keep me
+ * from opening mine.
  */
 function findRematch(db: Database, challengeId: string, meId: string, now: Date): RematchView | null {
+  const myRow = db.prepare('SELECT timezone FROM users WHERE id = ?').get(meId) as { timezone: string | null } | undefined;
   const rows = db
     .prepare(
-      `SELECT c.id, c.status, c.creator_id, c.starts_at, c.ends_at, u.display_name AS creator_name, p.status AS my_status
+      `SELECT c.*, u.display_name AS creator_name, p.status AS my_status
          FROM challenges c
          JOIN challenge_participants p ON p.challenge_id = c.id AND p.user_id = ?
          JOIN users u ON u.id = c.creator_id
         WHERE c.rematch_of_id = ? AND c.status <> 'cancelled' AND p.status IN ('accepted', 'invited')
         ORDER BY (c.creator_id = ?) DESC, c.created_at DESC`,
     )
-    .all(meId, challengeId, meId) as {
-    id: string;
+    .all(meId, challengeId, meId) as (ChallengeRow & {
     status: ChallengeStatus;
-    creator_id: string;
-    starts_at: string;
-    ends_at: string;
     creator_name: string;
     my_status: 'accepted' | 'invited';
-  }[];
+  })[];
   const row = rows.find(
     (r) =>
       r.my_status === 'accepted' ||
       ((r.status === 'pending' || r.status === 'active') &&
         now.getTime() < acceptClosesAt(r.starts_at, r.ends_at) &&
-        !isBlockedBetween(db, meId, r.creator_id)),
+        !isBlockedBetween(db, meId, r.creator_id) &&
+        !checkinDaysShort(r, typeForChallenge(r), creatorTimezone(db, r), participantTimezone(undefined, myRow))),
   );
   if (!row) return null;
   return {
@@ -399,8 +409,20 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     const createdAt = nowIso(now);
     const rematchId = newId();
 
-    const { invitees } = rematchLineUp(db, challenge, me.id);
+    // The accept route's check-in days, in the rematch's own window: an
+    // Istanbul erken_yat asked for at 14:00 has six evenings in New York to my
+    // seven, and the friend's "Varım" would only be refused (`checkinDaysShort`).
+    // He is not asked; he can open his own, with his seven.
+    const type = typeForChallenge(challenge);
+    const window = { starts_at: startsAt, ends_at: endsAt, deadline_time: challenge.deadline_time };
+    const lineUp = rematchLineUp(db, challenge, me.id).invitees.map((user) => ({
+      user,
+      short: checkinDaysShort(window, type, participantTimezone(undefined, me.row), participantTimezone(undefined, user)),
+    }));
+    const invitees = lineUp.filter((entry) => !entry.short).map((entry) => entry.user);
     if (invitees.length === 0) {
+      const first = lineUp.find((entry) => entry.short);
+      if (first?.short) throw invitedShortError(first.user.display_name, first.short, 'sende');
       throw badRequest('no_participants', 'Rövanş için davet edilecek kimse kalmadı.');
     }
 
