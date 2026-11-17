@@ -901,6 +901,39 @@ describe('scheduler: the itiraz hour for numbers that land at the whistle', () =
     expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: veli.me.id });
   });
 
+  it('opens no hour for a photo that answers an afternoon itiraz after the end', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'kitap_sayfa', { proofRequired: false });
+    at(harness, MIDNIGHT_END, -5 * HOUR);
+    const aliPages = await logPages(harness, ali, challengeId, 300);
+    const aliMore = await logPages(harness, ali, challengeId, 50);
+    await logPages(harness, veli, challengeId, 100);
+    at(harness, MIDNIGHT_END, -4 * HOUR);
+    await dispute(harness, veli, challengeId, aliPages);
+
+    // over at midnight, waiting only for Ali's photo
+    at(harness, MIDNIGHT_END, 1);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    at(harness, MIDNIGHT_END, 20 * MINUTE);
+    const answered = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${aliPages}/proof`,
+      payload: { proofUrl: '/uploads/sayfalar.jpg' },
+    });
+    expect(answered.statusCode).toBe(200);
+    expect(await disputesCloseAt(harness, veli, challengeId)).toBe(MIDNIGHT_END);
+
+    const another = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${aliMore}/dispute`,
+      payload: { reason: 'bu da yalan' },
+    });
+    expect(another.statusCode).toBe(400);
+    expect(another.json<{ error: { code: string } }>().error.code).toBe('challenge_ended');
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+  });
+
   it('gives a late typed number the hour after a server that was off at the end comes back', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await endingAtMidnight(harness, 'kitap_sayfa', { proofRequired: false });

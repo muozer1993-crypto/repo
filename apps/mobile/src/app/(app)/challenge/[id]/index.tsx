@@ -170,7 +170,7 @@ function settlingNote(type: ChallengeType | undefined, awaitingProof: boolean, i
       return 'Telefonların ölçtüğü son ekran süreleri toplanıyor, gelen sayılara itiraz da edilebilir. En geç bir saat içinde kazanan belli olur.';
     default:
       return itirazHour
-        ? 'Son saatte girilen sayılar var, kankalar bakıp itiraz edebilsin diye sonuç bekliyor. En geç bir saat içinde kazanan belli olur.'
+        ? 'Son saatte yapılan girişler var, kankalar bakıp itiraz edebilsin diye sonuç bekliyor. En geç bir saat içinde kazanan belli olur.'
         : 'Son hesap yapılıyor, bir dakikaya kalmaz.';
   }
 }

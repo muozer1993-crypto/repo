@@ -1445,7 +1445,7 @@ describe('a typed çelınc past its end, still active on the server', () => {
 
     const text = rendered(tree);
     expect(text).toContain('Sonuç birazdan');
-    expect(text).toContain('Son saatte girilen sayılar var');
+    expect(text).toContain('Son saatte yapılan girişler var');
     expect(text).toContain('En geç bir saat içinde kazanan belli olur.');
     expect(text).not.toContain('bir dakikaya kalmaz');
   });
@@ -1459,7 +1459,7 @@ describe('a typed çelınc past its end, still active on the server', () => {
       await settle();
       const text = rendered(tree);
       expect(text).toContain('Son hesap yapılıyor, bir dakikaya kalmaz.');
-      expect(text).not.toContain('Son saatte girilen');
+      expect(text).not.toContain('Son saatte yapılan');
     }
   });
 });

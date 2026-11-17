@@ -180,7 +180,7 @@ Bilinmesi gerekenler:
   Bilgisayar yine de uyursa adım ve ekran süresi çelınclarıyla itirazlar telafi edilir: uyanınca
   pencerede "bilgisayar 8 saat uyumuş" gibi bir satır çıkar. Uyurken biten bir adım ya da ekran
   süresi çelıncında kazanan, telefonlar bir saat daha beklendikten sonra belli olur, o saatte gelen
-  sayılara itiraz da edilebilir; son saatinde elle sayı girilmiş bir çelınc da uyandıktan sonra bir
+  sayılara itiraz da edilebilir; son saatinde elle giriş yapılmış bir çelınc da uyandıktan sonra bir
   saat itiraza açık kalır; uykudayken süresi dolan bir itirazın sahibi de fotoğraf eklemek
   için bir saat daha alır. Uyurken (ya da sunucu kapalıyken) basılan "Geldim" de basıldığı saatle
   sayılır: sunucu ne zaman uyuduğunu kendi yazar, telefon check-in'i sırada tutup uyanınca gönderir.
@@ -904,7 +904,7 @@ değiştirirse "Geri çek" ile itirazını kaldırır (aynı girişe bir daha it
 sayısını ya da fotoğrafını değiştirirse edebilir). Bitişe yakın gelen bir itiraz yüzünden sonuç
 en fazla 12 saat bekleyebilir. İtiraz sadece çelınc sürerken açılır; adım ve ekran süresi çelınclarında
 son akşamın sayıları bitişten sonraki bir saatte geldiği için o saat de sayılır. Elle girilen bir
-çelıncta son bir saatte sayı girildiyse ya da bir sayı değiştiyse o çelınc da bitişten sonra bir saat
+çelıncta son bir saatte bir giriş yapıldıysa ya da değiştiyse o çelınc da bitişten sonra bir saat
 itiraza açık kalır, sonuç da o saati bekler: yoksa bitişe 30 saniye kala yazılan 300 sayfaya rakibin
 itiraz edecek vakti olmazdı. Son saatte kimse bir şey girmediyse sonuç eskisi gibi tam bitişte çıkar.
 Bilgisayar bitişte uyuyorduysa bu bir saat uyandığı andan başlar. Uygulama itiraz düğmesini de sadece
@@ -1255,8 +1255,8 @@ uygulama o sırada "Sonuç birazdan" yazar, ana sayfadaki kart da "⏳ Sonuç be
 kalan ÖNDESİN / GERİDESİN o anki sıradır, sonuç değil. Herkesin telefonu son günü bitişten sonra
 gönderdiyse ve kimsenin sayısı bitişten sonra değişmediyse hemen kapanır. Bir telefon bitişten sonra
 bir günü yükselttiyse kankalar o sayıya itiraz edebilsin diye saatin sonu beklenir. Elle girilen
-çelınclar tam bitişte kapanır; ama son bir saatte sayı girildiyse onlar da bitişten sonra bir saat
-bekler, uygulama da "Son saatte girilen sayılar var" der. O saatten sonra gelen adımlar sonucu
+çelınclar tam bitişte kapanır; ama son bir saatte giriş yapıldıysa onlar da bitişten sonra bir saat
+bekler, uygulama da "Son saatte yapılan girişler var" der. O saatten sonra gelen adımlar sonucu
 değiştirmez. iPhone adımları arka planda pek göndermez: çelınc bitince o saat içinde uygulamayı bir
 kez açmayanın son günü, telefonunun en son gönderdiği haliyle kalır. Telefon bunun için bitişten iki
 dakika sonra son adımlarını yollaman için bir bildirim atar; ona dokunmak yeter.

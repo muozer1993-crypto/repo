@@ -1278,17 +1278,22 @@ function everyPhoneReported(db: Database, challenge: ChallengeRow, metric: Devic
  * type: a "Beyan et" step day typed at the whistle needs it as much. A row the
  * phone wrote is not typed (`DEVICE_SOURCES`); its late numbers are
  * `movedAfterEnd`'s. An itiraz's turn moves `updated_at` on a typed row too,
- * which only gives the other players the same hour to join it.
+ * which only gives the other players the same hour to join it. Only a turn
+ * before the end counts: a photo answering an itiraz from the afternoon, or
+ * the scheduler throwing out an unanswered one, comes after it, and on a
+ * çelınc with nothing late it reopened itirazlar that had closed at the end
+ * and held a result that only waited for that photo.
  */
 function lateTypedEntry(db: Database, challenge: ChallengeRow): boolean {
   const from = nowIso(new Date(Date.parse(challenge.ends_at) - LIMITS.DEVICE_SETTLE_MS));
+  const end = nowIso(new Date(Date.parse(challenge.ends_at)));
   const marks = DEVICE_SOURCES.map(() => '?').join(', ');
   const row = db
     .prepare(
       `SELECT 1 FROM entries WHERE challenge_id = ? AND source NOT IN (${marks})
-          AND (created_at >= ? OR updated_at >= ?) LIMIT 1`,
+          AND (created_at >= ? OR (updated_at >= ? AND updated_at < ?)) LIMIT 1`,
     )
-    .get(challenge.id, ...DEVICE_SOURCES, from, from);
+    .get(challenge.id, ...DEVICE_SOURCES, from, from, end);
   return row !== undefined;
 }
 

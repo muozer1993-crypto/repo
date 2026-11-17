@@ -279,7 +279,8 @@ saat açıldığı andan sayılır (`bootAt`). Bitişte uyuyan bilgisayar da kap
 uyanınca süreç yeniden başlamaz, ama zamanlayıcının iki vuruşu arasında beş dakikadan uzun bir
 boşluk görülünce `bootAt` uyandığı ana taşınır (`nextBootAt`). Elle girilen çelınclar tam bitişte
 kapanır; ama son bir saatinde telefonun yazmadığı bir giriş eklendiyse ya da değiştiyse
-(`lateTypedEntry`) onlar da aynı saati bekler, itiraz da o saatte açık kalır. Elle yazılan sayının tek
+(`lateTypedEntry`; bitişten sonra bir itiraza gelen fotoğraf sayılmaz, o kapanmış itirazları
+yeniden açardı) onlar da aynı saati bekler, itiraz da o saatte açık kalır. Elle yazılan sayının tek
 denetimi itirazdır: bitişe 30 saniye kala gönderilen altı tane 180 dakikalık odak seansı ya da 300
 sayfa, rakibine itiraz için 30 saniye bırakıyordu. Bu bekleyiş de bir saati geçmez (sunucu bitişte
 kapalıysa `bootAt`'ten bir saat); o saatte açılan bir itiraz sonucu ancak kendi 12 saatiyle tutar.
