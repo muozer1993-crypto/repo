@@ -1168,7 +1168,10 @@ of the app (home's greeting, the inbox, the wizard, the recap) keeps `me.timezon
 
 - auto_steps: "Bugün: 6.421 adım" + "Senkronla" (calls syncSteps → POST /me/steps → invalidate). Android while the count is approximate
   (foreground counter only, or the day recording started; a granted but empty Health Connect is not a source):
-  shows "Yaklaşık (uygulama açıkken sayılıyor)" + manual "Beyan et" entry. A past window day within STEPS_BACKFILL_DAYS
+  shows "Yaklaşık (uygulama açıkken sayılıyor)" + manual "Beyan et" entry, full width under "Senkronla" (side by side on
+  a 360 dp card "SENKRONLA" broke inside the word). Two pills side by side (yes/no, "Varım" / "Yokum") stretch to one
+  height, so a label that wraps does not stand taller than its neighbour; the wizard's "Vazgeç" / "Geri" keeps its own
+  width and only the main label wraps, between words. A past window day within STEPS_BACKFILL_DAYS
   with no positive entry (a rejected one is the phone's to restore, so it does not count) → secondary "Eksik günü yaz",
   opening the entry modal on the oldest; when one of them is before `recordingSince()` a faint line says the phone
   started counting that day and a later, higher phone count still wins.

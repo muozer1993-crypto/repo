@@ -3291,6 +3291,64 @@ describe('a long title on a narrow phone', () => {
   });
 });
 
+describe('two buttons side by side on a narrow phone', () => {
+  // A label may wrap to two lines now. In a row that centres its children, a
+  // pill whose label wrapped stood taller than its neighbour, off centre; and a
+  // pill too narrow for one word broke it ("VAZGE / Ç", "SENKRONL / A").
+  const styleOf = (node: ReactTestInstance) => StyleSheet.flatten(node.props.style) ?? {};
+  const steps = () => require('@/services/steps') as { getStepAvailability: jest.Mock };
+
+  afterEach(() => {
+    steps().getStepAvailability.mockResolvedValue({ available: false, reason: 'web' });
+  });
+
+  it('gives the wizard\'s "Vazgeç" its own width and both footer pills one height', async () => {
+    const NewChallengeScreen = require('@/app/(app)/challenge/new').default;
+    const tree = renderScreen(<NewChallengeScreen />);
+    await settle();
+
+    const back = findWith(tree, 'title', 'Vazgeç', 'onPress');
+    const next = findWith(tree, 'title', 'İleri', 'onPress');
+    expect(styleOf(back)).toEqual({ flexShrink: 0 });
+    expect(styleOf(next).flex).toBe(1);
+    expect(back.parent).toBe(next.parent);
+    expect(styleOf(back.parent!).alignItems ?? 'stretch').toBe('stretch');
+  });
+
+  it('stretches a yes/no pair to one height', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge: { ...detail.challenge, typeKey: 'sigara_yok', metricType: 'daily_boolean' as const, unit: 'gün' },
+    }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const yes = findWith(tree, 'title', 'İçmedim ✅', 'onPress');
+    const row = yes.parent!;
+    expect(styleOf(row).flexDirection).toBe('row');
+    expect(styleOf(row).alignItems ?? 'stretch').toBe('stretch');
+  });
+
+  it('puts "Senkronla" over "Beyan et" when a counted-in-the-app step count shows both', async () => {
+    steps().getStepAvailability.mockResolvedValue({ available: true, source: 'pedometer', approximate: true });
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => challengeDetail());
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const sync = findWith(tree, 'title', 'Senkronla', 'onPress');
+    const typed = findWith(tree, 'title', 'Beyan et', 'onPress');
+    expect(sync.parent).toBe(typed.parent);
+    expect(styleOf(sync.parent!).flexDirection ?? 'column').toBe('column');
+    expect(sync.props.fullWidth).toBe(true);
+    expect(typed.props.fullWidth).toBe(true);
+  });
+});
+
 describe('an itiraz on the feed', () => {
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
 

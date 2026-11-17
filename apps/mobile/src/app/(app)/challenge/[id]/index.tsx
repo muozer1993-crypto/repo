@@ -753,7 +753,7 @@ function InviteActions({
   return (
     <Card edgeColor={Colors.yellow}>
       <Text variant="lead">Davet sende</Text>
-      <View style={styles.row}>
+      <View style={styles.buttonRow}>
         <Button
           title="Varım"
           size="md"
@@ -1077,6 +1077,7 @@ function StepsAction({ id, detail, type, today, yesterday, dayKeys }: ActionProp
   const recorded = detail.myEntries.find((entry) => entry.dayKey === today);
   const approximate = availability?.available === true && availability.approximate;
   const unavailable = availability !== null && !availability.available;
+  const bothSyncAndTyped = !unavailable && approximate;
   /**
    * Past days of the race with nothing on them that the server still takes a
    * typed number for: the days before an invite was accepted, or before this
@@ -1135,13 +1136,16 @@ function StepsAction({ id, detail, type, today, yesterday, dayKeys }: ActionProp
         </Text>
       ) : null}
 
-      <View style={styles.row}>
+      {/* Both, one under the other: half a 360 dp card leaves "SENKRONLA" beside
+          its icon too little room, and it broke inside the word. */}
+      <View style={bothSyncAndTyped ? styles.buttonStack : styles.buttonRow}>
         {!unavailable ? (
           <Button
             title="Senkronla"
             icon="🔄"
             size="md"
-            style={styles.grow}
+            style={bothSyncAndTyped ? undefined : styles.grow}
+            fullWidth={bothSyncAndTyped}
             loading={syncing}
             disabled={availability === null}
             onPress={() => void sync()}
@@ -1153,7 +1157,8 @@ function StepsAction({ id, detail, type, today, yesterday, dayKeys }: ActionProp
             icon="✍️"
             variant={availability?.available ? 'secondary' : 'primary'}
             size="md"
-            style={styles.grow}
+            style={bothSyncAndTyped ? undefined : styles.grow}
+            fullWidth={bothSyncAndTyped}
             onPress={() => openEntryModal(id, today)}
           />
         ) : null}
@@ -1519,7 +1524,7 @@ function BooleanRow({
           Kankalar bu güne itiraz etti, gün sayılmıyor. Artık değiştirilemez.
         </Text>
       ) : (
-        <View style={styles.row}>
+        <View style={styles.buttonRow}>
           <Button
             title={`${yes} ✅`}
             size="md"
@@ -2739,7 +2744,10 @@ const styles = StyleSheet.create({
   verdict: { marginTop: Spacing.md },
   inviteMore: { marginTop: Spacing.md, alignSelf: 'flex-start' },
 
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  // Two pills side by side, stretched to one height: centred, a label that
+  // wraps ("İÇMEDİM / ✅") stood a line taller than its neighbour's.
+  buttonRow: { flexDirection: 'row', gap: Spacing.sm },
+  buttonStack: { gap: Spacing.sm },
   grow: { flex: 1 },
 
   actionBody: { gap: Spacing.md },

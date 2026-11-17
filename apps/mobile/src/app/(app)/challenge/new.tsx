@@ -919,7 +919,11 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
     backgroundColor: Colors.bg,
   },
-  footerRow: { flexDirection: 'row', gap: Spacing.md, alignItems: 'center' },
-  backButton: { flex: 1 },
-  nextButton: { flex: 2 },
+  // Both pills one height (stretch), "Vazgeç" / "Geri" at its own width: a
+  // third of the row broke "VAZGEÇ" into "VAZGE / Ç" at a large font, and a
+  // two-line "KOY BAKALIM 🍆" stood taller than its neighbour, off centre.
+  // Only the main label wraps now, and only between words.
+  footerRow: { flexDirection: 'row', gap: Spacing.md },
+  backButton: { flexShrink: 0 },
+  nextButton: { flex: 1 },
 });
