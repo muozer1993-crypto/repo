@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleShee
 import { SafeAreaProvider, useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 
+import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { formatRemaining } from '@/components/Countdown';
 import { OfflineFrame } from '@/components/OfflineBanner';
@@ -114,6 +115,28 @@ describe('Chip', () => {
     const [plain] = buttonsIn(tree!);
     expect(plain!.props.accessibilityState).toMatchObject({ selected: false });
     expect(plain!.props.accessibilityLabel).toBe('📸 Kanıt ekle');
+  });
+});
+
+describe('Button', () => {
+  it('keeps a long label inside its pill: the label gives way, the icon does not', () => {
+    let tree: ReactTestRenderer;
+    act(() => {
+      // half the Kankalar invite card, where "BAĞLANTIYI KOPYALA" ran under "PAYLAŞ"
+      tree = create(<Button title="Bağlantıyı kopyala" icon="📋" size="sm" variant="secondary" onPress={() => {}} />);
+    });
+    const flat = (node: ReactTestInstance) =>
+      (StyleSheet.flatten(node.props.style as never) ?? {}) as { flexShrink?: number; maxWidth?: string; flexDirection?: string };
+    const hostText = (text: string) =>
+      tree!.root.find((node) => typeof node.type === 'string' && node.props.children === text);
+
+    const label = hostText('BAĞLANTIYI KOPYALA');
+    expect(label.props.numberOfLines).toBe(1);
+    expect(flat(label).flexShrink).toBe(1);
+    expect(flat(hostText('📋')).flexShrink).toBe(0);
+    // the row is what the pill centres; uncapped it takes the label's whole width
+    const row = tree!.root.find((node) => typeof node.type === 'string' && flat(node).flexDirection === 'row');
+    expect(flat(row).maxWidth).toBe('100%');
   });
 });
 

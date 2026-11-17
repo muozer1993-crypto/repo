@@ -423,8 +423,11 @@ export default function FriendsScreen() {
           </Text>
         ) : null}
         <View style={styles.codeActions}>
+          {/* half the card is no room for "Bağlantıyı kopyala": even "Linki kopyala"
+              ends in "…" on a 360 dp phone. The toast says what was copied. */}
           <Button
-            title={inviteLink ? 'Bağlantıyı kopyala' : 'Kopyala'}
+            title="Kopyala"
+            accessibilityLabel={inviteLink ? 'Davet bağlantısını kopyala' : 'Davet kodunu kopyala'}
             icon="📋"
             variant="secondary"
             size="sm"

@@ -104,11 +104,12 @@ export function Button({
       ) : (
         <View style={styles.row}>
           {icon ? (
-            <Text style={{ fontSize: pad.font + 2, marginRight: Spacing.sm }}>{icon}</Text>
+            <Text style={{ fontSize: pad.font + 2, marginRight: Spacing.sm, flexShrink: 0 }}>{icon}</Text>
           ) : null}
           <Text
             numberOfLines={1}
             style={{
+              flexShrink: 1,
               color: FG[variant],
               fontSize: pad.font,
               fontWeight: FontWeight.black,
@@ -137,5 +138,9 @@ const styles = StyleSheet.create({
   fullWidth: { alignSelf: 'stretch' },
   pressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
   disabled: { opacity: 0.4 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  // The pill centres the row at its content's width, and neither Yoga nor the
+  // browser holds that to the pill: a label too long for a half-width button ran
+  // out of it and under its neighbour. Capped here, the label gives way and
+  // numberOfLines ends it in "…"; the icon keeps its size.
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', maxWidth: '100%' },
 });
