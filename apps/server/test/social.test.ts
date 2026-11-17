@@ -1732,6 +1732,42 @@ describe('GET /users/:id', () => {
 });
 
 describe('block / unblock / report', () => {
+  it('reads a waiting kanka isteği when either side blocks, or the requester deletes the account', async () => {
+    const h = await boot();
+    const veli = await registerUser(h.app, 'veli');
+    const unread = async () =>
+      (await authed(h.app, veli.token)({ method: 'GET', url: '/me/inbox/unread' })).json<{ count: number }>().count;
+    const askVeli = async (name: string) => {
+      const user = await registerUser(h.app, name);
+      const asked = await authed(h.app, user.token)({ method: 'POST', url: '/friends/request', payload: { username: 'veli' } });
+      expect(asked.statusCode).toBeLessThan(300);
+      return user;
+    };
+
+    // Veli blocks the one who asked
+    const ali = await askVeli('ali');
+    expect(await unread()).toBe(1);
+    expect((await authed(h.app, veli.token)({ method: 'POST', url: `/users/${ali.me.id}/block` })).statusCode).toBe(200);
+    expect(await unread()).toBe(0);
+
+    // the one who asked blocks Veli
+    const can = await askVeli('can');
+    expect(await unread()).toBe(1);
+    expect((await authed(h.app, can.token)({ method: 'POST', url: `/users/${veli.me.id}/block` })).statusCode).toBe(200);
+    expect(await unread()).toBe(0);
+
+    // the one who asked deletes the account
+    const deniz = await askVeli('deniz');
+    expect(await unread()).toBe(1);
+    expect((await authed(h.app, deniz.token)({ method: 'DELETE', url: '/me' })).statusCode).toBe(200);
+    expect(await unread()).toBe(0);
+    // still in Gelen, only no longer waiting
+    const requests = h.db
+      .prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND type = 'friend_request'")
+      .get(veli.me.id) as { n: number };
+    expect(requests.n).toBe(3);
+  });
+
   it('hides a blocked pair from search, profiles and friend requests', async () => {
     const h = await boot();
     const blocker = await registerUser(h.app, 'mustafa');

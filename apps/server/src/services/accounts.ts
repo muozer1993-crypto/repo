@@ -204,7 +204,14 @@ export function softDeleteUser(
     // çelınclar they stayed in above are the ones `takeTraces` leaves alone.
     for (const url of takeTraces(db, user.id).photos) photos.add(url);
 
-    // Pending friend requests in either direction are meaningless now.
+    // Pending friend requests in either direction are meaningless now, and the
+    // "kanka isteği" rows they left in the other side's Gelen wait for nothing.
+    db.prepare(
+      `UPDATE notifications SET read_at = ?
+        WHERE type = 'friend_request' AND read_at IS NULL
+          AND json_extract(data, '$.friendshipId') IN (
+            SELECT id FROM friendships WHERE status = 'pending' AND (requester_id = ? OR addressee_id = ?))`,
+    ).run(at, user.id, user.id);
     db.prepare("DELETE FROM friendships WHERE status = 'pending' AND (requester_id = ? OR addressee_id = ?)").run(
       user.id,
       user.id,

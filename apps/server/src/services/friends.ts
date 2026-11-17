@@ -23,6 +23,7 @@
  */
 import { newId, nowIso, type Database, type FriendshipRow, type UserRow } from '../db/index.js';
 import { forbidden } from '../errors.js';
+import { markAnsweredRead } from './notifications.js';
 
 /**
  * The row describing `a`↔`b`, whichever direction it was created in.
@@ -167,13 +168,19 @@ function joinRequests(db: Database, sql: string, userId: string): PendingRequest
 export function upsertBlock(db: Database, blockerId: string, blockedId: string, now: Date = new Date()): FriendshipRow {
   const at = nowIso(now);
   const mine = ownRow(db, blockerId, blockedId);
+  const theirs = ownRow(db, blockedId, blockerId);
+
+  // A request between the two is over either way, as an answer would end it:
+  // its "kanka isteği" no longer waits in the addressee's Gelen badge
+  // (migration 018 reads the ones from before so too).
+  for (const row of [mine, theirs]) {
+    if (row?.status === 'pending') markAnsweredRead(db, row.addressee_id, ['friend_request'], 'friendshipId', row.id, at);
+  }
 
   if (mine) {
     db.prepare("UPDATE friendships SET status = 'blocked', updated_at = ? WHERE id = ?").run(at, mine.id);
     return { ...mine, status: 'blocked', updated_at: at };
   }
-
-  const theirs = ownRow(db, blockedId, blockerId);
 
   const run = db.transaction(() => {
     if (theirs && theirs.status !== 'blocked') {

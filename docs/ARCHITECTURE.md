@@ -494,7 +494,8 @@ Bir bildirime dokunmak onu okunmuş sayar: push da telefonun kendi kopyası da s
 ana sayfadaki karttan ya da çelınc ekranından cevaplanır; satırı okunmamış kalınca rozet cevaplanmış
 istekleri sayıp duruyordu, insan da rozete bakmayı bırakıyordu. Artık kabul, ret (davette "Ayrıl"
 da) aynı işlemde o isteğin ya da o çelıncın okunmamış `friend_request` / `challenge_invite` /
-`rematch` satırını okunmuş yapar (`markAnsweredRead`); satır geçmiş olarak Gelen'de kalır,
+`rematch` satırını okunmuş yapar (`markAnsweredRead`); bekleyen bir isteği bitiren engelleme (iki
+taraftan da) ve isteği gönderenin ya da alanın hesabını silmesi de öyle. Satır geçmiş olarak Gelen'de kalır,
 uygulama da cevaptan sonra gelen kutusunu ve rozeti yeniden okur. Bundan önce cevaplananları
 migration 018 bir kere okunmuş yapar: artık beklemeyen kanka isteği, okuyanın artık `invited`
 olmadığı çelınc daveti. Yoksa kankaların taşıdığı rozet, "Hepsini okundu yap"a basana kadar eski
