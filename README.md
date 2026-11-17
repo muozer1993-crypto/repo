@@ -473,7 +473,8 @@ gösterir. Uygulama kapalı olsa da olur. Ayarlar'da bildirim satırı bu durumd
 Uygulama açıkken yeni bir bildirim gelince Gelen ve Kankalar sekmeleri kendiliğinden tazelenir,
 aşağı çekip yenilemen gerekmez. Bildirime dokununca da okunmuş sayılır, rozetten düşer. Bir kanka
 isteğini ya da çelınc davetini ana sayfadan, çelınc ekranından ya da Kankalar'dan cevaplarsan
-Gelen'deki satırı da okunmuş sayılır; rozet cevapladığın istekleri saymaz.
+Gelen'deki satırı da okunmuş sayılır; rozet cevapladığın istekleri saymaz. Güncellemeden önce
+cevapladıkların da sunucu yeni sürümle ilk açıldığında okunmuş sayılır.
 Android pili korumak için bu aralığı bazen uzatabilir. Telefonun bildirim ayarlarında hepsi
 **KOYDUM** kanalında durur; onu kapatan lafları da kaçırır. Eski sürümden kalma bir
 "Miscellaneous" kanalı görürsen ona artık bir şey gönderilmiyor.

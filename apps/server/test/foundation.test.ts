@@ -13,7 +13,7 @@ import { listInbox, markRead, notify, unreadCount } from '../src/services/notifi
 import { readLastBeat, writeLastBeat } from '../src/services/pauses.js';
 import { computeUserStats, getBadges } from '../src/services/stats.js';
 import { conflict } from '../src/errors.js';
-import { TEST_SECRET, makeApp, registerUser, type TestApp } from './helpers.js';
+import { TEST_SECRET, authed, befriend, makeApp, registerUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
 
@@ -158,7 +158,13 @@ describe('migrations', () => {
        VALUES ('u1', 'ali', 'Ali', 'x', 'K7QF2M', '2026-11-01T10:00:00.000Z', '2026-11-16T20:19:00.000Z')`,
     ).run();
 
-    expect(migrate(db)).toEqual(['014_server_pauses', '015_participant_invited_by', '016_friend_refusals', '017_seed_last_beat']);
+    expect(migrate(db)).toEqual([
+      '014_server_pauses',
+      '015_participant_invited_by',
+      '016_friend_refusals',
+      '017_seed_last_beat',
+      '018_read_answered_requests',
+    ]);
     // the first start of the new version writes the pause from here
     expect(readLastBeat(db)?.toISOString()).toBe('2026-11-16T20:19:00.000Z');
 
@@ -174,6 +180,83 @@ describe('migrations', () => {
     const fresh = openDb(':memory:');
     expect(readLastBeat(fresh)).toBeNull();
     fresh.close();
+  });
+
+  // Answering now reads the row (`markAnsweredRead`); the badge friends already
+  // carry counted every request and invite they had answered before that.
+  it('reads the requests and invites answered before answering read them', async () => {
+    harness = await makeApp();
+    const h = harness;
+    const kemal = await registerUser(h.app, 'kemal');
+    const kemalCall = authed(h.app, kemal.token);
+    const mustafa = await registerUser(h.app, 'mustafa');
+    const ayse = await registerUser(h.app, 'ayse');
+    const deniz = await registerUser(h.app, 'deniz');
+    const ece = await registerUser(h.app, 'ecem');
+    const ask = async (from: typeof kemal) =>
+      (
+        await authed(h.app, from.token)({ method: 'POST', url: '/friends/request', payload: { username: 'kemal' } })
+      ).json<{ friendshipId: string }>().friendshipId;
+    const accepted = await ask(mustafa);
+    const declined = await ask(ayse);
+    const waiting = await ask(deniz);
+    expect((await kemalCall({ method: 'POST', url: `/friends/${accepted}/accept` })).statusCode).toBe(200);
+    expect((await kemalCall({ method: 'POST', url: `/friends/${declined}/decline` })).statusCode).toBe(200);
+
+    befriend(h.app, ece.me.id, kemal.me.id);
+    const invite = async (title: string) =>
+      (
+        await authed(h.app, ece.token)({
+          method: 'POST',
+          url: '/challenges',
+          payload: {
+            typeKey: 'adim_yarisi',
+            title,
+            startsAt: h.now().toISOString(),
+            endsAt: new Date(h.now().getTime() + 3 * 86_400_000).toISOString(),
+            participantIds: [kemal.me.id],
+          },
+        })
+      ).json<{ id: string }>().id;
+    const yes = await invite('Bir');
+    const no = await invite('İki');
+    const open = await invite('Üç');
+    expect((await kemalCall({ method: 'POST', url: `/challenges/${yes}/accept` })).statusCode).toBe(200);
+    expect((await kemalCall({ method: 'POST', url: `/challenges/${no}/decline` })).statusCode).toBe(200);
+
+    // the database as the version before left it: every answer unread, beside
+    // a poke nobody has looked at and a row whose data cannot be read
+    h.db.prepare('UPDATE notifications SET read_at = NULL').run();
+    h.db
+      .prepare(
+        `INSERT INTO notifications (id, user_id, type, title, body, data, created_at)
+         VALUES ('poke-1', ?, 'poke', 'Dürtüldün', 'Kalk lan', '{"challengeId":"${yes}"}', ?),
+                ('broken-1', ?, 'friend_request', 'İstek', 'Eski', 'bozuk', ?)`,
+      )
+      .run(kemal.me.id, h.now().toISOString(), kemal.me.id, h.now().toISOString());
+    h.db.prepare("DELETE FROM _migrations WHERE id = '018_read_answered_requests'").run();
+    expect(migrate(h.db)).toEqual(['018_read_answered_requests']);
+
+    const readAt = (id: string) =>
+      (h.db.prepare('SELECT read_at FROM notifications WHERE id = ?').get(id) as { read_at: string | null }).read_at;
+    expect(readAt('broken-1')).toBeNull();
+    expect(readAt('poke-1')).toBeNull();
+    h.db.prepare("DELETE FROM notifications WHERE id = 'broken-1'").run();
+
+    const isRead = (type: string, key: string, id: string) =>
+      (
+        h.db
+          .prepare(`SELECT read_at FROM notifications WHERE user_id = ? AND type = ? AND json_extract(data, '$.${key}') = ?`)
+          .get(kemal.me.id, type, id) as { read_at: string | null }
+      ).read_at !== null;
+    expect([accepted, declined, waiting].map((id) => isRead('friend_request', 'friendshipId', id))).toEqual([true, true, false]);
+    expect([yes, no, open].map((id) => isRead('challenge_invite', 'challengeId', id))).toEqual([true, true, false]);
+    // only answers: the news they brought ("Kanka oldunuz", "başladı") is still to be read
+    const readOthers = h.db
+      .prepare("SELECT id FROM notifications WHERE type NOT IN ('friend_request', 'challenge_invite') AND read_at IS NOT NULL")
+      .all();
+    expect(readOthers).toEqual([]);
+    expect(unreadCount(h.db, mustafa.me.id).count).toBe(1);
   });
 
   it('generates readable invite codes', () => {

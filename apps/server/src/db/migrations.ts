@@ -425,6 +425,35 @@ SELECT 'last_beat', t FROM (
 ) WHERE t IS NOT NULL;
 `;
 
+/**
+ * The requests and invites answered before an answer read their row in Gelen
+ * (`markAnsweredRead`): the badge an owner's friends already carry counted
+ * every one of them, and would have gone on counting them until somebody found
+ * "Hepsini okundu yap". Read once here, as the answer would have read them: a
+ * kanka isteği that is no longer waiting (accepted, turned down, or gone with a
+ * block), a çelınc daveti or rematch whose reader is no longer `invited` in it.
+ * An invite still waiting stays unread, and so does one to a çelınc that was
+ * called off or ran out unanswered: nobody answered those. `json_valid` first:
+ * a row this cannot read must not stop the server from starting.
+ */
+const READ_ANSWERED_REQUESTS = `
+UPDATE notifications SET read_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+ WHERE read_at IS NULL AND (
+   (type = 'friend_request'
+     AND (CASE WHEN json_valid(data) THEN json_extract(data, '$.friendshipId') END) IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM friendships f
+        WHERE f.id = (CASE WHEN json_valid(notifications.data) THEN json_extract(notifications.data, '$.friendshipId') END)
+          AND f.status = 'pending'))
+   OR (type IN ('challenge_invite', 'rematch')
+     AND EXISTS (
+       SELECT 1 FROM challenge_participants p
+        WHERE p.challenge_id = (CASE WHEN json_valid(notifications.data) THEN json_extract(notifications.data, '$.challengeId') END)
+          AND p.user_id = notifications.user_id
+          AND p.status <> 'invited'))
+ );
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -443,4 +472,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '015_participant_invited_by', sql: PARTICIPANT_INVITED_BY },
   { id: '016_friend_refusals', sql: FRIEND_REFUSALS },
   { id: '017_seed_last_beat', sql: SEED_LAST_BEAT },
+  { id: '018_read_answered_requests', sql: READ_ANSWERED_REQUESTS },
 ];

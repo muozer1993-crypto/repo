@@ -481,7 +481,10 @@ ana sayfadaki karttan ya da çelınc ekranından cevaplanır; satırı okunmamı
 istekleri sayıp duruyordu, insan da rozete bakmayı bırakıyordu. Artık kabul, ret (davette "Ayrıl"
 da) aynı işlemde o isteğin ya da o çelıncın okunmamış `friend_request` / `challenge_invite` /
 `rematch` satırını okunmuş yapar (`markAnsweredRead`); satır geçmiş olarak Gelen'de kalır,
-uygulama da cevaptan sonra gelen kutusunu ve rozeti yeniden okur.
+uygulama da cevaptan sonra gelen kutusunu ve rozeti yeniden okur. Bundan önce cevaplananları
+migration 018 bir kere okunmuş yapar: artık beklemeyen kanka isteği, okuyanın artık `invited`
+olmadığı çelınc daveti. Yoksa kankaların taşıdığı rozet, "Hepsini okundu yap"a basana kadar eski
+cevapları saymaya devam ederdi.
 Dokunuş (push, onun toast'ı, yoklamanın toast'ı, Gelen'deki satır) ekranı `router.navigate` ile
 açar, `push` ile değil. Öndeki ekran zaten aynı yol ve aynı yol parametresiyse (`id`) yenisi
 açılmaz; başka bir çelınc yine üstüne açılır. Eskiden açık çelınca dair bir "Dürtüldün" toast'ı ya
