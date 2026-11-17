@@ -1,6 +1,15 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { Platform } from 'react-native';
+
 import { useServerInfo } from '@/hooks/queries';
+import { waitAtMost } from '@/hooks/usePullRefresh';
+import type { HealthResponse } from '@/lib/api';
+import { qk } from '@/lib/query';
 import { useAuth } from '@/store/auth';
 import { isLocalNetworkUrl, isLoopbackUrl } from '@/utils/url';
+
+/** How long a share waits for the server to say its address again. */
+const FRESH_LINK_WAIT_MS = 3_000;
 
 export interface InviteLink {
   /** `<server>/davet/<my code>`; null until /me has brought the code. */
@@ -9,6 +18,13 @@ export interface InviteLink {
   isLoopback: boolean;
   /** A home-network address: the link opens only for whoever is on the same Wi-Fi. */
   isLocal: boolean;
+  /**
+   * The link as the server tells its address right now, for a share or a copy:
+   * the cached one when it does not answer within a few seconds.
+   */
+  freshLink: () => Promise<string | null>;
+  /** Asks the server for its address again (a pull, coming back to Kankalar). */
+  refresh: () => Promise<unknown>;
 }
 
 /**
@@ -19,16 +35,37 @@ export interface InviteLink {
  * opens the app with the right address, and offers the APK. When the server is
  * on the internet (npm run internet) its public address goes into the link even
  * if this phone reaches it over the home Wi-Fi.
+ *
+ * That address changes under a running app: the tunnel opens a minute after
+ * the server when the first try failed, and comes back under a new name after
+ * a drop. The cache keeps /health five minutes and nothing reads it on focus,
+ * so Paylaş sent the home-Wi-Fi link (or the dead old tunnel's) after the PC's
+ * window said the new one was in. A share asks again first.
  */
 export function useInviteLink(): InviteLink {
   const inviteCode = useAuth((s) => s.me?.inviteCode ?? null);
   const serverUrl = useAuth((s) => s.serverUrl);
   const serverInfo = useServerInfo();
-  const base = (serverInfo.data?.publicUrl ?? serverUrl).replace(/\/+$/, '');
-  const isLoopback = isLoopbackUrl(base);
-  return {
-    link: inviteCode ? `${base}/davet/${inviteCode}` : null,
-    isLoopback,
-    isLocal: !isLoopback && isLocalNetworkUrl(base),
+  const queryClient = useQueryClient();
+
+  const build = (publicUrl: string | null | undefined) => {
+    const base = (publicUrl ?? serverUrl).replace(/\/+$/, '');
+    const isLoopback = isLoopbackUrl(base);
+    return {
+      link: inviteCode ? `${base}/davet/${inviteCode}` : null,
+      isLoopback,
+      isLocal: !isLoopback && isLocalNetworkUrl(base),
+    };
   };
+
+  const freshLink = async () => {
+    if (!inviteCode) return null;
+    // the web copies to the clipboard, which a browser allows only right after the tap
+    if (Platform.OS !== 'web') {
+      await waitAtMost(queryClient.refetchQueries({ queryKey: qk.health }), FRESH_LINK_WAIT_MS);
+    }
+    return build(queryClient.getQueryData<HealthResponse>(qk.health)?.publicUrl).link;
+  };
+
+  return { ...build(serverInfo.data?.publicUrl), freshLink, refresh: () => serverInfo.refetch() };
 }

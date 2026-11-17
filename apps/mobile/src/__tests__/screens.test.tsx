@@ -4958,6 +4958,93 @@ describe('invite link on the friends tab', () => {
     expect(findWith(tree, 'title', 'Kopyala', 'onPress').props.accessibilityLabel).toBe('Davet bağlantısını kopyala');
   });
 
+  describe('once the tunnel opens under a running app', () => {
+    // npm run internet: the first tunnel did not open, the server ran for the
+    // home Wi-Fi, the owner looked at Kankalar, and the tunnel opened a minute
+    // later. The window then says Paylaş sends the new address.
+    const TUNNEL = 'https://yeni-tunel.trycloudflare.com';
+    let share: jest.SpyInstance;
+    beforeEach(() => {
+      const { Share } = require('react-native') as typeof import('react-native');
+      share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' });
+      mockServer.url = 'http://192.168.1.20:4000';
+      api.health = jest.fn(async () => ({ ok: true, version: '1', time: '', app: null, publicUrl: null }));
+    });
+    afterEach(() => share.mockRestore());
+
+    const tunnelOpened = () => {
+      api.health = jest.fn(async () => ({ ok: true, version: '1', time: '', app: null, publicUrl: TUNNEL }));
+    };
+
+    it('shares the tunnel address, not the home Wi-Fi one the screen read', async () => {
+      const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
+      const tree = renderScreen(<FriendsScreen />);
+      await settle();
+      expect(rendered(tree)).toContain('sadece aynı Wi-Fi');
+
+      tunnelOpened();
+      await act(async () => {
+        findWith(tree, 'title', 'Paylaş', 'onPress').props.onPress();
+      });
+      await settle();
+
+      expect(share).toHaveBeenCalledTimes(1);
+      const { message } = share.mock.calls[0][0] as { message: string };
+      expect(message).toContain(`${TUNNEL}/davet/KOY123`);
+      expect(message).not.toContain('192.168.1.20');
+      expect(rendered(tree)).not.toContain('sadece aynı Wi-Fi');
+    });
+
+    it('shares the address it had when the server does not answer', async () => {
+      const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
+      const tree = renderScreen(<FriendsScreen />);
+      await settle();
+
+      api.health = jest.fn(async () => {
+        throw NETWORK_ERROR;
+      });
+      await act(async () => {
+        findWith(tree, 'title', 'Paylaş', 'onPress').props.onPress();
+      });
+      await settle();
+
+      const { message } = share.mock.calls[0][0] as { message: string };
+      expect(message).toContain('http://192.168.1.20:4000/davet/KOY123');
+    });
+
+    it('reads the address again on a pull and on coming back to the tab', async () => {
+      const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
+      const tree = renderScreen(<FriendsScreen />);
+      await settle();
+      expect(api.health).toHaveBeenCalledTimes(1);
+
+      tunnelOpened();
+      act(() => {
+        (tree.root.findByType(RefreshControl).props as { onRefresh: () => void }).onRefresh();
+      });
+      await settle();
+      expect(api.health).toHaveBeenCalledTimes(1);
+      expect(rendered(tree)).not.toContain('sadece aynı Wi-Fi');
+
+      // the tunnel dropped and came back under a new name while I was on another tab
+      const moved = 'https://baska-tunel.trycloudflare.com';
+      api.health = jest.fn(async () => ({ ok: true, version: '1', time: '', app: null, publicUrl: moved }));
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 21_000);
+      try {
+        act(() => mockFocus.effect?.());
+        await settle();
+      } finally {
+        clock.mockRestore();
+      }
+      expect(api.health).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        findWith(tree, 'title', 'Paylaş', 'onPress').props.onPress();
+      });
+      await settle();
+      expect((share.mock.calls[0][0] as { message: string }).message).toContain(`${moved}/davet/KOY123`);
+    });
+  });
+
   it('says whether a typed code made us kankas at once or only sent a request', async () => {
     api.health = jest.fn(async () => ({ ok: true, version: '1', time: '', app: null, publicUrl: null }));
     api.requestFriend = jest.fn(async () => ({ status: 'accepted', friendshipId: 'f-1' }));

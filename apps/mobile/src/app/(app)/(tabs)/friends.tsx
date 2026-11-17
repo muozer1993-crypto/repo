@@ -37,24 +37,34 @@ const FRIENDS_FRESH_MS = 20_000;
 export default function FriendsScreen() {
   const level = useLevel();
   const me = useAuth((s) => s.me);
-  const { link: inviteLink, isLoopback: linkIsLoopback, isLocal: linkIsLocal } = useInviteLink();
+  const {
+    link: inviteLink,
+    isLoopback: linkIsLoopback,
+    isLocal: linkIsLocal,
+    freshLink,
+    refresh: refreshServerInfo,
+  } = useInviteLink();
   const api = useApi();
   const toast = useToast();
   const friends = useFriends();
-  const pull = usePullRefresh(() => friends.refetch());
+  // the server's address too: the tunnel may have opened or moved since it was read
+  const pull = usePullRefresh(() => Promise.all([friends.refetch(), refreshServerInfo()]));
   const action = useFriendAction();
   const newKanka = useNewKankaToast();
   const queryClient = useQueryClient();
 
   // The tab stays mounted and nothing refetches on focus (lib/query), so a
   // request that came in while you were elsewhere never showed under "Gelen
-  // istekler" until a pull-to-refresh.
+  // istekler" until a pull-to-refresh. The server's address the same: the
+  // "sadece aynı Wi-Fi" line stayed after the tunnel had opened.
   useFocusEffect(() => {
-    const state = queryClient.getQueryState(qk.friends);
-    if (!state || state.fetchStatus !== 'idle') return;
-    // from the last answer, good or bad: a server that is down is asked at most every 20 s
-    const lastTry = Math.max(state.dataUpdatedAt, state.errorUpdatedAt);
-    if (Date.now() - lastTry > FRIENDS_FRESH_MS) void queryClient.refetchQueries({ queryKey: qk.friends });
+    for (const queryKey of [qk.friends, qk.health]) {
+      const state = queryClient.getQueryState(queryKey);
+      if (!state || state.fetchStatus !== 'idle') continue;
+      // from the last answer, good or bad: a server that is down is asked at most every 20 s
+      const lastTry = Math.max(state.dataUpdatedAt, state.errorUpdatedAt);
+      if (Date.now() - lastTry > FRIENDS_FRESH_MS) void queryClient.refetchQueries({ queryKey });
+    }
   });
 
   const [term, setTerm] = useState('');
@@ -165,10 +175,11 @@ export default function FriendsScreen() {
   const copyCode = async () => {
     if (!me?.inviteCode) return;
     try {
-      await Clipboard.setStringAsync(inviteLink ?? me.inviteCode);
+      const link = await freshLink();
+      await Clipboard.setStringAsync(link ?? me.inviteCode);
       toast({
         title: 'Kopyalandı',
-        body: inviteLink ? 'Bağlantıyı kankana gönder.' : 'Kodu kankana gönder.',
+        body: link ? 'Bağlantıyı kankana gönder.' : 'Kodu kankana gönder.',
         kind: 'success',
       });
     } catch {
@@ -180,13 +191,13 @@ export default function FriendsScreen() {
     if (!me?.inviteCode) return;
     // The link opens a page on our server: it opens the app (or offers the APK),
     // and signing up through it makes us kankas. The bare code stays as a fallback.
-    const message = inviteShareText(level, inviteLink, me.inviteCode, me.username);
     if (Platform.OS === 'web') {
       // react-native-web's Share is not reliable in every browser; copying always works
       await copyCode();
       return;
     }
     try {
+      const message = inviteShareText(level, await freshLink(), me.inviteCode, me.username);
       await Share.share({ message });
     } catch {
       toast({ title: 'Paylaşılamadı', body: 'Kodu kopyalayıp yollayabilirsin.', kind: 'danger' });

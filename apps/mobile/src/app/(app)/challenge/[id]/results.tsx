@@ -279,7 +279,7 @@ export default function ResultsScreen() {
   const me = useAuth((s) => s.me);
   const meId = me?.id ?? null;
   const toast = useToast();
-  const { link: inviteLink } = useInviteLink();
+  const { freshLink } = useInviteLink();
 
   const query = useResults(id);
   // the detail query is the authority on "one taunt per loser"; it is usually
@@ -506,6 +506,8 @@ export default function ResultsScreen() {
   // The group lives in WhatsApp: a screenshot carries the gloat but not the way
   // in, so the text goes with my invite link for whoever is not on KOYDUM yet.
   const shareResult = async () => {
+    // the address as the server tells it now: the tunnel may have moved since it was read
+    const link = await freshLink();
     const message = resultShareText({
       level,
       title: challenge.title || type?.nameTr || 'Çelınc',
@@ -516,7 +518,7 @@ export default function ResultsScreen() {
       winnerName: winner?.user.displayName ?? null,
       iWon,
       myRank: mine?.rank ?? 0,
-      link: inviteLink,
+      link,
     });
     if (Platform.OS === 'web') {
       // react-native-web's Share is not reliable in every browser; copying always works
