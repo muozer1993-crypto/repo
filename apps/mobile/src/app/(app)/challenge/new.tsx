@@ -4,6 +4,7 @@ import {
   CHALLENGE_TYPES,
   LIMITS,
   deadlineFitsWindow,
+  foldForSearch,
   getChallengeType,
   hhmmToMinutes,
   isValidHHmm,
@@ -111,8 +112,12 @@ function defaultsFor(type: ChallengeType): {
   };
 }
 
+/**
+ * Folded like the server's kanka search: "ozge" finds "Özge", "Ismail" finds "İsmail",
+ * and "@ozzy" (how the app copies a username) finds @ozzy.
+ */
 function normalize(value: string): string {
-  return value.trim().toLocaleLowerCase('tr-TR');
+  return foldForSearch(value.replace(/^\s*@+/, ''));
 }
 
 /* ------------------------------------------------------------ subviews */

@@ -47,7 +47,7 @@ export function stripEscapeSequences(text: string): string {
 
 /**
  * Turkish letters to their plain Latin twins (plus the circumflexed ones of
- * loanwords). Shared by the banned-word filter and `foldUsername`.
+ * loanwords). Shared by the banned-word filter, `foldUsername` and `foldForSearch`.
  */
 export const TURKISH_FOLD: Record<string, string> = {
   ı: 'i',
@@ -62,22 +62,46 @@ export const TURKISH_FOLD: Record<string, string> = {
 };
 
 /**
- * The one spelling a username is stored, looked up and compared in: ASCII, lowercase,
- * no spaces. To a Turkish speaker ş IS a lowercase letter, so "Şeyma" becomes `seyma`
- * instead of being told to use "küçük harf".
+ * Lowercase, Turkish letters to ASCII, every other accent dropped. I, İ, ı and i all
+ * end up `i`, so it never matters which of them a keyboard (or an English one) typed.
  *
  * `toLowerCase()` alone turns "İsmail" into "i̇smail" (i + U+0307), which matched
- * nobody: a friend whose keyboard capitalised the first letter could not log in.
- * Stripping the combining marks after NFD drops that dot along with any other accent
- * (José → jose). Whatever is left may still be invalid ("a.b"); the schema decides.
+ * nobody. Stripping the combining marks after NFD drops that dot along with any other
+ * accent (José → jose), and a "Ş" typed as S + U+0327 folds like the precomposed one.
  */
-export function foldUsername(raw: string): string {
+function foldLetters(raw: string): string {
   return stripInvisible(raw)
     .toLowerCase()
     .replace(/[ışğüöçâîû]/g, (ch) => TURKISH_FOLD[ch] ?? ch)
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, '');
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * The one spelling a username is stored, looked up and compared in: ASCII, lowercase,
+ * no spaces. To a Turkish speaker ş IS a lowercase letter, so "Şeyma" becomes `seyma`
+ * instead of being told to use "küçük harf", and a friend whose keyboard capitalised
+ * the first letter of "İsmail" can log in (`foldLetters`).
+ *
+ * A leading @ goes too: the app copies and shares a username as "@seyma", and that is
+ * what gets pasted back. Whatever is left may still be invalid ("a.b"); the schema decides.
+ */
+export function foldUsername(raw: string): string {
+  return foldLetters(raw).replace(/\s+/g, '').replace(/^@+/, '');
+}
+
+/**
+ * A display name or a search term in the spelling search compares them in: folded
+ * like a username, so "ozge" finds "Özge" and "Ismail" finds "İsmail", but with its
+ * words kept apart by single spaces, so a match can start at any word ("cag" finds
+ * "Özge Çağlar").
+ *
+ * Emoji and punctuation stay: a query of "😎" or "." still has something to match
+ * and does not fold to '', which every name would contain. Only one made of nothing
+ * but invisible characters or accents does; callers treat that as no query at all.
+ */
+export function foldForSearch(text: string): string {
+  return foldLetters(text).replace(/\s+/g, ' ').trim();
 }
 
 /**

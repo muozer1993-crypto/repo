@@ -23,6 +23,7 @@ import {
   TauntBodySchema,
   UpdateMeBodySchema,
   USERNAME_REGEX,
+  UserSearchQuerySchema,
   createChallengeBodySchema,
 } from '../schemas';
 import { getChallengeType } from '../catalog';
@@ -104,6 +105,7 @@ describe('LoginBody', () => {
     // a capitalised İ, typed now or lowercased by the 1.0 app into i + U+0307
     expect(LoginBodySchema.parse({ username: 'İsmail', password: 'x' }).username).toBe('ismail');
     expect(LoginBodySchema.parse({ username: 'İsmail'.toLowerCase(), password: 'x' }).username).toBe('ismail');
+    expect(LoginBodySchema.parse({ username: '@ismail', password: 'x' }).username).toBe('ismail');
     expect(LoginBodySchema.safeParse({ username: 'admin', password: '' }).success).toBe(false);
   });
 });
@@ -212,6 +214,8 @@ describe('FriendRequestBody', () => {
   it('requires exactly one of username / inviteCode', () => {
     expect(FriendRequestBodySchema.safeParse({ username: 'Ali' }).data).toEqual({ username: 'ali' });
     expect(FriendRequestBodySchema.safeParse({ username: 'Şeyma' }).data).toEqual({ username: 'seyma' });
+    // as the app copies and shares it
+    expect(FriendRequestBodySchema.safeParse({ username: '@Şeyma' }).data).toEqual({ username: 'seyma' });
     expect(FriendRequestBodySchema.safeParse({ inviteCode: 'K7X2' }).success).toBe(true);
     expect(FriendRequestBodySchema.safeParse({}).success).toBe(false);
     expect(FriendRequestBodySchema.safeParse({ username: 'ali', inviteCode: 'K7X2' }).success).toBe(false);
@@ -450,6 +454,19 @@ describe('query schemas', () => {
     expect(ChallengeListQuerySchema.parse({})).toEqual({ status: [] });
     expect(ChallengeListQuerySchema.parse({ status: 'active, pending' })).toEqual({ status: ['active', 'pending'] });
     expect(ChallengeListQuerySchema.safeParse({ status: 'active,bogus' }).success).toBe(false);
+  });
+
+  it('UserSearchQuery drops the @ a shared username comes with', () => {
+    expect(UserSearchQuerySchema.parse({ q: '@seyma' })).toEqual({ q: 'seyma' });
+    expect(UserSearchQuerySchema.parse({ q: ' @ seyma ' })).toEqual({ q: 'seyma' });
+    expect(UserSearchQuerySchema.parse({ q: '@@Şeyma' })).toEqual({ q: 'Şeyma' });
+    // what is left is searched as typed: the folding is the route's
+    expect(UserSearchQuerySchema.parse({ q: 'Özge Çağ' })).toEqual({ q: 'Özge Çağ' });
+    expect(UserSearchQuerySchema.safeParse({ q: '@' }).success).toBe(false);
+    expect(UserSearchQuerySchema.safeParse({ q: ' @@ ' }).success).toBe(false);
+    expect(UserSearchQuerySchema.safeParse({ q: '' }).success).toBe(false);
+    expect(UserSearchQuerySchema.safeParse({ q: `@${'a'.repeat(40)}` }).success).toBe(true);
+    expect(UserSearchQuerySchema.safeParse({ q: 'a'.repeat(41) }).success).toBe(false);
   });
 });
 

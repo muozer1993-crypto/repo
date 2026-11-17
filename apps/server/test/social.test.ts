@@ -1646,6 +1646,69 @@ describe('GET /users/search', () => {
     expect(invalid.json<{ error: { code: string } }>().error.code).toBe('validation');
   });
 
+  it('finds "@seyma" and the ASCII spellings of Turkish names, at any word of the display name', async () => {
+    const h = await boot();
+    const me = await registerUser(h.app, 'mert', { displayName: 'Mert' });
+    await registerUser(h.app, 'seyma', { displayName: 'Şeyma Yılmaz' });
+    await registerUser(h.app, 'ozzy', { displayName: 'Özge Çağlar' });
+    await registerUser(h.app, 'isahin', { displayName: 'İsmail Şahin' });
+    await registerUser(h.app, 'kral', { displayName: 'Çağrı' });
+    await registerUser(h.app, 'kanka1', { displayName: 'Işık' });
+    const call = authed(h.app, me.token);
+    const usernames = async (q: string): Promise<string[]> => {
+      const response = await call({ method: 'GET', url: `/users/search?q=${encodeURIComponent(q)}` });
+      expect(response.statusCode, q).toBe(200);
+      return response.json<{ username: string }[]>().map((u) => u.username);
+    };
+
+    // the app copies and shares a username as "@seyma"; the 1.1.0 APKs send it as it is
+    for (const q of ['@seyma', '@Şeyma', '@ seyma', '@@seyma']) expect(await usernames(q), q).toEqual(['seyma']);
+    // a Turkish letter typed without its accent, and an English capital I
+    for (const q of ['ozge', 'Ozge', 'OZGE', 'özge']) expect(await usernames(q), q).toEqual(['ozzy']);
+    for (const q of ['Ismail', 'ISMAIL', 'ismail', 'İsmail']) expect(await usernames(q), q).toEqual(['isahin']);
+    expect(await usernames('cagri')).toEqual(['kral']);
+    expect(await usernames('isik')).toEqual(['kanka1']);
+    expect(await usernames('yilmaz')).toEqual(['seyma']);
+    // the start of any word: "cag" is Çağrı's name and Özge's surname
+    expect(await usernames('cag')).toEqual(['kral', 'ozzy']);
+    expect(await usernames('caglar')).toEqual(['ozzy']);
+    expect(await usernames('ozge cag')).toEqual(['ozzy']);
+    // but not the middle of one
+    expect(await usernames('aglar')).toEqual([]);
+    expect(await usernames('lmaz')).toEqual([]);
+
+    // what folds to nothing matches nobody rather than everybody
+    expect(await usernames('😎')).toEqual([]);
+    expect(await usernames('.')).toEqual([]);
+    expect(await usernames(String.fromCharCode(0x200b))).toEqual([]);
+    expect(await usernames(String.fromCharCode(0x301))).toEqual([]);
+    const bare = await call({ method: 'GET', url: `/users/search?q=${encodeURIComponent('@')}` });
+    expect(bare.statusCode).toBe(400);
+    expect(bare.json<{ error: { code: string } }>().error.code).toBe('validation');
+  });
+
+  it('still hides a blocked pair from a folded search, both ways', async () => {
+    const h = await boot();
+    const me = await registerUser(h.app, 'mert', { displayName: 'Mert' });
+    const ozge = await registerUser(h.app, 'ozzy', { displayName: 'Özge Çağlar' });
+    const ismail = await registerUser(h.app, 'isahin', { displayName: 'İsmail Şahin' });
+    const usernames = async (token: string, q: string): Promise<string[]> =>
+      (await authed(h.app, token)({ method: 'GET', url: `/users/search?q=${encodeURIComponent(q)}` }))
+        .json<{ username: string }[]>()
+        .map((u) => u.username);
+    expect(await usernames(me.token, 'ozge')).toEqual(['ozzy']);
+    expect(await usernames(me.token, 'Ismail')).toEqual(['isahin']);
+
+    expect((await authed(h.app, me.token)({ method: 'POST', url: `/users/${ozge.me.id}/block` })).statusCode).toBe(200);
+    expect((await authed(h.app, ismail.token)({ method: 'POST', url: `/users/${me.me.id}/block` })).statusCode).toBe(200);
+
+    expect(await usernames(me.token, 'ozge')).toEqual([]);
+    expect(await usernames(me.token, '@ozzy')).toEqual([]);
+    expect(await usernames(me.token, 'Ismail')).toEqual([]);
+    expect(await usernames(ozge.token, 'mert')).toEqual([]);
+    expect(await usernames(ismail.token, '@mert')).toEqual([]);
+  });
+
   it('finds a friend past thousands of accounts whose names sort before hers', async () => {
     const h = await boot();
     const me = await registerUser(h.app, 'mustafa');
@@ -1698,8 +1761,10 @@ describe('GET /users/search', () => {
       // the exact username, then the usernames that start with it, then display names
       expect(hits.slice(0, 3), q).toEqual(['seyma', 'seymanur', 'a01']);
     }
-    // the look-alikes' plain S does not match a Ş: only the folded usernames do
-    expect(await usernames('Şeyma')).toEqual(['seyma', 'seymanur']);
+    // "Şeyma" is folded like "seyma" now, so the look-alikes match it too, after her
+    const turkish = await usernames('Şeyma');
+    expect(turkish).toHaveLength(20);
+    expect(turkish.slice(0, 3)).toEqual(['seyma', 'seymanur', 'a01']);
   });
 
   it('hides soft-deleted users', async () => {

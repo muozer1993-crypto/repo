@@ -62,7 +62,8 @@ export default function FriendsScreen() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
   useEffect(() => {
-    const id = setTimeout(() => setQuery(term.trim()), 350);
+    // "@seyma" is how the app copies and shares a username; the @ is not part of it
+    const id = setTimeout(() => setQuery(term.trim().replace(/^@+\s*/, '')), 350);
     return () => clearTimeout(id);
   }, [term]);
 
@@ -198,8 +199,13 @@ export default function FriendsScreen() {
     data.incoming.length === 0 &&
     data.outgoing.length === 0;
 
+  // an @name is a username, never an invite code: sent as one it only got "Böyle bir kanka bulamadım"
   const showCodeButton =
-    query.length >= 4 && !query.includes(' ') && !search.isFetching && results.length === 0;
+    query.length >= 4 &&
+    !query.includes(' ') &&
+    !term.trim().startsWith('@') &&
+    !search.isFetching &&
+    results.length === 0;
 
   return (
     <Screen

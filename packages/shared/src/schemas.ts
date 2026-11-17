@@ -547,7 +547,15 @@ export const ChallengeListQuerySchema = z.object({
 });
 export type ChallengeListQuery = z.infer<typeof ChallengeListQuerySchema>;
 
+/**
+ * A leading @ is dropped: the app copies and shares a username as "@seyma", and a
+ * search for that found nobody. A bare "@" is as empty as no query at all.
+ */
 export const UserSearchQuerySchema = z.object({
-  q: z.string().trim().min(1).max(40),
+  q: z
+    .string()
+    .trim()
+    .transform((s) => s.replace(/^@+/, '').trim())
+    .pipe(z.string().min(1).max(40)),
 });
 export type UserSearchQuery = z.infer<typeof UserSearchQuerySchema>;

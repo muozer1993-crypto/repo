@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   approximateGraphemeCount,
   countGraphemes,
+  foldForSearch,
   foldUsername,
   hasVisibleChar,
   singleLine,
@@ -114,6 +115,40 @@ describe('foldUsername', () => {
     expect(foldUsername('🍆🍆🍆')).toBe('🍆🍆🍆');
     expect(foldUsername('mustafa_42')).toBe('mustafa_42');
     expect(foldUsername(foldUsername('Şeyma'))).toBe('seyma');
+  });
+
+  it('drops the @ the app copies and shares a username with', () => {
+    expect(foldUsername('@seyma')).toBe('seyma');
+    expect(foldUsername(' @ Şeyma ')).toBe('seyma');
+    expect(foldUsername('@@seyma')).toBe('seyma');
+    expect(foldUsername(`${ZWSP}@seyma`)).toBe('seyma');
+    // only in front: anywhere else it is a character the schema refuses
+    expect(foldUsername('sey@ma')).toBe('sey@ma');
+    expect(foldUsername('@')).toBe('');
+  });
+});
+
+describe('foldForSearch', () => {
+  const COMBINING_CEDILLA = String.fromCharCode(0x327);
+
+  it('folds Turkish letters and both capital i spellings, keeping the words apart', () => {
+    expect(foldForSearch('Özge Çağlar')).toBe('ozge caglar');
+    expect(foldForSearch('İsmail')).toBe('ismail');
+    expect(foldForSearch('ISMAIL')).toBe('ismail');
+    expect(foldForSearch('Ismail')).toBe('ismail');
+    expect(foldForSearch('IŞIK')).toBe('isik');
+    expect(foldForSearch('Çağrı')).toBe('cagri');
+    // a keyboard that types Ş as S + combining cedilla
+    expect(foldForSearch(`S${COMBINING_CEDILLA}eyma`)).toBe('seyma');
+    expect(foldForSearch('  Ali \n  Veli  ')).toBe('ali veli');
+  });
+
+  it('keeps emoji and punctuation, so they never fold into a match for everybody', () => {
+    expect(foldForSearch('😎')).toBe('😎');
+    expect(foldForSearch('...')).toBe('...');
+    // nothing visible at all is nothing to search for
+    expect(foldForSearch(ZWSP)).toBe('');
+    expect(foldForSearch(COMBINING_CEDILLA)).toBe('');
   });
 });
 

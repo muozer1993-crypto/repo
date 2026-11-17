@@ -12,7 +12,7 @@
  * person for the same reason within a day is not stored again.
  */
 import type { FastifyInstance } from 'fastify';
-import { foldUsername, ReportBodySchema, UserSearchQuerySchema, type PublicUser } from '@koydum/shared';
+import { foldForSearch, foldUsername, ReportBodySchema, UserSearchQuerySchema, type PublicUser } from '@koydum/shared';
 import { newId, nowIso, type Database, type UserRow } from '../db/index.js';
 import { badRequest, notFound, parseBody, parseQuery, tooMany } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
@@ -40,38 +40,17 @@ export const REPORTS_PER_USER = { max: 10, windowMs: 60 * 60 * 1000 };
  */
 export const REPORT_REPEAT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/** Turkish casing: `I → ı`, `İ → i`. `toLowerCase()` gets both of those wrong. */
-function trLower(value: string): string {
-  return value.toLocaleLowerCase('tr');
-}
-
-/**
- * The prefix we can safely hand to SQLite.
- *
- * SQLite's `lower()` and its case-insensitive LIKE are ASCII-only, so anything with a
- * Turkish letter in it — and the dotted/dotless i pair in particular, where "ist" must
- * match "İstanbul" — cannot be resolved in SQL. We therefore cut the prefix at the
- * first character SQL cannot be trusted with; an empty prefix simply means "every row
- * goes to `matchesPrefix`". A space counts too: the folded username match drops it, so
- * "ali veli" has to reach `aliveli`. `%`, `_` and `\` are escaped (the query uses ESCAPE '\').
- */
-function sqlPrefix(query: string): string {
-  let prefix = '';
-  for (const ch of trLower(query)) {
-    if (ch.charCodeAt(0) > 127 || ch === 'i' || /\s/.test(ch)) break;
-    prefix += ch;
-  }
-  return prefix.replace(/[\\%_]/g, (m) => `\\${m}`);
-}
-
 /**
  * The hits: not me, not soft-deleted, not in a blocked relationship with me, and a
- * prefix match (`koydum_search_match`, registered in `userRoutes`).
+ * match (`koydum_search_match`, registered in `userRoutes`).
  *
  * The match runs inside the query, before the LIMIT. It used to run in JavaScript
  * on the first 2,000 rows by username, and for a query SQL cannot narrow ("Şey",
- * "şeyma": the LIKE is then `%`) those were simply the first 2,000 accounts, so
- * 2,000 throwaway "aa…" accounts hid @seyma from everybody.
+ * "şeyma") those were simply the first 2,000 accounts, so 2,000 throwaway "aa…"
+ * accounts hid @seyma from everybody. No query is narrowed in SQL any more:
+ * SQLite's `lower()` and LIKE are ASCII-only, and a match at any word of the
+ * display name ("cag" for "Özge Çağlar") has no prefix to narrow by, so every
+ * row is asked. The LIMIT still caps what comes back.
  *
  * The hits are ranked before the LIMIT too: the username itself first, then
  * usernames that start with the query, then names that only match by display
@@ -79,7 +58,6 @@ function sqlPrefix(query: string): string {
  * @seyma from a search for "seyma".
  */
 function searchHits(db: Database, meId: string, query: string): UserRow[] {
-  const like = `${sqlPrefix(query)}%`;
   const folded = foldUsername(query);
   const usernamePrefix = `${folded.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
   return db
@@ -87,7 +65,6 @@ function searchHits(db: Database, meId: string, query: string): UserRow[] {
       `SELECT * FROM users
         WHERE deleted_at IS NULL
           AND id <> ?
-          AND (lower(username) LIKE ? ESCAPE '\\' OR lower(display_name) LIKE ? ESCAPE '\\')
           AND koydum_search_match(username, display_name, ?) = 1
           AND NOT EXISTS (
             SELECT 1 FROM friendships f
@@ -97,22 +74,22 @@ function searchHits(db: Database, meId: string, query: string): UserRow[] {
         ORDER BY (username = ?) DESC, (username LIKE ? ESCAPE '\\') DESC, username ASC
         LIMIT ?`,
     )
-    .all(meId, like, like, query, meId, meId, folded, usernamePrefix, SEARCH_LIMIT) as UserRow[];
+    .all(meId, query, meId, meId, folded, usernamePrefix, SEARCH_LIMIT) as UserRow[];
 }
 
 /**
- * Prefix match on either field, in Turkish casing and in plain casing. The username is
- * also tried in the spelling it is stored in (`foldUsername`), so "şey" finds @seyma
- * even when her display name is spelled some other way.
+ * The query folded like a username against the start of the username ("Çağ" finds
+ * @cagri, "ca gri" too), and folded for search (`foldForSearch`) against the start
+ * of any word of the display name: "ozge", "Ozge" and "cag" find "Özge Çağlar",
+ * "Ismail" and "ISMAIL" find "İsmail Şahin". The app sends the query as typed (the
+ * 1.1.0 APKs in friends' hands too), so all of the folding happens here.
  */
 function matchesPrefix(row: Pick<UserRow, 'username' | 'display_name'>, query: string): boolean {
-  const tr = trLower(query);
-  const plain = query.toLowerCase();
+  // a query of nothing but invisible characters or accents folds to '', a prefix of everybody
   const folded = foldUsername(query);
-  // a query of nothing but invisible characters folds to '', a prefix of everybody
   if (folded !== '' && row.username.startsWith(folded)) return true;
-  const fields = [row.username, row.display_name];
-  return fields.some((field) => trLower(field).startsWith(tr) || field.toLowerCase().startsWith(plain));
+  const words = foldForSearch(query);
+  return words !== '' && ` ${foldForSearch(row.display_name)}`.includes(` ${words}`);
 }
 
 export default async function userRoutes(app: FastifyInstance): Promise<void> {

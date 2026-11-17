@@ -63,8 +63,8 @@ function tempPassword(): string {
 
 /** The row the owner means, or the Turkish error the CLI prints as it is. */
 function userNamed(db: Database, username: string): UserRow {
-  // the spelling the app stores, so "sifre Şeyma" finds seyma
-  const name = foldUsername(username).replace(/^@/, '');
+  // the spelling the app stores, so "sifre Şeyma" and "sifre @seyma" find seyma
+  const name = foldUsername(username);
   const row = db.prepare('SELECT * FROM users WHERE username = ?').get(name) as UserRow | undefined;
   if (!row) throw new Error(`"${name}" diye bir kullanıcı yok. Liste için: npm run yonet -- kullanicilar`);
   return row;

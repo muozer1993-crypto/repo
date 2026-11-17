@@ -1264,8 +1264,10 @@ karakterleri atar. Kayıt, giriş ve kullanıcı adıyla arkadaşlık isteği ş
 neyin kaydedileceğini görür. Eskiden "şeyma" "küçük harf olmalı" diye reddediliyordu, oysa ş da
 küçük harf. `toLowerCase()` ise "İsmail"i i + U+0307 + "smail" yapıyordu, bu da hiçbir hesapla
 eşleşmiyordu. 1.0 uygulaması hâlâ öyle gönderir, sunucu çevirdiği için girer.
-Var olan adlar zaten ASCII, geçiş gerekmedi. Arama da sorguyu böyle çevirip kullanıcı adına bakar:
-"Çağ" yazan @cagri'yi bulur. Görünen ad Türkçe harfleriyle kalır.
+Var olan adlar zaten ASCII, geçiş gerekmedi. Baştaki @ işareti de atılır: uygulama kullanıcı adını
+"@seyma" diye kopyalar ve paylaşır, yapıştırılan da o olur. Arama da sorguyu böyle çevirip kullanıcı
+adına bakar: "Çağ" yazan @cagri'yi bulur. Görünen ad Türkçe harfleriyle kalır; arama onu da
+`foldForSearch` ile aynı biçimde çevirir ama kelimeleri ayrı tutar (aşağıda).
 
 Görünen ad ise tek satırdır (`DisplayNameSchema`): görünmez karakterler, kontrol karakterleri ve
 yön değiştiren bidi işaretleri atılır (emojileri birbirine bağlayan ZWJ kalır), satır sonları tek
@@ -1526,6 +1528,23 @@ adları, sonra yalnızca görünen adı tutanlar. Yalnızca kullanıcı adına g
 "Seyma" olan 20 hesap (@a01…@a20) "seyma" aramasında @seyma'yı yine dışarıda bırakıyordu; artık
 tam kullanıcı adını hiçbir kalabalık gizleyemez. "şey" gibi kısa bir önek ise onunla başlayan
 herkesindir, ilk 20'si döner. Migration gerekmedi.
+
+Sonra arama yazımda takıldı. Sorgu yalnızca kullanıcı adına göre çevriliyordu; görünen ada Türkçe
+küçültmeyle bakılıyordu, SQL'deki LIKE de ASCII "ozge"yi elinde tutup "Özge"yi daha SQL'de eliyordu.
+"ozge", "cag", "Ismail" (İngilizce büyük I), "cagri", "isik" kimseyi bulmuyordu; "@seyma" da
+bulmuyordu, oysa uygulamanın kendisi adı öyle kopyalıyor ve davet mesajının sonuna öyle yazıyor.
+Üstüne "Kod ile ekle" çıkıp "@seyma"yı davet kodu diye gönderiyordu. Şimdi `UserSearchQuerySchema`
+baştaki @ işaretini atar (tek başına "@" boş sorgu gibi 400'dür), görünen ad da sorgu da
+`foldForSearch` (`packages/shared/src/text.ts`) ile çevrilir: küçük harf, Türkçe harfler ASCII,
+I/İ/ı hepsi i, aksanlar gider, kelimeler tek boşlukla ayrı kalır. Eşleşme görünen adın herhangi bir
+kelimesinin başındadır: "cag" hem "Çağrı"yı hem "Özge Çağlar"ı bulur, "aglar" kimseyi. Emoji ve
+noktalama atılmaz; atılsaydı "😎" boş dizeye döner, boş dize de herkesin adında bulunurdu. Yalnızca
+görünmez karakter ya da aksandan oluşan bir sorgu boşa çıkar ve kimseyle eşleşmez. Kelime başı
+eşleşmesinin SQL'de daraltacağı bir öneki olmadığından LIKE ön süzgeci kalktı: her satır
+`koydum_search_match`'e sorulur (2.100 hesaplık test bunu ölçer), dönen sayıyı yine LIMIT keser.
+Telefonlardaki 1.1.0 uygulaması sorguyu yazıldığı gibi gönderdiği için bütün çevirme sunucuda; yeni
+APK gerekmedi. Uygulama yine de kendi tarafında @ işaretini atar, @ ile başlayan yazıya "Kod ile
+ekle" göstermez, çelınc sihirbazının kanka süzgeci de aynı `foldForSearch`'ü kullanır.
 
 Adın kendisi de bir yoldu. "seni öldürürüm" adıyla açılan bir hesabın kanka isteği kurbanın kilit
 ekranına "seni öldürürüm seni kanka listesine ekledi" diye düşüyordu; laf filtresi

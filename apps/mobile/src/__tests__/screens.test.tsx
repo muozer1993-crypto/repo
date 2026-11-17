@@ -4989,6 +4989,79 @@ describe('invite link on the friends tab', () => {
   });
 });
 
+describe('kanka search with an @', () => {
+  it('searches "@seyma" as seyma, and never offers it as an invite code', async () => {
+    api.health = jest.fn(async () => ({ ok: true, version: '1', time: '', app: null, publicUrl: null }));
+    api.requestFriend = jest.fn(async () => ({ status: 'pending', friendshipId: 'f-1' }));
+    const FriendsScreen = require('@/app/(app)/(tabs)/friends').default;
+    const tree = renderScreen(<FriendsScreen />);
+    await settle();
+
+    // as "Kullanıcı adını kopyala" and the davet message hand it out; nobody is found
+    for (const term of ['@seyma', '@ seyma']) {
+      typeInto(tree, 'Kanka ara', term);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      });
+      await settle();
+      expect(api.searchUsers).toHaveBeenLastCalledWith('seyma');
+      expect(rendered(tree)).toMatch(/“\s*seyma\s*” diye biri yok\./);
+      // sent as a code it only got "Böyle bir kanka bulamadım"
+      expect(() => findWith(tree, 'title', 'Kod ile ekle', 'onPress')).toThrow();
+    }
+    expect(api.requestFriend).not.toHaveBeenCalled();
+
+    // a code typed bare still gets the button
+    typeInto(tree, 'Kanka ara', 'ABC234');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+    await settle();
+    expect(api.searchUsers).toHaveBeenLastCalledWith('ABC234');
+    expect(findWith(tree, 'title', 'Kod ile ekle', 'onPress')).toBeTruthy();
+  });
+});
+
+describe('the wizard\'s kanka filter', () => {
+  const OZGE = { id: 'u-2', username: 'ozzy', displayName: 'Özge Çağlar', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const ISMAIL = { id: 'u-3', username: 'isahin', displayName: 'İsmail Şahin', avatarEmoji: '🔥', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  it('finds Özge Çağlar by "ozge", "cag" and "@ozzy", and İsmail by "Ismail"', async () => {
+    api.friends = jest.fn(async () => ({ friends: [OZGE, ISMAIL], incoming: [], outgoing: [] }));
+    const NewChallengeScreen = require('@/app/(app)/challenge/new').default;
+    const tree = renderScreen(<NewChallengeScreen />);
+    await settle();
+    const [row] = tree.root.findAll(
+      (node) => typeof node.props.onSelect === 'function' && node.props.type?.key === 'adim_yarisi'
+    );
+    if (!row) throw new Error('adim_yarisi bulunamadı');
+    act(() => {
+      row.props.onSelect(row.props.type);
+    });
+    press(tree, 'İleri');
+    press(tree, 'İleri');
+    await settle();
+
+    const listed = (term: string): string[] => {
+      act(() => {
+        findWith(tree, 'placeholder', 'Kanka ara...', 'onChangeText').props.onChangeText(term);
+      });
+      return tree.root
+        .findAll((node) => typeof node.props.onToggle === 'function' && typeof node.props.user?.id === 'string')
+        .map((node) => node.props.user.username as string)
+        .filter((username, index, all) => all.indexOf(username) === index);
+    };
+
+    const ozge = ['ozge', 'Ozge', 'cag', '@ozzy', ' @ozzy', 'özge ç'];
+    expect(ozge.map(listed)).toEqual(ozge.map(() => ['ozzy']));
+    const ismail = ['Ismail', 'ISMAIL', 'isma', 'sahin'];
+    expect(ismail.map(listed)).toEqual(ismail.map(() => ['isahin']));
+    expect(listed('😎')).toEqual([]);
+    expect(rendered(tree)).toMatch(/“\s*😎\s*” diye biri yok\./);
+    expect(listed('@')).toEqual(['ozzy', 'isahin']);
+  });
+});
+
 describe('login screen', () => {
   it('tells a friend who forgot the password whom to ask', async () => {
     const LoginScreen = require('@/app/(auth)/login').default;
