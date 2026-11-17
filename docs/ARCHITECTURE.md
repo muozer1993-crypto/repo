@@ -79,7 +79,11 @@ sayısından fazla olan gününü alabilir. O güne girilmiş kayıt artık say�
 `day_out_of_range` alır. O kayda itiraz `entry_not_scored` alır (`unscoredEntry`); güncellemeden önce
 edilmiş itirazı da `disputeDeadlines` ve `disputedEntries` görmez: sonucu 12 saat bekletmez, kaydı
 yakmaz. O fazla gün eşit oynayanlardan birini öne geçiriyordu (evet/hayırda ve check-in'de bir puan
-fazla, ekran süresinde bitişin kestiği günün 1440'ı); onsuz eşit oyun berabere biter.
+fazla, ekran süresinde bitişin kestiği günün 1440'ı); onsuz eşit oyun berabere biter. Güncellemeden önce
+bitmiş çelınc ise eski sunucunun her güne verdiği skoru saklar; migration 020 yalnız `finished` olanları
+işaretler (`challenges.scored_whole_window` 1) ve `scoringWindow` onlarda her günü tutar. Yoksa sonuç
+ekranı saklanan 6'nın yanına "5 gün" yazar, bu sunucunun bitirdiği çelıncın `days`'i de skordan düşen
+kaydı sayıp berabereliklerde yurt dışındaki kankayı öne koyardı.
 
 Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
 

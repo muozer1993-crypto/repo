@@ -165,6 +165,9 @@ describe('migrations', () => {
     );
     challenge.run('checkin', 'erken_yat', 'checkin_deadline');
     challenge.run('steps', 'adim_yarisi', 'auto_steps');
+    // and one it finished, on every day of a friend abroad's
+    challenge.run('done', 'sigara_yok', 'daily_boolean');
+    db.prepare("UPDATE challenges SET status = 'finished' WHERE id = 'done'").run();
     const participant = db.prepare(
       `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at)
        VALUES (?, ?, ?, '2026-11-16T10:00:00.000Z', ?)`,
@@ -181,6 +184,7 @@ describe('migrations', () => {
       '017_seed_last_beat',
       '018_read_answered_requests',
       '019_unchecked_invites',
+      '020_whole_window_results',
     ]);
     // the first start of the new version writes the pause from here
     expect(readLastBeat(db)?.toISOString()).toBe('2026-11-16T20:19:00.000Z');
@@ -192,6 +196,12 @@ describe('migrations', () => {
       { challenge_id: 'checkin', user_id: 'u2', days_checked: 0 },
       { challenge_id: 'steps', user_id: 'u1', days_checked: 1 },
       { challenge_id: 'steps', user_id: 'u2', days_checked: 1 },
+    ]);
+    // only the finished one keeps its whole window; the running ones move onto the trim
+    expect(db.prepare('SELECT id, scored_whole_window FROM challenges ORDER BY id').all()).toEqual([
+      { id: 'checkin', scored_whole_window: 0 },
+      { id: 'done', scored_whole_window: 1 },
+      { id: 'steps', scored_whole_window: 0 },
     ]);
 
     // one at 016 that already beats keeps its own beat, even behind a later request

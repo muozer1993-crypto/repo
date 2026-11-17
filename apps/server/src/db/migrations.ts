@@ -470,6 +470,22 @@ UPDATE challenge_participants SET days_checked = 0
    AND challenge_id IN (SELECT id FROM challenges WHERE metric_type = 'checkin_deadline' AND status IN ('pending', 'active'));
 `;
 
+/**
+ * The çelınclar an older server finished. It scored a friend abroad on every
+ * day of `challengeWindow` in their own zone and stored those results; this
+ * version trims a friend's days to the creator's count (`scoringWindow`) and
+ * read those finished çelınclar with the trim, so the screens put "5 gün"
+ * next to a stored score of 6. Every one already finished when this version
+ * first starts was finished by such a server, and keeps its whole window
+ * (`challenges.scored_whole_window` 1). A çelınc still running moves onto the
+ * new count, so it is not marked, and one this version finishes was scored
+ * with the trim.
+ */
+const WHOLE_WINDOW_RESULTS = `
+ALTER TABLE challenges ADD COLUMN scored_whole_window INTEGER NOT NULL DEFAULT 0;
+UPDATE challenges SET scored_whole_window = 1 WHERE status = 'finished';
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -490,4 +506,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '017_seed_last_beat', sql: SEED_LAST_BEAT },
   { id: '018_read_answered_requests', sql: READ_ANSWERED_REQUESTS },
   { id: '019_unchecked_invites', sql: UNCHECKED_INVITES },
+  { id: '020_whole_window_results', sql: WHOLE_WINDOW_RESULTS },
 ];

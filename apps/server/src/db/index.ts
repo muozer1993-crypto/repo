@@ -138,6 +138,12 @@ export interface ChallengeRow {
   /** 0 | 1 */
   is_tie: number;
   rematch_of_id: string | null;
+  /**
+   * 1 on a çelınc an older server finished (migration 020): it scored every
+   * player on every day of their `challengeWindow`, and `scoringWindow`
+   * reads its days the same way. 0 on every other.
+   */
+  scored_whole_window: number;
 }
 
 export interface ParticipantRow {

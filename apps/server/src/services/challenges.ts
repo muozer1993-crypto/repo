@@ -320,16 +320,18 @@ export function checkinDaysShort(
  * (`checkinDaysShort`); one an older server let in sets the count for
  * everybody (`fewestCheckinDays`), the creator's zone included.
  *
- * No row keeps an older rule: a çelınc already running when the server is
- * updated moves onto this one. A server from before the trim scored a friend
- * abroad on every day of `challengeWindow`, and this keeps only some of them,
- * so the move can only take away a day they had on top of the creator's
- * count; an entry on it stops counting (`scoredDays`).
+ * A çelınc already running when the server is updated moves onto this rule.
+ * A server from before the trim scored a friend abroad on every day of
+ * `challengeWindow`, and this keeps only some of them, so the move can only
+ * take away a day they had on top of the creator's count; an entry on it
+ * stops counting (`scoredDays`). One that server finished keeps every day
+ * (`scored_whole_window`, migration 020): its stored results were counted on
+ * them, and its `days` and `myDays` must say the same.
  */
 export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string): string[] {
   const window = challengeWindow(challenge, tz);
   const type = typeForChallenge(challenge);
-  if (!SCORED_PER_DAY.includes(type.metricType)) return window;
+  if (!SCORED_PER_DAY.includes(type.metricType) || challenge.scored_whole_window === 1) return window;
   const zone = readableZone(tz);
   const creatorTz = creatorTimezone(db, challenge);
   const creatorZone = readableZone(creatorTz) === zone;
@@ -543,8 +545,9 @@ export function unscoredEntry(db: Database, challenge: ChallengeRow, entry: Pick
  * A day `scoringWindow` leaves out takes its entries with it on a yes/no or
  * check-in çelınc too, where `computeScore` counts every day with a yes
  * whatever the window: one written before the trim existed would keep its
- * point. A finished çelınc keeps the days it was scored on: its results are
- * the stored ones (`computeStandings`), and `days` must not disagree with them.
+ * point. A finished çelınc's results are the stored ones (`computeStandings`),
+ * and `days` is read from the days they were scored on: `scoringWindow`, which
+ * keeps every day of one an older server finished.
  */
 function rankAccepted(
   db: Database,
@@ -556,7 +559,7 @@ function rankAccepted(
   now: Date,
 ): { ranking: RankingResult; days: Map<string, number> } {
   const perUserWindow = type.metricType === 'manual_lower_is_better';
-  const trims = SCORED_PER_DAY.includes(type.metricType) && challenge.status !== 'finished';
+  const trims = SCORED_PER_DAY.includes(type.metricType);
   const days = new Map<string, number>();
   const playable = perUserWindow ? playableFrom(db, challenge) : 0;
 
@@ -565,7 +568,6 @@ function rankAccepted(
     let entries = entriesByUser.get(participant.user_id) ?? [];
     let window: string[] = [];
     if (trims) ({ window, entries } = scoredDays(db, challenge, tz, entries));
-    else if (perUserWindow) window = challengeWindow(challenge, tz);
     if (perUserWindow) {
       const floor = lateJoinFloor(participant, challenge, tz, playable);
       if (floor) {

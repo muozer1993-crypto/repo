@@ -1366,7 +1366,8 @@ yarısı biten "Erken Yatma Sözü" Londra'da 20:59'da biter) bitişe kadar say�
 sayıma geçer. Başka şehirdeki kankanın çelıncı açandan fazla günü varsa o gün düşer, o güne girilen kayıt da
 artık sayılmaz. O kayda itiraz edilmez ("zaten sayılmıyor" der); güncellemeden önce edilmiş bir itiraz da
 sonucu bekletmez, kaydı yakmaz. O fazla gün eşit oynayanlardan birini öne geçiriyordu; artık berabere
-biterler. Başka saat diliminde oynayan kankanın adının altında "🕐 Tokyo saati" yazar; "Geldim" dediği
+biterler. Güncellemeden önce bitmiş çelınclar eski sunucunun saydığı günlerle görünür, skorla gün sayısı
+birbirini tutar. Başka saat diliminde oynayan kankanın adının altında "🕐 Tokyo saati" yazar; "Geldim" dediği
 saat de hem onun hem senin saatinle görünür.
 
 **Uygulama "Sunucunun diski dolmak üzere" diyor.**

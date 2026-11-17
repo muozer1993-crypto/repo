@@ -372,7 +372,10 @@ users(id TEXT PK, username TEXT UNIQUE, display_name TEXT, password_hash TEXT, a
 friendships(id TEXT PK, requester_id TEXT, addressee_id TEXT, status TEXT, created_at TEXT, updated_at TEXT, UNIQUE(requester_id, addressee_id))
 challenges(id TEXT PK, creator_id TEXT, type_key TEXT, metric_type TEXT, direction TEXT, unit TEXT, title TEXT,
       starts_at TEXT, ends_at TEXT, status TEXT, reward_text TEXT, penalty_text TEXT, deadline_time TEXT, daily_target REAL,
-      proof_required INTEGER DEFAULT 0, created_at TEXT, finalized_at TEXT, winner_id TEXT, is_tie INTEGER DEFAULT 0, rematch_of_id TEXT)
+      proof_required INTEGER DEFAULT 0, created_at TEXT, finalized_at TEXT, winner_id TEXT, is_tie INTEGER DEFAULT 0, rematch_of_id TEXT,
+      scored_whole_window INTEGER DEFAULT 0)
+  -- scored_whole_window: 1 on a çelınc already `finished` when migration 020 ran: an older server scored it on every day
+  -- of each player's `dayKeysBetween`, and `scoringWindow` keeps those days for it (2.3)
 challenge_participants(challenge_id TEXT, user_id TEXT, status TEXT, invited_at TEXT, joined_at TEXT,
       final_score REAL, final_rank INTEGER, invited_by TEXT, days_checked INTEGER DEFAULT 1, PRIMARY KEY(challenge_id, user_id))
   -- invited_by: the player whose /invite brought them in (migration 015); NULL means the creator
@@ -544,7 +547,10 @@ point on a yes/no or check-in; on screen time one more day to average, 1440 when
 without it equal play ties. Sums (steps, focus, counts) cover the same hours in every zone and keep every day. The
 phones' fan-out writes the same window,
 the standings score it (a cut day's entries left out, written before this rule too) and `everyPhoneReported`
-waits for its last day; a finished çelınc keeps the results stored at its finish; `dayKey <= todayKey(user.tz)`; `dayKey >= todayKey − 2 days`
+waits for its last day; a finished çelınc keeps the results stored at its finish, and its `days` (`ParticipantView`)
+and `myDays` are read from the days those were counted on: the trimmed ones for a çelınc this version finished, every
+day of `dayKeysBetween` for one an older server finished (`scored_whole_window` 1), whose 6 next to "📅 5 gün" and
+whose friend abroad first in every tie (the results screen breaks a tie on `days`) came from mixing the two; `dayKey <= todayKey(user.tz)`; `dayKey >= todayKey − 2 days`
 (manual types) / `− 7 days` (steps); value ≤ `type.maxPerEntry`, and a whole number on a `wholeNumbers` type (400
 `not_whole` "Küsurat olmaz, tam sayı yaz.": a parked 12,43 adım from an app that read "12.430" as a decimal comes back as
 the offline queue's refusal, to be typed again); proof required when

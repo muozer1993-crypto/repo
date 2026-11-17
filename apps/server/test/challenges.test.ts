@@ -2994,8 +2994,11 @@ describe("friends in other zones play the creator's number of days", () => {
       if (day !== '2026-11-13') insert.run(`a-${day}`, challengeId, ali.me.id, day, iso(harness), iso(harness), iso(harness));
       insert.run(`d-${day}`, challengeId, deniz.me.id, day, iso(harness), iso(harness), iso(harness));
     }
+    // finished before the update, so migration 020 marked it
     harness.db
-      .prepare("UPDATE challenges SET status = 'finished', finalized_at = ?, winner_id = ?, is_tie = 0 WHERE id = ?")
+      .prepare(
+        "UPDATE challenges SET status = 'finished', finalized_at = ?, winner_id = ?, is_tie = 0, scored_whole_window = 1 WHERE id = ?",
+      )
       .run(iso(harness), deniz.me.id, challengeId);
     const store = harness.db.prepare(
       'UPDATE challenge_participants SET final_score = ?, final_rank = ? WHERE challenge_id = ? AND user_id = ?',
@@ -3010,6 +3013,40 @@ describe("friends in other zones play the creator's number of days", () => {
       [deniz.me.id, 4, 4, 1, true],
       [ali.me.id, 3, 3, 2, false],
     ]);
+    // and her rules card says the four days the 4 was counted on, not "3 gün"
+    expect(await myDays(harness, deniz, challengeId)).toEqual({ first: '2026-11-10', last: '2026-11-13' });
+  });
+
+  // This server finished it; the older one had taken Deniz's sliver. The
+  // standings left that entry out of her 3, but still counted it in her
+  // days, and the results screen put the friend abroad first in every tie.
+  it('reads the days of a çelınc this server finished from the days it scored', async () => {
+    harness = await makeApp({ now: '2026-11-10T13:00:00.000Z' });
+    const { ali, deniz, challengeId } = await newYorkSigara(harness);
+    for (const day of ['2026-11-10', '2026-11-11', '2026-11-12']) {
+      harness.setNow(`${day}T13:00:00.000Z`);
+      expect((await mark(harness, ali, challengeId, day)).statusCode).toBe(201);
+      expect((await mark(harness, deniz, challengeId, day)).statusCode).toBe(201);
+    }
+    harness.setNow('2026-11-13T03:30:00.000Z');
+    harness.db
+      .prepare(
+        `INSERT INTO entries (id, challenge_id, user_id, day_key, value, source, note, proof_url, status, client_time,
+                              session_id, late, created_at, updated_at)
+         VALUES ('sliver', ?, ?, '2026-11-13', 1, 'manual', NULL, NULL, 'ok', ?, NULL, 0, ?, ?)`,
+      )
+      .run(challengeId, deniz.me.id, iso(harness), iso(harness), iso(harness));
+    harness.setNow('2026-11-13T05:00:30.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    expect(outcome(harness, challengeId)).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
+
+    const results = await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}/results` });
+    const standings = results.json<ChallengeResults>().standings;
+    expect(standings.map((p) => [p.user.id, p.score, p.days, p.rank])).toEqual([
+      [ali.me.id, 3, 3, 1],
+      [deniz.me.id, 3, 3, 1],
+    ]);
+    expect(await myDays(harness, deniz, challengeId)).toEqual({ first: '2026-11-10', last: '2026-11-12' });
   });
 });
 
