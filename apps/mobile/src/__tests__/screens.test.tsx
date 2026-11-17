@@ -688,6 +688,22 @@ describe('the "laf sok" note in a group çelınc', () => {
     expect(text).toContain('Öndesin, laf sokma hakkı sende.');
     expect(text).not.toContain('önündesin');
   });
+
+  it('asks "… için" over the lines for a rival saved as "Ahmet Y", not "Ahmet Y\'e"', async () => {
+    const detail = threeWay([12430, 2], [15000, 1], [4201, 3], ['u-3']);
+    const veli = detail.participants[2]!;
+    detail.participants[2] = { ...veli, user: { ...veli.user, displayName: 'Ahmet Y' } };
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => detail);
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    press(tree, 'Dürt Bakalım');
+    const text = rendered(tree);
+    expect(text).toContain('Ahmet Y için ne diyelim?');
+    expect(text).not.toContain("Ahmet Y'e");
+  });
 });
 
 describe('how fresh a phone\'s count is', () => {

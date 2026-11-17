@@ -851,7 +851,7 @@ utils/serverClock.ts     the server's clock as this phone sees it: noteServerTim
 components/ClockSkewCard.tsx home card under BatteryBanner and Ayarlar card after Sunucu, while |skew| > `CLOCK_SKEW_WARN_MS` (3 min): title by level (1 "Telefonunla sunucunun saati farklı", 2 "Saatler tutmuyor", 3 "Saatler şaşmış, çelınc yanar 🍆"), body "Sunucunun saati seninkinden 3 saat geri." (clockGapTr: "20 dakika", "3 saat 5 dakika", "4 gün"; "ileri" when the server is ahead) and what to do: the phone's automatic time first, else the server PC's Windows Ayarlar → Zaman ve dil → Tarih ve saat → "Saati otomatik olarak ayarla" + "Şimdi eşitle". Nothing to close; it goes when the clocks agree
 utils/challengeWindow.ts computeWindow(startMode, days, tz, now, type?, deadlineTime?) → { startsAt, endsAt, startsTomorrow }: the wizard's window in the account's zone, the end snapped to the last millisecond of the last day (a window too short to be legal: 24 h steps); "Yarın" at `nextDayStartTime`, and a check-in "Hemen" past today's deadline moved there (`startsTomorrow`)
 utils/joinWindow.ts      joinClosesAt(challenge) (the server's `acceptClosesAt`, else the shared function) and stillJoinable(challenge, clock): pending/active and `clock` before it. `clock` is the last fetch's time, never `Date.now()` in render
-utils/turkish.ts         upperTr (İ/I by hand before toUpperCase), dativeTr(name) → "Can'a" / "Gül'e" / "Ali'ye" / "Mustafa'ya" by the last vowel (a short list of soft-"l" names takes "e": "Kemal'e", "Hilal'e"), null when the name ends in no letter or has no Turkish vowel
+utils/turkish.ts         upperTr (İ/I by hand before toUpperCase), dativeTr(name) → "Can'a" / "Gül'e" / "Ali'ye" / "Mustafa'ya" by the last word's last vowel (a short list of soft-"l" names takes "e": "Kemal'e", "Hilal'e"), null when the name ends in no letter or its last word has no Turkish vowel ("MSN", "Ahmet Y", "Can CK": an initial or acronym is read letter by letter, so the first name's vowel cannot pick its suffix)
 ```
 
 ### 3.3 Routes (`src/app`)
@@ -985,7 +985,8 @@ onboarding.tsx              4 slides (copy onboarding_1..4 under a title per lev
                             verdict's rule); one in the middle, or level at the top, is told whom they are ahead of ("Bunun
                             önündesin" over one name, "Bunların önündesin" over more) — opens a sheet of rendered `poke`
                             lines to choose from,
-                            titled with dativeTr ("Mehmet'e ne diyelim?", "🔥 için ne diyelim?" when it gives null),
+                            titled with dativeTr ("Mehmet'e ne diyelim?", "🔥 için ne diyelim?" / "Ahmet Y için ne
+                            diyelim?" when it gives null),
                             running (before `endsAt`) with fewer than two accepted → "Rakip bekleniyor / 1/2 kişi" hero
                             (the clock runs; nobody in by the end → cancelled) with a small end countdown, no
                             "öndesin" verdict and no "laf sok",

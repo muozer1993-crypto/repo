@@ -14,6 +14,8 @@ describe('dativeTr', () => {
     expect(dativeTr('Mustafa')).toBe("Mustafa'ya");
     expect(dativeTr('Emre')).toBe("Emre'ye");
     expect(dativeTr('Ayşegül ')).toBe("Ayşegül'e");
+    // an initial that is a vowel is read as itself: "E'ye"
+    expect(dativeTr('Ali E')).toBe("Ali E'ye");
   });
 
   it('fronts the suffix after the soft "l" of Kemal and Hilal', () => {
@@ -37,5 +39,12 @@ describe('dativeTr', () => {
     expect(dativeTr('Ali2')).toBeNull();
     expect(dativeTr('MSN')).toBeNull();
     expect(dativeTr('')).toBeNull();
+    // an initial or an acronym is read letter by letter ("Y'ye", "CK'ya"), so
+    // the first name's vowel must not pick its suffix ("Ahmet Y'e", "Can CK'a")
+    expect(dativeTr('Ahmet Y')).toBeNull();
+    expect(dativeTr('Mehmet K')).toBeNull();
+    expect(dativeTr('Can CK')).toBeNull();
+    expect(dativeTr('Burak TR')).toBeNull();
+    expect(dativeTr('Emre MSN')).toBeNull();
   });
 });
