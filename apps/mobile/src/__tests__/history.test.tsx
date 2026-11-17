@@ -162,6 +162,22 @@ describe('ChallengeCard on a finished tie', () => {
   });
 });
 
+describe('ChallengeCard title', () => {
+  it('wraps onto a second line instead of cutting it', () => {
+    const summary = tiedAtTop('ali');
+    // beside the emoji and the chip one line cut even "Sigarayı bırakıyoruz" on a 360 dp phone
+    summary.challenge.title = 'Sigarayı bırakıyoruz, bu sefer gerçekten';
+    let tree: ReactTestRenderer;
+    act(() => {
+      tree = create(<ChallengeCard summary={summary} level={2} meId="ali" />);
+    });
+    const title = tree!.root.find(
+      (node) => typeof node.type === 'string' && node.props.children === summary.challenge.title
+    );
+    expect(title.props.numberOfLines).toBe(2);
+  });
+});
+
 describe('ChallengeCard on a finished win or loss', () => {
   /** Ali kept all 7 days, Veli 5: Ali won outright. */
   function decided(meId: string): ChallengeSummary {

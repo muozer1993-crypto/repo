@@ -107,9 +107,10 @@ export function Button({
             <Text style={{ fontSize: pad.font + 2, marginRight: Spacing.sm, flexShrink: 0 }}>{icon}</Text>
           ) : null}
           <Text
-            numberOfLines={1}
+            numberOfLines={2}
             style={{
               flexShrink: 1,
+              textAlign: 'center',
               color: FG[variant],
               fontSize: pad.font,
               fontWeight: FontWeight.black,
@@ -140,7 +141,9 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.4 },
   // The pill centres the row at its content's width, and neither Yoga nor the
   // browser holds that to the pill: a label too long for a half-width button ran
-  // out of it and under its neighbour. Capped here, the label gives way and
-  // numberOfLines ends it in "…"; the icon keeps its size.
+  // out of it and under its neighbour. Capped here, the label gives way and wraps
+  // onto a second, centred line; only a third would end in "…", and the icon
+  // keeps its size. One line cut the winner's "BİR DAHA SAPLAYALIM 🍆" on a
+  // 360 dp phone, and "ODAK SEANSI BAŞLAT" there at a larger font.
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', maxWidth: '100%' },
 });

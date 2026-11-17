@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TextInput } from 'react-native';
-import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider } from '@/components/Toast';
@@ -3237,6 +3237,29 @@ describe('a çelınc joined in another zone than the account has now', () => {
   });
 });
 
+describe('a long title on a narrow phone', () => {
+  it('gives the title four lines and puts the status chip under it', async () => {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    // as long as a title may be (LIMITS.CHALLENGE_TITLE_MAX): two lines beside the chip cut it at 360 dp
+    detail.challenge.title = 'Sigarayı bırakıyoruz, bu sefer gerçekten';
+    expect(detail.challenge.title).toHaveLength(LIMITS.CHALLENGE_TITLE_MAX);
+    api.challenge = jest.fn(async () => detail);
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const [title] = tree.root.findAll(
+      (node) => typeof node.type === 'string' && node.props.children === detail.challenge.title
+    );
+    expect(title!.props.numberOfLines).toBe(4);
+    const [chip] = tree.root.findAll((node) => node.props.label === 'AKTİF');
+    const body = closestHolding(chip!, detail.challenge.title);
+    expect(StyleSheet.flatten(body.props.style)?.flexDirection ?? 'column').toBe('column');
+  });
+});
+
 describe('an itiraz on the feed', () => {
   const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
 
@@ -3443,6 +3466,33 @@ describe('an itiraz on the feed', () => {
     const text = rendered(tree);
     expect(text).toContain('Çoğunluk itiraz ederse sahibinin 12 saati başlar.');
     expect(text).not.toContain('haber gitti');
+  });
+
+  /**
+   * Beside the body a chip took 80-100 px of a 360 dp phone, and at a larger
+   * font the name before the score shrank to "G…". Jest cannot measure that,
+   * so it pins where the chip goes: in the column under the name, not in the
+   * row beside it.
+   */
+  it.each([
+    ['the itiraz button', 'Yalan Bu', 'Ali'],
+    ['"Geri çek"', 'Geri çek', 'Ali'],
+    ['"Kanıt ekle"', 'Kanıt ekle', 'Mustafa (sen)'],
+  ])('puts %s under the entry, so the name keeps the row', async (_case, label, name) => {
+    searchParams.id = 'c-1';
+    const detail = withDispute(label === 'Kanıt ekle' ? 'ali' : 'me');
+    if (label === 'Yalan Bu') {
+      detail.feed[0] = { ...detail.feed[0]!, status: 'ok' as 'disputed', answerBy: null as unknown as string };
+      detail.disputes = [];
+    }
+    api.challenge = jest.fn(async () => detail);
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const body = closestHolding(findWith(tree, 'label', label, 'onPress'), name);
+    expect(StyleSheet.flatten(body.props.style)?.flexDirection ?? 'column').toBe('column');
   });
 
   const CAN = { id: 'u-3', username: 'can', displayName: 'Can', avatarEmoji: '🦉', createdAt: '2026-09-01T00:00:00.000Z' };
@@ -4982,6 +5032,19 @@ function findWith(tree: ReactTestRenderer, key: string, value: string, handler: 
   );
   if (!node) throw new Error(`${key}="${value}" bulunamadı`);
   return node;
+}
+
+/**
+ * The nearest box around `node` that also holds a text reading `text`: the
+ * column the two share, or the row that only puts them side by side.
+ */
+function closestHolding(node: ReactTestInstance, text: string): ReactTestInstance {
+  const reads = (candidate: ReactTestInstance) =>
+    typeof candidate.type === 'string' && [candidate.props.children].flat().join('') === text;
+  let holder = node.parent;
+  while (holder && holder.findAll(reads).length === 0) holder = holder.parent;
+  if (!holder) throw new Error(`"${text}" bulunamadı`);
+  return holder;
 }
 
 function press(tree: ReactTestRenderer, title: string): void {

@@ -41,7 +41,8 @@ export function ChallengeCard({ summary, level, meId, onPress }: ChallengeCardPr
       <View style={styles.header}>
         <Text style={styles.emoji}>{type?.emoji ?? '🎯'}</Text>
         <View style={styles.headerBody}>
-          <Text variant="lead" numberOfLines={1}>
+          {/* two lines: beside the emoji and the chip one cut "Sigarayı bırakıyoruz" on a 360 dp phone */}
+          <Text variant="lead" numberOfLines={2}>
             {challenge.title || type?.nameTr || 'Çelınc'}
           </Text>
           <Text variant="tiny" muted numberOfLines={1}>

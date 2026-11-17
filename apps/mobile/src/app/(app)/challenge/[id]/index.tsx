@@ -409,15 +409,20 @@ export default function ChallengeDetailScreen() {
       <Card glow={challenge.status === 'active'} edgeColor={status.color}>
         <View style={styles.heroTop}>
           <Text style={styles.heroEmoji}>{type?.emoji ?? '🎯'}</Text>
+          {/* the chip sits under the title, not beside it: beside the emoji and the chip a 360 dp
+              phone left the title 169 px, and two lines of that cut any title past ~28 characters;
+              four lines hold the longest one allowed (LIMITS.CHALLENGE_TITLE_MAX) at a larger font */}
           <View style={styles.heroBody}>
-            <Text variant="title" numberOfLines={2}>
+            <Text variant="title" numberOfLines={4}>
               {challenge.title || type?.nameTr || 'Çelınc'}
             </Text>
             <Text variant="tiny" muted numberOfLines={1}>
               {accepted.length} kişi · {type?.unitTr ?? ''}
             </Text>
+            <View style={styles.heroChip}>
+              <Chip label={status.label} color={status.color} size="sm" filled={challenge.status === 'active'} />
+            </View>
           </View>
-          <Chip label={status.label} color={status.color} size="sm" filled={challenge.status === 'active'} />
         </View>
 
         <View style={styles.heroClock}>
@@ -2373,8 +2378,9 @@ function FeedRow({
           {formatDayKeyFriendly(item.dayKey, today, yesterday)} · {SOURCE_ICON[item.source] ?? '•'}{' '}
           {SOURCE_LABEL[item.source] ?? item.source} · {relativeTime(feedTime(item), new Date(now), tz)}
         </Text>
-        {/* never cut: beside the thumb and an itiraz chip a 360 dp phone at a larger font needs three
-            lines, and a cut takes "(sende 00:30)", the part that matters; city and two clocks keep it short */}
+        {/* never cut: beside the thumb a 360 dp phone at a larger font needs more than one line (three
+            while the itiraz chip stood beside it too), and a cut takes "(sende 00:30)", the part that
+            matters; city and two clocks keep it short */}
         {zone ? (
           <Text variant="tiny" faint>
             {`${zoneCityTr(zone)} saatiyle ${formatTime(item.createdAt, zone)} (sende ${formatTime(item.createdAt, tz)})`}
@@ -2401,9 +2407,10 @@ function FeedRow({
             {`${row.name}: “${row.reason}”`}
           </Text>
         ))}
+        {/* under the entry, not beside it: beside the body a chip like "Yalan Bu" squeezed the
+            name to "G…" on a 360 dp phone at a larger font */}
+        {chip ? <View style={styles.feedChip}>{chip}</View> : null}
       </View>
-
-      {chip}
     </View>
   );
 }
@@ -2713,6 +2720,7 @@ const styles = StyleSheet.create({
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   heroEmoji: { fontSize: 38 },
   heroBody: { flex: 1, gap: 2 },
+  heroChip: { alignSelf: 'flex-start', marginTop: Spacing.xs },
   heroClock: { marginTop: Spacing.lg, gap: 2 },
   closed: { marginTop: -Spacing.sm },
 
@@ -2734,8 +2742,9 @@ const styles = StyleSheet.create({
   olderFooter: { alignItems: 'center', gap: Spacing.xs, paddingTop: Spacing.md },
   proofButtons: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   proofPreview: { width: '100%', height: 220, borderRadius: Radius.md, backgroundColor: Colors.surfaceHigh },
-  feedRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  feedRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md },
   feedBody: { flex: 1, gap: 2 },
+  feedChip: { alignSelf: 'flex-start', marginTop: Spacing.xs },
   feedLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   feedName: { flexShrink: 1 },
   struck: { textDecorationLine: 'line-through' },

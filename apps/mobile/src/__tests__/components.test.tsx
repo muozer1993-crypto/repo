@@ -126,12 +126,19 @@ describe('Button', () => {
       tree = create(<Button title="Bağlantıyı kopyala" icon="📋" size="sm" variant="secondary" onPress={() => {}} />);
     });
     const flat = (node: ReactTestInstance) =>
-      (StyleSheet.flatten(node.props.style as never) ?? {}) as { flexShrink?: number; maxWidth?: string; flexDirection?: string };
+      (StyleSheet.flatten(node.props.style as never) ?? {}) as {
+        flexShrink?: number;
+        maxWidth?: string;
+        flexDirection?: string;
+        textAlign?: string;
+      };
     const hostText = (text: string) =>
       tree!.root.find((node) => typeof node.type === 'string' && node.props.children === text);
 
     const label = hostText('BAĞLANTIYI KOPYALA');
-    expect(label.props.numberOfLines).toBe(1);
+    // a second line, centred, before any "…": one line cut "BİR DAHA SAPLAYALIM 🍆" at 360 dp
+    expect(label.props.numberOfLines).toBe(2);
+    expect(flat(label).textAlign).toBe('center');
     expect(flat(label).flexShrink).toBe(1);
     expect(flat(hostText('📋')).flexShrink).toBe(0);
     // the row is what the pill centres; uncapped it takes the label's whole width
