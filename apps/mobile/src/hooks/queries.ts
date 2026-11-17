@@ -547,10 +547,17 @@ export interface AddEntryResult {
 export function useFlushQueue() {
   const api = useApi();
   const invalidate = useInvalidator();
+  const level = useLevel();
+  const tz = useTimezone();
   return useMutation<Awaited<ReturnType<typeof flushQueue>>, Error, void>({
     mutationFn: () => flushQueue(api),
     onSuccess: (result) => {
-      if (result.sent > 0) void invalidate.challenges();
+      if (result.sent > 0) {
+        void invalidate.challenges();
+        // as the bridge's drain does: a parked check-in a pull sent takes today's
+        // poke with it, or "30 dakikan kaldı" rang for a morning already counted
+        void refreshReminders(api, level, tz).catch(() => {});
+      }
     },
   });
 }

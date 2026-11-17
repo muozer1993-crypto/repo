@@ -7806,6 +7806,7 @@ describe('a pull-to-refresh with an entry parked', () => {
 
   async function pull(tree: ReactTestRenderer): Promise<void> {
     calls = [];
+    mockReminders.refresh.mockClear();
     act(() => {
       (tree.root.findByType(RefreshControl).props as { onRefresh: () => void }).onRefresh();
     });
@@ -7827,6 +7828,8 @@ describe('a pull-to-refresh with an entry parked', () => {
     expect(calls[0]).toBe('addEntry');
     expect(calls).toContain('challenges');
     expect(await readQueue()).toEqual([]);
+    // the check-in counted: today's "30 dakikan kaldı" goes with it, as after the bridge's drain
+    expect(mockReminders.refresh).toHaveBeenCalledWith(api, 2, 'Europe/Istanbul');
   });
 
   it('sends it before the çelınc screen reads itself again', async () => {
@@ -7845,6 +7848,7 @@ describe('a pull-to-refresh with an entry parked', () => {
     expect(calls.slice(0, 2)).toEqual(['addEntry', 'challenge']);
     expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ source: 'checkin' }));
     expect(await readQueue()).toEqual([]);
+    expect(mockReminders.refresh).toHaveBeenCalledWith(api, 2, 'Europe/Istanbul');
   });
 
   it('still refreshes the screen when the entry cannot go yet', async () => {
@@ -7865,6 +7869,8 @@ describe('a pull-to-refresh with an entry parked', () => {
 
     expect(calls).toEqual(['addEntry', 'challenge']);
     expect(await readQueue()).toHaveLength(1);
+    // nothing landed: the poke stays to bring the app back before the deadline
+    expect(mockReminders.refresh).not.toHaveBeenCalled();
     expect((tree.root.findByType(RefreshControl).props as { refreshing: boolean }).refreshing).toBe(false);
   });
 });
