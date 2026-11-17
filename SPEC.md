@@ -1046,7 +1046,10 @@ onboarding.tsx              4 slides (copy onboarding_1..4 under a title per lev
                             invited but the creator) → POST .../invite; `?invite=<userId>` (the "Kanka oldunuz" toast and
                             notification) opens the sheet at once with that friend ticked,
                             toast "Davet gitti: Cem, Can."; no friends left → "Kankalara git",
-                            "Ayrıl" (only to a player `accepted` in it: an invitee has "Yokum") / "İptal et"; finished → button to results;
+                            "Ayrıl" (only to a player `accepted` in it: an invitee has "Yokum"; before the start its
+                            confirm says "Çelınc daha başlamadı. Ayrılırsan kankalara haber gider ve bu çelınca geri
+                            dönemezsin." and its toast, like a "Yokum" then, "Çelınc sensiz başlayacak.", not the kept
+                            score and ranking of a running one) / "İptal et"; finished → button to results;
                             a failed refetch keeps the last detail with a faint "Sunucuya ulaşamıyorum, gördüğün son bilinen hali."
                             line ("Girişin sıraya alınır…" while I can enter); "Çelınc gelmedi" is only for a çelınc never loaded,
                             and a 404 still shows "Bu çelınc sende yok". A check-in çelınc is also kept on the phone

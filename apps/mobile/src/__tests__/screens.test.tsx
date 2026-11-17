@@ -7059,6 +7059,46 @@ describe('saying no to a çelınc', () => {
     expect(rendered(playing)).not.toContain('YOKUM');
   });
 
+  // Before the start there is no score and no ranking, and the kankas are told
+  // "vazgeçti"; the dialog spoke of a kept score, and not of the one thing that
+  // counts: the server never lets a leaver back in, while a "Reddet" may be undone.
+  it('tells a player leaving before the start that there is no way back, not about a score', async () => {
+    searchParams.id = 'c-1';
+    const notYet = (mine: 'invited' | 'accepted') => {
+      const detail = aliInvites(mine, true);
+      const startsAt = new Date(Date.now() + 86_400_000).toISOString();
+      return { ...detail, challenge: { ...detail.challenge, status: 'pending' as const, startsAt } };
+    };
+    api.challenge = jest.fn(async () => notYet('accepted'));
+    api.leaveChallenge = jest.fn(async () => ({}));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    press(tree, 'Ayrıl');
+    await settle();
+    const [title, body] = alert.mock.calls[0]!;
+    expect(title).toBe('Ayrılıyor musun?');
+    expect(body).toBe('Çelınc daha başlamadı. Ayrılırsan kankalara haber gider ve bu çelınca geri dönemezsin.');
+    await answerAlert('Ayrıl');
+    expect(api.leaveChallenge).toHaveBeenCalledWith('c-1');
+    expect(rendered(tree)).toContain('Çelınc sensiz başlayacak.');
+    expect(rendered(tree)).not.toContain('sensiz devam ediyor');
+
+    // an invitee's no to a çelınc that has not started either
+    alert.mockClear();
+    api.challenge = jest.fn(async () => notYet('invited'));
+    api.declineChallenge = jest.fn(async () => ({}));
+    const invited = renderScreen(<ChallengeScreen />);
+    await settle();
+    press(invited, 'Yokum');
+    await settle();
+    await answerAlert('Reddet');
+    expect(api.declineChallenge).toHaveBeenCalledWith('c-1');
+    expect(rendered(invited)).toContain('Çelınc sensiz başlayacak.');
+    expect(rendered(invited)).not.toContain('sensiz devam ediyor');
+  });
+
   it('lets a declined invite back in with "Katıl"', async () => {
     searchParams.id = 'c-1';
     api.challenge = jest.fn(async () => aliInvites('declined', true));

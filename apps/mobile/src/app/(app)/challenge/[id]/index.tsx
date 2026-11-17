@@ -740,7 +740,9 @@ function InviteActions({
               : 'Skorun sayılmaya başladı.'
             : endsIt
               ? 'Rakip kalmadı, çelınc iptal oldu.'
-              : 'Bu çelınc sensiz devam ediyor.',
+              : pending
+                ? 'Çelınc sensiz başlayacak.'
+                : 'Bu çelınc sensiz devam ediyor.',
         kind: kind === 'accept' ? 'success' : 'info',
       });
     } catch (error) {
@@ -2632,6 +2634,10 @@ function FooterActions({
 
   // leaving a head-to-head leaves nobody to race: the server cancels it on the spot
   const leavingEndsIt = endsWithoutMe(detail.participants, meId);
+  // Before the start there is no score and no ranking to drop out of: the
+  // kankas are told "vazgeçti". What matters then is that the server never lets
+  // a leaver back in, while a "Reddet" may be taken back.
+  const notStarted = challenge.status === 'pending';
 
   const run = async (kind: 'leave' | 'cancel') => {
     const ok = await confirmTr(
@@ -2639,7 +2645,9 @@ function FooterActions({
       kind === 'leave'
         ? leavingEndsIt
           ? 'Başka kimse kalmadığı için çelınc iptal olur, rakibine de haber gider.'
-          : 'Skorun silinmez ama sıralamadan düşersin. Kankalar bunu görecek.'
+          : notStarted
+            ? 'Çelınc daha başlamadı. Ayrılırsan kankalara haber gider ve bu çelınca geri dönemezsin.'
+            : 'Skorun silinmez ama sıralamadan düşersin. Kankalar bunu görecek.'
         : 'Herkese iptal bildirimi gider. Emin misin?',
       kind === 'leave' ? 'Ayrıl' : 'İptal et'
     );
@@ -2653,7 +2661,9 @@ function FooterActions({
             ? 'Çelınc kapandı.'
             : leavingEndsIt
               ? 'Rakip kalmadı, çelınc iptal oldu.'
-              : 'Bu çelınc sensiz devam ediyor.',
+              : notStarted
+                ? 'Çelınc sensiz başlayacak.'
+                : 'Bu çelınc sensiz devam ediyor.',
         kind: 'info',
       });
       onLeft();
