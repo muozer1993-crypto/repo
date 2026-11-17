@@ -216,9 +216,9 @@ Geçişleri 30 saniyede bir çalışan `services/scheduler.ts` yapar. Aynı fonk
 davranışı beklemeden test edilebilir.
 
 Zamanlayıcı çelıncı başlatınca kabul etmiş herkese "başladı" der, kendi saatiyle 22:00 ile 07:00
-arasında olana demez (`startsAtNight`). Ali'nin İstanbul'dan açtığı "Yarın 09:00" New York'taki
-kankası için gece 01:00'de, Londra'daki için 06:00'da başlar. Firebase'siz derlemede telefon,
-push'la gelmemiş her satırı kendi sesli bildirimiyle çaldığı için kanka gecenin bir yarısı
+arasında olana demez (`startsAtNight`). Ali'nin İstanbul'dan açtığı "Yarın 09:00" kışın New
+York'taki kankası için gece 01:00'de, Londra'daki için 06:00'da başlar. Firebase'siz derlemede
+telefon, push'la gelmemiş her satırı kendi sesli bildirimiyle çaldığı için kanka gecenin bir yarısı
 uyanıyordu. Satır hiç yazılmaz, sonradan da gönderilmez: çelınc onun için de başlar, uyanınca ana
 sayfada görür, günlük hatırlatma ve dürtme de onun gündüzünde konuşur. Check-in çelıncının kuralı
 başka (`startsQuietly`, bkz. Zaman ve günler): orada "başladı" ilk sabahın tek sözü olabilir.
@@ -247,7 +247,8 @@ Kabul de sessiz değildir. "Hemen" başlayan çelınc oluştuğu anda `active` o
 açan vardır; zamanlayıcı yalnızca `pending` çelıncları başlattığı için böyle bir çelıncta
 "başladı" hiç denmiyordu. Onu iki kişi yapan ilk kabul (daha önce kimse katılmadıysa) ikisine
 `challenge_started` gönderir. Başlangıç saati geçmiş bir `pending` çelıncı iki kişi yapan kabul
-hiçbir şey göndermez: zamanlayıcı onu 30 saniye içinde başlatır ve aynısını söyler. Diğer her
+hiçbir şey göndermez: zamanlayıcı onu 30 saniye içinde başlatır ve aynısını söyler (kendi saatiyle
+gece olana söylemez, `startsAtNight`). Diğer her
 kabul `challenge_accepted` olur ("Ali kabul etti"): başlamamış çelıncta açana ve onu çağıran başka
 biriyse ona da, süren çelıncta içerideki herkese; ret ve ayrılmayla aynı yoldan (`tellWhoIsIn`),
 engelli ikiliye ve silinmiş hesaba gitmez. Kimse katılmadan süren bir çelıncta uygulama "öndesin" demez, "Rakip bekleniyor"
@@ -1548,11 +1549,13 @@ bulmuyordu, oysa uygulamanın kendisi adı öyle kopyalıyor ve davet mesajını
 baştaki @ işaretini atar (tek başına "@" boş sorgu gibi 400'dür), görünen ad da sorgu da
 `foldForSearch` (`packages/shared/src/text.ts`) ile çevrilir: küçük harf, Türkçe harfler ASCII,
 I/İ/ı hepsi i, aksanlar gider, kelimeler tek boşlukla ayrı kalır. Eşleşme görünen adın herhangi bir
-kelimesinin başındadır: "cag" hem "Çağrı"yı hem "Özge Çağlar"ı bulur, "aglar" kimseyi. Emoji ve
-noktalama atılmaz; atılsaydı "😎" boş dizeye döner, boş dize de herkesin adında bulunurdu. Yalnızca
-görünmez karakter ya da aksandan oluşan bir sorgu boşa çıkar ve kimseyle eşleşmez. Kelime başı
-eşleşmesinin SQL'de daraltacağı bir öneki olmadığından LIKE ön süzgeci kalktı: her satır
-`koydum_search_match`'e sorulur (2.100 hesaplık test bunu ölçer), dönen sayıyı yine LIMIT keser.
+kelimesinin başındadır: "cag" hem "Çağrı"yı hem "Özge Çağlar"ı bulur, "aglar" kimseyi. Kelime
+boşluktan sonra da, emojiden ya da noktalamadan hemen sonra gelen harfle de başlar: "kemal"
+"🔥Kemal"i, "nur" "Ayşe-Nur"u bulur. Emoji ve noktalama atılmaz; atılsaydı "😎" boş dizeye döner,
+boş dize de herkesin adında bulunurdu. Yalnızca görünmez karakter ya da aksandan oluşan bir sorgu
+boşa çıkar ve kimseyle eşleşmez. Kelime başı eşleşmesinin SQL'de daraltacağı bir öneki
+olmadığından LIKE ön süzgeci kalktı: her satır `koydum_search_match`'e sorulur (2.100 hesaplık test
+bunu ölçer), dönen sayıyı yine LIMIT keser.
 Telefonlardaki 1.1.0 uygulaması sorguyu yazıldığı gibi gönderdiği için bütün çevirme sunucuda; yeni
 APK gerekmedi. Uygulama yine de kendi tarafında @ işaretini atar, @ ile başlayan yazıya "Kod ile
 ekle" göstermez, çelınc sihirbazının kanka süzgeci de aynı `foldForSearch`'ü kullanır.

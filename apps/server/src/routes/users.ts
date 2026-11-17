@@ -78,18 +78,40 @@ function searchHits(db: Database, meId: string, query: string): UserRow[] {
 }
 
 /**
+ * What a word is made of: a letter or a digit. Not a mark: the accents are gone
+ * by now, and what is left is mostly the U+FE0F many emoji end with (sun, heart).
+ */
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
+/**
+ * Whether `query` starts a word of `name` (both `foldForSearch`ed): at its start,
+ * after a space, or as a letter or digit right after an emoji or punctuation. A
+ * display name can be "🔥Mert", "Ayşe-Nur" or "@kral", and split on spaces alone
+ * "mert", "nur" and "kral" found none of them. A query that itself starts with an
+ * emoji or punctuation ("😎") still needs the start or a space in front.
+ */
+function startsAWord(name: string, query: string): boolean {
+  const opensWord = WORD_CHAR.test(query[0] ?? '');
+  for (let at = name.indexOf(query); at !== -1; at = name.indexOf(query, at + 1)) {
+    const before = name[at - 1];
+    if (before === undefined || before === ' ' || (opensWord && !WORD_CHAR.test(before))) return true;
+  }
+  return false;
+}
+
+/**
  * The query folded like a username against the start of the username ("Çağ" finds
  * @cagri, "ca gri" too), and folded for search (`foldForSearch`) against the start
- * of any word of the display name: "ozge", "Ozge" and "cag" find "Özge Çağlar",
- * "Ismail" and "ISMAIL" find "İsmail Şahin". The app sends the query as typed (the
- * 1.1.0 APKs in friends' hands too), so all of the folding happens here.
+ * of any word of the display name (`startsAWord`): "ozge", "Ozge" and "cag" find
+ * "Özge Çağlar", "Ismail" and "ISMAIL" find "İsmail Şahin". The app sends the query
+ * as typed (the 1.1.0 APKs in friends' hands too), so all of the folding happens here.
  */
 function matchesPrefix(row: Pick<UserRow, 'username' | 'display_name'>, query: string): boolean {
   // a query of nothing but invisible characters or accents folds to '', a prefix of everybody
   const folded = foldUsername(query);
   if (folded !== '' && row.username.startsWith(folded)) return true;
   const words = foldForSearch(query);
-  return words !== '' && ` ${foldForSearch(row.display_name)}`.includes(` ${words}`);
+  return words !== '' && startsAWord(foldForSearch(row.display_name), words);
 }
 
 export default async function userRoutes(app: FastifyInstance): Promise<void> {

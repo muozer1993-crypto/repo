@@ -991,12 +991,12 @@ const STARTED_QUIET_FROM_HOUR = 22;
 /**
  * Whether a çelınc that is not a check-in one starts at night for this player
  * (before 07:00 or from 22:00 in their pinned zone). Ali's "Yarın 09:00" starts
- * at 01:00 for a kanka in New York and at 06:00 for one in London, and a phone
- * without push shows every row nobody pushed as a sounding notification of its
- * own: it rang them awake for news that waits. Nothing is lost by the silence:
- * the çelınc is on Ana sayfa when they wake, and the day's reminder and nudges
- * speak in their day. A check-in çelınc keeps `startsQuietly`: there "başladı"
- * can be the first morning's only word.
+ * in winter at 01:00 for a kanka in New York and at 06:00 for one in London,
+ * and a phone without push shows every row nobody pushed as a sounding
+ * notification of its own: it rang them awake for news that waits. Nothing is
+ * lost by the silence: the çelınc is on Ana sayfa when they wake, and the
+ * day's reminder and nudges speak in their day. A check-in çelınc keeps
+ * `startsQuietly`: there "başladı" can be the first morning's only word.
  */
 function startsAtNight(challenge: ChallengeRow, timezone: string, now: Date): boolean {
   if (challenge.metric_type === 'checkin_deadline') return false;

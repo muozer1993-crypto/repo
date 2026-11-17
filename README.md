@@ -529,9 +529,10 @@ Saatli uyarılar ayarı sadece o telefonda geçerli. Check-in uyarısı sadece k
 kendiliğinden susar. İleri bir tarihe açtığın çelıncı senden başka kimse kabul etmediyse o daha
 başlamamıştır: ne check-in ne de son saat uyarısı çalar. Telefon bu uyarıları ikinci kişi kabul
 ettikten sonraki ilk yenilemede kurar (uygulamayı açınca ya da arka planda kendini yenileyince).
-"KOYDUM MU?" lafları, kankanın elle dürtmesi, davetler ve sonuçlar her zaman gelir. "Çelınc
-başladı" ise senin saatinle 22:00 ile 07:00 arasına denk gelirse hiç gelmez, çelınc yine başlar
-(check-in çelınclarında kural başka: [Kabul edince ne oluyor?](#kabul-edince-ne-oluyor)).
+"KOYDUM MU?" lafları, kankanın elle dürtmesi, davetler ve sonuçlar her zaman gelir. İleri bir
+tarihe açılan çelıncın "Çelınc başladı" bildirimi ise senin saatinle 22:00 ile 07:00 arasına denk
+gelirse hiç gelmez, çelınc yine başlar (**Hemen** açılan çelıncta ve check-in çelınclarında kural
+başka: [Kabul edince ne oluyor?](#kabul-edince-ne-oluyor)).
 
 **Anlık olsun istersen** (laf atıldığı saniye telefon titresin), Android'e Google'ın push servisi
 (Firebase Cloud Messaging) gerekir. Bir kerelik iş, ücretsiz:
@@ -1008,10 +1009,10 @@ sonradan katılan her kanka için içeridekilere "Ali kabul etti" gelir (seviyen
 dedi" ya da "Ali sahaya indi 🍆"). İleri bir tarihte başlayan çelıncta kabulleri sadece açan duyar
 (sonradan **Kankaları Çağır** ile gelen birinin kabulünü onu çağıran da duyar), başlangıç saatinde
 herkese "başladı" gider. Kendi saatiyle gece olana (22:00 ile 07:00 arası) gitmez: İstanbul'dan
-açtığın "Yarın 09:00" New York'taki kankan için gece 01:00'de başlar, Londra'daki için 06:00'da;
-bunun için kimse uyandırılmaz. Çelınc onun için de başlar, uyanınca ana sayfada görür, sonradan
-ayrıca "başladı" gelmez. Sabah check-in'leri bunun dışında: Erken Kalkan Koyar 04:00'te, Yatak
-Toplama Sabahı 05:00'te başlar ve saat 07:00 olmadan kimse "başladı" bildirimiyle uyandırılmaz;
+açtığın "Yarın 09:00" kışın New York'taki kankan için gece 01:00'de başlar, Londra'daki için
+06:00'da; bunun için kimse uyandırılmaz. Çelınc onun için de başlar, uyanınca ana sayfada görür,
+sonradan ayrıca "başladı" gelmez. Sabah check-in'leri bunun dışında: Erken Kalkan Koyar 04:00'te,
+Yatak Toplama Sabahı 05:00'te başlar ve saat 07:00 olmadan kimse "başladı" bildirimiyle uyandırılmaz;
 ilk öten, telefonun check-in hatırlatması olur. Bu, ikinci "varım" başlangıçtan önce geldiyse
 böyle: telefon hatırlatmayı ancak iki kişinin kabul ettiği bir çelınc için kurar. İkinci kabul
 başlangıçtan sonra gelirse (Veli 05:45'te kalkıp **Varım** derse) ya da son saat başlangıçtan

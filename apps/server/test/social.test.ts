@@ -1687,6 +1687,32 @@ describe('GET /users/search', () => {
     expect(bare.json<{ error: { code: string } }>().error.code).toBe('validation');
   });
 
+  it('finds a word right after an emoji or punctuation in the display name', async () => {
+    const h = await boot();
+    const me = await registerUser(h.app, 'mert', { displayName: 'Mert' });
+    await registerUser(h.app, 'kemo', { displayName: '🔥Kemal' });
+    await registerUser(h.app, 'aysenur', { displayName: 'Ayşe-Nur' });
+    await registerUser(h.app, 'patron', { displayName: '@kral' });
+    await registerUser(h.app, 'kanka3', { displayName: '(Işık)' });
+    // the sun emoji ends with an invisible U+FE0F
+    await registerUser(h.app, 'kanka4', { displayName: `${String.fromCodePoint(0x2600, 0xfe0f)}Selin` });
+    const usernames = async (q: string): Promise<string[]> =>
+      (await authed(h.app, me.token)({ method: 'GET', url: `/users/search?q=${encodeURIComponent(q)}` }))
+        .json<{ username: string }[]>()
+        .map((u) => u.username);
+
+    for (const q of ['kemal', 'KEMAL', '🔥', '🔥kemal']) expect(await usernames(q), q).toEqual(['kemo']);
+    expect(await usernames('nur')).toEqual(['aysenur']);
+    // the @ is dropped from the query, the name's own @ is no part of a word
+    for (const q of ['kral', '@kral']) expect(await usernames(q), q).toEqual(['patron']);
+    expect(await usernames('Işık')).toEqual(['kanka3']);
+    expect(await usernames('selin')).toEqual(['kanka4']);
+    // still not the middle of a word, nor punctuation glued to one
+    expect(await usernames('emal')).toEqual([]);
+    expect(await usernames('yse')).toEqual([]);
+    expect(await usernames('-nur')).toEqual([]);
+  });
+
   it('still hides a blocked pair from a folded search, both ways', async () => {
     const h = await boot();
     const me = await registerUser(h.app, 'mert', { displayName: 'Mert' });

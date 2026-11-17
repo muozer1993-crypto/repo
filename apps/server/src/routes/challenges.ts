@@ -314,9 +314,10 @@ function tellWhoIsIn(
  * it, whatever the hour on a check-in çelınc too: nothing made the creator's
  * phone set a check-in reminder since the creation, so this is the only word
  * the creator gets. A yes that makes a `pending` çelınc past its start time two
- * is left to the scheduler, which starts it within 30 s and says the same, also
- * before 07:00 (`startsQuietly`: nobody's phone had it either); a second
- * notification on top would only be noise. Every other yes is a
+ * is left to the scheduler, which starts it within 30 s and says the same: on
+ * a check-in çelınc before 07:00 too (`startsQuietly`: nobody's phone had it
+ * either), on any other not to whoever it is night for (`startsAtNight`); a
+ * second notification on top would only be noise. Every other yes is a
  * `challenge_accepted` (`tellWhoIsIn`), also the one that brings a çelınc back
  * to two after somebody walked out: it had its start already.
  */
