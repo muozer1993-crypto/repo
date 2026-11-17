@@ -122,6 +122,43 @@ describe('offline entry queue', () => {
     expect(await flushQueue(fakeClient(addEntry))).toMatchObject({ sent: 2, remaining: 0 });
   });
 
+  it("waits out the server's full disk without spending a try, and stops there", async () => {
+    await enqueueEntry('c1', body('2026-09-08', 3), 'a');
+    await enqueueEntry('c1', body('2026-09-07', 4), 'b');
+    const addEntry = jest
+      .fn()
+      .mockRejectedValue(
+        new ApiError(
+          'disk_full',
+          'Sunucunun diski doldu, şimdilik hiçbir şey kaydedilemiyor. Sunucuyu açan kankana haber ver.',
+          507
+        )
+      );
+    const client = fakeClient(addEntry);
+
+    // every foreground and saved entry flushes: a day of a full disk is many more than eight
+    for (let run = 0; run < 12; run += 1) {
+      expect(await flushQueue(client)).toEqual({ sent: 0, dropped: 0, remaining: 2 });
+    }
+    // the entry behind it would only have been refused the same way
+    expect(addEntry).toHaveBeenCalledTimes(12);
+    const queue = await readQueue();
+    expect(queue.map((item) => [item.id, item.attempts, item.failedReason])).toEqual([
+      ['a', 0, undefined],
+      ['b', 0, undefined],
+    ]);
+  });
+
+  it('still spends a try on a server that fails some other way', async () => {
+    await enqueueEntry('c1', body('2026-09-08', 3), 'a');
+    const addEntry = jest
+      .fn()
+      .mockRejectedValue(new ApiError('internal', 'Sunucuda bir şeyler ters gitti. Birazdan tekrar dene.', 500));
+    await flushQueue(fakeClient(addEntry));
+    const [item] = await readQueue();
+    expect(item?.attempts).toBe(1);
+  });
+
   it('removes a single item', async () => {
     await enqueueEntry('c1', body('2026-09-08', 3), 'a');
     await removeFromQueue('a');

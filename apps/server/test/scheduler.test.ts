@@ -2209,6 +2209,53 @@ describe('scheduler: proof photos no entry shows', () => {
   });
 });
 
+describe('scheduler: a full disk', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('tells the owner once an hour in Turkish, not on every beat that cannot write its time down', async () => {
+    harness = await makeApp({ now: NOW });
+    // every write fails the way SQLite's do on a full disk: stubbed, never a real disk filled
+    type Run = (this: { source: string }, ...args: unknown[]) => unknown;
+    const proto = Object.getPrototypeOf(harness.db.prepare('SELECT 1')) as { run: Run };
+    const run = proto.run;
+    vi.spyOn(proto, 'run').mockImplementation(function (this: { source: string }, ...args: unknown[]) {
+      if (/^\s*(INSERT|UPDATE|DELETE)\b/i.test(this.source)) {
+        throw Object.assign(new Error('database or disk is full'), { code: 'SQLITE_FULL' });
+      }
+      return run.apply(this, args);
+    });
+    const warn = vi.spyOn(harness.app.log, 'warn');
+    const said = (msg: string) => warn.mock.calls.filter((args) => args[1] === msg).length;
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      stop = startScheduler(harness.app, harness.db, harness.config, {
+        push: quietPush,
+        uptimeMs: () => harness!.now().getTime(),
+      });
+      const beat = async (): Promise<void> => {
+        harness!.advance(SCHEDULER_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
+      };
+
+      // the start and ten beats, each failing to write its last beat
+      for (let i = 0; i < 10; i += 1) await beat();
+      expect(said('disk full, nothing can be saved')).toBe(1);
+      expect(said('writing down when the server was off failed')).toBe(0);
+
+      // an hour of beats on, once more
+      for (let i = 0; i < HOUR / SCHEDULER_INTERVAL_MS; i += 1) await beat();
+      expect(said('disk full, nothing can be saved')).toBe(2);
+      expect(said('writing down when the server was off failed')).toBe(0);
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('scheduler: stop', () => {
   it('waits for the push flush in flight, so the database does not close under it', async () => {
     harness = await makeApp({ now: NOW });

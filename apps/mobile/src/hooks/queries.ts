@@ -466,9 +466,9 @@ export function useAddEntry(id: string, options: { append?: boolean } = {}) {
       // whoever is logged in when it answers.
       const owner = await currentOwnerId();
       // a page from a Wi-Fi portal or a proxy is not our server saying no (lib/api.ts).
-      // A 507 is: the photo's disk is nearly full, the connection is fine, and the
-      // form shows its message (remove the photo, or tell the owner) rather than
-      // "Sıraya alındı · bağlantı gelince gönderilecek".
+      // A 507 is: the server's disk is full, or too full for the photo, the
+      // connection is fine, and the form shows its message (remove the photo, or
+      // tell the owner) rather than "Sıraya alındı · bağlantı gelince gönderilecek".
       const parkable = (error: unknown) =>
         error instanceof ApiError &&
         (error.isNetwork || (error.status >= 500 && error.status !== 507) || error.code === 'not_koydum');

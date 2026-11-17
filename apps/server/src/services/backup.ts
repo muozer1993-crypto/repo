@@ -20,6 +20,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import { DEFAULT_TIMEZONE, dayKeyInTz, localTimeHHmm, todayKey } from '@koydum/shared';
 import { MEMORY, type Config } from '../config.js';
 import type { Database } from '../db/index.js';
+import { freeBytesSync, isDiskFull } from './disk.js';
 
 export const BACKUPS_KEPT = 7;
 const NAME_RE = /^koydum-\d{4}-\d{2}-\d{2}\.db$/;
@@ -29,6 +30,17 @@ export const SERVER_OPEN =
   "Sunucu açık, açıkken yedek yüklersen veritabanı bozulur. Önce sunucunun penceresini kapat (ya da o pencerede Ctrl+C'ye bas), sonra tekrar dene.";
 const BROKEN = 'Bu yedek bozuk, başka birini seç.';
 const NOT_OURS = 'Bu dosya bir KOYDUM yedeği değil.';
+
+/**
+ * Room a restore needs past the backup's own size: the check opens the copy,
+ * which writes its -wal/-shm, and the server's first writes come right after.
+ */
+const RESTORE_HEADROOM_BYTES = 10 * 1024 * 1024;
+
+function noRoomToRestore(backupBytes: number): string {
+  const mb = Math.ceil((backupBytes + RESTORE_HEADROOM_BYTES) / (1024 * 1024));
+  return `Diskte yer yok: yedeği yüklemek için ~${mb} MB boş yer lazım, önce yer aç.`;
+}
 
 export function backupDir(config: Pick<Config, 'dataDir'>): string {
   return path.join(path.resolve(config.dataDir), 'backups');
@@ -81,8 +93,14 @@ export async function backupIfDue(
   // write aside and rename, so a crash mid-copy never leaves a "backup" that is half a file
   const temp = `${target}.tmp`;
   for (const stale of [temp, `${temp}-journal`, `${temp}-wal`, `${temp}-shm`]) fs.rmSync(stale, { force: true });
-  await db.backup(temp);
-  fs.renameSync(temp, target);
+  try {
+    await db.backup(temp);
+    fs.renameSync(temp, target);
+  } catch (err) {
+    // half a copy left on a disk that just ran out holds the very room the database needs
+    removeWithCompanions(temp);
+    throw err;
+  }
   await trim(dir);
   return target;
 }
@@ -271,10 +289,10 @@ function removeWithCompanions(file: string): void {
 }
 
 /**
- * Puts the backup `file` in place of the database, only with the server closed.
- * Nothing is deleted: the database that was there moves aside to
- * `koydum-onceki-<time>.db` next to it, so a wrong pick is undone by restoring
- * that file. `accounts` is how many open accounts the restored file holds.
+ * Puts the backup `file` in place of the database, only with the server closed
+ * and room on the disk for the copy. Nothing is deleted: the database that was
+ * there moves aside to `koydum-onceki-<time>.db` next to it, so a wrong pick is
+ * undone by restoring that file. `accounts` is how many open accounts the restored file holds.
  * Throws with a Turkish reason the CLI prints as is.
  */
 export function restoreBackup(
@@ -285,6 +303,11 @@ export function restoreBackup(
   if (config.dbPath === MEMORY) throw new Error('Bellekteki veritabanına yedek yüklenmez.');
   const dbPath = path.resolve(config.dbPath);
   const wal = `${dbPath}-wal`;
+  // Before the check below: on a full disk closing our look at the database
+  // cannot fold its WAL back in, which then reads as a server still open.
+  const size = fs.statSync(path.resolve(file)).size;
+  const free = freeBytesSync(path.dirname(dbPath));
+  if (free !== null && free < size + RESTORE_HEADROOM_BYTES) throw new Error(noRoomToRestore(size));
   if (fs.existsSync(dbPath)) assertClosed(dbPath);
 
   // Copied next to the database and checked there, before the old one moves: a
@@ -292,8 +315,14 @@ export function restoreBackup(
   // backup where it lies would leave -wal/-shm files in the backup folder.
   const incoming = `${dbPath}.gelen`;
   removeWithCompanions(incoming);
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  fs.copyFileSync(path.resolve(file), incoming);
+  try {
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    fs.copyFileSync(path.resolve(file), incoming);
+  } catch (err) {
+    // the part copied before the disk ran out is no backup, and takes the room
+    removeWithCompanions(incoming);
+    throw isDiskFull(err) ? new Error(noRoomToRestore(size)) : err;
+  }
   const { problem, accounts } = verdict(incoming);
   if (problem) {
     removeWithCompanions(incoming);

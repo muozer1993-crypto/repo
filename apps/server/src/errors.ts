@@ -5,6 +5,7 @@
  * with a Turkish `message` and a stable English `code` the app switches on.
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { isDiskFull, warnDiskFull } from './services/disk.js';
 
 export class HttpError extends Error {
   readonly code: string;
@@ -125,6 +126,21 @@ export function errorHandler(error: Error, request: FastifyRequest, reply: Fasti
     const body: ErrorBody = { error: { code: error.code, message: error.message } };
     if (error.issues !== undefined) body.error.issues = error.issues;
     void reply.code(error.status).send(body);
+    return;
+  }
+
+  // Any write on a full disk: SQLite's "database or disk is full" (SQLITE_FULL), a
+  // file's ENOSPC. As a 500 it told the friends nothing they could act on and
+  // spent a try of every entry their phones had parked; the owner hears why once
+  // an hour. Reads and logins write nothing that matters and keep working.
+  if (isDiskFull(error)) {
+    warnDiskFull(request.server, request.server.now().getTime());
+    void reply.code(507).send({
+      error: {
+        code: 'disk_full',
+        message: 'Sunucunun diski doldu, şimdilik hiçbir şey kaydedilemiyor. Sunucuyu açan kankana haber ver.',
+      },
+    } satisfies ErrorBody);
     return;
   }
 

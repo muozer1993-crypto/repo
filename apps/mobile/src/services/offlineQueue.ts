@@ -347,7 +347,8 @@ export interface FlushResult {
 /**
  * Replays the queue oldest first. A validation error from the server is final
  * (the day has passed, the cap was hit): the item is dropped with its reason so
- * the user can be told. A network error stops the flush and leaves the rest.
+ * the user can be told. A network error, or the server's full disk (507), stops
+ * the flush and leaves the rest.
  *
  * An entry parked with a photo still on the phone uploads it first. A photo
  * that can never go up (the file is gone, the server refused it, it ran out
@@ -486,6 +487,14 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
       }
       if (error instanceof ApiError && error.status === 401) {
         signedOut = true;
+        continue;
+      }
+      // The server's disk is full: every entry behind this one fails the same
+      // way until the owner frees room. Waits like no connection, no try spent:
+      // eight flushes come in minutes, and the entries were gone by the time
+      // the disk had room again.
+      if (error instanceof ApiError && error.status === 507) {
+        offline = true;
         continue;
       }
       if (error instanceof ApiError && alreadyCheckedIn(item, error)) {

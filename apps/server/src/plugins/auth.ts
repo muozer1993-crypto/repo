@@ -11,6 +11,7 @@ import type { Config } from '../config.js';
 import type { Database, UserRow } from '../db/index.js';
 import { unauthorized } from '../errors.js';
 import { bearerToken, verifyToken } from '../auth/jwt.js';
+import { isDiskFull, warnDiskFull } from '../services/disk.js';
 
 export interface AuthUser {
   id: string;
@@ -83,8 +84,17 @@ export function registerAuth(app: FastifyInstance, deps: AuthDeps): void {
     const last = row.last_seen_at ? Date.parse(row.last_seen_at) : 0;
     if (!Number.isFinite(last) || now.getTime() - last > LAST_SEEN_THROTTLE_MS) {
       const iso = now.toISOString();
-      touchUser.run(iso, row.id);
-      row.last_seen_at = iso;
+      // Only the last visit `yonet kullanicilar` shows. On a full disk this write
+      // failed every request a minute after the one before, reads included: the
+      // whole group locked out of screens that save nothing. A real write still
+      // gets the 507 that says why.
+      try {
+        touchUser.run(iso, row.id);
+        row.last_seen_at = iso;
+      } catch (err) {
+        if (!isDiskFull(err)) throw err;
+        warnDiskFull(app, now.getTime());
+      }
     }
 
     request.user = { id: row.id, row };

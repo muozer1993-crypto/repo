@@ -200,6 +200,10 @@ const MESSAGES: Record<string, (entry: Entry) => string | null> = {
   'push flush failed': () => 'push gönderilemedi',
   'database backup written': (e) => `günün yedeği alındı: ${text(e.file)}`,
   'database backup failed': () => 'günün yedeği alınamadı',
+  'database backup did not fit on the disk, trying again in an hour': (e) => {
+    const needed = typeof e.neededMb === 'number' ? `; yedek için ~${formatNumberTr(e.neededMb)} MB lazım` : '';
+    return `diskte yer yok, günün yedeği alınamadı${needed}, bir saat sonra yine denerim`;
+  },
   'database backup copied to BACKUP_DIR': (e) => `yedek BACKUP_DIR'a da kopyalandı: ${text(e.file)}`,
   'database backup copy to BACKUP_DIR failed, trying again in an hour': (e) =>
     `yedek BACKUP_DIR'a kopyalanamadı, bir saat sonra yine denerim (${text(e.dir)})`,
@@ -212,6 +216,10 @@ const MESSAGES: Record<string, (entry: Entry) => string | null> = {
   'disk almost full, uploads refused': (e) => {
     const free = typeof e.freeMb === 'number' ? `diskte ${formatNumberTr(e.freeMb)} MB boş yer kaldı` : 'disk doldu';
     return `${free}; veritabanı ve yedekler yazılabilsin diye kanıt fotoğrafı almıyorum, diskte yer aç (fotoğraflar: ${text(e.uploadDir)})`;
+  },
+  'disk full, nothing can be saved': (e) => {
+    const free = typeof e.freeMb === 'number' ? ` (${formatNumberTr(e.freeMb)} MB boş)` : '';
+    return `disk doldu${free}: kankaların girişleri ve adımları, yeni hesaplar kaydedilmiyor; diskte yer aç, sunucuyu yeniden başlatman gerekmez`;
   },
   'daily upload budget used up': (e) =>
     `son 24 saatte ${formatNumberTr(count(e, 'mb'))} MB fotoğraf geldi, günlük sınır doldu; bir süre kanıt fotoğrafı almıyorum` +

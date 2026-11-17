@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_TIMEZONE,
   LIMITS,
@@ -33,7 +33,7 @@ import { notify } from '../src/services/notifications.js';
 import { computeUserStats } from '../src/services/stats.js';
 import { resetPassword } from '../src/services/admin.js';
 import { AttemptLimiter, clientKey } from '../src/services/throttle.js';
-import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
+import { DEFAULT_PASSWORD, authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
 let harness: TestApp | null = null;
 
@@ -892,6 +892,107 @@ describe('request logging', () => {
     } finally {
       await built.app.close();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A full disk: every screen and the login keep working, a write says why
+// ---------------------------------------------------------------------------
+
+describe('a full disk', () => {
+  const DISK_FULL = 'Sunucunun diski doldu, şimdilik hiçbir şey kaydedilemiyor. Sunucuyu açan kankana haber ver.';
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * While `full()` says so, every write fails the way SQLite fails on a full disk
+   * and every read goes on, as on the owner's PC once the disk ran out. Never a
+   * real disk filled: the statements are better-sqlite3's, stubbed.
+   */
+  function stubDisk(h: TestApp, full: () => boolean): void {
+    type Run = (this: { source: string }, ...args: unknown[]) => unknown;
+    const proto = Object.getPrototypeOf(h.db.prepare('SELECT 1')) as Record<'run' | 'get' | 'all', Run>;
+    for (const method of ['run', 'get', 'all'] as const) {
+      const original = proto[method];
+      vi.spyOn(proto, method).mockImplementation(function (this: { source: string }, ...args: unknown[]) {
+        if (full() && /^\s*(INSERT|UPDATE|DELETE|REPLACE)\b/i.test(this.source)) {
+          throw Object.assign(new Error('database or disk is full'), { code: 'SQLITE_FULL' });
+        }
+        return original.apply(this, args);
+      });
+    }
+  }
+
+  it('keeps every screen and the login working, and answers a write with 507 disk_full', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await livePair(harness, 'su_bardak', {}, 3);
+    let full = true;
+    stubDisk(harness, () => full);
+    // past the minute after which every request writes down the last visit again
+    harness.advance(2 * 60_000);
+    const call = authed(harness.app, ali.token);
+
+    for (const url of ['/me', '/challenges', `/challenges/${challengeId}`, '/me/inbox']) {
+      expect((await call({ method: 'GET', url })).statusCode, url).toBe(200);
+    }
+    const login = await harness.app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { username: 'ali', password: DEFAULT_PASSWORD },
+    });
+    expect(login.statusCode).toBe(200);
+
+    const glass = () =>
+      call({
+        method: 'POST',
+        url: `/challenges/${challengeId}/entries`,
+        payload: { dayKey: today(harness!), value: 1, source: 'manual', clientTime: iso(harness!), sessionId: randomUUID() },
+      });
+    const refused = await glass();
+    expect(refused.statusCode).toBe(507);
+    expect(refused.json()).toEqual({ error: { code: 'disk_full', message: DISK_FULL } });
+    const synced = await call({
+      method: 'POST',
+      url: '/me/steps',
+      payload: { days: [{ dayKey: today(harness), steps: 8000, source: 'pedometer' }] },
+    });
+    expect([synced.statusCode, errorCode(synced)]).toEqual([507, 'disk_full']);
+    const signUp = await harness.app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { username: 'zeki', displayName: 'Zeki', password: DEFAULT_PASSWORD, timezone: DEFAULT_TIMEZONE },
+    });
+    expect([signUp.statusCode, errorCode(signUp)]).toEqual([507, 'disk_full']);
+
+    // room again: the next write lands, no restart
+    full = false;
+    expect((await glass()).statusCode).toBe(201);
+    expect(entries(harness, challengeId, ali.me.id)).toHaveLength(1);
+  });
+
+  it('tells the owner once an hour, in Turkish, however many writes fail', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await livePair(harness, 'su_bardak', {}, 3);
+    stubDisk(harness, () => true);
+    const warn = vi.spyOn(harness.app.log, 'warn');
+    const told = () => warn.mock.calls.filter((args) => args[1] === 'disk full, nothing can be saved').length;
+    const glass = () =>
+      authed(harness!.app, ali.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/entries`,
+        payload: { dayKey: today(harness!), value: 1, source: 'manual', clientTime: iso(harness!) },
+      });
+
+    for (let i = 0; i < 3; i += 1) expect((await glass()).statusCode).toBe(507);
+    expect(told()).toBe(1);
+    harness.advance(59 * 60_000);
+    await glass();
+    expect(told()).toBe(1);
+    harness.advance(60_000);
+    await glass();
+    expect(told()).toBe(2);
   });
 });
 

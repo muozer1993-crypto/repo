@@ -175,6 +175,19 @@ describe('ownerLogStream', () => {
     ]);
   });
 
+  it('says the disk is full and what that stops, and how much room the day’s backup wants', () => {
+    const { stream, lines } = capture();
+    stream.write(pino({ level: 40, freeMb: 3, msg: 'disk full, nothing can be saved' }));
+    // a system that will not say how much is left
+    stream.write(pino({ level: 40, msg: 'disk full, nothing can be saved' }));
+    stream.write(pino({ level: 40, neededMb: 1240, msg: 'database backup did not fit on the disk, trying again in an hour' }));
+    expect(lines().slice(1)).toEqual([
+      '21:03:12 ! disk doldu (3 MB boş): kankaların girişleri ve adımları, yeni hesaplar kaydedilmiyor; diskte yer aç, sunucuyu yeniden başlatman gerekmez',
+      '21:03:12 ! disk doldu: kankaların girişleri ve adımları, yeni hesaplar kaydedilmiyor; diskte yer aç, sunucuyu yeniden başlatman gerekmez',
+      '21:03:12 ! diskte yer yok, günün yedeği alınamadı; yedek için ~1.240 MB lazım, bir saat sonra yine denerim',
+    ]);
+  });
+
   it('marks a failed request and a slow one as warnings', () => {
     const { stream, lines } = capture();
     stream.write(pino({ level: 40, reqId: 'req-7', method: 'POST', url: '/challenges', statusCode: 500, ms: 812, msg: 'request failed' }));

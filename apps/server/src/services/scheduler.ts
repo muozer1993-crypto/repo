@@ -5,6 +5,7 @@
  * The timer is `unref()`ed so it never keeps a test process (or a CLI run) alive,
  * and no exception can escape a tick — a broken pass must not kill the server.
  */
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -14,6 +15,7 @@ import type { Database } from '../db/index.js';
 import { clearDeletedTraces } from './accounts.js';
 import { backupIfDue, copyBackupIfDue } from './backup.js';
 import { runSchedulerOnce } from './challenges.js';
+import { isDiskFull, warnDiskFull } from './disk.js';
 import { readLastBeat, recordPause, writeLastBeat } from './pauses.js';
 import { sweepOrphanPhotos } from './photos.js';
 import { createPushSender, type PushSender } from './push.js';
@@ -29,8 +31,8 @@ export const STOP_WAIT_MS = 10_000;
 
 /**
  * After a failed copy to BACKUP_DIR (OneDrive signed out, a USB disk unplugged),
- * how long until the next try. Every pass would fill the owner's window with the
- * same warning twice a minute.
+ * or a day's backup that did not fit on the disk, how long until the next try.
+ * Every pass would fill the owner's window with the same warning twice a minute.
  */
 export const BACKUP_COPY_RETRY_MS = 60 * 60_000;
 
@@ -70,6 +72,15 @@ export interface SchedulerOptions {
 
 const machineUptimeMs = (): number => os.uptime() * 1000;
 
+/** About how much room a copy of the database takes, in whole MB rounded up; null when the file cannot be read. */
+function databaseMb(dbPath: string): number | null {
+  try {
+    return Math.max(1, Math.ceil(fs.statSync(path.resolve(dbPath)).size / (1024 * 1024)));
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Starts the interval and returns the stop function. Await it before closing the
  * database: a flush cut off between Expo's answer and `pushed_at` leaves rows that
@@ -86,6 +97,7 @@ export function startScheduler(
   let inFlight: Promise<void> | null = null;
   let copyInFlight: Promise<void> | null = null;
   let copyRetryAt = 0;
+  let backupRetryAt = 0;
   // the Istanbul day the unused proof photos were last swept
   let sweptDay: string | null = null;
   // A phone-counted çelınc that ended while this server was off waits a full
@@ -99,6 +111,14 @@ export function startScheduler(
   // the itiraz route and the çelınc detail read it (`disputesOpenUntil`)
   app.schedulerBootAt.at = bootAt;
 
+  // A full disk fails every write of every pass. The owner hears that once an
+  // hour, in the words that say what to do (`warnDiskFull`), not as SQLite's
+  // English twice a minute; anything else is logged as it was.
+  const report = (err: unknown, log: () => void): void => {
+    if (isDiskFull(err)) warnDiskFull(app, app.now().getTime());
+    else log();
+  };
+
   // Every pause is written down: a check-in a phone parked while nobody could
   // hear it counts at its tap (`tappedWhileDown`). A failed write costs only
   // that, and must not throw out of the interval and take the server with it.
@@ -106,7 +126,7 @@ export function startScheduler(
     try {
       write();
     } catch (err) {
-      app.log.warn({ err }, 'writing down when the server was off failed');
+      report(err, () => app.log.warn({ err }, 'writing down when the server was off failed'));
     }
   };
   // A process that was stopped (Ctrl+C, the window closed, the power cut, `dur`
@@ -123,7 +143,7 @@ export function startScheduler(
     try {
       const summary = runSchedulerOnce(db, app.now(), {
         bootAt,
-        onError: (stepName, err) => app.log.error({ err, step: stepName }, 'scheduler step failed'),
+        onError: (stepName, err) => report(err, () => app.log.error({ err, step: stepName }, 'scheduler step failed')),
       });
       if (
         summary.activated ||
@@ -138,7 +158,7 @@ export function startScheduler(
         app.log.info(summary, 'scheduler pass');
       }
     } catch (err) {
-      app.log.error({ err }, 'scheduler pass failed');
+      report(err, () => app.log.error({ err }, 'scheduler pass failed'));
     }
 
     // A deleted account's notes and photos, once the çelınc that still needed
@@ -148,22 +168,31 @@ export function startScheduler(
       const entries = clearDeletedTraces(db, path.resolve(config.uploadDir));
       if (entries) app.log.info({ entries }, 'deleted accounts cleared');
     } catch (err) {
-      app.log.warn({ err }, 'clearing deleted accounts failed');
+      report(err, () => app.log.warn({ err }, 'clearing deleted accounts failed'));
     }
 
     try {
       const result = await push.flush(db, app.now());
       if (result.sent || result.failed) app.log.info(result, 'push flush');
     } catch (err) {
-      app.log.error({ err }, 'push flush failed');
+      report(err, () => app.log.error({ err }, 'push flush failed'));
     }
 
     // a no-op on every tick but the first of the day
-    try {
-      const written = await backupIfDue(db, config, app.now());
-      if (written) app.log.info({ file: written }, 'database backup written');
-    } catch (err) {
-      app.log.error({ err }, 'database backup failed');
+    if (app.now().getTime() >= backupRetryAt) {
+      try {
+        const written = await backupIfDue(db, config, app.now());
+        if (written) app.log.info({ file: written }, 'database backup written');
+      } catch (err) {
+        if (isDiskFull(err)) {
+          // a copy of the whole database does not fit: an hour on, not every pass
+          // with a stack, and how much room it wants, which is what the owner must free
+          backupRetryAt = app.now().getTime() + BACKUP_COPY_RETRY_MS;
+          app.log.warn({ neededMb: databaseMb(config.dbPath) }, 'database backup did not fit on the disk, trying again in an hour');
+        } else {
+          app.log.error({ err }, 'database backup failed');
+        }
+      }
     }
 
     // The first pass of each day, the start's included: the proof photos no

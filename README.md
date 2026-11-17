@@ -924,7 +924,8 @@ ama çok yavaşsa fotoğrafa iki dakika verilir; o da yetmezse arkadaki girişle
 denemede gidemeyen fotoğraf bırakılır ve giriş onsuz gider (fotoğraf zorunluysa uygulama "Kanıt
 fotoğrafı gitmedi, bağlantı çok yavaştı" der). Sunucunun diski dolmak üzereyse ya da saatlik
 fotoğraf sınırı dolduysa fotoğraf girişiyle bir saat bekler, sonra giriş onsuz gider; fotoğraf
-zorunluysa uygulama sunucunun söylediğini iletir. Bağlantı
+zorunluysa uygulama sunucunun söylediğini iletir. Sunucunun diski tamamen dolduysa sıradaki
+girişler de deneme hakkı harcamadan bekler, yer açılınca kendiliğinden gider. Bağlantı
 koptuğunda açık olan çelınc ekranı kapanmaz, son bilinen hali gösterir; yazdığın sayı silinmez.
 Check-in çelınclarının son hali telefonda da saklanır (kabul ettiğin anda ve uygulama sabah
 hatırlatmalarını her kurduğunda güncellenir): telefon uygulamayı gece kapatmış olsa bile
@@ -1327,6 +1328,23 @@ dosyaları başka bir diske taşı. Yer açılınca fotoğraflar hemen yine gide
 başlatman gerekmez. Sınırı değiştirmek istersen `apps\server\.env` dosyasına
 `UPLOAD_MIN_FREE_MB=1024` gibi bir satır ekle (MB cinsinden) ve sunucuyu yeniden başlat; çok
 düşürme, disk dolunca adımlar da kaydedilemez.
+
+**Uygulama "Sunucunun diski doldu, şimdilik hiçbir şey kaydedilemiyor" diyor.**
+Disk tamamen dolmuş. Kankalar uygulamayı açar, hesaplarına girer, çelınclara ve skorlara bakar,
+ama hiçbir şey kaydedilmez: girişler, adımlar, yeni hesaplar, günün yedeği. Bu arada girilen bir sayı
+kaydedilmez, giriş formu bu mesajı gösterir; yer açılınca tekrar girilsin. Telefonda sırada
+bekleyen girişler deneme hakkı harcamadan bekler, adımlar da telefonda durur; ikisi de yer
+açılınca kendiliğinden gider. Pencerede saatte bir şu satır çıkar:
+
+```
+21:03:12 ! disk doldu (3 MB boş): kankaların girişleri ve adımları, yeni hesaplar kaydedilmiyor; diskte yer aç, sunucuyu yeniden başlatman gerekmez
+```
+
+Günün yedeği de sığmadıysa yanında "diskte yer yok, günün yedeği alınamadı; yedek için ~… MB
+lazım, bir saat sonra yine denerim" satırı da olur. Yukarıdaki gibi yer aç (`Get-PSDrive C`).
+Yer açılır açılmaz her şey yine kaydedilir, sunucuyu yeniden başlatman gerekmez; yedek en geç bir
+saat sonra alınır. Disk doluyken `npm run yonet -- geri-yukle` de çalışmaz, "Diskte yer yok:
+yedeği yüklemek için ~… MB boş yer lazım, önce yer aç." der: önce yer aç, sonra yine dene.
 
 **Uygulama "Bu ağdan bir saatte çok fazla fotoğraf yüklendi" ya da "Sunucu bugün çok fazla fotoğraf aldı" diyor.**
 Fotoğraflar diski doldurmasın diye sunucu bir hesaptan da bir internet bağlantısından da saatte en

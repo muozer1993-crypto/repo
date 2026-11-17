@@ -25,6 +25,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { HttpError, badRequest, tooMany } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
+import { OWNER_WARN_EVERY_MS, freeBytes, isDiskFull } from '../services/disk.js';
 import { sniffImage, stripMetadata } from '../services/images.js';
 import { AttemptLimiter, clientKey, retryAfterText } from '../services/throttle.js';
 
@@ -49,23 +50,6 @@ export const UPLOADS_PER_USER = { max: 60, windowMs: 60 * 60 * 1000 } as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** The day's bytes are kept a minute at a time, so a flood of tiny files cannot grow the list past 1,440. */
 const SLOT_MS = 60 * 1000;
-/** The owner's window hears about a full disk or a spent day once an hour, not once a photo. */
-const OWNER_WARN_EVERY_MS = 60 * 60 * 1000;
-
-/**
- * Free bytes for us on the disk under `dir`, or null when the system will not
- * say (the check is then skipped, never a reason to refuse).
- */
-async function freeBytes(dir: string): Promise<number | null> {
-  try {
-    // a folder deleted while the server runs is made again, so its disk can be asked
-    await fs.promises.mkdir(dir, { recursive: true });
-    const stats = await fs.promises.statfs(dir);
-    return stats.bavail * stats.bsize;
-  } catch {
-    return null;
-  }
-}
 
 export default async function uploadRoutes(app: FastifyInstance): Promise<void> {
   const uploadDir = path.resolve(app.config.uploadDir);
@@ -194,8 +178,7 @@ export default async function uploadRoutes(app: FastifyInstance): Promise<void> 
         await fs.promises.writeFile(target, clean);
       } catch (err) {
         slot.bytes -= clean.length;
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code === 'ENOSPC' || code === 'EDQUOT') {
+        if (isDiskFull(err)) {
           // writeFile leaves behind whatever it got down before the disk ran out
           await fs.promises.unlink(target).catch(() => undefined);
           throw diskFull(at, { err });

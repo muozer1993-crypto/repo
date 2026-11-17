@@ -23,6 +23,7 @@ import { conflict, parseBody, tooMany, unauthorized } from '../errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { toMe } from '../serialize.js';
 import { createUser, usernameTaken } from '../services/accounts.js';
+import { isDiskFull, warnDiskFull } from '../services/disk.js';
 import { BANNED_TEXT_MESSAGES, assertCleanName } from '../services/moderation.js';
 import { publicOrigin } from '../services/origin.js';
 import { AttemptLimiter, clientKey, retryAfterText } from '../services/throttle.js';
@@ -175,8 +176,14 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     loginByAccount.reset(accountKey);
     loginByUsername.reset(usernameKey);
 
-    db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').run(now.toISOString(), row.id);
-    row.last_seen_at = now.toISOString();
+    // as in `authenticate`: a full disk must not keep anybody from signing in to look
+    try {
+      db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').run(now.toISOString(), row.id);
+      row.last_seen_at = now.toISOString();
+    } catch (err) {
+      if (!isDiskFull(err)) throw err;
+      warnDiskFull(app, now.getTime());
+    }
 
     const payload: AuthResponse = {
       token: signToken({ sub: row.id, ver: row.token_version }, config.jwtSecret, undefined, now),

@@ -193,6 +193,63 @@ describe('BACKUP_DIR', () => {
   });
 });
 
+describe('a day’s backup that does not fit on the disk', () => {
+  it('leaves no half copy, says how much room it wants and waits an hour, never every pass', async () => {
+    const config = tempData();
+    harness = await makeApp({ now: day(22), config });
+    addUser(harness.db, 'ali');
+    // stubbed, never a real disk filled: SQLite gets part of the copy down, then runs out
+    const backup = vi.spyOn(harness.db, 'backup').mockImplementation(async (destination: string) => {
+      fs.writeFileSync(destination, 'yarım');
+      throw Object.assign(new Error('database or disk is full'), { code: 'SQLITE_FULL' });
+    });
+    const warn = vi.spyOn(harness.app.log, 'warn');
+    const error = vi.spyOn(harness.app.log, 'error');
+    const didNotFit = () =>
+      warn.mock.calls.filter((call) => call[1] === 'database backup did not fit on the disk, trying again in an hour');
+    let flushes = 0;
+    const push: PushSender = {
+      flush: async () => {
+        flushes += 1;
+        return { sent: 0, failed: 0 };
+      },
+    };
+
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      const stop = startScheduler(harness.app, harness.db, harness.config, { push });
+      await vi.waitFor(() => expect(didNotFit()).toHaveLength(1), { interval: 10, timeout: 5000 });
+      expect(didNotFit()[0]?.[0]).toEqual({ neededMb: 1 });
+      expect(error).not.toHaveBeenCalled();
+      // the part written before the disk ran out is room the database needs
+      expect(fs.readdirSync(backupDir(config))).toEqual([]);
+
+      // the passes after it: no second try, no second line
+      for (let pass = 2; pass <= 4; pass += 1) {
+        harness.advance(SCHEDULER_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
+        await vi.waitFor(() => expect(flushes).toBe(pass), { interval: 10, timeout: 5000 });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(backup).toHaveBeenCalledTimes(1);
+      expect(didNotFit()).toHaveLength(1);
+
+      // room again an hour later: the day gets its backup
+      backup.mockRestore();
+      harness.advance(BACKUP_COPY_RETRY_MS);
+      await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
+      await vi.waitFor(() => expect(fs.existsSync(path.join(backupDir(config), 'koydum-2026-09-22.db'))).toBe(true), {
+        interval: 10,
+        timeout: 5000,
+      });
+      await stop();
+      expect(usernames(path.join(backupDir(config), 'koydum-2026-09-22.db'))).toEqual(['ali']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('listing and picking a backup', () => {
   it('lists newest first, ignores what is not a backup, and picks across both folders', async () => {
     const config = tempData();
@@ -305,6 +362,43 @@ describe('restoring a backup', () => {
     expect(() => restoreBackup(config, foreign, day(24))).toThrow('KOYDUM yedeği değil');
 
     expect(fs.readdirSync(config.dataDir).sort()).toEqual([...before, 'baska.db', 'bozuk.db'].sort());
+    expect(usernames(config.dbPath)).toEqual(['ali', 'veli']);
+  });
+
+  it('refuses up front when the disk has no room for the copy', async () => {
+    const { config, backup } = await withBackup();
+    const before = fs.readdirSync(config.dataDir).sort();
+    const size = fs.statSync(backup).size;
+    // stubbed, never a real disk filled: 5 MB free, which a backup and its 10 MB margin do not fit in
+    vi.spyOn(fs, 'statfsSync').mockReturnValue({ bavail: 1280, bsize: 4096 } as fs.StatsFs);
+    try {
+      expect(() => restoreBackup(config, backup, day(24))).toThrow(
+        `Diskte yer yok: yedeği yüklemek için ~${Math.ceil((size + 10 * 1024 * 1024) / (1024 * 1024))} MB boş yer lazım, önce yer aç.`,
+      );
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(fs.readdirSync(config.dataDir).sort()).toEqual(before);
+    expect(usernames(config.dbPath)).toEqual(['ali', 'veli']);
+  });
+
+  it('leaves no half-copied backup behind when the disk runs out during the copy', async () => {
+    const { config, backup } = await withBackup();
+    const before = fs.readdirSync(config.dataDir).sort();
+    // the system would not say how much is free, so the copy is tried and runs out halfway
+    vi.spyOn(fs, 'statfsSync').mockImplementation(() => {
+      throw Object.assign(new Error('ENOSYS'), { code: 'ENOSYS' });
+    });
+    vi.spyOn(fs, 'copyFileSync').mockImplementation((_from, to) => {
+      fs.writeFileSync(to as string, 'yarım');
+      throw Object.assign(new Error('ENOSPC: no space left on device, copyfile'), { code: 'ENOSPC' });
+    });
+    try {
+      expect(() => restoreBackup(config, backup, day(24))).toThrow(/^Diskte yer yok: yedeği yüklemek için ~\d+ MB boş yer lazım/);
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(fs.readdirSync(config.dataDir).sort()).toEqual(before);
     expect(usernames(config.dbPath)).toEqual(['ali', 'veli']);
   });
 
