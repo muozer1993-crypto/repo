@@ -1689,11 +1689,10 @@ describe('a rival who plays a check-in çelınc on another zone\'s clock', () =>
 
     const text = rendered(tree);
     expect(text).toContain('Tokyo saatiyle 06:30 (sende 00:30)');
-    // two lines, so a 360 dp phone with the itiraz chip beside it keeps "(sende 00:30)"
-    const clock = tree.root.findAll(
-      (node) => node.props.children === 'Tokyo saatiyle 06:30 (sende 00:30)' && node.props.numberOfLines === 2
-    );
+    // never cut: a 360 dp phone at a larger font, with the itiraz chip beside it, needs three lines for it
+    const clock = tree.root.findAll((node) => node.props.children === 'Tokyo saatiyle 06:30 (sende 00:30)');
     expect(clock.length).toBeGreaterThan(0);
+    expect(clock.every((node) => node.props.numberOfLines === undefined)).toBe(true);
     // mine is on my own clock: nothing to add
     expect(text.match(/saatiyle/g)).toHaveLength(1);
   });

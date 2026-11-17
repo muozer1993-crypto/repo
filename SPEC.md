@@ -929,8 +929,9 @@ onboarding.tsx              4 slides (copy onboarding_1..4 under a title per lev
                             önce": a phone's row (`pedometer`, `health_connect`, `usage_stats`) is timed by `updatedAt ??
                             createdAt`, a typed one by `createdAt`, both read against the screen's clock, the last fetch,
                             as the standings' quiet-phone line is; a check-in of a player whose `timezone` is not mine
-                            adds "Tokyo saatiyle 06:30 (sende 00:30)", its `createdAt` on both clocks, on up to two lines (beside the thumb
-                            and the itiraz chip one line cut off "(sende 00:30)"); under it the
+                            adds "Tokyo saatiyle 06:30 (sende 00:30)", its `createdAt` on both clocks, wrapping onto as many lines as it needs, never
+                            cut (beside the thumb and the itiraz chip one line cut off "(sende 00:30)", and at a 360 dp phone's larger font
+                            two lines still did); under it the
                             owner's `note`, “in quotes”, two lines at most, on the author's own row too) with dispute
                             button (only while
                             the server takes one: `active` and before `disputesCloseAt`, i.e. the end, plus the settle hour

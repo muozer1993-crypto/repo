@@ -66,7 +66,7 @@ Aynı dilimdeki oyunculara dokunulmaz. Profilini
 "Varım"dan hemen önce Tokyo'ya alan biri 07:00'lik sabahları İstanbul saatiyle 00:30'da yakalar. Kabulü
 saat dilimi değişti diye reddetmek gerçekten yolculuk yapanı cezalandırırdı; onun yerine herkesin oynadığı
 dilim görünür (`ParticipantView.timezone`): sıralamada adının altında kendi satırında "🕐 Tokyo saati" (adın yanında
-360 dp'lik telefonda "(Los Angel…" diye kesiliyordu), check-in satırında iki satıra kadar
+360 dp'lik telefonda "(Los Angel…" diye kesiliyordu), check-in satırında gerektiği kadar satıra sarılan, hiç kesilmeyen
 "Tokyo saatiyle 06:30 (sende 00:30)". İtiraz eden neye itiraz ettiğini görür.
 
 Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
