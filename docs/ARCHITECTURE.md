@@ -450,7 +450,9 @@ sayılmaz). Kalanı aşan seans reddedilmez, kalana kırpılarak yazılır: eski
 gönderir, reddetmek sığan kısmı da çöpe atardı. Tekrar gönderilen bir seans bu hesaba hiç gelmez,
 `sessionId` kontrolü önce çalışır. Bir dakika bile kalmadıysa 400 `daily_cap`. Odak ekranı da
 seansı günün kalanına göre kısaltır ve "Bugün 30 dk hakkın kaldı" der; kaydedince sunucunun
-yazdığı sayıyı gösterir. Eski APK'nın odak ekranı ise sunucu ne yazarsa yazsın seansın tamamını
+yazdığı sayıyı gösterir. Sunucu cevap vermezse seans `sessionId`'siyle çevrimdışı kuyruğa girer ve
+ekran yeşil "skoruna eklendi" yerine sarıyla "25dk telefonda bekliyor" der: o sayıyı sunucu henüz
+görmedi, çelınc biterse de almaz. Eski APK'nın odak ekranı ise sunucu ne yazarsa yazsın seansın tamamını
 "skoruna eklendi" der; kırpılan her seans için yazana bir bildirim gider ("“Odak Ligi”: 180
 dakikalık seansın 60 dakikası yazıldı. Günde en fazla 360 dakika sayılıyor."). 360 dolduktan sonra
 eski APK seansı yine de başlatır, bitince sunucu reddeder.

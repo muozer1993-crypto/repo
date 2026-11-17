@@ -1101,7 +1101,10 @@ onboarding.tsx              4 slides (copy onboarding_1..4 under a title per lev
                             "Bugün 30 dk hakkın kaldı" (", seans 30 dk sürer." when the preset is longer and the çelınc's end does not cut
                             it shorter still), start() caps the target there too, and at the cap "Bugünlük 360 dk doldu. Yarın devam."
                             (no "Yarın devam." on the last day) blocks Başlat; the done card shows what the server stored (`entry.value`),
-                            not what the timer counted; the running timer scrolls (centred while it fits), so "Vazgeç" under the
+                            not what the timer counted; a session the server did not answer for is parked in the offline queue
+                            under its `sessionId`, and the done card (and a burnt session's "kaydet", which then goes away) says
+                            so in yellow, "25dk telefonda bekliyor, bağlantı gelince skoruna eklenecek.", never "skoruna eklendi"
+                            or "yine de skoruna yazıldı"; the running timer scrolls (centred while it fits), so "Vazgeç" under the
                             paused card stays reachable on a short phone or with a large font
 (app)/history.tsx           every finished and cancelled çelınc, newest closed first (the same `GET /challenges` list home
                             uses); chips Hepsi / Koyduklarım / Yediklerim / Berabere / İptal with counts (at my level 1

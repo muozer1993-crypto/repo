@@ -6306,6 +6306,111 @@ describe('the focus timer on a short phone', () => {
   });
 });
 
+describe('a focus session the server did not answer for', () => {
+  const { readQueue, removeFromQueue } = require('@/services/offlineQueue') as typeof import('@/services/offlineQueue');
+  const { StorageKeys, setJson } = require('@/lib/storage') as typeof import('@/lib/storage');
+  const { saveSession } = require('@/services/focus') as typeof import('@/services/focus');
+
+  async function openFocus(): Promise<ReactTestRenderer> {
+    searchParams.id = 'c-1';
+    const detail = challengeDetail();
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      challenge: { ...detail.challenge, typeKey: 'odak_seansi', metricType: 'focus_minutes' as const, unit: 'dk' },
+    }));
+    const FocusScreen = require('@/app/(app)/focus/[id]').default;
+    const tree = renderScreen(<FocusScreen />);
+    await settle();
+    return tree;
+  }
+
+  /** The default 25 minutes, sat through: the clock jumps and the timer's next tick finishes it. */
+  async function sitThrough(tree: ReactTestRenderer): Promise<void> {
+    press(tree, 'Başlat');
+    expect(rendered(tree)).toMatch(/Hedef\s+25dk/);
+    jest.setSystemTime(Date.now() + 25 * 60_000);
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+    await settle();
+  }
+
+  beforeEach(async () => {
+    // the account the phone has stored, as after a sign-in: the queue parks under it
+    await setJson(StorageKeys.me, ME);
+    // the clock and the timer's tick are faked; the query and settle() still need real timeouts
+    jest.useFakeTimers({
+      doNotFake: [
+        'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',
+        'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout',
+      ],
+    });
+  });
+
+  afterEach(async () => {
+    jest.useRealTimers();
+    for (const item of await readQueue()) await removeFromQueue(item.id);
+    await AsyncStorage.removeItem(StorageKeys.me);
+    await act(async () => {
+      await saveSession(null);
+    });
+  });
+
+  it('says a finished session waits on the phone, not that it went on the score', async () => {
+    api.addEntry = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    const tree = await openFocus();
+    await sitThrough(tree);
+
+    const queue = await readQueue();
+    expect(queue).toHaveLength(1);
+    expect(queue[0]).toMatchObject({ challengeId: 'c-1', body: { source: 'focus', value: 25 } });
+    // the server never saw it: a green "25dk skoruna eklendi." was a score nobody had
+    const text = rendered(tree);
+    expect(text).toContain('25dk telefonda bekliyor, bağlantı gelince skoruna eklenecek.');
+    expect(text).not.toContain('skoruna eklendi');
+  });
+
+  it('says what the server kept when it does answer', async () => {
+    api.addEntry = jest.fn(async (_id: string, body: { value: number }) => ({
+      entry: { id: 'f-1', value: body.value, source: 'focus', status: 'ok' },
+      standings: [],
+    }));
+    const tree = await openFocus();
+    await sitThrough(tree);
+
+    expect(await readQueue()).toHaveLength(0);
+    const text = rendered(tree);
+    expect(text).toContain('25dk skoruna eklendi.');
+    expect(text).not.toContain('telefonda bekliyor');
+  });
+
+  it('parks the whole minutes of a burnt session once, without a second "kaydet"', async () => {
+    api.addEntry = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    const tree = await openFocus();
+    press(tree, 'Başlat');
+    jest.setSystemTime(Date.now() + 3 * 60_000 + 5_000);
+    press(tree, 'Vazgeç');
+    press(tree, 'Evet, vazgeçtim');
+    expect(rendered(tree)).toContain('Seans yandı');
+
+    press(tree, '3dk kaydet');
+    await settle();
+
+    expect(await readQueue()).toHaveLength(1);
+    const text = rendered(tree);
+    expect(text).toContain('3dk telefonda bekliyor, bağlantı gelince skoruna eklenecek.');
+    expect(text).not.toContain('yine de skoruna yazıldı');
+    expect(text).not.toContain('Kaydedelim mi?');
+    expect(
+      tree.root.findAll((node) => node.props.title === '3dk kaydet' && typeof node.props.onPress === 'function')
+    ).toHaveLength(0);
+  });
+});
+
 describe('effort that would not count', () => {
   /** A focus çelınc that ends `msLeft` from now. */
   function focusEndingIn(msLeft: number) {

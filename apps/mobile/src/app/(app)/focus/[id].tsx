@@ -49,6 +49,11 @@ const KEEP_AWAKE_TAG = 'koydum-focus';
  */
 const END_MARGIN_MS = 30_000;
 
+/** A session the server did not answer for: parked in the offline queue, not on the score yet. */
+function parkedLine(minutes: number): string {
+  return `${formatMinutes(minutes)} telefonda bekliyor, bağlantı gelince skoruna eklenecek.`;
+}
+
 
 export default function FocusScreen() {
   const params = useLocalSearchParams<{ id: string }>();
@@ -71,6 +76,8 @@ export default function FocusScreen() {
   const [preset, setPreset] = useState<number>(FOCUS_PRESETS[1]);
   const [confirmQuit, setConfirmQuit] = useState(false);
   const [savedMinutes, setSavedMinutes] = useState<number | null>(null);
+  // minutes the offline queue holds under the session's id; they go out by themselves
+  const [queuedMinutes, setQueuedMinutes] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const postedRef = useRef<string | null>(null);
@@ -181,16 +188,24 @@ export default function FocusScreen() {
     }
     setSaving(true);
     setSaveError(null);
+    setQueuedMinutes(null);
     try {
+      const value = Math.min(earned, LIMITS.FOCUS_MAX_MINUTES);
       const result = await addEntry.mutateAsync({
         dayKey: safeTodayKey(tz),
-        value: Math.min(earned, LIMITS.FOCUS_MAX_MINUTES),
+        value,
         source: 'focus',
         sessionId: target.sessionId,
         clientTime: new Date().toISOString(),
       });
+      // No answer, so the session was parked: a green "skoruna eklendi" claimed
+      // minutes the server had not seen yet (and refuses once the çelınc is over)
+      if (result.queued) {
+        setQueuedMinutes(value);
+        return;
+      }
       // the server cuts a session to what is left of the day's cap: say what it kept
-      setSavedMinutes(result.entry && !result.queued ? result.entry.value : earned);
+      setSavedMinutes(result.entry ? result.entry.value : earned);
     } catch (error) {
       setSaveError(errorText(error, 'Dakikalar sunucuya gitmedi.'));
     } finally {
@@ -228,6 +243,7 @@ export default function FocusScreen() {
     if (target < LIMITS.FOCUS_MIN_MINUTES) return;
     postedRef.current = null;
     setSavedMinutes(null);
+    setQueuedMinutes(null);
     setSaveError(null);
     setSession(createSession(id, target, uuidV4(), stamp));
     if (Platform.OS !== 'web') {
@@ -245,6 +261,7 @@ export default function FocusScreen() {
   const reset = () => {
     postedRef.current = null;
     setSavedMinutes(null);
+    setQueuedMinutes(null);
     setSaveError(null);
     setSession(null);
     void saveSession(null);
@@ -421,6 +438,10 @@ export default function FocusScreen() {
         <Card edgeColor={savedMinutes !== null ? Colors.success : Colors.yellow}>
           {saving ? (
             <Loading label="Dakikalar yazılıyor..." />
+          ) : queuedMinutes !== null ? (
+            <Text variant="small" color={Colors.yellow}>
+              {parkedLine(queuedMinutes)}
+            </Text>
           ) : savedMinutes !== null ? (
             <Text variant="small">
               {savedMinutes < session.targetMinutes
@@ -476,7 +497,12 @@ export default function FocusScreen() {
           </Text>
           <Text variant="huge">{formatMinutes(earned)}</Text>
           {earned >= LIMITS.FOCUS_MIN_MINUTES ? (
-            savedMinutes !== null ? (
+            // parked under its sessionId: another "kaydet" would only park it again
+            queuedMinutes !== null ? (
+              <Text variant="small" color={Colors.yellow} style={styles.hint}>
+                {parkedLine(queuedMinutes)}
+              </Text>
+            ) : savedMinutes !== null ? (
               <Text variant="small" color={Colors.success} style={styles.hint}>
                 {formatMinutes(savedMinutes)} yine de skoruna yazıldı.
               </Text>
