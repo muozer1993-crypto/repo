@@ -5,6 +5,7 @@ import {
   renderTaunt,
   t,
   USERNAME_REGEX,
+  type AuthResponse,
   type TauntVars,
   type VulgarityLevel,
 } from '@koydum/shared';
@@ -20,7 +21,7 @@ import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { TauntBubble } from '@/components/TauntBubble';
 import { Text } from '@/components/Text';
-import { ApiError } from '@/lib/api';
+import { ApiError, type ApiClient } from '@/lib/api';
 import { serverUrlIsEditable } from '@/lib/config';
 import { deviceTimezone, useAuth } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
@@ -43,6 +44,14 @@ const LEVELS: { value: VulgarityLevel; label: string; emoji: string }[] = [
   { value: 3, label: 'Ağır Abi', emoji: '🍆' },
 ];
 
+/**
+ * No answer, or one from a gateway rather than our server: the request may
+ * have reached it all the same.
+ */
+function unanswered(err: unknown): boolean {
+  return err instanceof ApiError && (err.isNetwork || err.code === 'server_down');
+}
+
 const LEVEL_NOTE: Record<VulgarityLevel, string> = {
   1: 'Kibar takılırız. Bildirimlerde argo, küfür olmaz.',
   2: 'Kanka ağzı. Laf sokar ama küfretmez.',
@@ -63,10 +72,50 @@ export default function RegisterScreen() {
   const [busy, setBusy] = useState(false);
   const displayNameRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
+  // the name and password of a sign-up whose answer never came (see signUp)
+  const lostTry = useRef<{ name: string; password: string } | null>(null);
   const chooseFirst = needsServerChoice(serverUrl);
 
   // React Compiler memoises this for us: the preview follows the picker live.
   const preview = renderTaunt(pickTaunt('win', level, 1), PREVIEW_VARS);
+
+  /**
+   * A tunnel or a mobile link can deliver the sign-up and lose its answer: the
+   * account is made, the app says "Sunucu cevap vermedi", and the next tap
+   * heard "kapılmış" about the friend's own new account. They signed up as
+   * zeynep2 and left an empty zeynep where their kankas search for them. So a
+   * "kapılmış" for the very name and password of a try that got no answer
+   * signs in to that account, through the plain login and its limits: only
+   * whoever typed that password gets in, and a name somebody else holds still
+   * says "kapılmış". The app does it because only the app knows what it sent:
+   * the server cannot tell a retry from a stranger who wants the same name.
+   */
+  const signUp = async (
+    client: ApiClient,
+    body: Parameters<ApiClient['register']>[0]
+  ): Promise<AuthResponse> => {
+    try {
+      return await client.register(body);
+    } catch (err) {
+      if (unanswered(err)) lostTry.current = { name: body.username, password: body.password };
+      const lost = lostTry.current;
+      if (
+        err instanceof ApiError &&
+        err.code === 'username_taken' &&
+        lost?.name === body.username &&
+        lost.password === body.password
+      ) {
+        try {
+          return await client.login({ username: body.username, password: body.password });
+        } catch (loginErr) {
+          // no answer this time either: that is what to say, and the next tap tries again
+          if (unanswered(loginErr)) throw loginErr;
+          // a wrong password: the name is somebody else's after all
+        }
+      }
+      throw err;
+    }
+  };
 
   const submit = async () => {
     setError(null);
@@ -94,7 +143,7 @@ export default function RegisterScreen() {
     setBusy(true);
     try {
       const client = makeClient();
-      const result = await client.register({
+      const result = await signUp(client, {
         username: name,
         password,
         displayName: display,

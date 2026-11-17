@@ -81,6 +81,14 @@ interface IdParams {
 const START_AHEAD_SLACK_MS = 60_000;
 
 /**
+ * How close a second "KOY BAKALIM" comes to the first to be its retry: the app
+ * gives up on an answer after 15 s, and a "Hemen" start (and an end too short
+ * to snap to a local midnight, computeWindow's fallback) moves on with the
+ * clock between the two taps.
+ */
+const RETRY_TWIN_MS = 2 * 60_000;
+
+/**
  * Ordering (SPEC 2.2): active first by soonest deadline, then pending by start time,
  * then finished newest-first. Cancelled ones trail the list.
  */
@@ -144,6 +152,74 @@ function requireFriend(db: Database, meId: string, userId: string): UserRow {
     throw badRequest('not_friends', `${user.display_name} kankan değil. Önce arkadaş olun.`);
   }
   return user;
+}
+
+/** The columns of a new çelınc that a retry of its creation sends again. */
+interface CreatedFields {
+  type_key: string;
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  reward_text: string | null;
+  penalty_text: string | null;
+  deadline_time: string | null;
+  daily_target: number | null;
+  proof_required: number;
+}
+
+/**
+ * The çelınc this creation already made, when it is a retry. A tunnel or a
+ * mobile link can deliver POST /challenges and lose its answer; the app says
+ * "Sunucu cevap vermedi" and the creator taps "KOY BAKALIM" again. Each tap
+ * made a çelınc and sent every friend an invite, and the twin of a "Hemen" one
+ * is live, which nobody can call off. A twin is the same creator's, made within
+ * RETRY_TWIN_MS, still theirs to play (pending or active, not walked out of),
+ * with the same type, name, stakes and rules, the same friends asked (whatever
+ * they answered since) and its start and end within RETRY_TWIN_MS of these:
+ * computeWindow snaps the end to the last local day, so the retry of every
+ * installed wizard sends the same one. Both have begun or neither has: a
+ * "Hemen" is no twin of a start two minutes ahead. A rematch is never one: it
+ * has its own route and its own check.
+ */
+function retryTwin(
+  db: Database,
+  meId: string,
+  fields: CreatedFields,
+  participantIds: readonly string[],
+  now: Date,
+): ChallengeRow | undefined {
+  const candidates = db
+    .prepare(
+      `SELECT c.* FROM challenges c
+         JOIN challenge_participants p ON p.challenge_id = c.id AND p.user_id = c.creator_id
+        WHERE c.creator_id = ? AND c.created_at >= ? AND c.status IN ('pending', 'active')
+          AND c.rematch_of_id IS NULL AND p.status = 'accepted'
+          AND c.type_key = ? AND c.title = ? AND c.reward_text IS ? AND c.penalty_text IS ?
+          AND c.deadline_time IS ? AND c.daily_target IS ? AND c.proof_required = ?
+        ORDER BY c.created_at DESC`,
+    )
+    .all(
+      meId,
+      nowIso(new Date(now.getTime() - RETRY_TWIN_MS)),
+      fields.type_key,
+      fields.title,
+      fields.reward_text,
+      fields.penalty_text,
+      fields.deadline_time,
+      fields.daily_target,
+      fields.proof_required,
+    ) as ChallengeRow[];
+  const near = (a: string, b: string): boolean => Math.abs(Date.parse(a) - Date.parse(b)) <= RETRY_TWIN_MS;
+  const begun = (at: string): boolean => Date.parse(at) <= now.getTime();
+  const asked = [...participantIds].sort().join(',');
+  return candidates.find((row) => {
+    if (!near(row.starts_at, fields.starts_at) || !near(row.ends_at, fields.ends_at)) return false;
+    if (begun(row.starts_at) !== begun(fields.starts_at)) return false;
+    const others = db
+      .prepare('SELECT user_id FROM challenge_participants WHERE challenge_id = ? AND user_id <> ?')
+      .all(row.id, meId) as { user_id: string }[];
+    return others.map((other) => other.user_id).sort().join(',') === asked;
+  });
 }
 
 /** "6 güne denk geliyor", or no day at all: the check-in days a zone gets (`checkinDaysShort`). */
@@ -408,25 +484,34 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
        VALUES (?, ?, ?, ?, ?, NULL, NULL, ?)`,
     );
 
-    const run = db.transaction(() => {
+    const fields: CreatedFields = {
+      type_key: type.key,
+      title: body.title ?? type.nameTr,
+      starts_at: startsAt,
+      ends_at: endsAt,
+      reward_text: body.rewardText ?? null,
+      penalty_text: body.penaltyText ?? null,
+      deadline_time: deadlineTime,
+      daily_target: body.dailyTarget ?? null,
+      proof_required: (body.proofRequired ?? type.proofRequired) ? 1 : 0,
+    };
+
+    // In the transaction with the insert, so two copies arriving together
+    // cannot both miss each other.
+    const run = db.transaction((): ChallengeRow | undefined => {
+      const twin = retryTwin(db, me.id, fields, body.participantIds, now);
+      if (twin) return twin;
+
       insertChallenge.run({
+        ...fields,
         id: challengeId,
         creator_id: me.id,
-        type_key: type.key,
         // The metric shape is COPIED from the catalog so a later catalog edit can
         // never rewrite the rules of a challenge that is already being played.
         metric_type: type.metricType,
         direction: type.direction,
         unit: type.unitTr,
-        title: body.title ?? type.nameTr,
-        starts_at: startsAt,
-        ends_at: endsAt,
         status,
-        reward_text: body.rewardText ?? null,
-        penalty_text: body.penaltyText ?? null,
-        deadline_time: deadlineTime,
-        daily_target: body.dailyTarget ?? null,
-        proof_required: (body.proofRequired ?? type.proofRequired) ? 1 : 0,
         created_at: createdAt,
       });
 
@@ -445,13 +530,16 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
           createdAt,
         });
       }
+      return undefined;
     });
-    run();
+    const twin = run();
 
-    void reply.code(201);
+    // A retry gets the first one, as the lost answer would have had it: 200, no
+    // second invite. Every wizard treats any 2xx alike and opens /challenge/<id>.
+    void reply.code(twin ? 200 : 201);
     // SPEC 2.2: creation answers with the Challenge itself — the wizard navigates
     // straight to /challenge/<id> and then loads the detail.
-    return toChallenge(requireChallengeRow(db, challengeId));
+    return toChallenge(twin ?? requireChallengeRow(db, challengeId));
   });
 
   // -------------------------------------------------------------------------

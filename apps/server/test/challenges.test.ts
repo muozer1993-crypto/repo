@@ -262,6 +262,59 @@ describe('POST /challenges', () => {
     expect(later.json<Challenge>().status).toBe('pending');
   });
 
+  // "Hemen", three days, as computeWindow sends it: the end snapped to the last
+  // millisecond of the third local day in Istanbul
+  const SEKERSIZ = { typeKey: 'sekersiz_gun', title: 'Şekersiz Günler', endsAt: '2026-01-07T20:59:59.999Z' };
+
+  it('answers a retry after a lost answer with the çelınc the first try made', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+
+    const first = await createChallenge(harness, ali, { ...SEKERSIZ, participantIds: [veli.me.id] });
+    expect(first.statusCode).toBe(201);
+    expect(first.json<Challenge>().status).toBe('active');
+
+    // the answer never came: the app gave up after 15 s and Ali tapped "KOY
+    // BAKALIM" again, its "Hemen" now 20 s later
+    harness.advance(20_000);
+    const retry = await createChallenge(harness, ali, { ...SEKERSIZ, participantIds: [veli.me.id] });
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json<Challenge>()).toEqual(first.json<Challenge>());
+
+    const mine = await authed(harness.app, ali.token)({ method: 'GET', url: '/challenges' });
+    expect(mine.json<ChallengeSummary[]>()).toHaveLength(1);
+    expect(listByType(harness.db, veli.me.id, 'challenge_invite')).toHaveLength(1);
+  });
+
+  it('still makes a new çelınc when anything differs, or two minutes on', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali');
+    const veli = await registerUser(harness.app, 'veli');
+    const ayse = await registerUser(harness.app, 'ayse');
+    befriend(harness.app, ali.me.id, veli.me.id);
+    befriend(harness.app, ali.me.id, ayse.me.id);
+    const create = (options: Partial<CreateOptions>) =>
+      createChallenge(harness!, ali, { ...SEKERSIZ, participantIds: [veli.me.id], ...options });
+
+    const first = await create({});
+    expect(first.statusCode).toBe(201);
+    const others = [
+      await create({ title: 'Tatlı Yok' }),
+      await create({ endsAt: '2026-01-08T20:59:59.999Z' }),
+      await create({ participantIds: [veli.me.id, ayse.me.id] }),
+      await create({ rewardText: 'Kaybeden baklava alır' }),
+    ];
+    harness.advance(3 * 60_000);
+    others.push(await create({}));
+
+    expect(others.map((response) => response.statusCode)).toEqual([201, 201, 201, 201, 201]);
+    const ids = new Set([first, ...others].map((response) => response.json<Challenge>().id));
+    expect(ids.size).toBe(6);
+    expect(listByType(harness.db, veli.me.id, 'challenge_invite')).toHaveLength(6);
+  });
+
   it('requires deadlineTime for a check-in challenge', async () => {
     harness = await makeApp({ now: NOW });
     const ali = await registerUser(harness.app, 'ali');
@@ -540,8 +593,9 @@ describe('accept / decline / leave / cancel', () => {
     befriend(h.app, ali.me.id, ayse.me.id);
     befriend(h.app, veli.me.id, ayse.me.id);
     const veliCall = authed(h.app, veli.token);
-    const create = async () =>
-      (await createChallenge(h, ali, { participantIds: [veli.me.id, ayse.me.id] })).json<Challenge>().id;
+    // four çelıncs, not one sent four times (a retry lands on the first)
+    const create = async (title: string) =>
+      (await createChallenge(h, ali, { title, participantIds: [veli.me.id, ayse.me.id] })).json<Challenge>().id;
     const veliInvite = (challengeId: string) =>
       h.db
         .prepare(
@@ -549,10 +603,10 @@ describe('accept / decline / leave / cancel', () => {
         )
         .get(veli.me.id, challengeId) as { read_at: string | null };
 
-    const first = await create();
-    const second = await create();
-    const third = await create();
-    const untouched = await create();
+    const first = await create('Bir');
+    const second = await create('İki');
+    const third = await create('Üç');
+    const untouched = await create('Dört');
     expect((await veliCall({ method: 'GET', url: '/me/inbox/unread' })).json<{ count: number }>().count).toBe(4);
 
     h.advance(60_000);

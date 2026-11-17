@@ -99,6 +99,11 @@ const mockLogin = jest.fn(async (_body: { username: string; password: string }) 
   token: 'token',
   me: { ...ME, timezone: 'Europe/Istanbul' },
 }));
+/** a sign-up through the same client; each test says what the server answers */
+const mockRegister = jest.fn(async (_body: { username: string; password: string }) => ({
+  token: 'token',
+  me: { ...ME, timezone: 'Europe/Istanbul' },
+}));
 const mockSetMe = jest.fn(async () => {});
 /** the address the screens see; a fresh install sits on the localhost fallback */
 const mockServer = { url: 'http://localhost:4000' };
@@ -118,7 +123,7 @@ jest.mock('@/store/auth', () => ({
       refreshMe: mockRefreshMe,
       setSession: mockSetSession,
       setMe: mockSetMe,
-      client: () => ({ login: mockLogin }),
+      client: () => ({ login: mockLogin, register: mockRegister }),
       rememberServerId: jest.fn(async () => {}),
       sessionEnded: mockSession.ended,
       sessionEndReason: mockSession.reason,
@@ -4949,6 +4954,77 @@ describe('usernames with Turkish letters', () => {
     press(tree, 'Gir bakalım');
     await settle();
     expect(mockLogin).toHaveBeenCalledWith({ username: 'ismail', password: 'cokgizli' });
+  });
+});
+
+describe('a sign-up whose answer never came', () => {
+  const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+  const TIMEOUT = new ApiError('timeout', 'Sunucu cevap vermedi. Bağlantını kontrol et.', 0);
+  const TAKEN = new ApiError('username_taken', 'Bu kullanıcı adı kapılmış. Başka bir tane dene.', 409);
+
+  beforeEach(() => {
+    mockServer.url = 'http://192.168.1.20:4000';
+    mockLogin.mockClear();
+    mockRegister.mockReset();
+    mockSetSession.mockClear();
+    router.replace!.mockClear();
+  });
+
+  async function signUp(password: string): Promise<ReactTestRenderer> {
+    const RegisterScreen = require('@/app/(auth)/register').default;
+    const tree = renderScreen(<RegisterScreen />);
+    await settle();
+    typeInto(tree, 'Kullanıcı adı', 'zeynep');
+    typeInto(tree, 'Görünen ad', 'Zeynep');
+    typeInto(tree, 'Şifre', password);
+    press(tree, 'Kaydol ve başla');
+    await settle();
+    return tree;
+  }
+
+  it('signs in to the account the lost try made instead of calling the name taken', async () => {
+    // the first try made the account and its answer was lost; the second hears the name is in use
+    mockRegister.mockRejectedValueOnce(TIMEOUT).mockRejectedValueOnce(TAKEN);
+    const tree = await signUp('gizli123');
+    expect(rendered(tree)).toContain('Sunucu cevap vermedi.');
+    expect(mockLogin).not.toHaveBeenCalled();
+
+    press(tree, 'Kaydol ve başla');
+    await settle();
+    expect(mockLogin.mock.calls).toEqual([[{ username: 'zeynep', password: 'gizli123' }]]);
+    expect(mockSetSession).toHaveBeenCalledWith('token', expect.objectContaining({ id: 'me-1' }));
+    expect(router.replace).toHaveBeenCalledWith('/onboarding');
+    expect(rendered(tree)).not.toContain('kapılmış');
+  });
+
+  it('keeps "kapılmış" for another password, or with no lost try before it', async () => {
+    mockRegister.mockRejectedValueOnce(TIMEOUT).mockRejectedValueOnce(TAKEN);
+    const changed = await signUp('gizli123');
+    typeInto(changed, 'Şifre', 'baska456');
+    press(changed, 'Kaydol ve başla');
+    await settle();
+    expect(rendered(changed)).toContain('Bu kullanıcı adı kapılmış.');
+
+    // somebody else's name, asked about for the first time
+    mockRegister.mockRejectedValueOnce(TAKEN);
+    const taken = await signUp('gizli123');
+    expect(rendered(taken)).toContain('Bu kullanıcı adı kapılmış.');
+
+    expect(mockLogin).not.toHaveBeenCalled();
+    expect(mockSetSession).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('says "kapılmış" when the password does not open the name after all', async () => {
+    mockRegister.mockRejectedValueOnce(TIMEOUT).mockRejectedValueOnce(TAKEN);
+    mockLogin.mockRejectedValueOnce(new ApiError('bad_credentials', 'Kullanıcı adı ya da şifre yanlış.', 401));
+    const tree = await signUp('gizli123');
+    press(tree, 'Kaydol ve başla');
+    await settle();
+    expect(mockLogin).toHaveBeenCalledTimes(1);
+    expect(rendered(tree)).toContain('Bu kullanıcı adı kapılmış.');
+    expect(rendered(tree)).not.toContain('şifre yanlış');
+    expect(mockSetSession).not.toHaveBeenCalled();
   });
 });
 

@@ -823,6 +823,20 @@ onun yerine kuyruğa koyar; kuyruk o güne ancak ondan sonra dokunur.
 Sunucunun zaten yazdığı bir check-in'in tekrarı (409 `already_checked_in`) reddedilmiş değil,
 gitmiş sayılır: ilk gönderim varmış, sadece cevabı kaybolmuştu.
 
+Cevabı yolda kaybolan istek yalnızca girişte olmaz. Tünel ya da mobil hat isteği sunucuya ulaştırıp
+cevabı kaybedebilir; uygulama 15 saniye sonra "Sunucu cevap vermedi" der, kanka da bir daha basar.
+Çelınc açarken bu ikinci bir çelınc açıyordu: her kankaya ikinci davet gidiyordu, "Hemen" başlayan
+kopya da `active` olduğu için iptal edilemiyordu. Şimdi `POST /challenges`, aynı kişinin son iki
+dakikada açtığı, hâlâ içinde olduğu, aynı tür, ad, ödül, ceza, kural ve kankalarla, başlangıcı ve
+bitişi iki dakikadan az farklı bir çelınc bulursa yenisini açmaz, onu 200 ile döner
+(`retryTwin`). Uygulama bitişi son günün yerel gece yarısına yasladığı için tekrar da aynı bitişi
+gönderir; karar sunucuda olduğu için eski sürümler de ilk denemenin çelıncına düşer.
+Kayıtta ikinci deneme, kankanın az önce açılan kendi hesabı yüzünden "Bu kullanıcı adı kapılmış"
+duyuyordu; kanka zeynep2 açıyor, kankalarının aradığı zeynep boş kalıyordu. Kayıt ekranı artık
+cevapsız kalan denemenin adını ve şifresini aklında tutar. Aynı ad ve aynı şifreyle gelen
+"kapılmış" o hesaba sıradan giriş ucundan, onun sınırlarıyla girer; şifre tutmazsa ad gerçekten
+başkasınındır ve "kapılmış" kalır.
+
 Kuyruğa her dokunuş listenin tamamını okuyup geri yazar; AsyncStorage de her çağrıyı kendi yerel
 iş parçacığında, sırayla cevaplar. Bağlantı gidince kuyruğun gönderdiği bardak da kankanın tam o
 sırada bastığı "+1" de aynı anda hata alır. İkisi de listeyi öbürü yazmadan okuyordu, sonra yazan
