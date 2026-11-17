@@ -378,6 +378,22 @@ describe('EntryBody', () => {
     expect(issuePaths(EntryBodySchema.safeParse({ ...ok, proofUrl: 'javascript:alert(1)' }))).toEqual(['proofUrl']);
   });
 
+  it('takes the session id a 1.0 focus screen makes, which never gets a JS update', () => {
+    const focus = { ...ok, source: 'focus' };
+    // the 1.0 expression, as it runs on those phones
+    const legacy = `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    expect(EntryBodySchema.safeParse({ ...focus, sessionId: legacy }).data?.sessionId).toBe(legacy);
+    // Math.random() rolled 0: only the clock follows the 'f'
+    expect(EntryBodySchema.safeParse({ ...focus, sessionId: `f${Date.now().toString(36)}` }).success).toBe(true);
+    expect(EntryBodySchema.safeParse({ ...focus, sessionId: 'fmwkucho8lckwax6x' }).success).toBe(true);
+    expect(EntryBodySchema.safeParse({ ...focus, sessionId: '123e4567-e89b-12d3-a456-426614174000' }).success).toBe(true);
+
+    // lowercase base36 only, and no longer than the clock and the random part
+    for (const sessionId of ['f-abc', 'F123456789', 'fMWKUCHO8', 'f1234567', `f${'a'.repeat(17)}`, `f${'a'.repeat(30)}`]) {
+      expect(issuePaths(EntryBodySchema.safeParse({ ...focus, sessionId }))).toEqual(['sessionId']);
+    }
+  });
+
   it('DayKeySchema rejects impossible dates', () => {
     expect(DayKeySchema.safeParse('2024-02-29').success).toBe(true);
     expect(DayKeySchema.safeParse('2023-02-29').success).toBe(false);

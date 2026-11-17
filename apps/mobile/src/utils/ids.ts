@@ -1,6 +1,8 @@
 /**
  * RFC 4122 version-4 UUIDs for the entry API's `sessionId` — the server
- * validates the field with `z.uuid()`, so anything shorter is a 400, not an id.
+ * validates the field with `z.uuid()` (the only other shape it takes is the
+ * 1.0 focus screen's `f…` id, for APKs that never update), so a made-up
+ * string is a 400, not an id.
  *
  * Hermes has no `crypto.randomUUID`; when the runtime does provide it (web,
  * newer engines) it is used, otherwise `Math.random` fills the 122 bits. This

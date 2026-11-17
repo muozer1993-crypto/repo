@@ -449,6 +449,29 @@ describe('focus_minutes entries', () => {
     expect(another.json<{ standings: ParticipantView[] }>().standings.find((p) => p.user.id === ali.me.id)?.score).toBe(70);
   });
 
+  it('takes the session id the 1.0 focus screen sends', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, challengeId } = await liveChallenge(harness, 'odak_seansi');
+    // the 1.0 APK makes its own id and never gets a JS update; a 400 threw the minutes away
+    const sessionId = `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    const body = { dayKey: today(harness), value: 25, source: 'focus', sessionId, clientTime: iso(harness) };
+
+    const first = await post(harness, ali, challengeId, body);
+    expect(first.statusCode).toBe(201);
+    expect(first.json<{ standings: ParticipantView[] }>().standings.find((p) => p.user.id === ali.me.id)?.score).toBe(25);
+
+    // its offline queue replays it like any other session: the same row, counted once
+    const replay = await post(harness, ali, challengeId, body);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json<{ entry: Entry }>().entry.id).toBe(first.json<{ entry: Entry }>().entry.id);
+    const rows = harness.db.prepare('SELECT COUNT(*) AS n FROM entries WHERE session_id = ?').get(sessionId) as { n: number };
+    expect(rows.n).toBe(1);
+
+    const junk = await post(harness, ali, challengeId, { ...body, sessionId: 'f-abc' });
+    expect(junk.statusCode).toBe(400);
+    expect(errorCode(junk)).toBe('validation');
+  });
+
   it('needs a session id, the focus source and a sane duration', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await liveChallenge(harness, 'odak_seansi');

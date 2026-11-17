@@ -432,6 +432,14 @@ const ProofUrlSchema = z
   .max(LIMITS.PROOF_URL_MAX)
   .refine((s) => /^(https?:\/\/|\/)/.test(s), 'Geçersiz kanıt adresi');
 
+/**
+ * The 1.0 focus screen's own session id: 'f', `Date.now()` in base36 (8
+ * characters from 1972 to 2059) and at most 8 base36 characters of
+ * `Math.random()`, none when it rolls 0. Those APKs never get a JS update, and
+ * a 400 there threw the finished session's minutes away.
+ */
+const LEGACY_FOCUS_SESSION_ID = /^f[0-9a-z]{8,16}$/;
+
 export const EntryBodySchema = z.object({
   dayKey: DayKeySchema,
   value: z.number().finite().min(0, 'Değer negatif olamaz'),
@@ -439,8 +447,10 @@ export const EntryBodySchema = z.object({
   note: optionalText(LIMITS.NOTE_MAX),
   proofUrl: ProofUrlSchema.optional(),
   clientTime: IsoDateTimeSchema,
-  /** Focus sessions: idempotency key. */
-  sessionId: z.uuid('Geçersiz oturum kimliği').optional(),
+  /** Focus sessions: idempotency key. A UUID, or the id the 1.0 focus screen made. */
+  sessionId: z
+    .union([z.uuid(), z.string().regex(LEGACY_FOCUS_SESSION_ID)], { error: 'Geçersiz oturum kimliği' })
+    .optional(),
 });
 export type EntryBody = z.infer<typeof EntryBodySchema>;
 
