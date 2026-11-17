@@ -58,7 +58,11 @@ saatten önce kestiği günden önce gelir (00:30'da "Hemen" açılan Erken Kuş
 kalır, 04:00-05:59 son sabahı düşer). Son saat aralığına hiç denk gelmeyen gün, açanda da öyle değilse o
 kankanın günü sayılmaz (New York'ta 15:59'da biten son akşam). Bitişin son saatten önce kestiği gün
 (Londra'nın 20:59'da biten yedinci akşamı) bitişe kadar oynanır: uygulama o gün sınırı 20:59 gösterir ve
-yarım saat önce hatırlatır. Aynı dilimdeki oyunculara dokunulmaz. Profilini
+yarım saat önce hatırlatır. Bu kural migration 019'la geldi; ondan önce açılmış çelınc, bitmiş ya da
+sürüyor, oynandığı eski kuralla kırpılır (`challenges.window_rule` 0): check-in'de son saati içeride
+olsun olmasın daha az kapsanan uç düşer, ekran süresinde daha az saatlik uç. Yoksa güncellemeyle
+reddedilmiş bir gün eksik güne, sayılmış bir giriş de sayılmayana dönerdi; kazanan değişirdi.
+Aynı dilimdeki oyunculara dokunulmaz. Profilini
 "Varım"dan hemen önce Tokyo'ya alan biri 07:00'lik sabahları İstanbul saatiyle 00:30'da yakalar. Kabulü
 saat dilimi değişti diye reddetmek gerçekten yolculuk yapanı cezalandırırdı; onun yerine herkesin oynadığı
 dilim görünür (`ParticipantView.timezone`): sıralamada adının altında kendi satırında "🕐 Tokyo saati" (adın yanında

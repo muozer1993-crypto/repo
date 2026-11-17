@@ -2860,6 +2860,14 @@ describe("friends in other zones play the creator's number of days", () => {
     ]);
   });
 
+  it('keeps a screen-time çelınc made before the update on the trim it was played under', async () => {
+    harness = await makeApp({ now: '2026-01-04T21:00:00.000Z' }); // Monday 00:00 in Istanbul
+    const { lara, challengeId } = await istanbulMidnight(harness, 'ekran_suresi_beyani');
+    harness.db.prepare('UPDATE challenges SET window_rule = 0 WHERE id = ?').run(challengeId);
+    // the old trim: the 11 hours of her first Sunday are fewer than the last one's 13
+    expect(await myDays(harness, lara, challengeId)).toEqual({ first: '2026-01-05', last: '2026-01-11' });
+  });
+
   it('charges nobody 1440 on screen time for a last day the end cuts, west or east of the creator', async () => {
     harness = await makeApp({ now: '2026-01-04T21:00:00.000Z' }); // Monday 00:00 in Istanbul
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
@@ -3162,6 +3170,45 @@ describe('check-in çelınclar across zones', () => {
     runSchedulerOnce(harness.db, harness.now());
     const outcome = harness.db.prepare('SELECT status, winner_id, is_tie FROM challenges WHERE id = ?').get(challengeId);
     expect(outcome).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
+  });
+
+  // Migration 019 marks every çelınc from before the new trim `window_rule` 0:
+  // re-trimmed mid-game, Veli's refused Tuesday would turn into a missed one
+  // and his Saturday, which counted, would drop out.
+  it('keeps a check-in çelınc made before the update on the trim it was played under', async () => {
+    harness = await makeApp({ now: '2026-11-09T21:30:00.000Z' }); // 00:30 on Tuesday in Istanbul, 06:30 in Tokyo
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli', timezone: 'Asia/Tokyo' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'erken_kus',
+      deadlineTime: '07:00',
+      participantIds: [veli.me.id],
+      endsAt: '2026-11-13T20:59:59.999Z',
+    });
+    const challengeId = created.json<Challenge>().id;
+    expect((await accept(harness, veli, challengeId)).statusCode).toBe(200);
+    harness.db.prepare('UPDATE challenges SET window_rule = 0 WHERE id = ?').run(challengeId);
+    // the old trim: the half hour of Tuesday is less than Saturday's 04:00-05:59, and goes
+    expect((await detailFor(harness, veli, challengeId)).myDays).toEqual({ first: '2026-11-11', last: '2026-11-14' });
+    expect(errorOf(await checkIn(harness, veli, challengeId, '2026-11-10')).code).toBe('day_out_of_range');
+
+    for (const day of ['2026-11-11', '2026-11-12', '2026-11-13']) {
+      harness.setNow(`${addDays(day, -1)}T21:45:00.000Z`);
+      expect((await checkIn(harness, veli, challengeId, day)).statusCode).toBe(201);
+    }
+    for (const day of ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13']) {
+      harness.setNow(`${day}T03:45:00.000Z`);
+      expect((await checkIn(harness, ali, challengeId, day)).statusCode).toBe(201);
+    }
+    harness.setNow('2026-11-13T19:45:00.000Z'); // 04:45 on Saturday in Tokyo
+    expect((await checkIn(harness, veli, challengeId, '2026-11-14')).statusCode).toBe(201);
+
+    harness.setNow('2026-11-13T22:00:30.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    const outcome = harness.db.prepare('SELECT status, winner_id, is_tie FROM challenges WHERE id = ?').get(challengeId);
+    expect(outcome).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
+    expect((await detailFor(harness, veli, challengeId)).myDays).toEqual({ first: '2026-11-11', last: '2026-11-14' });
   });
 
   it("leaves a zone's days with no slot out of its check-in days, but not a day the creator has without one too", async () => {

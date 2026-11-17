@@ -1350,7 +1350,10 @@ Check-in çelınclarında da çelıncı açanın kaç sabahı ya da akşamı var
 farkı yüzünden daha azına denk gelen kanka eklenemez (İstanbul'da öğlen açılan bir günlük "Erken Yatma Sözü" New York'ta
 akşam 19:00 olmadan biter), uygulama bunu söyler. Bitişin son saatten önce kestiği gün (İstanbul'da gece
 yarısı biten "Erken Yatma Sözü" Londra'da 20:59'da biter) bitişe kadar sayılır; uygulama o gün sınırı
-20:59 diye gösterir ve yarım saat önce hatırlatır. Başka saat diliminde oynayan kankanın adının altında
+20:59 diye gösterir ve yarım saat önce hatırlatır. Hangi uçtaki günün düşeceği bu sürümde değişti;
+sunucuyu güncellemeden önce açılmış çelınclar başladıkları kuralla biter, kimsenin sayılmış günü sonradan
+düşmez. Başka saat
+diliminde oynayan kankanın adının altında
 "🕐 Tokyo saati" yazar; "Geldim" dediği saat de hem onun hem senin saatinle görünür.
 
 **Uygulama "Sunucunun diski dolmak üzere" diyor.**
