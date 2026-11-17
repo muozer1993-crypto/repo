@@ -596,7 +596,10 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    is ever upheld.
 2. `active` with `ends_at <= now` → finalize. A type with a `deviceMetric` (steps, screen time) first **settles**: the
    phone's last evening usually arrives with the next background sync (15+ minutes, longer under Doze), so it
-   stays `active` until `now >= max(ends_at, bootAt) + LIMITS.DEVICE_SETTLE_MS` (1 h), or earlier once every
+   stays `active` until `now >= max(ends_at, bootAt) + LIMITS.DEVICE_SETTLE_MS` (1 h; `bootAt` counts only when a
+   `server_pauses` row, or a pause the scheduler holds because it could not write it, overlaps the hour after `ends_at`:
+   a wake or restart long after an hour the server was up for does not run it again, or every sleep reopened
+   itirazlar on a result an itiraz holds, each new one holding it 12 h more), or earlier once every
    accepted participant's `steps_daily` / `screen_time_daily` row for their own last window day
    (`challengeWindow(c, participantTimezone(p, u)).at(-1)`) has `updated_at > ends_at`; a participant whose last
    day was not over by `ends_at` (another zone, an end in the middle of a day) is not waited for, because that day
@@ -612,7 +615,10 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    `bootAt` too (3). Either way the gap goes to `server_pauses` (a start reads the
    last beat a stopped process, or its stop(), left in `server_state`, and writes any gap; a running one writes a gap
    only when the machine's uptime moved as much, so a clock put forward is no pause), where a check-in tapped
-   meanwhile is judged (2.3). The phones' queues send what they parked the moment the server answers again, often
+   meanwhile is judged (2.3). A gap that cannot be written (a PC that wakes on a full disk) is held in memory
+   (`holdPause`) and written by a later beat (`writeHeldPauses`); meanwhile it vouches for a tap like a written one,
+   so the night's parked "Geldim", sent the moment the PC wakes, is judged at its tap and only the disk (507) keeps
+   it out. The phones' queues send what they parked the moment the server answers again, often
    before the interval's next beat, so a request that comes more than `RESUME_GAP_MS` after the last beat runs that
    beat first (`catchUp`, from an `onRequest` hook): the pause is written, `bootAt` moved and the pass run (a due
    `pending` çelınc started) before it is handled. Whichever of the request and the interval comes second finds no

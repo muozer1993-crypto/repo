@@ -920,8 +920,9 @@ son akşamın sayıları bitişten sonraki bir saatte geldiği için o saat de s
 çelıncta son bir saatte bir giriş yapıldıysa ya da değiştiyse o çelınc da bitişten sonra bir saat
 itiraza açık kalır, sonuç da o saati bekler: yoksa bitişe 30 saniye kala yazılan 300 sayfaya rakibin
 itiraz edecek vakti olmazdı. Son saatte kimse bir şey girmediyse sonuç eskisi gibi tam bitişte çıkar.
-Bilgisayar bitişte uyuyorduysa bu bir saat uyandığı andan başlar. Uygulama itiraz düğmesini de sadece
-bu sürede gösterir.
+Bilgisayar bitişte ya da ondan sonraki saatte uyuyorduysa bu bir saat uyandığı andan başlar; o saat
+bilgisayar açıkken geçtiyse sonraki bir uyku ya da yeniden başlatma itirazı yeniden açmaz. Uygulama
+itiraz düğmesini de sadece bu sürede gösterir.
 Akışta en yeni 40 giriş görünür (itiraz bekleyenler ne kadar eski olursa olsun hep oradadır); daha
 eskisine itiraz etmek için listenin altındaki **Daha eski girişler**'e dokun, her dokunuşta 40 tane
 daha gelir. Kalabalık ya da uzun bir çelıncta ilk günlerin girişleri böylece hâlâ sorgulanabilir. Fotoğraf kanıtı, bir

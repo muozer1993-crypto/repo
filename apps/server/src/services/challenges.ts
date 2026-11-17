@@ -64,6 +64,7 @@ import { asVulgarityLevel, toPublicUser } from '../serialize.js';
 import { DEVICE_SOURCES, disputeAwaitingAnswer, isDeviceSource, resolveDisputes } from './entries.js';
 import { isBlockedBetween } from './friends.js';
 import { notify } from './notifications.js';
+import { pausedBetween } from './pauses.js';
 import { joinNames, sendWeeklyRecaps } from './recap.js';
 import { awardBadges } from './stats.js';
 
@@ -1375,7 +1376,8 @@ export function disputesCloseAt(db: Database, challenge: ChallengeRow): number {
  * `bootAt`). The late numbers land in that hour wherever it falls: a reading a
  * phone sends at 08:05, after the PC slept through midnight, can be disputed
  * like one sent at 00:05, and so can a number typed at 23:59 that nobody could
- * see before the PC woke. Only that hour keeps it open; a restart does not
+ * see before the PC woke. Only that hour keeps it open, and only when the
+ * server was down for some of the hour after the end; a restart does not
  * reopen a çelınc that only waits for an itiraz's photo, nor one every phone
  * has reported for with nothing moved after the end (the next pass crowns it).
  */
@@ -1397,17 +1399,24 @@ export function disputesOpenUntil(db: Database, challenge: ChallengeRow, now: Da
  * too (`lateTypedEntry`). A typed çelınc with nothing late has nothing more to
  * receive and finishes on the dot.
  *
- * The hour runs from the end or from `bootAt`, whichever is later: a server
- * that was off at midnight must not crown anybody on boot before a single phone
- * could reach it, nor before a friend could see the last typed number, and a
- * restart during the hour starts it again, which needs no bookkeeping table. A
- * PC that slept through midnight is the same server off at midnight (the phones'
- * syncs failed all night), so the scheduler moves `bootAt` to the moment it
- * wakes. However it goes, the wait ends an hour after that (an itiraz filed in
- * it holds the result its own `DISPUTE_ANSWER_MS` more, `disputeAwaitingAnswer`).
+ * The hour runs from the end, or from `bootAt` when the server was not running
+ * for some of the hour after the end (`pausedBetween`: a sleep or a stopped
+ * process, as the scheduler writes them down): a server that was off at
+ * midnight must not crown anybody on boot before a single phone could reach it,
+ * nor before a friend could see the last typed number, and a restart during
+ * that hour starts it again. A PC that slept through midnight is the same
+ * server off at midnight (the phones' syncs failed all night), so the scheduler
+ * moves `bootAt` to the moment it wakes. However it goes, the wait ends an hour
+ * after that (an itiraz filed in it holds the result its own
+ * `DISPUTE_ANSWER_MS` more, `disputeAwaitingAnswer`). A wake or restart long
+ * after an hour the server was up for does not run it again: with an itiraz
+ * holding the result for its photo, every sleep reopened itirazlar on it and
+ * each new one held it 12 hours more.
  */
 function stillSettling(db: Database, challenge: ChallengeRow, now: Date, bootAt?: Date): boolean {
-  const settleFrom = Math.max(Date.parse(challenge.ends_at), bootAt?.getTime() ?? Number.NEGATIVE_INFINITY);
+  const endsAt = Date.parse(challenge.ends_at);
+  const downAfterEnd = !!bootAt && pausedBetween(db, endsAt, endsAt + LIMITS.DEVICE_SETTLE_MS);
+  const settleFrom = downAfterEnd ? Math.max(endsAt, bootAt.getTime()) : endsAt;
   if (now.getTime() >= settleFrom + LIMITS.DEVICE_SETTLE_MS) return false;
   if (lateTypedEntry(db, challenge)) return true;
   const metric = typeForChallenge(challenge).deviceMetric;

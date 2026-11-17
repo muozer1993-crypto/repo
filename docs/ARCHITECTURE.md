@@ -94,7 +94,12 @@ Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
   bunları `server_pauses`'a yazar: iki vuruşu arasında beş dakikadan uzun bir boşluk, ya da açılırken
   kapanmadan önceki son vuruşundan (`server_state`; düzgün kapanış onu kapanış anında yazar) bu yana
   geçen süre, ne kadar kısa olursa olsun: `dur` ile `y` arasındaki üç dakikada tünel 502 döner,
-  o arada basılan "Geldim" de gecenin uykusundaki gibi sayılmalı. 014'ten eski bir sürüm bu vuruşu
+  o arada basılan "Geldim" de gecenin uykusundaki gibi sayılmalı. Disk dolu uyanan bilgisayar bu
+  kesintiyi yazamaz; zamanlayıcı onu bellekte tutar (`holdPause`) ve yer açılınca yazar, bu arada
+  telefonun sabah gönderdiği gece "Geldim"i yine basıldığı saatle değerlendirilir, onu sadece disk
+  (507) bekletir. Bitişten sonraki saat de (`stillSettling`) uyanıştan ancak o saatte bir kesinti
+  varsa yeniden başlar: o saat sunucu açıkken geçtiyse sonraki her uyku, bir itirazın tuttuğu sonucu
+  yeniden itiraza açıp 12 saat daha bekletiyordu. 014'ten eski bir sürüm bu vuruşu
   hiç yazmıyordu; ondan güncellenen veritabanına migration 017 onun yerine eski sunucunun en son
   duyduğu anı koyar (en yeni `last_seen_at`, kayıt ya da bildirim saati). Yoksa yeni sürümün ilk
   açılışı kesinti yazmaz, güncelleme sırasında basılan "Geldim" geç kalmış bir 0 sayılır, sunucu

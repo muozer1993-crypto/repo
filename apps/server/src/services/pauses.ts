@@ -26,6 +26,44 @@ const PAUSE_KEEP_MS = 7 * 24 * 60 * 60_000;
 
 const LAST_BEAT = 'last_beat';
 
+/**
+ * Pauses the scheduler could not write down (a PC that woke on a full disk),
+ * per database, until a later beat can (`writeHeldPauses`). They vouch for a
+ * tap all the same: the phones send the night's "Geldim" the moment the tunnel
+ * answers again, before anybody has freed any room, and that check-in was
+ * judged at its arrival and refused as not today's.
+ */
+const held = new WeakMap<Database, { startedAt: Date; endedAt: Date }[]>();
+
+/** Keeps a pause `recordPause` could not write, for the next beat to try again. */
+export function holdPause(db: Database, startedAt: Date, endedAt: Date): void {
+  const list = held.get(db) ?? [];
+  list.push({ startedAt, endedAt });
+  held.set(db, list);
+}
+
+/** Writes down the held pauses, oldest first; one that fails again stays held, with those after it. */
+export function writeHeldPauses(db: Database): void {
+  const list = held.get(db);
+  while (list && list.length > 0) {
+    const pause = list[0]!;
+    recordPause(db, pause.startedAt, pause.endedAt);
+    list.shift();
+  }
+}
+
+/**
+ * Whether the server was not running for some of `from` to `to` (epoch ms),
+ * by a pause written down or one still held.
+ */
+export function pausedBetween(db: Database, from: number, to: number): boolean {
+  const row = db
+    .prepare('SELECT 1 AS hit FROM server_pauses WHERE started_at < ? AND ended_at > ? LIMIT 1')
+    .get(new Date(to).toISOString(), new Date(from).toISOString());
+  if (row) return true;
+  return (held.get(db) ?? []).some((pause) => pause.startedAt.getTime() < to && pause.endedAt.getTime() > from);
+}
+
 /** Writes down that the server was not running from `startedAt` to `endedAt`. */
 export function recordPause(db: Database, startedAt: Date, endedAt: Date): void {
   db.transaction(() => {
@@ -53,7 +91,7 @@ export function readLastBeat(db: Database): Date | null {
 
 /**
  * `clientTime` as an instant when it falls inside a pause that ended at most
- * `PAUSE_TRUST_MS` before `now`, else null. Never earlier than the server went
+ * `PAUSE_TRUST_MS` before `now` (written down, or still held), else null. Never earlier than the server went
  * away, never a moment it was up to hear the tap itself.
  */
 export function tappedWhileDown(db: Database, clientTime: string, now: Date): Date | null {
@@ -62,8 +100,14 @@ export function tappedWhileDown(db: Database, clientTime: string, now: Date): Da
   // stored as toISOString(), so the strings compare as the instants do; the
   // phone's own string may carry an offset and is normalised first
   const at = new Date(tapped).toISOString();
+  const trustFrom = now.getTime() - PAUSE_TRUST_MS;
   const hit = db
     .prepare('SELECT 1 AS hit FROM server_pauses WHERE ended_at >= ? AND started_at <= ? AND ended_at >= ? LIMIT 1')
-    .get(new Date(now.getTime() - PAUSE_TRUST_MS).toISOString(), at, at);
-  return hit ? new Date(tapped) : null;
+    .get(new Date(trustFrom).toISOString(), at, at);
+  if (hit) return new Date(tapped);
+  const inHeld = (held.get(db) ?? []).some(
+    (pause) =>
+      pause.endedAt.getTime() >= trustFrom && pause.startedAt.getTime() <= tapped && pause.endedAt.getTime() >= tapped,
+  );
+  return inHeld ? new Date(tapped) : null;
 }

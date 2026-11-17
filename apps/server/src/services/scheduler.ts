@@ -16,7 +16,7 @@ import { clearDeletedTraces } from './accounts.js';
 import { backupIfDue, copyBackupIfDue } from './backup.js';
 import { runSchedulerOnce } from './challenges.js';
 import { isDiskFull, warnDiskFull } from './disk.js';
-import { readLastBeat, recordPause, writeLastBeat } from './pauses.js';
+import { holdPause, readLastBeat, recordPause, writeHeldPauses, writeLastBeat } from './pauses.js';
 import { sweepOrphanPhotos } from './photos.js';
 import { createPushSender, type PushSender } from './push.js';
 
@@ -129,6 +129,17 @@ export function startScheduler(
       report(err, () => app.log.warn({ err }, 'writing down when the server was off failed'));
     }
   };
+  // A pause that cannot be written now (a full disk at the wake) is held in
+  // memory and written by a later beat (`writeHeldPauses`); meanwhile it vouches
+  // for the night's parked check-ins and the hour after an end it covers.
+  const pause = (startedAt: Date, endedAt: Date): void => {
+    try {
+      recordPause(db, startedAt, endedAt);
+    } catch (err) {
+      holdPause(db, startedAt, endedAt);
+      report(err, () => app.log.warn({ err }, 'writing down when the server was off failed'));
+    }
+  };
   // A process that was stopped (Ctrl+C, the window closed, the power cut, `dur`
   // and `y` in the npm run internet window) left its last beat behind: the time
   // since then is a pause like a sleep, however short. Nothing ran meanwhile,
@@ -136,7 +147,7 @@ export function startScheduler(
   // must count at its tap like one tapped in the night.
   remember(() => {
     const lastRun = readLastBeat(db);
-    if (lastRun && lastRun.getTime() < bootAt.getTime()) recordPause(db, lastRun, bootAt);
+    if (lastRun && lastRun.getTime() < bootAt.getTime()) pause(lastRun, bootAt);
   });
 
   const tick = async (): Promise<void> => {
@@ -239,7 +250,7 @@ export function startScheduler(
       const minutes = Math.round((now.getTime() - lastBeatMs) / 60_000);
       if (upNow - lastBeatUptimeMs > RESUME_GAP_MS) {
         app.log.warn({ minutes }, 'scheduler resumed after a pause');
-        remember(() => recordPause(db, new Date(lastBeatMs), now));
+        pause(new Date(lastBeatMs), now);
       } else {
         // the process was here all along: no tap went unheard
         app.log.warn({ minutes }, 'clock moved forward');
@@ -249,7 +260,8 @@ export function startScheduler(
     app.schedulerBootAt.at = bootAt;
     lastBeatMs = now.getTime();
     lastBeatUptimeMs = upNow;
-    // what the next start reads back
+    // what the next start reads back, and a pause a full disk kept from being written
+    remember(() => writeHeldPauses(db));
     remember(() => writeLastBeat(db, now));
 
     if (inFlight) return; // never overlap two passes

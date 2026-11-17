@@ -33,7 +33,7 @@ import {
   startScheduler,
   STOP_WAIT_MS,
 } from '../src/services/scheduler.js';
-import { readLastBeat, writeLastBeat } from '../src/services/pauses.js';
+import { readLastBeat, recordPause, writeLastBeat } from '../src/services/pauses.js';
 import { getBadges } from '../src/services/stats.js';
 import { migrate, newId, nowIso, type ChallengeRow, type ParticipantRow } from '../src/db/index.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
@@ -388,8 +388,9 @@ describe('scheduler: the hour the phones get after a step çelınc ends', () => 
     await phoneSync(harness, ali, { '2026-01-06': 10_000 });
     await phoneSync(harness, veli, { '2026-01-06': 9_000 });
 
-    // The PC was off all night and comes back at 07:00.
+    // The PC was off all night and comes back at 07:00, as the scheduler writes it down.
     const bootAt = new Date('2026-01-07T04:00:00.000Z');
+    recordPause(harness.db, new Date('2026-01-06T19:30:00.000Z'), bootAt);
     const pass = () => runSchedulerOnce(harness!.db, harness!.now(), { bootAt });
     at(harness, bootAt.toISOString());
     expect(pass()).toMatchObject({ finalized: 0 });
@@ -942,6 +943,7 @@ describe('scheduler: the itiraz hour for numbers that land at the whistle', () =
 
     // the PC was off from midnight to 08:00: nobody could see the 300 before
     const bootAt = new Date(Date.parse(MIDNIGHT_END) + 8 * HOUR);
+    recordPause(harness.db, new Date(MIDNIGHT_END), bootAt);
     harness.app.schedulerBootAt.at = bootAt;
     const pass = () => runSchedulerOnce(harness!.db, harness!.now(), { bootAt });
     at(harness, bootAt.toISOString());
@@ -952,6 +954,40 @@ describe('scheduler: the itiraz hour for numbers that land at the whistle', () =
     );
     await dispute(harness, ali, challengeId, late);
     expect(entryStatus(harness, late)).toBe('disputed');
+  });
+
+  it('does not open the itiraz hour again on a wake after an hour the server was up for', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'kitap_sayfa', { proofRequired: false });
+    harness.app.schedulerBootAt.at = harness.now();
+    at(harness, MIDNIGHT_END, -2 * HOUR);
+    const aliPages = await logPages(harness, ali, challengeId, 120);
+    at(harness, MIDNIGHT_END, -30_000);
+    const late = await logPages(harness, veli, challengeId, 300);
+    // up all along: Ali's itiraz at 00:00:20 holds the result for Veli's photo
+    at(harness, MIDNIGHT_END, 20_000);
+    await dispute(harness, ali, challengeId, late);
+    const refuse = async () => {
+      const response = await authed(harness!.app, veli.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/entries/${aliPages}/dispute`,
+        payload: { reason: 'okumadı o kadar' },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json<{ error: { code: string } }>().error.code).toBe('challenge_ended');
+    };
+    at(harness, MIDNIGHT_END, 90 * MINUTE);
+    expect(runSchedulerOnce(harness.db, harness.now(), { bootAt: harness.app.schedulerBootAt.at })).toMatchObject({ finalized: 0 });
+    await refuse();
+
+    // the PC sleeps from 01:30 to 08:00: the hour after the end had run with it up
+    const bootAt = new Date(Date.parse(MIDNIGHT_END) + 8 * HOUR);
+    recordPause(harness.db, new Date(Date.parse(MIDNIGHT_END) + 90 * MINUTE), bootAt);
+    harness.app.schedulerBootAt.at = bootAt;
+    at(harness, bootAt.toISOString(), 10 * MINUTE);
+    expect(runSchedulerOnce(harness.db, harness.now(), { bootAt })).toMatchObject({ finalized: 0 });
+    expect(await disputesCloseAt(harness, ali, challengeId)).toBe(new Date(Date.parse(MIDNIGHT_END) + HOUR).toISOString());
+    await refuse();
   });
 
   it('holds a step çelınc the whole hour when a phone raised its days after the rival had reported', async () => {
@@ -1601,6 +1637,52 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
       await nextBeat();
       expect(pauses(harness)).toEqual([{ started_at: slept, ended_at: woke }]);
     } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
+  it('counts a "Geldim" from the night at its tap when the wake could not write the sleep down', async () => {
+    harness = await makeApp({ now: NOW });
+    const { veli, challengeId } = await checkinRace(harness, 'erken_yat', '23:30');
+    // from the wake on every write fails the way SQLite's do on a full disk: stubbed, never a real disk filled
+    type Run = (this: { source: string }, ...args: unknown[]) => unknown;
+    const proto = Object.getPrototypeOf(harness.db.prepare('SELECT 1')) as { run: Run };
+    const run = proto.run;
+    let full = false;
+    const writes = vi.spyOn(proto, 'run').mockImplementation(function (this: { source: string }, ...args: unknown[]) {
+      if (full && /^\s*(INSERT|UPDATE|DELETE)\b/i.test(this.source)) {
+        throw Object.assign(new Error('database or disk is full'), { code: 'SQLITE_FULL' });
+      }
+      return run.apply(this, args);
+    });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      at(harness, '2026-01-05T20:00:00.000Z');
+      const slept = iso(harness);
+      stop = startScheduler(harness.app, harness.db, harness.config, asleepWithClock(harness));
+      // 08:05, on a full disk: the 23:10 tap is today's for the night it was tapped in,
+      // and only the disk keeps it out, so the phone keeps it
+      at(harness, '2026-01-06T05:05:00.000Z');
+      const woke = iso(harness);
+      full = true;
+      const parked = await geldim(harness, veli, challengeId, '2026-01-05', '2026-01-05T20:10:00.000Z');
+      expect(parked.statusCode).toBe(507);
+      expect(pauses(harness)).toEqual([]);
+
+      // room freed: the next beat writes the sleep down, and the queue sends it again
+      full = false;
+      at(harness, woke, SCHEDULER_INTERVAL_MS);
+      await nextBeat();
+      expect(pauses(harness)).toEqual([{ started_at: slept, ended_at: woke }]);
+      const sent = await geldim(harness, veli, challengeId, '2026-01-05', '2026-01-05T20:10:00.000Z');
+      expect(sent.statusCode).toBe(201);
+      const { entry } = sent.json<{ entry: Entry }>();
+      expect(entry).toMatchObject({ dayKey: '2026-01-05', value: 1 });
+      expect(entry.late).toBeUndefined();
+    } finally {
+      writes.mockRestore();
       await stop?.();
       vi.useRealTimers();
     }
