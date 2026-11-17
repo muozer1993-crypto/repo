@@ -189,7 +189,10 @@ Bilinmesi gerekenler:
   sonu kapalı kalan bilgisayarda cuma gecesinin check-in'i de böyle sayılır. Birkaç dakikalık
   kapanış da sayılır (`dur` ile `y` arası, çökme). Ama son gece elle yazılan sayılar, odak seansları ve uyurken biten
   bir check-in çelıncının son günü süre bittiyse reddedilir (uygulama hangi çelıncın hangi gününün
-  gitmediğini söyler). Elle sayı ve odak çelınclarında bilgisayarın uyumaması şart.
+  gitmediğini söyler). Elle sayı ve odak çelınclarında bilgisayarın uyumaması şart. Bilgisayar
+  uyandıktan ya da sunucu açıldıktan sonraki ilk 20 dakika günlük hatırlatma ve gün ortası dürtme
+  gitmez: telefonlarda bekleyen girişler önce gelsin, sabah işaretleyen kankaya "hâlâ sıfırdasın"
+  denmesin.
 * **Sunucu çökerse pencere onu kendisi yeniden açar.** "Sunucu düştü, yeniden açıyorum" yazar,
   birkaç saniye sonra sunucu geri gelir. Tünel yerinde kaldığı için adres de aynıdır, kimseye
   yeni bağlantı atmana gerek yok. On dakikada beş kere çökerse de tüneli kapatmaz, adres yine
@@ -494,6 +497,11 @@ Evet/hayır çelıncında o günü işaretlediysen, cevabın ne olursa olsun, o 
 o gün yapacağın bir şey kalmadı. Sayı girilen çelıncta bugün bir şey girdiysen "girişini unutma"
 demez, "biraz daha" ister; günlük sınırı doldurduysan o çelınc için hiç gelmez. Odak çelıncında
 bugünün 360 dakikasını doldurduysan da gelmez.
+
+**Günlük hatırlatma** Ayarlar'da seçtiğin saatte gelir, o gün elle hiçbir şey girmediysen ve hâlâ
+boş bir çelıncın varsa. Telefonun kendiliğinden gönderdiği adım ya da ekran süresi onu susturmaz:
+adımların gitti ama Şekersiz Günler'i işaretlemediysen hatırlatma o çelıncın adını söyler, dokununca
+onu açar. Adımlarını telefonun zaten gönderdiği adım yarışı için ayrıca hatırlatmaz.
 
 Bazı bildirimler fazla geliyorsa kanalı kapatma, uygulamada **Ayarlar → Bildirim tercihleri**'ne
 gir: gün ortası dürtmeyi ("sana fark koymuş"), pazar akşamı haftalık özeti ve telefonun kendi

@@ -22,7 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CHALLENGE_TYPES, DEFAULT_TIMEZONE, LIMITS, todayKey, type Challenge, type Entry } from '@koydum/shared';
-import { runSchedulerOnce } from '../src/services/challenges.js';
+import { runSchedulerOnce, WAKE_GRACE_MS } from '../src/services/challenges.js';
 import { challengeFeed, disputeUpheldCopy, entryReplacedCopy } from '../src/services/challengeViews.js';
 import { listByType } from '../src/services/notifications.js';
 import type { FlushResult, PushSender } from '../src/services/push.js';
@@ -1876,6 +1876,142 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
       expect(error).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), 'scheduler catch-up failed');
     } finally {
       broken = false;
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("scheduler: the evening reminder and the nudge wait for what the phones parked", () => {
+  const TUESDAY = '2026-01-06';
+
+  /** "Yemedim" for `dayKey`, sent now: by the app, or by its queue for a tap at `clientTime`. */
+  function markDay(h: TestApp, user: RegisteredUser, challengeId: string, dayKey: string, clientTime = iso(h)) {
+    return authed(h.app, user.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey, value: 1, source: 'manual', clientTime },
+    });
+  }
+
+  /** What one person heard of `type` about Tuesday. */
+  function onTuesday(h: TestApp, user: RegisteredUser, type: 'reminder' | 'nudge') {
+    return listByType(h.db, user.me.id, type).filter((row) => dataOf(row).dayKey === TUESDAY);
+  }
+
+  function nudgeClaims(h: TestApp, user: RegisteredUser): number {
+    return (
+      h.db.prepare('SELECT COUNT(*) AS n FROM nudges_sent WHERE user_id = ? AND day_key = ?').get(user.me.id, TUESDAY) as {
+        n: number;
+      }
+    ).n;
+  }
+
+  const beat = async (): Promise<void> => {
+    await vi.advanceTimersByTimeAsync(SCHEDULER_INTERVAL_MS);
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+
+  /**
+   * Ali and Veli in Şekersiz Günler until Tuesday midnight, reminded from noon,
+   * both clean on Monday; on Tuesday the server beats from 09:00 to 10:00 (Ali
+   * marks the day at 09:30) and the PC sleeps from 10:00 until 13:00. Returns
+   * with the clock at 13:00 and nothing run since the lid came down.
+   */
+  async function asleepUntilOne(h: TestApp) {
+    const players = await endingAtMidnight(h, 'sekersiz_gun', { reminderHour: 12 });
+    const { ali, veli, challengeId } = players;
+    expect((await markDay(h, ali, challengeId, '2026-01-05')).statusCode).toBe(201);
+    expect((await markDay(h, veli, challengeId, '2026-01-05')).statusCode).toBe(201);
+
+    // started at 09:00; the machine's uptime is the clock, so moving it is a sleep
+    at(h, '2026-01-06T06:00:00.000Z');
+    const stop = startScheduler(h.app, h.db, h.config, { push: quietPush, uptimeMs: () => h.now().getTime() });
+    for (let minutes = 4; minutes <= 60; minutes += 4) {
+      at(h, '2026-01-06T06:00:00.000Z', minutes * MINUTE);
+      await beat();
+      if (minutes === 28) {
+        at(h, '2026-01-06T06:30:00.000Z');
+        expect((await markDay(h, ali, challengeId, TUESDAY)).statusCode).toBe(201);
+      }
+    }
+    at(h, '2026-01-06T10:00:00.000Z');
+    return { ...players, stop };
+  }
+
+  it('tells nobody at the wake that they are at zero, before the tap the phone parked in the morning lands', async () => {
+    harness = await makeApp({ now: NOW });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      const race = await asleepUntilOne(harness);
+      stop = race.stop;
+      const { ali, veli, challengeId } = race;
+      const woke = iso(harness);
+
+      // Veli marked it at 10:30, while nothing answered; his queue sends it as
+      // the PC wakes, and that request runs the beat the wake is owed first
+      const parked = await markDay(harness, veli, challengeId, TUESDAY, '2026-01-06T07:30:00.000Z');
+      expect(parked.statusCode).toBe(201);
+      expect(harness.app.schedulerBootAt.at?.toISOString()).toBe(woke);
+      // the pass at the wake was due to say "hâlâ sıfırdasın" and "Ali sana 1 gün fark koymuş"
+      expect(onTuesday(harness, veli, 'reminder')).toEqual([]);
+      expect(onTuesday(harness, veli, 'nudge')).toEqual([]);
+      expect(nudgeClaims(harness, veli)).toBe(0);
+
+      // 2-2 when the grace is over: nothing to remind him of, nobody ahead
+      for (let minutes = 4; minutes <= 24; minutes += 4) {
+        at(harness, woke, minutes * MINUTE);
+        await beat();
+      }
+      expect(onTuesday(harness, veli, 'reminder')).toEqual([]);
+      expect(onTuesday(harness, veli, 'nudge')).toEqual([]);
+      expect(nudgeClaims(harness, veli)).toBe(0);
+      expect(onTuesday(harness, ali, 'reminder')).toEqual([]);
+    } finally {
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
+  it('reminds somebody with nothing parked on the first beat after the grace, once', async () => {
+    harness = await makeApp({ now: NOW });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      const race = await asleepUntilOne(harness);
+      stop = race.stop;
+      const { ali, veli } = race;
+      const woke = iso(harness);
+
+      // the interval notices the wake this time
+      await beat();
+      expect(harness.app.schedulerBootAt.at?.toISOString()).toBe(woke);
+      expect(onTuesday(harness, veli, 'reminder')).toEqual([]);
+      expect(onTuesday(harness, veli, 'nudge')).toEqual([]);
+      for (let minutes = 4; minutes < WAKE_GRACE_MS / MINUTE; minutes += 4) {
+        at(harness, woke, minutes * MINUTE);
+        await beat();
+        expect(onTuesday(harness, veli, 'reminder'), `${minutes} dakika sonra`).toEqual([]);
+        expect(onTuesday(harness, veli, 'nudge'), `${minutes} dakika sonra`).toEqual([]);
+      }
+
+      at(harness, woke, WAKE_GRACE_MS);
+      await beat();
+      expect(onTuesday(harness, veli, 'reminder')).toHaveLength(1);
+      expect(onTuesday(harness, veli, 'nudge').map((row) => row.body)).toEqual([
+        'Ali sana 1 gün fark koymuş. Bugünü kaçırma.',
+      ]);
+
+      // the claims hold: no second one on the beats after it
+      for (let minutes = 4; minutes <= 12; minutes += 4) {
+        at(harness, woke, WAKE_GRACE_MS + minutes * MINUTE);
+        await beat();
+      }
+      expect(onTuesday(harness, veli, 'reminder')).toHaveLength(1);
+      expect(onTuesday(harness, veli, 'nudge')).toHaveLength(1);
+      expect(onTuesday(harness, ali, 'reminder')).toEqual([]);
+    } finally {
       await stop?.();
       vi.useRealTimers();
     }

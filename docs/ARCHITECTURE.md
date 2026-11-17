@@ -125,6 +125,15 @@ Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
   vakti gelmiş çelıncları başlatır (`activateDueChallenges`). İptal, liste ve detay okuması da aynısını
   yapar: ekran geri sayımı bittiği anda detayı yeniden ister, vuruş 30 saniye sonra gelebilir; o
   arada dönen `pending` uygulamaya "sunucuya ulaşamadım" dedirtiyordu.
+* Açılıştan ya da uyanıştan (`bootAt`) sonraki ilk 20 dakika (`WAKE_GRACE_MS`) zamanlayıcı günlük
+  hatırlatmayı ve gün ortası dürtmeyi göndermez. Telefonlar bekleyenleri ancak bir sonraki
+  gidişlerinde gönderir: açık uygulama hemen, cepteki telefon arka plan görevinin bir sonraki
+  turunda, en erken 15 dakikada bir. Bilgisayar 10:00-13:00 uyuduğunda uyanışın ilk turu 10:30'da
+  işaretleyen Veli'ye "Bugün hâlâ sıfırdasın" ve "Ali sana 1 gün fark koymuş" gönderiyor, girişi bir
+  dakika sonra geliyordu; günün tek dürtmesi de olmayan bir farka harcanıyordu. İkisi de her şeye
+  hak satırından (`reminders_sent`, `nudges_sent`) önce bakar, bu arada hiçbir hak yazılmaz: aradan
+  sonraki ilk tur bekleyenler sayılmış haliyle gönderir, hak satırları da ikincisine izin vermez.
+  Telefonu 20 dakikadan geç gelen yine hatırlatma alabilir.
 * Sunucu çelınc bittikten sonra odak dakikası almaz. Odak ekranı seansı kalan süreye sığdırır,
   molalarla uzayan seansı da bitişe 30 saniye kala kapatıp tam dakikalarını gönderir.
 * Geçmiş güne giriş penceresi (manuel 2 gün, adım 7 gün) sunucunun "şimdi"sine göredir.
@@ -537,6 +546,18 @@ mısın? Veli ağzını açmanı bekliyor." Kurallar:
 Kazananın adına otomatik laf **atılmaz**; "KOYDUM MU?" kazananın hakkı, onun ağzından başkası
 konuşmaz. Kaybedenin sonuç ekranı da dürüst olur: bitişten 24 saat sonra "bekle" yerine
 "unuttu galiba, rövanş aç, bu sefer sen koy" der.
+
+## Günlük hatırlatma
+
+Sunucunun kendiliğinden gönderdiği tek "bugün gir" bildirimi: oyuncunun seçtiği saatten sonra
+(`reminder_hour`, kendi saatiyle), yerel günde bir kez (`reminders_sent`). O gün elle bir şey giren
+almaz. Telefonun kendi yazdığı satır (`DEVICE_SOURCES`: arka planda gönderilen adım, Android'in
+ekran süresi) bu sayılmaz: sayılınca arka plan adım senkronu çalışan herkes adım yarışı boyunca hiç
+hatırlatma almıyor, yanında oynadığı Şekersiz Günler boş kalıyordu. Ayrıca bugün hâlâ boş, giriş
+alabilecek bir çelınc gerekir; telefonun saydığı bir çelınc senkron o günü doldurana kadar boş
+sayılır (uygulamayı açmamış iPhone'cuya yine gider, adımlar uygulama açılınca gider). Telefon bugün
+bir şey yazdıysa "Bugün hâlâ sıfırdasın" yalan olur: bildirim boş kalan çelınclardan bitişi en
+yakın olanın adını söyler ("“Şekersiz Günler” bugün boş kaldı. Gir şuraya.") ve dokununca onu açar.
 
 ## Gün ortası dürtme
 

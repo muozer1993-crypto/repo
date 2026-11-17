@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { newId, nowIso } from '../src/db/index.js';
 import { listInbox } from '../src/services/notifications.js';
-import { runSchedulerOnce, sendNudges } from '../src/services/challenges.js';
+import { runSchedulerOnce, sendNudges, WAKE_GRACE_MS } from '../src/services/challenges.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 import type { FastifyInstance } from 'fastify';
 import type { Me } from '@koydum/shared';
@@ -406,6 +406,36 @@ describe('mid-day nudges', () => {
     addSteps(app, id, veli.me.id, TODAY, 2_000);
 
     expect(sendNudges(app.db, app.now())).toBe(0);
+  });
+
+  it('waits after the PC wakes for the steps the phones parked, and spends nobody’s day meanwhile', async () => {
+    const { app, ali, veli } = await twoPlayers(AFTERNOON);
+    const can = await registerUser(app, 'can', { displayName: 'Can', timezone: 'Europe/Istanbul' });
+    const id = seedActive(app, {
+      creatorId: ali.me.id,
+      accepted: [ali.me.id, veli.me.id, can.me.id],
+      startsAt: '2026-01-05T00:00:00.000Z',
+      endsAt: '2026-01-08T00:00:00.000Z',
+    });
+    addSteps(app, id, ali.me.id, TODAY, 12_000);
+    addSteps(app, id, veli.me.id, TODAY, 2_000);
+    addSteps(app, id, can.me.id, TODAY, 1_000);
+
+    // the PC woke at 14:50; Veli's walk is still on his phone, waiting for its next background run
+    const bootAt = new Date(app.now().getTime() - 10 * 60_000);
+    expect(runSchedulerOnce(app.db, app.now(), { bootAt }).nudges).toBe(0);
+    harness!.setNow(new Date(bootAt.getTime() + WAKE_GRACE_MS - 1));
+    expect(runSchedulerOnce(app.db, app.now(), { bootAt }).nudges).toBe(0);
+    expect(app.db.prepare('SELECT COUNT(*) AS n FROM nudges_sent').get()).toEqual({ n: 0 });
+
+    // it lands: 500 steps behind is no story. Can, with nothing parked, still hears his.
+    app.db.prepare('UPDATE entries SET value = ? WHERE challenge_id = ? AND user_id = ?').run(11_500, id, veli.me.id);
+    harness!.setNow(new Date(bootAt.getTime() + WAKE_GRACE_MS));
+    expect(runSchedulerOnce(app.db, app.now(), { bootAt }).nudges).toBe(1);
+    expect(nudgesOf(harness!, veli.me.id)).toHaveLength(0);
+    expect(nudgesOf(harness!, can.me.id).map((row) => row.body)).toEqual([
+      'Mahmut sana 11.000 adım fark koymuş. Kalk da iki dolaş.',
+    ]);
   });
 });
 

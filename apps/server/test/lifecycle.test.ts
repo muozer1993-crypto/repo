@@ -421,6 +421,104 @@ describe('challenge lifecycle', () => {
     });
   });
 
+  describe('the daily reminder is about what the reader typed, not what the phone sent by itself', () => {
+    /** İlker and Ufuk (reminded at 20:00 in Istanbul) on Monday 12:00, at these levels. */
+    async function pair(levels: { ilker?: 1 | 2 | 3; ufuk?: 1 | 2 | 3 } = {}) {
+      const h = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+      harness = h;
+      const ilker = await registerUser(h.app, 'ilker', { reminderHour: 20, vulgarityMax: levels.ilker });
+      const ufuk = await registerUser(h.app, 'ufuk', { reminderHour: 20, vulgarityMax: levels.ufuk });
+      befriend(h.app, ilker.me.id, ufuk.me.id);
+      return { h, ilker, ufuk };
+    }
+
+    /** The background task at 19:30: Monday's steps from Health Connect, fanned out into the step race. */
+    async function stepsSynced(h: TestApp, user: RegisteredUser, steps: number): Promise<void> {
+      h.setNow('2026-01-05T16:30:00.000Z');
+      const response = await authed(h.app, user.token)({
+        method: 'POST',
+        url: '/me/steps',
+        payload: { days: [{ dayKey: '2026-01-05', steps, source: 'health_connect' }] },
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    /** Monday 20:00, the reminder hour. */
+    function eight(h: TestApp) {
+      h.setNow('2026-01-05T17:00:30.000Z');
+      return runSchedulerOnce(h.db, h.now());
+    }
+
+    function reminders(h: TestApp, user: RegisteredUser) {
+      return listByType(h.db, user.me.id, 'reminder').map((row) => ({
+        body: row.body,
+        data: JSON.parse(row.data) as unknown,
+      }));
+    }
+
+    it('names the çelınc still empty when only the phone has written today', async () => {
+      const { h, ilker, ufuk } = await pair();
+      await playTogether(h, ilker, ufuk, { typeKey: 'adim_yarisi' });
+      const sugar = await playTogether(h, ilker, ufuk, { typeKey: 'sekersiz_gun' });
+      await stepsSynced(h, ilker, 4200);
+
+      expect(eight(h).reminders).toBe(2);
+      // "hâlâ sıfırdasın" next to his 4.200 steps would be false; Şekersiz Günler is what he forgot
+      expect(reminders(h, ilker)).toEqual([
+        { body: '“Şekersiz Günler” bugün boş kaldı. Gir şuraya.', data: { dayKey: '2026-01-05', challengeId: sugar } },
+      ]);
+      // nothing at all from Ufuk today: the usual line
+      expect(reminders(h, ufuk)).toEqual([
+        { body: 'Bugün hâlâ sıfırdasın. Kalk bir şeyler yap.', data: { dayKey: '2026-01-05' } },
+      ]);
+    });
+
+    it('says it at the reader’s level', async () => {
+      const { h, ilker, ufuk } = await pair({ ilker: 1, ufuk: 3 });
+      await playTogether(h, ilker, ufuk, { typeKey: 'adim_yarisi' });
+      await playTogether(h, ilker, ufuk, { typeKey: 'sekersiz_gun' });
+      await stepsSynced(h, ilker, 4200);
+      await stepsSynced(h, ufuk, 9100);
+
+      expect(eight(h).reminders).toBe(2);
+      expect(reminders(h, ilker).map((row) => row.body)).toEqual(['“Şekersiz Günler” için bugün henüz bir şey girmedin.']);
+      expect(reminders(h, ufuk).map((row) => row.body)).toEqual(['“Şekersiz Günler” bomboş lan. Kankalar bakıyor.']);
+    });
+
+    it('leaves a step racer whose phone sent today alone, and still reminds one whose phone has not', async () => {
+      const { h, ilker, ufuk } = await pair();
+      await playTogether(h, ilker, ufuk, { typeKey: 'adim_yarisi' });
+      await stepsSynced(h, ilker, 4200);
+
+      // nothing to type: the phone filled his day. Ufuk's iPhone sends only when he opens the app.
+      expect(eight(h).reminders).toBe(1);
+      expect(reminders(h, ilker)).toEqual([]);
+      expect(reminders(h, ufuk)).toEqual([
+        { body: 'Bugün hâlâ sıfırdasın. Kalk bir şeyler yap.', data: { dayKey: '2026-01-05' } },
+      ]);
+    });
+
+    it('stays quiet for anybody who typed something today, whatever is still empty', async () => {
+      const { h, ilker, ufuk } = await pair();
+      await playTogether(h, ilker, ufuk, { typeKey: 'adim_yarisi' });
+      const sugar = await playTogether(h, ilker, ufuk, { typeKey: 'sekersiz_gun' });
+      await stepsSynced(h, ilker, 4200);
+      for (const user of [ilker, ufuk]) {
+        const marked = await authed(h.app, user.token)({
+          method: 'POST',
+          url: `/challenges/${sugar}/entries`,
+          payload: { dayKey: '2026-01-05', value: 1, source: 'manual', clientTime: h.now().toISOString() },
+        });
+        expect(marked.statusCode).toBe(201);
+      }
+
+      // Ufuk's step race is still empty, but he has been here today
+      expect(eight(h).reminders).toBe(0);
+      expect(reminders(h, ilker)).toEqual([]);
+      expect(reminders(h, ufuk)).toEqual([]);
+    });
+  });
+
   it('runSchedulerOnce reports what it did and never throws', async () => {
     harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
     const { app, db } = harness;

@@ -83,7 +83,7 @@ export interface SchedulerSummary {
 export interface SchedulerDeps {
   /** Called for anything that goes wrong inside one step (never throws out). */
   onError?: (step: string, err: unknown) => void;
-  /** When this server started, or last woke from sleep (`startScheduler`); see `stillSettling` and `resolveDisputes`. */
+  /** When this server started, or last woke from sleep (`startScheduler`); see `stillSettling`, `resolveDisputes` and `WAKE_GRACE_MS`. */
   bootAt?: Date;
 }
 
@@ -796,6 +796,18 @@ function reminderTitle(level: VulgarityLevel): string {
 }
 
 /**
+ * The reminder for somebody whose phone has already written today (steps,
+ * screen time): "Bugün hâlâ sıfırdasın" next to the 4.200 steps on their own
+ * screen reads like the app did not see them, so it names the çelınc that is
+ * still empty instead.
+ */
+function reminderBody(level: VulgarityLevel, title: string): string {
+  if (level === 1) return `“${title}” için bugün henüz bir şey girmedin.`;
+  if (level === 3) return `“${title}” bomboş lan. Kankalar bakıyor.`;
+  return `“${title}” bugün boş kaldı. Gir şuraya.`;
+}
+
+/**
  * "Ali hâlâ bekliyor": the winner has not said a word to the people they beat.
  * `losers` are only the ones still waiting, runner-up first.
  */
@@ -1405,8 +1417,9 @@ export function finalizeEndedChallenges(
 
 /**
  * Step 3 — one daily reminder per user, at (or after) their own `reminder_hour` in
- * their own timezone, only while they have at least one active challenge that can
- * still take an entry today, at most once per local day (`reminders_sent`).
+ * their own timezone, only while they have typed nothing today and at least one
+ * active challenge can still take an entry today, at most once per local day
+ * (`reminders_sent`).
  *
  * The check is `localHour >= reminder_hour`, not equality: on a DST spring-forward
  * day the target hour never happens locally (02:xx does not exist in New York on
@@ -1428,11 +1441,15 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
     .all(iso) as UserRow[];
 
   const claim = db.prepare('INSERT OR IGNORE INTO reminders_sent (user_id, day_key) VALUES (?, ?)');
-  // the reminder says "you have nothing today" — so it only goes to people for
-  // whom that is true in at least... none of their live çelınclar has a row today
-  const loggedToday = db.prepare(
-    `SELECT 1 FROM entries e JOIN challenges c ON c.id = e.challenge_id
-      WHERE e.user_id = ? AND e.day_key = ? AND c.status = 'active' AND e.status <> 'rejected' LIMIT 1`,
+  // Where today's rows in the reader's live çelınclar came from. The reminder
+  // is the one daily prompt to type something, and anything typed today means
+  // they have been here. A row the phone wrote by itself (`DEVICE_SOURCES`: a
+  // background step sync at 19:30, Android's screen time) does not: it used to
+  // silence the reminder for every typed çelınc they also play, for the whole
+  // of a step race.
+  const sourcesToday = db.prepare(
+    `SELECT DISTINCT e.source FROM entries e JOIN challenges c ON c.id = e.challenge_id
+      WHERE e.user_id = ? AND e.day_key = ? AND c.status = 'active' AND e.status <> 'rejected'`,
   );
   // "Çelıncı unutma" has to point at something that still counts today. A
   // check-in past its deadline does not: the tap is stored late with 0, so an
@@ -1441,21 +1458,31 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
   // before its window opens (erken_yat before 19:00) the check-in is still ahead.
   // Nor does the sliver of a day `scoringWindow` leaves out of a friend's yes/no
   // or screen-time days, nor the extra deadline it leaves out of their check-in
-  // days: the server refuses anything sent for it.
+  // days: the server refuses anything sent for it. Nor does a çelınc the phone
+  // counts by itself once a sync filled today: there is nothing to type. One
+  // whose phone has sent nothing yet still does (an iPhone step racer: opening
+  // the app is what sends the steps). Soonest end first: the one a reminder
+  // names is the one with the least time left.
   const live = db.prepare(
     `SELECT c.*, p.timezone AS p_timezone FROM challenge_participants p
        JOIN challenges c ON c.id = p.challenge_id AND c.status = 'active' AND c.ends_at > ?
-      WHERE p.user_id = ? AND p.status = 'accepted'`,
+      WHERE p.user_id = ? AND p.status = 'accepted'
+      ORDER BY c.ends_at, c.created_at`,
   );
-  const canStillPlay = (user: UserRow): boolean =>
-    (live.all(iso, user.id) as (ChallengeRow & { p_timezone: string | null })[]).some((challenge) => {
-      const metric = typeForChallenge(challenge).metricType;
-      if (!SCORED_PER_DAY.includes(metric)) return true;
+  const filledToday = db.prepare(
+    `SELECT 1 FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ? AND status <> 'rejected' LIMIT 1`,
+  );
+  const stillToPlay = (user: UserRow): ChallengeRow[] =>
+    (live.all(iso, user.id) as (ChallengeRow & { p_timezone: string | null })[]).filter((challenge) => {
+      const type = typeForChallenge(challenge);
       try {
         const tz = participantTimezone({ timezone: challenge.p_timezone }, user);
-        if (!scoringWindow(db, challenge, tz).includes(todayKey(tz, now))) return false;
-        if (metric !== 'checkin_deadline') return true;
-        const deadline = effectiveDeadline(typeForChallenge(challenge), challenge.deadline_time);
+        const today = todayKey(tz, now);
+        if (type.deviceMetric && filledToday.get(challenge.id, user.id, today)) return false;
+        if (!SCORED_PER_DAY.includes(type.metricType)) return true;
+        if (!scoringWindow(db, challenge, tz).includes(today)) return false;
+        if (type.metricType !== 'checkin_deadline') return true;
+        const deadline = effectiveDeadline(type, challenge.deadline_time);
         return isBeforeOrEqualHHmm(localTimeHHmm(now, tz), deadline);
       } catch {
         // a zone this server cannot read: remind, as before
@@ -1475,18 +1502,23 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
       continue;
     }
     if (hour < Number(user.reminder_hour)) continue;
-    if (loggedToday.get(user.id, dayKey)) continue;
+    const sources = (sourcesToday.all(user.id, dayKey) as { source: string }[]).map((row) => row.source);
+    if (sources.some((source) => !isDeviceSource(source))) continue;
     // before the claim: a çelınc accepted later this evening still gets today's
-    if (!canStillPlay(user)) continue;
+    const open = stillToPlay(user);
+    if (open.length === 0) continue;
     if (claim.run(user.id, dayKey).changes === 0) continue;
 
     const level = levelOf(user);
+    // With the phone's own number already in today, "Bugün hâlâ sıfırdasın" is
+    // false: the reminder names the çelınc still empty instead, and its tap opens it.
+    const named = sources.length > 0 ? open[0] : null;
     notify(db, {
       userId: user.id,
       type: 'reminder',
       title: reminderTitle(level),
-      body: t('notification_daily_reminder', level),
-      data: { dayKey },
+      body: named ? reminderBody(level, named.title) : t('notification_daily_reminder', level),
+      data: named ? { dayKey, challengeId: named.id } : { dayKey },
       createdAt: iso,
     });
     sent += 1;
@@ -1776,6 +1808,21 @@ export function sendTauntFollowups(db: Database, now: Date = new Date()): number
 }
 
 /**
+ * How long after `bootAt` (a start, or the PC waking) the passes send no daily
+ * reminder and no nudge. While the server was away the phones parked what
+ * their owners entered, and they send it only when they next reach it: an open
+ * app at once, a phone in a pocket on its next background run, every 15
+ * minutes at the soonest (`minimumInterval` in the app's
+ * services/background.ts). Before that lands, "Bugün hâlâ sıfırdasın" goes to
+ * somebody who logged at 10:30, and the day's one nudge is spent on a lead that
+ * is gone a minute later. Nothing is claimed meanwhile (both check everything
+ * before their `reminders_sent` / `nudges_sent` claim), so the first pass after
+ * it sends them with the parked entries counted, and the claims still keep them
+ * to one a day. A phone that takes longer than this can still be reminded.
+ */
+export const WAKE_GRACE_MS = 20 * 60_000;
+
+/**
  * One scheduler pass. Every step is isolated: a failure in one is reported through
  * `deps.onError` and the others still run.
  */
@@ -1803,8 +1850,12 @@ export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: Sch
   step('disputes', () => resolveDisputes(db, now, { bootAt: deps.bootAt }), (n) => (summary.disputes = n));
   step('finalize', () => finalizeEndedChallenges(db, now, { bootAt: deps.bootAt }), (n) => (summary.finalized = n));
   step('cancel', () => cancelUnderfilled(db, now), (n) => (summary.cancelled = n));
-  step('reminders', () => sendReminders(db, now), (n) => (summary.reminders = n));
-  step('nudges', () => sendNudges(db, now), (n) => (summary.nudges = n));
+  // the phones' parked entries land first (`WAKE_GRACE_MS`)
+  const justBack = deps.bootAt !== undefined && now.getTime() - deps.bootAt.getTime() < WAKE_GRACE_MS;
+  if (!justBack) {
+    step('reminders', () => sendReminders(db, now), (n) => (summary.reminders = n));
+    step('nudges', () => sendNudges(db, now), (n) => (summary.nudges = n));
+  }
   step('tauntFollowups', () => sendTauntFollowups(db, now), (n) => (summary.tauntFollowups = n));
   // after finalize, so a çelınc that ended this minute is already in the count
   step('recaps', () => sendWeeklyRecaps(db, now), (n) => (summary.recaps = n));
