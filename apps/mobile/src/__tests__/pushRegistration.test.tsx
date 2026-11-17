@@ -6,7 +6,11 @@
  *
  * Once it is up, a foreground only asks /me, and sends it again when the
  * account's slot is empty: an older app's logout on the old phone clears it.
+ * A start of a phone that already sent its token for the account leaves the
+ * slot alone while the server holds one: after a move it is the new phone's,
+ * and the old phone's logout would then clear it.
  */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Me } from '@koydum/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppState, type AppStateStatus } from 'react-native';
@@ -35,6 +39,8 @@ jest.mock('@/services/notifications', () => ({
   addReceivedListener: () => ({ remove: () => {} }),
   getInitialRoute: async () => null,
   routeForNotificationData: () => null,
+  pushTokenNeedsSending: (deviceToken: string, hasPushToken: boolean | undefined) =>
+    jest.requireActual('@/services/notifications').pushTokenNeedsSending(deviceToken, hasPushToken),
 }));
 
 // everything else the bridge starts: none of it is under test here
@@ -115,8 +121,9 @@ const mockRefreshMe = jest.fn(async () => ({ ...ME, hasPushToken: serverHasToken
 /** The session token each POST /me/push-token went up with. */
 const sentWith = () => setPushToken.mock.contexts.map((client) => (client as ApiClient).token);
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
+  await AsyncStorage.clear();
   setPushToken = jest.spyOn(ApiClient.prototype, 'setPushToken').mockResolvedValue({ ok: true } as never);
   appStateListeners = [];
   jest.spyOn(AppState, 'addEventListener').mockImplementation((type, listener) => {
@@ -157,7 +164,8 @@ describe('push token registration', () => {
     await settle();
     expect(sentWith()).toEqual(['oturum-1']);
 
-    // the password sheet's setSession
+    // the password sheet's setSession; the server cleared the slot with the change
+    serverHasToken = false;
     act(() => useAuth.setState({ token: 'oturum-2' }));
     await settle();
     expect(sentWith()).toEqual(['oturum-1', 'oturum-2']);
@@ -169,6 +177,7 @@ describe('push token registration', () => {
     await settle();
 
     setPushToken.mockRejectedValueOnce(new Error('offline'));
+    serverHasToken = false;
     act(() => useAuth.setState({ token: 'oturum-2' }));
     await settle();
     expect(sentWith()).toEqual(['oturum-1', 'oturum-2']);
@@ -188,6 +197,7 @@ describe('push token registration', () => {
       act(() => appStateListeners.forEach((listener) => listener('active')));
       await settle();
     };
+    mockRefreshMe.mockClear();
     await foreground();
     await foreground();
     expect(mockRefreshMe).toHaveBeenCalledTimes(2);
@@ -203,6 +213,23 @@ describe('push token registration', () => {
     await foreground();
     expect(sentWith()).toEqual(['oturum-1', 'oturum-1']);
     expect(setPushToken).toHaveBeenLastCalledWith({ token: 'ExponentPushToken[telefon]', platform: expect.any(String) });
+  });
+
+  it('leaves the slot to the phone holding it when one that already sent its token starts again', async () => {
+    // this phone registered this token for the account before; the new phone has the slot since
+    await AsyncStorage.setItem('koydum.pushToken', 'ExponentPushToken[telefon]');
+    renderBridge();
+    await settle();
+    expect(sentWith()).toEqual([]);
+    act(() => appStateListeners.forEach((listener) => listener('active')));
+    await settle();
+    expect(sentWith()).toEqual([]);
+
+    // the server lost it: this phone puts its own there
+    serverHasToken = false;
+    act(() => appStateListeners.forEach((listener) => listener('active')));
+    await settle();
+    expect(sentWith()).toEqual(['oturum-1']);
   });
 
   it('leaves the token alone when /me could not be read', async () => {

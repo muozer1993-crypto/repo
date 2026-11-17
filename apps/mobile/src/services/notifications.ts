@@ -94,6 +94,20 @@ const MISSING_FIREBASE =
  */
 let askedThisRun = false;
 
+/**
+ * Whether this phone has to send its device token to the server now. Not when
+ * it already sent this very token for this account (it is stored, and logout
+ * removes it) and the server still holds one (`Me.hasPushToken`): the account
+ * has one slot, and after a move to a new phone that phone holds it. The old
+ * phone took it back each time it started or opened Ayarlar, and its "Çıkış
+ * yap" then cleared it, leaving the new phone without push. A server that lost
+ * the token (`hasPushToken: false`, or not known) gets it again.
+ */
+export async function pushTokenNeedsSending(deviceToken: string, hasPushToken: boolean | undefined): Promise<boolean> {
+  if (hasPushToken !== true) return true;
+  return (await getItem(StorageKeys.pushToken)) !== deviceToken;
+}
+
 export async function registerForPush(options: { askAgain?: boolean } = {}): Promise<PushRegistration> {
   if (Platform.OS === 'web') return { token: null, granted: false, reason: 'web' };
 

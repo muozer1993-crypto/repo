@@ -13,6 +13,7 @@ import {
   addResponseListener,
   getInitialRoute,
   installNotificationHandler,
+  pushTokenNeedsSending,
   registerForPush,
   routeForNotificationData,
   type NotificationRoute,
@@ -128,6 +129,15 @@ export function NotificationBridge() {
         if (!registration.token) return;
         const sent = session + registration.token;
         if (pushTokenSent.current === sent) return;
+        // A cold start of a phone that already sent this token for this account
+        // leaves the slot alone while the server holds one: after a move it is
+        // the new phone's (`pushTokenNeedsSending`). /me is read fresh for it.
+        const fresh = await refreshMe();
+        if (cancelled) return;
+        if (!(await pushTokenNeedsSending(registration.token, fresh?.hasPushToken))) {
+          pushTokenSent.current = sent;
+          return;
+        }
         await makeClient().setPushToken({
           token: registration.token,
           platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',

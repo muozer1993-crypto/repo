@@ -153,6 +153,8 @@ const mockNotifPermission: { status: 'granted' | 'denied' | 'undetermined' | 'un
 jest.mock('@/services/notifications', () => ({
   registerForPush: jest.fn(async () => ({ token: null, reason: 'web' })),
   pushPermissionStatus: async () => mockNotifPermission.status,
+  pushTokenNeedsSending: (deviceToken: string, hasPushToken: boolean | undefined) =>
+    jest.requireActual('@/services/notifications').pushTokenNeedsSending(deviceToken, hasPushToken),
 }));
 
 /** The phone's own deadline alerts, as Ayarlar sees them (services/reminders has its own test). */
@@ -5760,6 +5762,45 @@ describe('a permission the phone said no to', () => {
       expect(() => findWith(tree, 'title', 'Ayarları aç', 'onPress')).toThrow();
     } finally {
       notifications().registerForPush.mockResolvedValue({ token: null, reason: 'web' });
+    }
+  });
+
+  it('Ayarlar does not take the push slot back for a token this phone already sent, but "Tekrar dene" does', async () => {
+    const { StorageKeys, setItem, removeItem } = storage();
+    notifications().registerForPush.mockResolvedValue({ token: 'ExponentPushToken[eski]', granted: true });
+    api.setPushToken = jest.fn(async () => ({ ok: true }));
+    await setItem(StorageKeys.pushToken, 'ExponentPushToken[eski]');
+    const hadToken = ME.hasPushToken;
+    // the server holds a token for the account: the new phone's, after a move
+    ME.hasPushToken = true;
+    try {
+      const SettingsScreen = require('@/app/(app)/settings').default;
+      const tree = renderScreen(<SettingsScreen />);
+      await settle();
+      expect(api.setPushToken).not.toHaveBeenCalled();
+
+      press(tree, 'Tekrar dene');
+      await settle();
+      expect(api.setPushToken).toHaveBeenCalledTimes(1);
+    } finally {
+      ME.hasPushToken = hadToken;
+      notifications().registerForPush.mockResolvedValue({ token: null, reason: 'web' });
+      await removeItem(StorageKeys.pushToken);
+    }
+  });
+
+  it('Ayarlar sends the token when the server has none for the account', async () => {
+    notifications().registerForPush.mockResolvedValue({ token: 'ExponentPushToken[yeni]', granted: true });
+    api.setPushToken = jest.fn(async () => ({ ok: true }));
+    try {
+      const SettingsScreen = require('@/app/(app)/settings').default;
+      renderScreen(<SettingsScreen />);
+      await settle();
+      expect(api.setPushToken).toHaveBeenCalledWith({ token: 'ExponentPushToken[yeni]', platform: expect.any(String) });
+    } finally {
+      notifications().registerForPush.mockResolvedValue({ token: null, reason: 'web' });
+      const { StorageKeys, removeItem } = storage();
+      await removeItem(StorageKeys.pushToken);
     }
   });
 

@@ -50,7 +50,7 @@ import {
   type BackgroundHealth,
 } from '@/services/deviceHealth';
 import { serverFromInviteLink } from '@/services/invite';
-import { registerForPush, type PushRegistration } from '@/services/notifications';
+import { pushTokenNeedsSending, registerForPush, type PushRegistration } from '@/services/notifications';
 import { deviceRemindersEnabled, refreshReminders, setDeviceRemindersEnabled } from '@/services/reminders';
 import {
   USAGE_ACCESS_RESTRICTED_HINT,
@@ -575,13 +575,21 @@ export default function SettingsScreen() {
   const update = useAppUpdate();
   const build = Application.nativeBuildVersion;
 
-  /** `askAgain: false` only looks (see registerForPush); "Tekrar dene" is a tap and asks. */
+  /**
+   * `askAgain: false` only looks (see registerForPush), and then sends the token
+   * only when the server needs it (`pushTokenNeedsSending`); "Tekrar dene" is a
+   * tap, asks, and sends it whatever the server holds.
+   */
   const refreshPush = async (options: { askAgain?: boolean } = {}) => {
     setPushBusy(true);
     try {
       const result = await registerForPush(options);
       setPush(result);
-      if (result.token) {
+      const tap = options.askAgain !== false;
+      if (
+        result.token &&
+        (tap || (await pushTokenNeedsSending(result.token, me?.hasPushToken)))
+      ) {
         try {
           await api.setPushToken({ token: result.token, platform: PLATFORM });
           // as the bridge does: logout clears only the token stored here
@@ -625,7 +633,13 @@ export default function SettingsScreen() {
       setScreenTime(screenTimeResult);
       setDeviceAlerts(alertsOn);
       setBackground(backgroundResult);
-      if (pushResult.token) {
+      // Only when the server needs it: opening Ayarlar on an old phone took the
+      // account's one push slot from the new one, and logging out here then
+      // cleared it (`pushTokenNeedsSending`).
+      if (
+        pushResult.token &&
+        (await pushTokenNeedsSending(pushResult.token, me?.hasPushToken))
+      ) {
         try {
           await api.setPushToken({ token: pushResult.token, platform: PLATFORM });
           await setItem(StorageKeys.pushToken, pushResult.token);

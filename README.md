@@ -1243,7 +1243,9 @@ bölümünde anlattım). Ana sayfada bildirimlerin kapalı olduğunu söyleyen k
 kendiliğinden gider. Android iki kere "izin verme" denince bir daha sormuyor, yol bu. Kartı
 **Kalsın** ile kapattıysan aynı düğme **Ayarlar → Bildirimler**'de de var.
 Yeni telefona geçen bir kanka eskisinden çıkış yaparsa yeni telefonun bildirimleri kesilmez:
-çıkış sadece o telefonun kendi kaydını siler. Eski telefondaki uygulama güncellemeyi hiç almamışsa
+çıkış sadece o telefonun kendi kaydını siler. Eski telefonda uygulamayı açmak ya da Ayarlar'a girmek
+de bildirimleri yeni telefondan geri almaz; geri almak istersen Ayarlar → Bildirimler'deki
+**Tekrar dene**'ye bas. Eski telefondaki uygulama güncellemeyi hiç almamışsa
 yenisinin kaydını da siler; yeni telefonda KOYDUM'u bir kez öne getirmek (açmak ya da arka plandan
 dönmek) kaydı geri koyar.
 
