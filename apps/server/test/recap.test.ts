@@ -100,10 +100,14 @@ async function gang(now: string = SUNDAY_EVENING) {
 
 describe('recapWeekFor', () => {
   const tz = 'Europe/Istanbul';
-  it('opens at 20:00 on Sunday and closes at noon on Monday', () => {
+  it('opens at 20:00 on Sunday and closes at noon on Monday, skipping the night', () => {
     expect(recapWeekFor(new Date('2026-01-11T16:59:00.000Z'), tz)).toBeNull(); // Sun 19:59
     expect(recapWeekFor(new Date('2026-01-11T17:00:00.000Z'), tz)).toBe(SUNDAY); // Sun 20:00
     expect(recapWeekFor(new Date('2026-01-11T20:59:00.000Z'), tz)).toBe(SUNDAY); // Sun 23:59
+    expect(recapWeekFor(new Date('2026-01-11T21:00:00.000Z'), tz)).toBeNull(); // Mon 00:00
+    expect(recapWeekFor(new Date('2026-01-11T23:00:00.000Z'), tz)).toBeNull(); // Mon 02:00
+    expect(recapWeekFor(new Date('2026-01-12T03:59:00.000Z'), tz)).toBeNull(); // Mon 06:59
+    expect(recapWeekFor(new Date('2026-01-12T04:00:00.000Z'), tz)).toBe(SUNDAY); // Mon 07:00
     expect(recapWeekFor(new Date('2026-01-12T08:59:00.000Z'), tz)).toBe(SUNDAY); // Mon 11:59
     expect(recapWeekFor(new Date('2026-01-12T09:00:00.000Z'), tz)).toBeNull(); // Mon 12:00
     expect(recapWeekFor(new Date('2026-01-10T18:00:00.000Z'), tz)).toBeNull(); // Sat 21:00
@@ -113,6 +117,9 @@ describe('recapWeekFor', () => {
     // 17:30Z is Sunday 20:30 in Istanbul but still Sunday 12:30 in New York
     expect(recapWeekFor(new Date(SUNDAY_EVENING), 'America/New_York')).toBeNull();
     expect(recapWeekFor(new Date('2026-01-12T01:00:00.000Z'), 'America/New_York')).toBe(SUNDAY);
+    // Monday 08:30 in Istanbul is 00:30 in New York: night there, no make-up yet
+    expect(recapWeekFor(new Date('2026-01-12T05:30:00.000Z'), 'America/New_York')).toBeNull();
+    expect(recapWeekFor(new Date('2026-01-12T12:00:00.000Z'), 'America/New_York')).toBe(SUNDAY); // Mon 07:00
   });
 });
 
@@ -235,6 +242,30 @@ describe('weekly recap', () => {
     expect(sendWeeklyRecaps(app.db, new Date('2026-01-12T10:00:00.000Z'))).toBe(0); // Monday 13:00: too late
     expect(sendWeeklyRecaps(app.db, app.now())).toBe(3);
     expect(dataOf(recapsOf(ali.me.id)[0]).weekKey).toBe(SUNDAY);
+  });
+
+  it('makes up a friend abroad’s missed Sunday at 07:00 his time, not in his night', async () => {
+    harness = await makeApp({ now: SUNDAY_EVENING }); // 20:30 in Istanbul, 12:30 in New York
+    const app = harness.app;
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali', timezone: 'Europe/Istanbul' });
+    const mert = await registerUser(app, 'mert', { displayName: 'Mert', timezone: 'America/New_York' });
+    befriend(app, ali.me.id, mert.me.id);
+    setSteps(app, ali.me.id, '2026-01-07', 8_000);
+    setSteps(app, mert.me.id, '2026-01-08', 11_000);
+
+    // the owner's PC is on for Ali's Sunday evening, then sleeps through Mert's
+    expect(sendWeeklyRecaps(app.db, app.now())).toBe(1);
+    expect(recapsOf(mert.me.id)).toHaveLength(0);
+
+    // it wakes Monday 08:30 in Istanbul: 00:30 in New York, nothing is sent or claimed
+    expect(sendWeeklyRecaps(app.db, new Date('2026-01-12T05:30:00.000Z'))).toBe(0);
+    expect(app.db.prepare('SELECT week_key FROM recaps_sent WHERE user_id = ?').all(mert.me.id)).toEqual([]);
+
+    // Monday 07:30 in New York: the make-up goes out
+    expect(sendWeeklyRecaps(app.db, new Date('2026-01-12T12:30:00.000Z'))).toBe(1);
+    const [forMert] = recapsOf(mert.me.id);
+    expect(dataOf(forMert)).toMatchObject({ weekKey: SUNDAY, steps: 11_000 });
+    expect(forMert.body).toContain('Geçen hafta ne koydun ne yedin.');
   });
 
   it('counts a çelınc that ends after the recap in the next one, exactly once', async () => {

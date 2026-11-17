@@ -9,8 +9,8 @@
  *
  * Rules:
  *   - sent from 20:00 local on Sunday; a server that was off all evening still
- *     sends it on Monday morning (until noon), never later — a recap that shows
- *     up on Wednesday is about nothing;
+ *     sends it on Monday morning (07:00 to noon), never in the night before and
+ *     never later — a recap that shows up on Wednesday is about nothing;
  *   - once per person per week: `recaps_sent (user_id, week_key)` is the claim,
  *     `week_key` being the local Sunday that ends the week;
  *   - the results window runs from the previous recap to now, so a çelınc
@@ -39,7 +39,14 @@ import { notify } from './notifications.js';
 
 /** Sunday, 20:00 local: the week is over and the phone is in hand. */
 export const RECAP_HOUR = 20;
-/** A missed Sunday evening is made up on Monday morning, not later. */
+/**
+ * A missed Sunday evening is made up on Monday morning, between these hours:
+ * not later, and not in the night before it — a friend west of the owner
+ * misses Sunday evening nearly every week (New York's is 04:00–08:00 on Monday
+ * in Istanbul, while the PC sleeps), and the make-up then rang them, with
+ * sound, at whatever night hour the PC woke.
+ */
+export const RECAP_LATE_FROM_HOUR = 7;
 export const RECAP_LATE_UNTIL_HOUR = 12;
 
 const DAY_MS = 24 * 60 * 60_000;
@@ -110,7 +117,7 @@ export function recapWeekFor(now: Date, timezone: string): string | null {
   const hour = localHour(now, timezone);
   const weekday = weekdayOf(today);
   if (weekday === 0 && hour >= RECAP_HOUR) return today;
-  if (weekday === 1 && hour < RECAP_LATE_UNTIL_HOUR) return addDays(today, -1);
+  if (weekday === 1 && hour >= RECAP_LATE_FROM_HOUR && hour < RECAP_LATE_UNTIL_HOUR) return addDays(today, -1);
   return null;
 }
 

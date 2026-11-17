@@ -626,8 +626,12 @@ kankalar arasında **haftanın kralı** kim. Tek bir çelınca değil gruba dair
 pazartesi sabahki laf atışmasını pazar akşamı başlatan kısım.
 
 * `recaps_sent (user_id, week_key)` hız sınırıdır; `week_key` haftayı bitiren yerel pazardır.
-* Sunucu bütün pazar akşamı kapalı kaldıysa özet pazartesi öğlene kadar yine gider, sonrasında
-  gitmez — çarşamba gelen bir özet hiçbir şey anlatmaz.
+* Sunucu bütün pazar akşamı kapalı kaldıysa özet pazartesi sabahı 07:00 ile 12:00 arasında yine
+  gider. Öğleden sonra gitmez — çarşamba gelen bir özet hiçbir şey anlatmaz. Gece de gitmez:
+  sunucunun batısındaki kanka pazar akşamını neredeyse her hafta kaçırır (New York'un pazar
+  20:00–24:00'ü İstanbul'da pazartesi 04:00–08:00, bilgisayar o saatte genelde uyur), telafi de
+  bilgisayar hangi saatte uyandıysa o saatte, yani onun gecesinde sesli bildirimle çalıyordu.
+  07:00'den önce `recaps_sent` kaydı da yazılmaz, 07:00'den sonraki ilk tur gönderir.
 * Sonuç penceresi bir önceki özetin gönderildiği andan şimdiye kadardır. Pazar 23:59'da biten bir
   çelınc bu yüzden ya bu haftaya ya da bir sonrakine girer, ikisine birden ya da hiçbirine değil.
   Önceki özet 7 günden biraz eskiyse de (pazartesi telafisi, saatlerin geri alındığı gece) pencere

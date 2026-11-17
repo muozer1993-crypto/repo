@@ -544,8 +544,10 @@ bildirimler artık ona gider, öncekinin lafları o telefonda çalmaz.
 
 **Haftanın hesabı:** her pazar akşamı 20:00'den sonra herkese haftanın özeti düşer: kaç kere
 koydun, kaç kere yedin, toplam adım ve kankalar arasında haftanın kralı. Sunucu pazar akşamı
-kapalıysa pazartesi öğlene kadar yine gönderilir. Gelen kutusunda kart olarak görünür, dokununca
-profildeki sıralamaya gider.
+kapalıysa pazartesi sabahı 07:00 ile 12:00 arasında yine gönderilir, gece gönderilmez: yurt
+dışındaki bir kankanın pazar akşamı senin bilgisayarının uyuduğu saate denk gelebilir (New York'ta
+pazar 20:00, İstanbul'da pazartesi 04:00), telafi özeti onu gece uyandırmasın. Gelen kutusunda kart
+olarak görünür, dokununca profildeki sıralamaya gider.
 
 **Laf sokmayı unutan kazanan:** çelınc bittikten 2 saat sonra kazanan kaybedenlerden birine
 hâlâ laf sokmadıysa ona bir kere "Koymayacak mısın? Veli ağzını açmanı bekliyor." düşer,
