@@ -140,6 +140,16 @@ export function startScheduler(
       report(err, () => app.log.warn({ err }, 'writing down when the server was off failed'));
     }
   };
+  // The last beat is what a later start writes its pause from, and the only
+  // record of a pause still held in memory, which dies with this process: it
+  // moves only once nothing is held. A disk with room for the beat's small row
+  // but not for the pause, or room freed and the server restarted before the
+  // next beat could write it, would otherwise leave the night with no pause,
+  // and the "Geldim" parked in it refused as not today's.
+  const keepBeat = (at: Date): void => {
+    writeHeldPauses(db);
+    writeLastBeat(db, at);
+  };
   // A process that was stopped (Ctrl+C, the window closed, the power cut, `dur`
   // and `y` in the npm run internet window) left its last beat behind: the time
   // since then is a pause like a sleep, however short. Nothing ran meanwhile,
@@ -261,8 +271,7 @@ export function startScheduler(
     lastBeatMs = now.getTime();
     lastBeatUptimeMs = upNow;
     // what the next start reads back, and a pause a full disk kept from being written
-    remember(() => writeHeldPauses(db));
-    remember(() => writeLastBeat(db, now));
+    remember(() => keepBeat(now));
 
     if (inFlight) return; // never overlap two passes
     inFlight = tick().finally(() => {
@@ -293,7 +302,7 @@ export function startScheduler(
     app.schedulerBootAt.catchUp = undefined;
     // the pause the next start writes down begins now, not at the last beat:
     // up to 30 s in which this server was still here to hear a tap
-    remember(() => writeLastBeat(db, app.now()));
+    remember(() => keepBeat(app.now()));
     if (!inFlight && !copyInFlight) return;
     let waited: NodeJS.Timeout | undefined;
     const gaveUp = await Promise.race([

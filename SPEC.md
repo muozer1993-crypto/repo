@@ -622,7 +622,9 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    last beat a stopped process, or its stop(), left in `server_state`, and writes any gap; a running one writes a gap
    only when the machine's uptime moved as much, so a clock put forward is no pause), where a check-in tapped
    meanwhile is judged (2.3). A gap that cannot be written (a PC that wakes on a full disk) is held in memory
-   (`holdPause`) and written by a later beat (`writeHeldPauses`); meanwhile it vouches for a tap like a written one,
+   (`holdPause`) and written by a later beat (`writeHeldPauses`), and the last beat (`last_beat`, which a later start
+   writes its pause from) is not moved, by a beat or by a stop, while one is held: a restart before the next beat
+   could write it still writes the night down. Meanwhile it vouches for a tap like a written one,
    so the night's parked "Geldim", sent the moment the PC wakes, is judged at its tap and only the disk (507) keeps
    it out. The phones' queues send what they parked the moment the server answers again, often
    before the interval's next beat, so a request that comes more than `RESUME_GAP_MS` after the last beat runs that

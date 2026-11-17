@@ -100,7 +100,9 @@ Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
   kapanmadan önceki son vuruşundan (`server_state`; düzgün kapanış onu kapanış anında yazar) bu yana
   geçen süre, ne kadar kısa olursa olsun: `dur` ile `y` arasındaki üç dakikada tünel 502 döner,
   o arada basılan "Geldim" de gecenin uykusundaki gibi sayılmalı. Disk dolu uyanan bilgisayar bu
-  kesintiyi yazamaz; zamanlayıcı onu bellekte tutar (`holdPause`) ve yer açılınca yazar, bu arada
+  kesintiyi yazamaz; zamanlayıcı onu bellekte tutar (`holdPause`) ve yer açılınca yazar. Bellekteki
+  kesinti süreçle ölür, o yüzden tutulan kesinti varken son vuruş (`last_beat`) ne vuruşta ne kapanışta
+  ilerler: yer açılıp sunucu hemen yeniden başlatılsa da gece oradan yazılır. Bu arada
   telefonun sabah gönderdiği gece "Geldim"i yine basıldığı saatle değerlendirilir, onu sadece disk
   (507) bekletir. Bitişten sonraki saat de (`stillSettling`) uyanıştan ancak o saatte bir kesinti
   varsa yeniden başlar ve sunucunun bitişten sonra kesintisiz açık kaldığı ilk saattir (`upSpanFrom`:

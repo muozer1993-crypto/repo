@@ -1731,6 +1731,52 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
     }
   });
 
+  it('keeps the last beat before a sleep it could not write down, so a restart still writes the night', async () => {
+    harness = await makeApp({ now: NOW });
+    const { veli, challengeId } = await checkinRace(harness, 'erken_yat', '23:30');
+    // room for the beat's small row but not for the pause: stubbed, never a real disk filled
+    type Run = (this: { source: string }, ...args: unknown[]) => unknown;
+    const proto = Object.getPrototypeOf(harness.db.prepare('SELECT 1')) as { run: Run };
+    const run = proto.run;
+    let full = false;
+    const writes = vi.spyOn(proto, 'run').mockImplementation(function (this: { source: string }, ...args: unknown[]) {
+      if (full && /^\s*INSERT INTO server_pauses\b/i.test(this.source)) {
+        throw Object.assign(new Error('database or disk is full'), { code: 'SQLITE_FULL' });
+      }
+      return run.apply(this, args);
+    });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      at(harness, '2026-01-05T20:00:00.000Z');
+      const slept = iso(harness);
+      stop = startScheduler(harness.app, harness.db, harness.config, asleepWithClock(harness));
+      // 08:05 on a full disk: the night is held in memory, and the beat stays before it
+      at(harness, '2026-01-06T05:05:00.000Z');
+      full = true;
+      await nextBeat();
+      expect(pauses(harness)).toEqual([]);
+      expect(readLastBeat(harness.db)?.toISOString()).toBe(slept);
+      // stopped at 08:20 with the night still held: not moved past it either
+      at(harness, '2026-01-06T05:20:00.000Z');
+      await stop();
+      stop = null;
+      expect(readLastBeat(harness.db)?.toISOString()).toBe(slept);
+
+      // room freed, started again: the pause from that beat covers the 23:10 tap
+      full = false;
+      stop = startScheduler(harness.app, harness.db, harness.config, asleepWithClock(harness));
+      expect(pauses(harness)).toContainEqual({ started_at: slept, ended_at: iso(harness) });
+      const sent = await geldim(harness, veli, challengeId, '2026-01-05', '2026-01-05T20:10:00.000Z');
+      expect(sent.statusCode).toBe(201);
+      expect(sent.json<{ entry: Entry }>().entry.late).toBeUndefined();
+    } finally {
+      writes.mockRestore();
+      await stop?.();
+      vi.useRealTimers();
+    }
+  });
+
   it('counts a morning tap from the sleep on time, not as a late 0 for good', async () => {
     harness = await makeApp({ now: NOW });
     const { veli, challengeId } = await checkinRace(harness, 'erken_kus', '07:00');
