@@ -957,8 +957,11 @@ koptuğunda açık olan çelınc ekranı kapanmaz, son bilinen hali gösterir; y
 Check-in çelınclarının son hali telefonda da saklanır (kabul ettiğin anda ve uygulama sabah
 hatırlatmalarını her kurduğunda güncellenir): telefon uygulamayı gece kapatmış olsa bile
 sabah hatırlatmaya dokununca, bilgisayar uyuyor ya da telefon çekmiyorsa ekran o hali gösterir ve
-**Geldim** sıraya girer. Bu kopya sadece o hesabındır; çıkış yapınca ya da hesabı silince telefondan
-silinir, aynı telefona giren başka bir hesap onu görmez.
+**Geldim** sıraya girer. Uygulamayı ana ekrandan açtıysan liste gelmez ama bu çelınclar ana sayfada
+"Liste gelmedi" kartının altında **Son bilinen hali** başlığıyla durur; bu listenin tamamı değil,
+sadece telefonda saklı check-in'lerin. Birine dokunup **Geldim**'e basman yeter. Bu kopya sadece
+o hesabındır; çıkış yapınca ya da hesabı silince telefondan silinir, aynı telefona giren başka bir
+hesap onu görmez.
 
 ### Davet gelince
 

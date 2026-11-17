@@ -262,7 +262,8 @@ export default function ProfileScreen() {
   const earnedCount = BADGES.filter((badge) => earned.has(badge.key)).length;
   const ladder = badgeLadder(stats, [...earned]);
   const openTitle = openRung ? badgeTitle(openRung.badge, level) : null;
-  const friendCount = friends.data?.friends.length ?? 0;
+  // not read yet, or the server out of reach: a 0 there says I have no kanka at all
+  const friendCount: number | string = friends.data ? friends.data.friends.length : '–';
 
   const saveField = (
     body: Parameters<typeof updateMe.mutate>[0],

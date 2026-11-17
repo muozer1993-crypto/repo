@@ -1,6 +1,6 @@
 import type { ChallengeSummary, VulgarityLevel } from '@koydum/shared';
 import { TAGLINE, getChallengeType, t } from '@koydum/shared';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -25,8 +25,10 @@ import { useApi } from '@/hooks/useApi';
 import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
+import { qk } from '@/lib/query';
 import { openAppSettings } from '@/services/deviceHealth';
 import { syncDeviceNow } from '@/services/deviceSyncNow';
+import { savedChallengeDetails } from '@/services/savedDetails';
 import {
   getStepAvailability,
   getTodaySteps,
@@ -86,6 +88,19 @@ export default function HomeScreen() {
 
   const nothingAtAll =
     !challenges.isPending && !challenges.isError && list.length === 0;
+
+  // A cold start with the PC asleep: no list, but the phone still has the
+  // check-in çelınclar it kept for that morning (services/savedDetails), and
+  // their "Geldim" must not wait for the server. Home's own query, never put
+  // in the list's cache: history and the rest read that one, and would take
+  // these few for the whole list. Only while there is no list at all.
+  const listMissing = challenges.isError && !challenges.data;
+  const offlineCopies = useQuery({
+    queryKey: qk.savedDetails(me?.id ?? ''),
+    queryFn: () => savedChallengeDetails(),
+    enabled: listMissing,
+  });
+  const kept = listMissing ? (offlineCopies.data ?? []) : [];
 
   const openChallenge = (id: string) => {
     router.push({ pathname: '/challenge/[id]', params: { id } });
@@ -154,6 +169,25 @@ export default function HomeScreen() {
               onPress={() => void challenges.refetch()}
             />
           </Card>
+        ) : null}
+
+        {kept.length > 0 ? (
+          <View style={styles.section}>
+            <SectionHeader title="Son bilinen hali" count={kept.length} emoji="📴" />
+            <Text variant="small" muted>
+              Sadece telefonda saklı check-in çelıncların, son gördüğün haliyle; gerisi sunucuya ulaşınca gelir.
+              Açıp Geldim’e basarsan sıraya alınır, bağlantı gelince gider.
+            </Text>
+            {kept.map((detail) => (
+              <ChallengeCard
+                key={detail.challenge.id}
+                summary={detail}
+                level={level}
+                meId={me?.id}
+                onPress={() => openChallenge(detail.challenge.id)}
+              />
+            ))}
+          </View>
         ) : null}
 
         {invited.length > 0 ? (

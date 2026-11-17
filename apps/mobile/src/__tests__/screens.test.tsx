@@ -2851,6 +2851,91 @@ describe('a morning check-in with the server out of reach', () => {
     expect(text).not.toContain('kabul bekleniyor');
   });
 
+  /** Mustafa's running Erken Kalkan Koyar as the phone kept it, under a name no catalog has. */
+  function keptCopy() {
+    const detail = morning({ status: 'active' });
+    return { ...detail, challenge: { ...detail.challenge, title: 'Sabah testi' } };
+  }
+
+  const ASLEEP = new ApiError('server_down', 'Sunucu şu an kapalı, uyuyor ya da adresi değişmiş.', 530);
+
+  // opened from the launcher, not the reminder: home was the dead end, and a
+  // parked tap counts from when it was pressed, so waiting cost the morning
+  it('lists the check-ins kept on the phone when the list does not come, and opens them', async () => {
+    const { router } = require('expo-router') as { router: Record<string, jest.Mock> };
+    router.push!.mockClear();
+    await saveChallengeDetail(keptCopy() as never);
+    api.challenges = jest.fn(async () => {
+      throw ASLEEP;
+    });
+    api.challenge = jest.fn(async () => {
+      throw ASLEEP;
+    });
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const home = renderScreen(<HomeScreen />);
+    await settle();
+
+    const text = rendered(home);
+    expect(text).toContain('Liste gelmedi');
+    expect(text).toContain('SON BİLİNEN HALİ');
+    // never passed off as the whole list
+    expect(text).toContain('Sadece telefonda saklı check-in çelıncların');
+    expect(text).toContain('Sabah testi');
+
+    const [card] = home.root.findAll(
+      (node) => node.props.summary?.challenge?.id === 'c-1' && typeof node.props.onPress === 'function'
+    );
+    act(() => {
+      card!.props.onPress();
+    });
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/challenge/[id]', params: { id: 'c-1' } });
+
+    // where it leads draws the same copy, with a "Geldim" to park
+    searchParams.id = 'c-1';
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const screen = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(rendered(screen)).toContain('Sabah testi');
+    expect(geldim(screen)).toHaveLength(1);
+  });
+
+  it('keeps the copies off a home that has its list', async () => {
+    await saveChallengeDetail(keptCopy() as never);
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+    expect(rendered(tree)).not.toContain('SON BİLİNEN HALİ');
+
+    // a refetch that fails keeps the list it had: that is the list, not these
+    api.challenges = jest.fn(async () => {
+      throw ASLEEP;
+    });
+    await act(async () => {
+      await clientOf(tree).refetchQueries({ queryKey: ['challenges'] });
+    });
+    await settle();
+    expect(api.challenges).toHaveBeenCalled();
+    expect(rendered(tree)).toContain('Liste gelmedi');
+    expect(rendered(tree)).not.toContain('SON BİLİNEN HALİ');
+    expect(rendered(tree)).not.toContain('Sabah testi');
+  });
+
+  it("never lists another account's copies on home", async () => {
+    // Veli's, left on the phone; Mustafa is the one signed in
+    await setJson(StorageKeys.savedDetails, { ownerId: 'u-3', details: [keptCopy()] });
+    api.challenges = jest.fn(async () => {
+      throw ASLEEP;
+    });
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Liste gelmedi');
+    expect(text).not.toContain('SON BİLİNEN HALİ');
+    expect(text).not.toContain('Sabah testi');
+  });
+
   // the çelınc screen's "+ Giriş" and "Odak seansı" open these: refusing there
   // what the screen just offered left a typed count or a session nowhere to go
   it('takes the entry form and the focus timer for it too, not only the check-in', async () => {
@@ -7777,6 +7862,38 @@ describe('the odak and adım rungs on the profile', () => {
     // a day typed with "Beyan et" never moves it, and nothing used to say so
     expect(text).toContain('Tek günde 7.500 adım at (telefonun saydığı)');
     expect(text).toContain('4.000 / 7.500');
+  });
+});
+
+describe('the kanka count on the Karne', () => {
+  const ALI = { id: 'u-2', username: 'ali', displayName: 'Ali', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+  const CAN = { ...ALI, id: 'u-4', username: 'can', displayName: 'Can' };
+
+  // the other tiles come from the stored profile; this one from GET /friends,
+  // which a cold start with the PC asleep never got
+  it('says it does not know rather than 0 when the friends list did not come', async () => {
+    api.friends = jest.fn(async () => {
+      throw NETWORK_ERROR;
+    });
+    const ProfileScreen = require('@/app/(app)/(tabs)/profile').default;
+    const tree = renderScreen(<ProfileScreen />);
+    await settle();
+    expect(api.friends).toHaveBeenCalled();
+    expect(rendered(tree)).toContain('🫂 – KANKA');
+    expect(rendered(tree)).not.toContain('🫂 0 KANKA');
+  });
+
+  it('counts them once they come, and a real 0 stays 0', async () => {
+    api.friends = jest.fn(async () => ({ friends: [ALI, CAN], incoming: [], outgoing: [] }));
+    const ProfileScreen = require('@/app/(app)/(tabs)/profile').default;
+    const two = renderScreen(<ProfileScreen />);
+    await settle();
+    expect(rendered(two)).toContain('🫂 2 KANKA');
+
+    api.friends = jest.fn(async () => ({ friends: [], incoming: [], outgoing: [] }));
+    const none = renderScreen(<ProfileScreen />);
+    await settle();
+    expect(rendered(none)).toContain('🫂 0 KANKA');
   });
 });
 

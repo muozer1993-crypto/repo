@@ -965,8 +965,13 @@ gelmedi" diyordu ve **Geldim** sıraya alınamıyordu. Bu yüzden oynadığım, 
 çelınclarının son detayı telefonda da durur (`services/savedDetails.ts`, en fazla beş). Bellek
 boşken `useChallenge` sunucuya sormadan önce bu kopyayı koyar; istek düşerse ekran onu "son bilinen
 hali" satırıyla gösterir, dokunuş da basıldığı saatle ve çelıncın kendi saat dilimindeki günüyle
-sıraya girer. Kopya hesabındır: üstünde hangi hesabın okuduğu yazar, başka hesaba gösterilmez;
-çıkışta, hesap silinince ve arka plan görevinin 401'inde `forgetStoredSession` onu da siler.
+sıraya girer. Uygulama hatırlatmadan değil de ana ekrandan açılırsa liste de gelmez; ana sayfa o
+zaman "Liste gelmedi" kartının altında bu kopyaları "Son bilinen hali" başlığıyla, listenin tamamı
+olmadığını söyleyerek sıralar (`savedChallengeDetails`). Bunu kendi sorgusuyla yapar, listenin
+önbelleğine yazmaz: geçmiş ve gelen kutusu da o önbelleği okur, bu birkaç çelıncı bütün liste
+sanırdı. Liste gelince ya da elde eski bir liste varken bölüm görünmez. Kopya hesabındır: üstünde
+hangi hesabın okuduğu yazar, başka hesaba gösterilmez; çıkışta, hesap silinince ve arka plan
+görevinin 401'inde `forgetStoredSession` onu da siler.
 
 Kopya önce yalnızca çelınc ekranı açılınca yazılıyordu. Çelıncı açan, ikinci "varım"dan sonra ekranı
 bir daha açmadıysa sabah kopyada "Kabul bekleniyor 1/2" görüyordu, **Geldim** yoktu; ana sayfadaki

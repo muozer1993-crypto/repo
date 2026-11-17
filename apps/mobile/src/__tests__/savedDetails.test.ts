@@ -7,6 +7,7 @@ import {
   forgetSavedChallengeDetails,
   saveChallengeDetail,
   savedChallengeDetail,
+  savedChallengeDetails,
   syncSavedWithList,
 } from '@/services/savedDetails';
 import { forgetStoredSession } from '@/services/session';
@@ -164,6 +165,32 @@ describe('saved check-in details', () => {
 
     await syncSavedWithList([row] as unknown as ChallengeDetail[], NOW);
     expect((await savedChallengeDetail('c-1'))?.myDays).toEqual({ first: '2026-09-09', last: '2026-09-15' });
+  });
+
+  it('lists the copies still worth a "Geldim", for a home whose list did not come', async () => {
+    // as stored before: one about to start, one I left since and one whose end passed
+    await setJson(StorageKeys.savedDetails, {
+      ownerId: 'me-1',
+      details: [
+        detail('c-1'),
+        detail('left', { meStatus: 'left' }),
+        detail('pending', { status: 'pending' }),
+        detail('over', { endsAt: '2026-09-09T03:00:00.000Z' }),
+      ],
+    });
+    expect((await savedChallengeDetails(NOW)).map((kept) => kept.challenge.id)).toEqual(['c-1', 'pending']);
+    // the week after: nothing left to tap
+    expect(await savedChallengeDetails(Date.parse('2026-09-16T00:00:00.000Z'))).toEqual([]);
+  });
+
+  it("lists nothing of another account's, nor signed out", async () => {
+    await saveChallengeDetail(detail('c-1'), NOW);
+
+    await signIn('me-2');
+    expect(await savedChallengeDetails(NOW)).toEqual([]);
+
+    await AsyncStorage.removeItem(StorageKeys.me);
+    expect(await savedChallengeDetails(NOW)).toEqual([]);
   });
 
   it('clears on its own too', async () => {

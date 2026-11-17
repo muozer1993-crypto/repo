@@ -34,4 +34,6 @@ export const qk = {
   profile: (id: string) => ['profile', id] as const,
   search: (q: string) => ['search', q] as const,
   health: ['health'] as const,
+  // the check-in copies on the phone (services/savedDetails), read only by a home with no list
+  savedDetails: (ownerId: string) => ['savedDetails', ownerId] as const,
 };

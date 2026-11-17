@@ -140,6 +140,22 @@ export function savedChallengeDetail(id: string): Promise<ChallengeDetail | null
   });
 }
 
+/**
+ * Every copy this account still has a use for, for a home whose list did not
+ * come. Opened from the launcher rather than the reminder, a cold app with
+ * the PC asleep had only "Liste gelmedi" there, and the "Geldim" these copies
+ * exist for was out of reach: the parked tap is judged by when it was
+ * pressed, so waiting for the server cost the morning.
+ */
+export function savedChallengeDetails(now: number = Date.now()): Promise<ChallengeDetail[]> {
+  return serially(async () => {
+    const ownerId = await currentOwnerId();
+    if (!ownerId) return [];
+    // a copy whose end passed since it was saved has no "Geldim" left to take
+    return (await readSaved(ownerId)).filter((detail) => keeps(detail, ownerId, now));
+  });
+}
+
 /** The server says çelınc `id` is not mine (any more): its copy goes. */
 export function dropSavedChallengeDetail(id: string): Promise<void> {
   return serially(async () => {
