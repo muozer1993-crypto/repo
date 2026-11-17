@@ -420,8 +420,16 @@ APK'yı sunucuya koymak için expo.dev'den indirdiğin dosyayı bir kere yayınl
 
 ```bash
 npm run apk:yayinla -- C:\Users\sen\Downloads\koydum.apk
-# sürümü app.json'dan okur; elle vermek istersen: -- dosya.apk --surum 1.1.0 --not "Ekran süresi geldi"
+# sürümü APK'nın içinden okur; not eklemek istersen: -- dosya.apk --not "Ekran süresi geldi"
 ```
+
+Sürümü `app.json`'dan değil, APK'nın kendisinden okur; telefon da kendi sürümünü oradan bilir.
+Depodaki `app.json` çoğu zaman henüz derlemediğin bir sonraki sürümü yazar. 1.1.0 dosyası 1.1.1
+diye yayınlanırsa 1.1.0'daki herkes "Yeni sürüm var" kartını görür, indirip kursa da kart gitmez.
+İkisi farklıysa komut bunu bir satırla söyler ve APK'nın sürümüyle yayınlar. `--surum 1.1.0`
+yazarsan ve APK başka bir sürümse hiçbir şeyi yayınlamadan durur: yanlış derlemeyi indirmiş
+olabilirsin. Sürümü APK'dan okuyamazsa da durur; o zaman expo.dev'deki derleme sayfasında yazan
+sürümü `--surum` ile sen ver.
 
 Dosya `apps/server/data/app/koydum.apk` olarak durur, sunucu yeniden başlatmadan `/koydum.apk`
 adresinden sunar. APK'yı başka yerde tutuyorsan (expo.dev derleme sayfası gibi) sunucuya
@@ -835,7 +843,9 @@ yedeği alınmaz, `geri-yukle` yine son gerçek yedeği bulur; eski `data\upload
 fotoğraflar da silinmez, hiçbir girişin fotoğraf göstermediği bir veritabanında temizlik hiç çalışmaz. Herkes uygulamaya bir kez yeniden giriş
 yapar (kullanıcı adı ve şifresiyle), çünkü oturum anahtarı (`data\secret`) yedeğe girmez; eski
 bilgisayardan o dosyayı kurtardıysan yeni `data` klasörüne koy, kimse çıkış yapmaz. Kanıt
-fotoğrafları (`data\uploads`) da yedeğe girmez.
+fotoğrafları (`data\uploads`) da yedeğe girmez. Yayınladığın APK (`data\app`) da girmez: davet
+sayfasında **Uygulamayı indir** yine çıksın diye APK'yı expo.dev'den indirip
+`npm run apk:yayinla` ile bir kez daha yayınla (eski `data\app` klasörünü kopyaladıysan gerek yok).
 
 Docker'da önce sunucuyu durdur, yedeği öyle yükle: `docker compose stop`, sonra
 `docker compose run --rm koydum npm run yonet -- geri-yukle`, sonra `docker compose start`.
