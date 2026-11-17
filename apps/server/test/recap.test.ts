@@ -437,6 +437,30 @@ describe('weekly recap', () => {
     expect(runSchedulerOnce(app.db, bootAt, { bootAt }).recaps).toBe(3);
   });
 
+  it('sends a Sunday evening at once when its window closes within the grace after a wake', async () => {
+    const { app, ali, veli } = await gang('2026-01-11T20:45:00.000Z'); // Sunday 23:45
+    seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: ali.me.id, finalizedAt: '2026-01-09T10:00:00.000Z' });
+    // awake until 01:00, then asleep through Monday morning: midnight was the last chance
+    const bootAt = app.now();
+    expect(runSchedulerOnce(app.db, bootAt, { bootAt }).recaps).toBe(3);
+  });
+
+  it('sends a make-up at once when the first pass after the grace would come at noon', async () => {
+    const { app, ali, veli } = await gang('2026-01-12T08:39:45.000Z'); // Monday 11:39:45
+    seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: ali.me.id, finalizedAt: '2026-01-09T10:00:00.000Z' });
+    // the grace ends at 11:59:45, and the beat after it is at 12:00:00, past the make-up's window
+    const bootAt = app.now();
+    expect(runSchedulerOnce(app.db, new Date(bootAt.getTime() + WAKE_GRACE_MS - 15_000), { bootAt }).recaps).toBe(3);
+  });
+
+  it('still waits out the grace for a Sunday evening that stays open after it', async () => {
+    const { app, ali, veli } = await gang('2026-01-11T19:30:00.000Z'); // Sunday 22:30
+    seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: ali.me.id, finalizedAt: '2026-01-09T10:00:00.000Z' });
+    const bootAt = app.now();
+    expect(runSchedulerOnce(app.db, bootAt, { bootAt }).recaps).toBe(0);
+    expect(runSchedulerOnce(app.db, new Date(bootAt.getTime() + WAKE_GRACE_MS), { bootAt }).recaps).toBe(3);
+  });
+
   it('runs as a scheduler step', async () => {
     const { app, ali, veli, can } = await gang();
     seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: ali.me.id, finalizedAt: '2026-01-09T10:00:00.000Z' });

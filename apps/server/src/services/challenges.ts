@@ -1944,8 +1944,9 @@ export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: Sch
   step('tauntFollowups', () => sendTauntFollowups(db, now), (n) => (summary.tauntFollowups = n));
   // After finalize, so a çelınc that ended this minute is already in the count,
   // and after the grace, so the steps the phones parked while the PC slept are
-  // too: one week's walker line is never corrected. A Monday make-up closing
-  // within the grace goes now rather than never.
+  // too: one week's walker line is never corrected. A window closing within
+  // the grace (a Sunday evening at midnight, a Monday make-up at noon) goes now
+  // rather than never.
   step(
     'recaps',
     () => sendWeeklyRecaps(db, now, justBack ? { closingBy: graceEnds } : {}),

@@ -391,14 +391,24 @@ export function recapCopy(
 }
 
 /**
+ * How long after the wake grace (`closingBy`) a window may still close and its
+ * recap go at once: the first pass after the grace comes up to a beat later
+ * (30 s), more when a push flush still holds the one before. A window that
+ * closed in that gap was never sent at all.
+ */
+const RECAP_GRACE_SLACK_MS = 5 * 60_000;
+
+/**
  * Scheduler step: writes the recap of everybody whose Sunday evening it is.
  * Returns how many were sent.
  *
- * With `closingBy` (a pass right after a wake, `WAKE_GRACE_MS`) only the Monday
- * make-ups whose window closes by then go: the rest wait for the steps the
- * phones parked while the PC slept, which otherwise came after a recap that
- * named the wrong walker for good, and a make-up waited for past its noon would
- * never go.
+ * With `closingBy` (a pass right after a wake, `WAKE_GRACE_MS`) only the
+ * windows that close by then (`RECAP_GRACE_SLACK_MS` after it, too) go: a
+ * Sunday evening at local midnight, a Monday make-up at noon. The rest wait
+ * for the steps the phones parked while the PC slept, which otherwise came
+ * after a recap that named the wrong walker for good. One that waited past its
+ * close would never go: a PC woken at 23:45 on Sunday that sleeps again from
+ * 01:00 to the evening misses the Monday make-up too.
  */
 export function sendWeeklyRecaps(db: Database, now: Date = new Date(), options: { closingBy?: Date } = {}): number {
   const until = nowIso(now);
@@ -427,9 +437,11 @@ export function sendWeeklyRecaps(db: Database, now: Date = new Date(), options: 
     const today = todayKey(timezone, now);
     const late = weekKey !== today;
     if (options.closingBy) {
-      // a Sunday evening still has its Monday make-up; only a make-up closing in the grace goes now
-      const closes = late ? localInstant(today, RECAP_LATE_UNTIL_HOUR, 0, timezone).getTime() : Number.POSITIVE_INFINITY;
-      if (closes > options.closingBy.getTime()) continue;
+      // only a window that closes in the grace goes now: Sunday's at midnight, a make-up's at noon
+      const closes = late
+        ? localInstant(today, RECAP_LATE_UNTIL_HOUR, 0, timezone).getTime()
+        : localInstant(addDays(today, 1), 0, 0, timezone).getTime();
+      if (closes > options.closingBy.getTime() + RECAP_GRACE_SLACK_MS) continue;
     }
 
     // Normally the previous recap: its moment is where this window starts, even
