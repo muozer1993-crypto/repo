@@ -944,7 +944,8 @@ denemede gidemeyen fotoğraf bırakılır ve giriş onsuz gider (fotoğraf zorun
 fotoğrafı gitmedi, bağlantı çok yavaştı" der). Sunucunun diski dolmak üzereyse ya da saatlik
 fotoğraf sınırı dolduysa fotoğraf girişiyle bir saat bekler, sonra giriş onsuz gider; fotoğraf
 zorunluysa uygulama sunucunun söylediğini iletir. Sunucunun diski tamamen dolduysa sıradaki
-girişler de deneme hakkı harcamadan bekler, yer açılınca kendiliğinden gider. Bağlantı
+girişler de deneme hakkı harcamadan bekler, yer açılınca kendiliğinden gider; bir saati dolan
+fotoğraf da girişi sunucuya girene kadar telefonda kalır ve yer açılınca onunla birlikte gider. Bağlantı
 koptuğunda açık olan çelınc ekranı kapanmaz, son bilinen hali gösterir; yazdığın sayı silinmez.
 Check-in çelınclarının son hali telefonda da saklanır (kabul ettiğin anda ve uygulama sabah
 hatırlatmalarını her kurduğunda güncellenir): telefon uygulamayı gece kapatmış olsa bile

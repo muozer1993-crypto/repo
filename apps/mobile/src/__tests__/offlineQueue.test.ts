@@ -365,6 +365,29 @@ describe('a photo the server holds back for a while', () => {
     expect(item?.failedReason).toBe(`${DISK_FULL} Bu çelıncta kanıt fotoğrafı zorunlu.`);
   });
 
+  it('keeps the photo when the entry cannot get in either, and sends both once there is room', async () => {
+    await enqueueEntry('cA', body('2026-09-08', 30), 'a', PHOTO);
+    const uploadPhoto = jest.fn().mockRejectedValue(diskFull());
+    const addEntry = jest.fn().mockRejectedValue(diskFull());
+    const client = fakeClient(addEntry, { uploadPhoto });
+
+    await flushQueue(client);
+    await heldFor(61 * 60 * 1000);
+    // the hour is up: the entry goes without its photo, and the full disk turns it away too
+    expect(await flushQueue(client)).toEqual({ sent: 0, dropped: 0, remaining: 1 });
+    expect(addEntry).toHaveBeenCalledWith('cA', body('2026-09-08', 30));
+    const [item] = await readQueue();
+    expect(item).toMatchObject({ id: 'a', proofLocalUri: PHOTO, attempts: 0 });
+    expect(item?.photoHeldSince).toEqual(expect.any(String));
+    expect(item?.failedReason).toBeUndefined();
+
+    // the owner freed room
+    uploadPhoto.mockResolvedValue({ url: '/uploads/p1.jpg' });
+    addEntry.mockResolvedValue({});
+    expect(await flushQueue(client)).toEqual({ sent: 1, dropped: 0, remaining: 0 });
+    expect(addEntry).toHaveBeenLastCalledWith('cA', { ...body('2026-09-08', 30), proofUrl: '/uploads/p1.jpg' });
+  });
+
   it('still counts a try for a server that fails some other way', async () => {
     await enqueueEntry('cA', body('2026-09-08', 30), 'a', PHOTO);
     const uploadPhoto = jest

@@ -81,6 +81,9 @@ const SLOW_PHOTO_TRIES = 3;
  * and the entry's days would run out first. Time, not flushes: every foreground
  * and every saved entry flushes, eight of them came in minutes, and spending a
  * try on each threw the entry away while the server still had room for it.
+ * After it the entry is sent without the photo, which is dropped only once the
+ * entry lands or is refused: on a disk too full for the entry too, it waits
+ * with it and goes up first once there is room.
  */
 const PHOTO_HOLD_MS = 60 * 60 * 1000;
 
@@ -407,6 +410,10 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
     if (offline || signedOut || queued.failedReason) continue;
     let item = queued;
     let photoLost: string | null = null;
+    // A photo held back an hour (a full disk, the hour's limit) goes only once
+    // its entry lands or is refused: on a disk too full for the entry as well,
+    // dropping it bought nothing, and an entry that needs one lost its day.
+    let heldSince: string | null = null;
 
     if (item.proofLocalUri && !item.body.proofUrl) {
       const photo = await sendQueuedPhoto(client, item.proofLocalUri);
@@ -429,6 +436,7 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
         }
         // held back for an hour: the entry goes without it, and says why if refused
         photoLost = photo.reason;
+        heldSince = since;
       }
       if (photo.kind === 'slow') {
         const photoSlowTries = (item.photoSlowTries ?? 0) + 1;
@@ -456,8 +464,10 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
           : { ...item, proofLocalUri: undefined };
       if (photo.kind === 'lost') photoLost = photo.reason;
       // persisted before the entry goes: a crash or a failed POST must not
-      // upload the same photo again, or chase a file that is gone
-      await replaceInQueue(item);
+      // upload the same photo again, or chase a file that is gone. Not a photo
+      // only held back: it stays parked with its entry until that entry is
+      // through (`heldSince`).
+      if (heldSince === null) await replaceInQueue(item);
     }
 
     // A photo can take two minutes, and the app is open meanwhile: the same
@@ -509,7 +519,8 @@ async function runFlush(client: ApiClient): Promise<FlushResult> {
         touched.set(item.id, { ...item, attempts: item.attempts + 1, failedReason });
         continue;
       }
-      retryLater(item);
+      // a held photo is tried again first next time
+      retryLater(heldSince === null ? item : { ...queued, photoHeldSince: heldSince });
     }
   }
 
