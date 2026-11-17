@@ -215,6 +215,14 @@ Geçişleri 30 saniyede bir çalışan `services/scheduler.ts` yapar. Aynı fonk
 (`runSchedulerOnce`) testlerde ve `/dev/advance` ucunda doğrudan çağrılır, yani zamanlayıcı
 davranışı beklemeden test edilebilir.
 
+Zamanlayıcı çelıncı başlatınca kabul etmiş herkese "başladı" der, kendi saatiyle 22:00 ile 07:00
+arasında olana demez (`startsAtNight`). Ali'nin İstanbul'dan açtığı "Yarın 09:00" New York'taki
+kankası için gece 01:00'de, Londra'daki için 06:00'da başlar. Firebase'siz derlemede telefon,
+push'la gelmemiş her satırı kendi sesli bildirimiyle çaldığı için kanka gecenin bir yarısı
+uyanıyordu. Satır hiç yazılmaz, sonradan da gönderilmez: çelınc onun için de başlar, uyanınca ana
+sayfada görür, günlük hatırlatma ve dürtme de onun gündüzünde konuşur. Check-in çelıncının kuralı
+başka (`startsQuietly`, bkz. Zaman ve günler): orada "başladı" ilk sabahın tek sözü olabilir.
+
 Zamanlayıcıyı beklemeyen iki iptal var: açanın kendi iptali ve "herkes kaçtı". İkincisinde bir ret,
 bir ayrılma ya da bir hesap silme çelıncta kabul etmiş ya da hâlâ davetli iki kişi bırakmazsa çelınc
 o istekle birlikte iptal olur (`cancelIfAbandoned`). Yoksa reddedilmiş bir teke tek, açanı bir hafta

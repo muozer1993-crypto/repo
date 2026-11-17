@@ -983,10 +983,37 @@ function startsQuietly(challenge: ChallengeRow, accepted: ParticipantRow[], time
 }
 
 /**
+ * From this hour where the player lives, a çelınc of any other type starts
+ * without a "başladı" to them; with `STARTED_QUIET_UNTIL_HOUR` it is their night.
+ */
+const STARTED_QUIET_FROM_HOUR = 22;
+
+/**
+ * Whether a çelınc that is not a check-in one starts at night for this player
+ * (before 07:00 or from 22:00 in their pinned zone). Ali's "Yarın 09:00" starts
+ * at 01:00 for a kanka in New York and at 06:00 for one in London, and a phone
+ * without push shows every row nobody pushed as a sounding notification of its
+ * own: it rang them awake for news that waits. Nothing is lost by the silence:
+ * the çelınc is on Ana sayfa when they wake, and the day's reminder and nudges
+ * speak in their day. A check-in çelınc keeps `startsQuietly`: there "başladı"
+ * can be the first morning's only word.
+ */
+function startsAtNight(challenge: ChallengeRow, timezone: string, now: Date): boolean {
+  if (challenge.metric_type === 'checkin_deadline') return false;
+  try {
+    const hour = localHour(now, timezone);
+    return hour < STARTED_QUIET_UNTIL_HOUR || hour >= STARTED_QUIET_FROM_HOUR;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Step 1a — `pending` challenges whose start time has passed and that have at least
- * two accepted participants become `active` and notify everyone who accepted (on a
- * check-in çelınc, not before 07:00 where they are when their phone's reminder
- * speaks first: `startsQuietly`).
+ * two accepted participants become `active` and notify everyone who accepted, except
+ * where it is night for them: on a check-in çelınc before 07:00 when their phone's
+ * reminder speaks first (`startsQuietly`), on any other before 07:00 or from 22:00
+ * (`startsAtNight`). The çelınc starts for them all the same.
  */
 export function activateDueChallenges(db: Database, now: Date = new Date()): number {
   const iso = nowIso(now);
@@ -1005,7 +1032,8 @@ export function activateDueChallenges(db: Database, now: Date = new Date()): num
       for (const participant of accepted) {
         const user = users.get(participant.user_id);
         if (!user) continue;
-        if (startsQuietly(challenge, accepted, participantTimezone(participant, user), now)) continue;
+        const timezone = participantTimezone(participant, user);
+        if (startsQuietly(challenge, accepted, timezone, now) || startsAtNight(challenge, timezone, now)) continue;
         const copy = startedCopy(levelOf(user), challenge.title);
         notify(db, {
           userId: user.id,

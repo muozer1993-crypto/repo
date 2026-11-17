@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Expo } from 'expo-server-sdk';
 import type { FastifyInstance } from 'fastify';
-import type { Challenge, ChallengeDetail } from '@koydum/shared';
+import type { Challenge, ChallengeDetail, Notification } from '@koydum/shared';
 import {
   activateDueChallenges,
   cancelUnderfilled,
@@ -324,6 +324,75 @@ describe('challenge lifecycle', () => {
     expect(getChallengeRow(db, challengeId)?.status).toBe('cancelled');
     expect(listByType(db, ali.me.id, 'challenge_cancelled')).toHaveLength(1);
     expect(listByType(db, veli.me.id, 'challenge_cancelled')).toHaveLength(1);
+  });
+
+  describe('"başladı" does not wake a kanka for whom it is night', () => {
+    /**
+     * Ali (Istanbul) opens an Adım Yarışı the evening before, starting at
+     * `startsAt`, and Can (New York) and Lena (London) say yes to it.
+     */
+    async function startAt(startsAt: string) {
+      const h = await makeApp({ now: '2026-01-05T18:00:00.000Z' });
+      harness = h;
+      const ali = await registerUser(h.app, 'ali');
+      const can = await registerUser(h.app, 'can', { timezone: 'America/New_York' });
+      const lena = await registerUser(h.app, 'lena', { timezone: 'Europe/London' });
+      befriend(h.app, ali.me.id, can.me.id);
+      befriend(h.app, ali.me.id, lena.me.id);
+      const created = await authed(h.app, ali.token)({
+        method: 'POST',
+        url: '/challenges',
+        payload: {
+          typeKey: 'adim_yarisi',
+          startsAt,
+          endsAt: '2026-01-08T20:59:59.999Z',
+          participantIds: [can.me.id, lena.me.id],
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      const challengeId = created.json<Challenge>().id;
+      for (const user of [can, lena]) {
+        const accepted = await authed(h.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+        expect(accepted.statusCode).toBe(200);
+      }
+
+      // the scheduler's first pass after the start
+      h.setNow(new Date(Date.parse(startsAt) + 30_000));
+      expect(runSchedulerOnce(h.db, h.now()).activated).toBe(1);
+      expect(getChallengeRow(h.db, challengeId)?.status).toBe('active');
+
+      /** The çelınc ids of the "başladı" rows in the reader's Gelen, as the phone reads them. */
+      const started = async (user: RegisteredUser) => {
+        const inbox = await authed(h.app, user.token)({ method: 'GET', url: '/me/inbox' });
+        expect(inbox.statusCode).toBe(200);
+        return inbox
+          .json<Notification[]>()
+          .filter((item) => item.type === 'challenge_started')
+          .map((item) => item.data.challengeId);
+      };
+      return { challengeId, ali, can, lena, started };
+    }
+
+    it('keeps it from Can at 01:00 in New York and Lena at 06:00 in London; Ali hears it at 09:00', async () => {
+      const { challengeId, ali, can, lena, started } = await startAt('2026-01-06T06:00:00.000Z');
+      expect(await started(ali)).toEqual([challengeId]);
+      expect(await started(can)).toEqual([]);
+      expect(await started(lena)).toEqual([]);
+    });
+
+    it('tells everybody when it is day for all of them', async () => {
+      // 15:00 in Istanbul, 07:00 in New York, 12:00 in London
+      const { challengeId, ali, can, lena, started } = await startAt('2026-01-06T12:00:00.000Z');
+      for (const user of [ali, can, lena]) expect(await started(user)).toEqual([challengeId]);
+    });
+
+    it('keeps it from Ali at 22:30 in Istanbul', async () => {
+      // 14:30 in New York, 19:30 in London
+      const { challengeId, ali, can, lena, started } = await startAt('2026-01-06T19:30:00.000Z');
+      expect(await started(ali)).toEqual([]);
+      expect(await started(can)).toEqual([challengeId]);
+      expect(await started(lena)).toEqual([challengeId]);
+    });
   });
 
   it('sends at most one reminder per local day', async () => {
