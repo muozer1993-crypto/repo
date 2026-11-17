@@ -947,7 +947,10 @@ giriş sayılır, yani teke tek çelıncta rakip tek dokunuşla senin gününü 
 değiştirirse "Geri çek" ile itirazını kaldırır (aynı girişe bir daha itiraz edemez; giriş sonradan
 sayısını ya da fotoğrafını değiştirirse edebilir). Bitişe yakın gelen bir itiraz yüzünden sonuç
 en fazla 12 saat bekleyebilir. İtiraz sadece çelınc sürerken açılır; adım ve ekran süresi çelınclarında
-son akşamın sayıları bitişten sonraki bir saatte geldiği için o saat de sayılır. Elle girilen bir
+son akşamın sayıları bitişten sonraki bir saatte geldiği için o saat de sayılır. O saatin içinde bir
+telefon bir sayıyı değiştirirse (00:59'da üç günü birden yükseltirse mesela) itiraz o andan sonra yarım
+saat daha açık kalır, sonuç da onu bekler. O saatten sonra telefondan gelen sayı hiçbir şeyi
+değiştirmez, sonuç bir itirazın fotoğrafını beklerken bile. Elle girilen bir
 çelıncta son bir saatte bir giriş yapıldıysa ya da değiştiyse o çelınc da bitişten sonra bir saat
 itiraza açık kalır, sonuç da o saati bekler: yoksa bitişe 30 saniye kala yazılan 300 sayfaya rakibin
 itiraz edecek vakti olmazdı. Son saatte kimse bir şey girmediyse sonuç eskisi gibi tam bitişte çıkar.

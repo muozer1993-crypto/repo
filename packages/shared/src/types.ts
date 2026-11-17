@@ -588,7 +588,8 @@ export interface ChallengeDetail extends ChallengeSummary {
   /**
    * Until when an itiraz may be filed (ISO), by the server's own rule: the
    * end, plus the phones' hour on a çelınc the phone counts, and that hour
-   * starts again when the owner's PC wakes past the end. The app hides its
+   * starts again when the owner's PC wakes past the end; half an hour after a
+   * phone's sync moved a number in it, when that is later. The app hides its
    * itiraz chip by it. `null` for dates the server cannot read; an older server leaves
    * it out, and the app falls back to the end plus `LIMITS.DEVICE_SETTLE_MS`.
    */

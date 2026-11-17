@@ -355,7 +355,17 @@ Adım çelıncında "Beyan et" ile bitişte yazılan bir gün de böyle saati so
 telefonu gönderse bile. Bitişten sonra senkron yalnızca bitişte bitmiş günleri değiştirebilir
 (`dayOverByEnd`): bitiş bir günü yarıda kestiyse (başka saat dilimindeki bir oyuncu, eski usul 24 saatlik bir
 çelınc) o günün sonraki okuması bitişten sonra atılan adımları da taşır, o yüzden gün bitişteki
-haliyle kalır ve o oyuncu beklenmez. Bekleyişte dürtme de yoktur: "hâlâ açık, sıra sende" yalan
+haliyle kalır ve o oyuncu beklenmez. Telefonların saati bitince (`phonesCloseAt`: bitişten, sunucu
+bitişte kapalıysa ya da uyuyorduysa döndüğü andan bir saat) senkron o çelınca artık hiçbir sayı
+yazmaz, sonuç bir itirazın fotoğrafını beklerken de. Eskiden bitişten yarım saat sonra açılan bir
+itiraz sonucu 12 saat tutuyor, elle hazırlanmış bir `POST /me/steps` o sürede istediği günü
+yükseltiyor, `/me/screen-time` elle yazılmış 240 dakikayı 5 yapıyordu; itirazlar kapandığı için de
+kimse sorgulayamıyordu. Saatin içinde bir senkron bir sayıyı değiştirdiyse itirazlar o değişiklikten
+sonra yarım saat daha açık kalır, sonuç da onu bekler (`LATE_PHONE_MOVE_ITIRAZ_MS`,
+`lastLatePhoneMove`): 00:59:30'da üç günü birden yükselten telefon rakibine otuz saniye bırakıyordu.
+Saatten sonra telefon hiçbir şeyi değiştiremediği için bu yarım saat bir kere olur, zincirlenmez.
+Saatten sonra yazılan tek şey, itirazla atılan elle yazılmış bir güne konan telefonun kendi
+okumasıdır (`restoreFromPhone`). Bekleyişte dürtme de yoktur: "hâlâ açık, sıra sende" yalan
 olurdu.
 
 İtiraz tek başına bir girişi silmez. Diğer oyuncuların çoğunluğu itiraz edince girişin sahibine
@@ -398,7 +408,8 @@ göndermek de itirazı cevaplar. Fotoğrafla kapanan ya da geri çekilen itiraz�
 sayısını ya da fotoğrafını değiştirince yeniden itiraz edebilir. Bitişte süresi dolmamış bir itiraz
 varsa çelınc o süre boyunca `active` kalır; yoksa son dakika gelen bir itiraz, sahibine söz verilen
 12 saati yerdi. Bu bekleyişte yeni itiraz alınmaz (adım ve ekran süresi çelınclarının bir saati
-hariç, son akşamın sayıları o saatte gelir; son saatinde elle sayı girilen bir çelıncın bir saati de
+hariç, son akşamın sayıları o saatte gelir, o saatte telefonun değiştirdiği bir sayıdan sonraki
+yarım saat de; son saatinde elle sayı girilen bir çelıncın bir saati de
 öyle; `disputesCloseAt`), yoksa art arda açılan itirazlar sonucu günlerce bekletebilirdi. Bitişten sonra ayrılmak da kapalıdır: teke tek çelıncta kaybeden
 ayrılıp sonucu iptal ettirebilirdi.
 

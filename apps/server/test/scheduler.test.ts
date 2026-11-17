@@ -6,8 +6,9 @@
  * its 30-second timer — so the test covers exactly what the running server does:
  * a challenge going live at its start time, finishing at its end time (a step
  * çelınc once the phones have had their hour, any çelınc whose numbers were typed
- * or moved at the whistle once friends have had theirs to question them) with the
- * right winner (or no winner at all), telling every participant, handing out
+ * or moved at the whistle once friends have had theirs to question them, half an
+ * hour more for a phone's move at the end of that hour, and no phone number taken
+ * after it) with the right winner (or no winner at all), telling every participant, handing out
  * badges, throwing out a disputed entry whose owner never answered (and holding
  * the result for one who still may),
  * giving both an hour after the owner's PC wakes from a night asleep (also when
@@ -279,14 +280,15 @@ async function endingAtMidnight(
   return { ali, veli, challengeId };
 }
 
-/** What the background sync posts: the phone's count for each of these days. */
-async function phoneSync(h: TestApp, user: RegisteredUser, days: Record<string, number>) {
+/** What the background sync posts: the phone's count for each of these days. Returns the entries it reached. */
+async function phoneSync(h: TestApp, user: RegisteredUser, days: Record<string, number>): Promise<number> {
   const response = await authed(h.app, user.token)({
     method: 'POST',
     url: '/me/steps',
     payload: { days: Object.entries(days).map(([dayKey, steps]) => ({ dayKey, steps, source: 'health_connect' })) },
   });
   expect(response.statusCode).toBe(200);
+  return response.json<{ updated: number }>().updated;
 }
 
 function at(h: TestApp, instant: string, offsetMs = 0): void {
@@ -1093,6 +1095,192 @@ describe('scheduler: the itiraz hour for numbers that land at the whistle', () =
     expect(tick(harness)).toMatchObject({ finalized: 0 });
     at(harness, MIDNIGHT_END, 10 * MINUTE);
     expect((await dispute(harness, ali, challengeId, stepDay(harness, challengeId, veli, '2026-01-06'))).answerBy).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The phones' numbers after their hour
+// ---------------------------------------------------------------------------
+
+/** 00:59:30, thirty seconds before the phones' hour runs out. */
+const LATE_MOVE = 59 * MINUTE + 30_000;
+
+function afterEnd(offsetMs: number): string {
+  return new Date(Date.parse(MIDNIGHT_END) + offsetMs).toISOString();
+}
+
+function dayRow(h: TestApp, challengeId: string, user: RegisteredUser, dayKey: string) {
+  return h.db
+    .prepare('SELECT value, source, status FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ?')
+    .get(challengeId, user.me.id, dayKey) as { value: number; source: string; status: string };
+}
+
+/** A step race whose two days both phones sent in the evening: Ali 12.000 a day, Veli 11.000. */
+async function stepRace(h: TestApp): Promise<{ ali: RegisteredUser; veli: RegisteredUser; challengeId: string }> {
+  const pair = await endingAtMidnight(h, 'adim_yarisi');
+  at(h, '2026-01-06T19:00:00.000Z');
+  await phoneSync(h, pair.ali, { '2026-01-05': 12_000, '2026-01-06': 12_000 });
+  await phoneSync(h, pair.veli, { '2026-01-05': 11_000, '2026-01-06': 11_000 });
+  return pair;
+}
+
+describe("scheduler: the phones' numbers after their hour", () => {
+  it('keeps itirazlar open half an hour after a phone raised its days at the end of the hour', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await stepRace(harness);
+
+    // Veli's phone, quiet since the evening, raises both days at 00:59:30
+    at(harness, MIDNIGHT_END, LATE_MOVE);
+    expect(await phoneSync(harness, veli, { '2026-01-05': 13_000, '2026-01-06': 13_000 })).toBe(2);
+    expect(await disputesCloseAt(harness, ali, challengeId)).toBe(afterEnd(LATE_MOVE + LIMITS.LATE_PHONE_MOVE_ITIRAZ_MS));
+
+    // the hour is over, but nobody has had a look at those numbers yet
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS + 5_000);
+    expect((await dispute(harness, ali, challengeId, stepDay(harness, challengeId, veli, '2026-01-06'))).answerBy).not.toBeNull();
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS + MINUTE);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+
+    // no photo backs the phone's Tuesday: it burns, and Ali wins
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS + 5_000 + LIMITS.DISPUTE_ANSWER_MS);
+    expect(tick(harness)).toMatchObject({ disputes: 1, finalized: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+    expect(participant(harness, challengeId, veli.me.id).final_score).toBe(13_000);
+  });
+
+  it('finishes when that half hour runs out, and takes no phone number in it that could open another', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await stepRace(harness);
+    at(harness, MIDNIGHT_END, LATE_MOVE);
+    await phoneSync(harness, veli, { '2026-01-05': 13_000, '2026-01-06': 13_000 });
+
+    at(harness, MIDNIGHT_END, 70 * MINUTE);
+    expect(await phoneSync(harness, veli, { '2026-01-06': 20_000 })).toBe(0);
+    expect(dayRow(harness, challengeId, veli, '2026-01-06').value).toBe(13_000);
+    expect(await disputesCloseAt(harness, ali, challengeId)).toBe(afterEnd(LATE_MOVE + LIMITS.LATE_PHONE_MOVE_ITIRAZ_MS));
+
+    at(harness, MIDNIGHT_END, LATE_MOVE + LIMITS.LATE_PHONE_MOVE_ITIRAZ_MS - 1);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    at(harness, MIDNIGHT_END, LATE_MOVE + LIMITS.LATE_PHONE_MOVE_ITIRAZ_MS);
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: veli.me.id });
+    expect(participant(harness, challengeId, veli.me.id).final_score).toBe(26_000);
+  });
+
+  it('opens no half hour for a sync at the end of the hour that brings nothing new', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await stepRace(harness);
+
+    // it reaches both days, and changes neither
+    at(harness, MIDNIGHT_END, 59 * MINUTE);
+    expect(await phoneSync(harness, veli, { '2026-01-05': 11_000, '2026-01-06': 11_000 })).toBe(2);
+    expect(await disputesCloseAt(harness, ali, challengeId)).toBe(AN_HOUR_AFTER);
+
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS);
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+  });
+
+  it('gives the same half hour on screen time, where a phone reading replaces a typed day, and nothing after the hour', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'ekran_suresi_beyani', { proofRequired: false });
+    at(harness, '2026-01-06T19:00:00.000Z');
+    for (const [user, minutes] of [[ali, 120], [veli, 240]] as const) {
+      for (const dayKey of ['2026-01-05', '2026-01-06']) {
+        const typed = await authed(harness.app, user.token)({
+          method: 'POST',
+          url: `/challenges/${challengeId}/entries`,
+          payload: { dayKey, value: minutes, source: 'manual', clientTime: iso(harness) },
+        });
+        expect(typed.statusCode).toBe(201);
+      }
+    }
+    const screenTime = async (dayKey: string, minutes: number): Promise<number> => {
+      const response = await authed(harness!.app, veli.token)({
+        method: 'POST',
+        url: '/me/screen-time',
+        payload: { days: [{ dayKey, minutes }] },
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json<{ updated: number }>().updated;
+    };
+
+    // 00:59:40: five minutes from a phone take the place of Veli's typed 240
+    at(harness, MIDNIGHT_END, 59 * MINUTE + 40_000);
+    expect(await screenTime('2026-01-06', 5)).toBe(1);
+    expect(dayRow(harness, challengeId, veli, '2026-01-06')).toMatchObject({ value: 5, source: 'usage_stats' });
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS + 5_000);
+    expect((await dispute(harness, ali, challengeId, stepDay(harness, challengeId, veli, '2026-01-06'))).answerBy).not.toBeNull();
+
+    // while that itiraz holds the result, his Monday stays as he typed it
+    at(harness, MIDNIGHT_END, 2 * HOUR);
+    expect(await screenTime('2026-01-05', 5)).toBe(0);
+    expect(dayRow(harness, challengeId, veli, '2026-01-05')).toMatchObject({ value: 240, source: 'manual' });
+  });
+
+  it('moves no number while an itiraz filed in the hour holds the result', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await stepRace(harness);
+    // "Beyan et" over the phone's Monday
+    const typed = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: '2026-01-05', value: 12_500, source: 'manual', clientTime: iso(harness) },
+    });
+    expect(typed.statusCode).toBe(200);
+    const monday = typed.json<{ entry: { id: string } }>().entry.id;
+    at(harness, MIDNIGHT_END, 30 * MINUTE);
+    await dispute(harness, ali, challengeId, monday);
+
+    // 06:00, the result waiting for Veli's photo: a Tuesday that would hand him the race
+    at(harness, MIDNIGHT_END, 6 * HOUR);
+    expect(await phoneSync(harness, veli, { '2026-01-06': 26_000 })).toBe(0);
+    expect(dayRow(harness, challengeId, veli, '2026-01-06')).toMatchObject({ value: 11_000, status: 'ok' });
+    expect(await disputesCloseAt(harness, ali, challengeId)).toBe(AN_HOUR_AFTER);
+
+    // the photo answers the itiraz, and the result is the one from before the hour ran out
+    at(harness, MIDNIGHT_END, 6 * HOUR + MINUTE);
+    const answered = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${monday}/proof`,
+      payload: { proofUrl: '/uploads/adimlar.jpg' },
+    });
+    expect(answered.statusCode).toBe(200);
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+    expect(participant(harness, challengeId, veli.me.id).final_score).toBe(23_500);
+  });
+
+  it("runs the phones' hour from a wake past the end, and takes nothing after it", async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await stepRace(harness);
+    // the PC slept from 23:30 to 08:00
+    const bootAt = new Date(Date.parse(MIDNIGHT_END) + 8 * HOUR);
+    recordPause(harness.db, new Date(Date.parse(MIDNIGHT_END) - 30 * MINUTE), bootAt);
+    harness.app.schedulerBootAt.at = bootAt;
+    const pass = () => runSchedulerOnce(harness!.db, harness!.now(), { bootAt });
+    const afterWake = (offsetMs: number) => at(harness!, bootAt.toISOString(), offsetMs);
+
+    // 08:05: Veli's last evening, parked on the phone all night, still counts
+    afterWake(5 * MINUTE);
+    expect(await phoneSync(harness, veli, { '2026-01-06': 14_000 })).toBe(1);
+    expect(dayRow(harness, challengeId, veli, '2026-01-06').value).toBe(14_000);
+
+    // 08:59:30: and so does Ali's, with half an hour for Veli to question it
+    afterWake(LATE_MOVE);
+    expect(await phoneSync(harness, ali, { '2026-01-06': 15_000 })).toBe(1);
+    expect(await disputesCloseAt(harness, veli, challengeId)).toBe(
+      new Date(bootAt.getTime() + LATE_MOVE + LIMITS.LATE_PHONE_MOVE_ITIRAZ_MS).toISOString(),
+    );
+
+    afterWake(70 * MINUTE);
+    expect(pass()).toMatchObject({ finalized: 0 });
+    expect(await phoneSync(harness, veli, { '2026-01-06': 30_000 })).toBe(0);
+    afterWake(LATE_MOVE + LIMITS.LATE_PHONE_MOVE_ITIRAZ_MS);
+    expect(pass()).toMatchObject({ finalized: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+    expect(participant(harness, challengeId, ali.me.id).final_score).toBe(27_000);
   });
 });
 

@@ -44,9 +44,10 @@ import { LOGIN_FAILURES_PER_ACCOUNT } from './auth.js';
  * Writes the synced days into `steps_daily` and mirrors them into every open
  * step challenge. Returns how many entries were touched. `steps_daily` records
  * everything the phone reported — only the challenge fan-out is gated by the
- * day rules.
+ * day rules, and by the phones' hour after an end, which `bootAt` (the
+ * scheduler's) moves after a wake or restart.
  */
-function syncSteps(db: Database, user: UserRow, days: StepsSyncDay[], now: Date): number {
+function syncSteps(db: Database, user: UserRow, days: StepsSyncDay[], now: Date, bootAt?: Date): number {
   const at = nowIso(now);
   const upsert = db.prepare(
     `INSERT INTO steps_daily (user_id, day_key, steps, source, updated_at)
@@ -65,6 +66,8 @@ function syncSteps(db: Database, user: UserRow, days: StepsSyncDay[], now: Date)
       'steps',
       list.map((day) => ({ dayKey: day.dayKey, value: day.steps, source: day.source })),
       now,
+      undefined,
+      { bootAt },
     );
   });
   return run(days);
@@ -81,7 +84,7 @@ function syncSteps(db: Database, user: UserRow, days: StepsSyncDay[], now: Date)
  * replaces gets that one as well. `updated_at` moves on every sync all the same:
  * it says when the phone last spoke.
  */
-function syncScreenTime(db: Database, user: UserRow, days: ScreenTimeSyncDay[], now: Date): number {
+function syncScreenTime(db: Database, user: UserRow, days: ScreenTimeSyncDay[], now: Date, bootAt?: Date): number {
   const at = nowIso(now);
   const upsert = db.prepare(
     `INSERT INTO screen_time_daily (user_id, day_key, minutes, updated_at)
@@ -96,7 +99,7 @@ function syncScreenTime(db: Database, user: UserRow, days: ScreenTimeSyncDay[], 
       const row = upsert.get(user.id, day.dayKey, day.minutes, at) as { minutes: number };
       return { dayKey: day.dayKey, value: Number(row.minutes), source: 'usage_stats' as const };
     });
-    return fanOutDeviceDays(db, user, 'screen_time', stored, now);
+    return fanOutDeviceDays(db, user, 'screen_time', stored, now, undefined, { bootAt });
   });
   return run(days);
 }
@@ -278,7 +281,7 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
     const { row } = requireUser(request);
     const body = parseBody(StepsSyncBodySchema, request.body);
     const now = app.now();
-    const updated = syncSteps(db, row, body.days, now);
+    const updated = syncSteps(db, row, body.days, now, app.schedulerBootAt.at);
     // The step ladder ("Yola Çıktın" at 7.500 a day) reads steps_daily, which
     // only this route writes. Without this the badge waited for some unrelated
     // event (a finish, a laf) and arrived days after the walk. A failure here
@@ -298,7 +301,7 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
   app.post('/me/screen-time', auth, async (request) => {
     const { row } = requireUser(request);
     const body = parseBody(ScreenTimeSyncBodySchema, request.body);
-    const updated = syncScreenTime(db, row, body.days, app.now());
+    const updated = syncScreenTime(db, row, body.days, app.now(), app.schedulerBootAt.at);
     return { updated };
   });
 

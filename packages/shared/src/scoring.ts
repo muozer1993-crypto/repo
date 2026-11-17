@@ -62,6 +62,13 @@ export const LIMITS = {
    */
   DEVICE_SETTLE_MS: 60 * 60 * 1000,
   /**
+   * How long itirazlar stay open after a phone sync moved an ended çelınc's
+   * numbers inside that hour. Past the hour the phones move nothing, so this
+   * runs out at most this long after it: a day raised at 00:59:30 still
+   * leaves the rival time to question it.
+   */
+  LATE_PHONE_MOVE_ITIRAZ_MS: 30 * 60 * 1000,
+  /**
    * How long the owner of an entry the majority disputed has to answer with a
    * photo before it is thrown out. Long enough to sleep through a night and
    * still answer; a çelınc waiting on one past its end finishes when it runs out.

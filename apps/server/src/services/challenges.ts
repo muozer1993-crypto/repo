@@ -1449,7 +1449,8 @@ function movedAfterEnd(db: Database, challenge: ChallengeRow): boolean {
  * can still be `active`: the hour below, or an itiraz waiting for its photo.
  * Only that hour takes new ones, on a phone-counted type because the last
  * evening's numbers land in it, on any other one because a number was typed in
- * its last hour (`lateTypedEntry`); after that each new itiraz would hold the
+ * its last hour (`lateTypedEntry`), and the half hour after a phone moved a
+ * number in it (`disputesOpenUntil`); after that each new itiraz would hold the
  * result another `DISPUTE_ANSWER_MS`, and one after another could hold it for
  * days. A typed çelınc with nothing late closes them right at its end, as before.
  */
@@ -1461,7 +1462,7 @@ export function disputesCloseAt(db: Database, challenge: ChallengeRow): number {
 /**
  * Until when an itiraz may be filed, as things stand at `now` (epoch ms):
  * `disputesCloseAt`, or the end of the hour while it still holds the çelınc
- * after the server started or woke past the end (`stillSettling` from
+ * after the server started or woke past the end (`holdingHour` from
  * `bootAt`). The late numbers land in that hour wherever it falls: a reading a
  * phone sends at 08:05, after the PC slept through midnight, can be disputed
  * like one sent at 00:05, and so can a number typed at 23:59 that nobody could
@@ -1469,11 +1470,21 @@ export function disputesCloseAt(db: Database, challenge: ChallengeRow): number {
  * server was down for some of the hour after the end; a restart does not
  * reopen a çelınc that only waits for an itiraz's photo, nor one every phone
  * has reported for with nothing moved after the end (the next pass crowns it).
+ *
+ * On a type the phone counts, a sync that moved a number in that hour keeps
+ * them open `LATE_PHONE_MOVE_ITIRAZ_MS` after it (`lastLatePhoneMove`), with
+ * or without `bootAt`: three days raised at 00:59:30 left the rival thirty
+ * seconds, the way 300 pages typed at 23:59:30 did. The phones move nothing
+ * after the hour (`phonesCloseAt`), so this ends at most half an hour after
+ * it and never starts again.
  */
 export function disputesOpenUntil(db: Database, challenge: ChallengeRow, now: Date, bootAt?: Date): number {
   const fixed = disputesCloseAt(db, challenge);
-  if (!bootAt || !stillSettling(db, challenge, now, bootAt)) return fixed;
-  return Math.max(fixed, settleFrom(db, challenge, bootAt) + LIMITS.DEVICE_SETTLE_MS);
+  const hour =
+    bootAt && holdingHour(db, challenge, now, bootAt) ? Math.max(fixed, phonesCloseAt(db, challenge, bootAt)) : fixed;
+  if (!typeForChallenge(challenge).deviceMetric) return hour;
+  const moved = lastLatePhoneMove(db, challenge, bootAt);
+  return moved === null ? hour : Math.max(hour, moved + LIMITS.LATE_PHONE_MOVE_ITIRAZ_MS);
 }
 
 /**
@@ -1486,6 +1497,41 @@ export function disputesOpenUntil(db: Database, challenge: ChallengeRow, now: Da
 function settleFrom(db: Database, challenge: ChallengeRow, bootAt?: Date): number {
   const endsAt = Date.parse(challenge.ends_at);
   return bootAt ? upSpanFrom(db, endsAt, LIMITS.DEVICE_SETTLE_MS) : endsAt;
+}
+
+/**
+ * Where the phones' hour after an ended çelınc runs out (epoch ms): an hour
+ * after `settleFrom`, so a wake or restart past the end moves it as it moves
+ * the wait. From then on a sync moves none of its numbers (`fanOutDeviceDays`):
+ * an itiraz filed in the hour holds the result 12 hours, and in them a
+ * hand-made `POST /me/steps` raised or replaced any day while nobody could
+ * question it any more.
+ */
+export function phonesCloseAt(db: Database, challenge: ChallengeRow, bootAt?: Date): number {
+  return settleFrom(db, challenge, bootAt) + LIMITS.DEVICE_SETTLE_MS;
+}
+
+/**
+ * When a phone's sync last moved a number of the çelınc after its end, inside
+ * the phones' hour (epoch ms), or null. Only the fan-out moves a phone row's
+ * `updated_at` (an itiraz's turn leaves it alone, `ITIRAZ_UPDATED_AT`), and
+ * only on a row whose number it changed, so a sync that brings nothing new is
+ * not one. A day restored from the phone after the hour (an itiraz upheld
+ * then) is past the bound and opens nothing.
+ */
+function lastLatePhoneMove(db: Database, challenge: ChallengeRow, bootAt?: Date): number | null {
+  const endsAt = Date.parse(challenge.ends_at);
+  if (!Number.isFinite(endsAt)) return null;
+  const from = nowIso(new Date(endsAt));
+  const until = nowIso(new Date(phonesCloseAt(db, challenge, bootAt)));
+  const marks = DEVICE_SOURCES.map(() => '?').join(', ');
+  const row = db
+    .prepare(
+      `SELECT MAX(updated_at) AS at FROM entries
+        WHERE challenge_id = ? AND source IN (${marks}) AND updated_at > ? AND updated_at <= ?`,
+    )
+    .get(challenge.id, ...DEVICE_SOURCES, from, until) as { at: string | null };
+  return row.at === null ? null : Date.parse(row.at);
 }
 
 /**
@@ -1514,8 +1560,8 @@ function settleFrom(db: Database, challenge: ChallengeRow, bootAt?: Date): numbe
  * holding the result for its photo, every sleep reopened itirazlar on it and
  * each new one held it 12 hours more.
  */
-function stillSettling(db: Database, challenge: ChallengeRow, now: Date, bootAt?: Date): boolean {
-  if (now.getTime() >= settleFrom(db, challenge, bootAt) + LIMITS.DEVICE_SETTLE_MS) return false;
+function holdingHour(db: Database, challenge: ChallengeRow, now: Date, bootAt?: Date): boolean {
+  if (now.getTime() >= phonesCloseAt(db, challenge, bootAt)) return false;
   if (lateTypedEntry(db, challenge)) return true;
   const metric = typeForChallenge(challenge).deviceMetric;
   if (!metric) return false;
@@ -1524,14 +1570,29 @@ function stillSettling(db: Database, challenge: ChallengeRow, now: Date, bootAt?
 }
 
 /**
+ * Whether an ended çelınc still holds its result: its hour (`holdingHour`),
+ * or, on a type the phone counts, the half hour after a sync moved one of its
+ * numbers in that hour (`lastLatePhoneMove`), while an itiraz may still be
+ * filed on it (`disputesOpenUntil`). Without it a day raised at 00:59:30 was
+ * crowned by the pass at 01:00, and the rival's itiraz refused.
+ */
+function stillSettling(db: Database, challenge: ChallengeRow, now: Date, bootAt?: Date): boolean {
+  if (holdingHour(db, challenge, now, bootAt)) return true;
+  if (!typeForChallenge(challenge).deviceMetric) return false;
+  const moved = lastLatePhoneMove(db, challenge, bootAt);
+  return moved !== null && now.getTime() < moved + LIMITS.LATE_PHONE_MOVE_ITIRAZ_MS;
+}
+
+/**
  * Step 2 — every `active` challenge whose end time has passed, once the phones
  * have had their chance to report and friends theirs to question the last
  * numbers (`stillSettling`), and no disputed entry is still inside its answer
  * window (`disputeAwaitingAnswer`): an owner told "12 saat içinde fotoğraf ekle"
  * keeps those hours even when the itiraz came at the last minute. Until then it
- * stays `active`, so a late device sync still fans out into it, an itiraz can
- * still be filed and a photo can still land; the entry route takes nothing from
- * `ends_at` on (`challenge_ended` in `validateAndUpsertEntry`).
+ * stays `active`, so a device sync in the phones' hour still fans out into it
+ * (none after it, `phonesCloseAt`), an itiraz can still be filed while
+ * `disputesOpenUntil` allows and a photo can still land; the entry route takes
+ * nothing from `ends_at` on (`challenge_ended` in `validateAndUpsertEntry`).
  */
 export function finalizeEndedChallenges(
   db: Database,
