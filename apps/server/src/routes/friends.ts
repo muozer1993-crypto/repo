@@ -42,7 +42,7 @@ import {
   recordRefusal,
   refusedBy,
 } from '../services/friends.js';
-import { notify } from '../services/notifications.js';
+import { markAnsweredRead, notify } from '../services/notifications.js';
 import { AttemptLimiter, retryAfterText } from '../services/throttle.js';
 
 // ---------------------------------------------------------------------------
@@ -253,10 +253,14 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
       return { status: 'accepted' as const, friendshipId: existing.id, user: toPublicUser(target) };
     }
 
-    // They asked first → accept instead of piling up a second pending row.
+    // They asked first → accept instead of piling up a second pending row. Their
+    // request is answered, so its row in my inbox stops counting as unread.
     if (existing?.status === 'pending') {
-      db.prepare("UPDATE friendships SET status = 'accepted', updated_at = ? WHERE id = ?").run(at, existing.id);
-      tellFriendAccepted(db, now, target, me.row, { friendshipId: existing.id }, acceptedCopy);
+      db.transaction(() => {
+        db.prepare("UPDATE friendships SET status = 'accepted', updated_at = ? WHERE id = ?").run(at, existing.id);
+        markAnsweredRead(db, me.id, ['friend_request'], 'friendshipId', existing.id, at);
+        tellFriendAccepted(db, now, target, me.row, { friendshipId: existing.id }, acceptedCopy);
+      })();
       return { status: 'accepted' as const, friendshipId: existing.id, user: toPublicUser(target) };
     }
 
@@ -305,8 +309,12 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
     const now = app.now();
     const at = nowIso(now);
 
-    db.prepare("UPDATE friendships SET status = 'accepted', updated_at = ? WHERE id = ?").run(at, friendship.id);
-    forgetRefusal(db, me.id, friendship.requester_id);
+    // wherever it was answered (Kankalar, a profile, Gelen), its row stops counting as unread
+    db.transaction(() => {
+      db.prepare("UPDATE friendships SET status = 'accepted', updated_at = ? WHERE id = ?").run(at, friendship.id);
+      forgetRefusal(db, me.id, friendship.requester_id);
+      markAnsweredRead(db, me.id, ['friend_request'], 'friendshipId', friendship.id, at);
+    })();
 
     const requester = db.prepare('SELECT * FROM users WHERE id = ?').get(friendship.requester_id) as UserRow | undefined;
     const live = requester && requester.deleted_at === null ? requester : undefined;
@@ -326,9 +334,11 @@ export default async function friendRoutes(app: FastifyInstance): Promise<void> 
     // Deleted rather than kept as 'declined': the schema has no such status and the
     // requester should be able to try again later. By asking: the no is kept, so
     // the invite code a new account came with does not turn it into a yes.
+    const now = app.now();
     db.transaction(() => {
       db.prepare('DELETE FROM friendships WHERE id = ?').run(friendship.id);
-      recordRefusal(db, me.id, friendship.requester_id, app.now());
+      recordRefusal(db, me.id, friendship.requester_id, now);
+      markAnsweredRead(db, me.id, ['friend_request'], 'friendshipId', friendship.id, nowIso(now));
     })();
     return { status: 'declined' as const, friendshipId: friendship.id };
   });

@@ -1211,6 +1211,61 @@ describe('friends', () => {
     expect(inbox[0]?.type).toBe('friend_accepted');
   });
 
+  // A request is mostly answered on Kankalar or a profile, not from Gelen: its
+  // row went on lighting the badge for a request that was no longer there.
+  it('reads the request in Gelen once it is answered, however it was answered', async () => {
+    const h = await boot();
+    const kemal = await registerUser(h.app, 'kemal');
+    const kemalCall = authed(h.app, kemal.token);
+    const mustafa = await registerUser(h.app, 'mustafa');
+    const ayse = await registerUser(h.app, 'ayse');
+    const deniz = await registerUser(h.app, 'deniz');
+    const ece = await registerUser(h.app, 'ecem');
+    const ask = async (from: typeof kemal) =>
+      (
+        await authed(h.app, from.token)({ method: 'POST', url: '/friends/request', payload: { username: 'kemal' } })
+      ).json<{ friendshipId: string }>().friendshipId;
+    const unread = async () =>
+      (await kemalCall({ method: 'GET', url: '/me/inbox/unread' })).json<{ count: number }>().count;
+    const requestRow = (friendshipId: string) =>
+      h.db
+        .prepare(
+          "SELECT read_at FROM notifications WHERE user_id = ? AND type = 'friend_request' AND json_extract(data, '$.friendshipId') = ?",
+        )
+        .get(kemal.me.id, friendshipId) as { read_at: string | null };
+
+    // nobody answers Ece's: it stays unread throughout
+    const fromEce = await ask(ece);
+
+    const fromMustafa = await ask(mustafa);
+    expect(await unread()).toBe(2);
+    h.advance(60_000);
+    expect((await kemalCall({ method: 'POST', url: `/friends/${fromMustafa}/accept` })).statusCode).toBe(200);
+    expect(requestRow(fromMustafa).read_at).toBe(nowIso(h.now()));
+    expect(await unread()).toBe(1);
+
+    const fromAyse = await ask(ayse);
+    expect(await unread()).toBe(2);
+    expect((await kemalCall({ method: 'POST', url: `/friends/${fromAyse}/decline` })).statusCode).toBe(200);
+    expect(requestRow(fromAyse).read_at).not.toBeNull();
+    expect(await unread()).toBe(1);
+
+    // both asked: Kemal's own "ekle" is his answer to Deniz's request
+    const fromDeniz = await ask(deniz);
+    const crossed = await kemalCall({ method: 'POST', url: '/friends/request', payload: { username: 'deniz' } });
+    expect(crossed.json<{ status: string }>().status).toBe('accepted');
+    expect(requestRow(fromDeniz).read_at).not.toBeNull();
+    expect(await unread()).toBe(1);
+
+    expect(requestRow(fromEce).read_at).toBeNull();
+    // answered rows stay in Gelen as history
+    const inbox = (await kemalCall({ method: 'GET', url: '/me/inbox' })).json<Notification[]>();
+    expect(inbox.filter((n) => n.type === 'friend_request')).toHaveLength(4);
+    // and the requesters' own news is theirs to read
+    const mustafaUnread = await authed(h.app, mustafa.token)({ method: 'GET', url: '/me/inbox/unread' });
+    expect(mustafaUnread.json<{ count: number }>().count).toBe(1);
+  });
+
   it('declines a request and lets the requester ask again', async () => {
     const h = await boot();
     const asker = await registerUser(h.app, 'mustafa');

@@ -408,6 +408,8 @@ export function useChallengeAction(id: string) {
     },
     onSuccess: (result, action) => {
       invalidate.challenge(id);
+      // an answered invite is read on the server now: the Gelen badge drops it
+      invalidate.inbox();
       // the copy first, so the refresh finds it and does not read it again
       const saved = action === 'accept' && isDetail(result) ? saveChallengeDetail(result) : Promise.resolve();
       saved

@@ -30,7 +30,7 @@ import {
 } from '@koydum/shared';
 import { badRequest, conflict, forbidden, parseBody, parseQuery, type HttpError } from '../errors.js';
 import { newId, nowIso, type ChallengeRow, type Database, type UserRow } from '../db/index.js';
-import { notify } from '../services/notifications.js';
+import { markAnsweredRead, notify } from '../services/notifications.js';
 import { toChallenge } from '../serialize.js';
 import {
   acceptedCopy,
@@ -258,6 +258,16 @@ function announceAccept(db: Database, challenge: ChallengeRow, who: UserRow, now
     return;
   }
   tellWhoIsIn(db, challenge, who, 'challenge_accepted', at);
+}
+
+/**
+ * An invite answered (yes, no, or an invitee's "Ayrıl") is read in Gelen too:
+ * the one sent at creation, a "Kanka ekle" one and a rematch's, which names the
+ * rematch as its `challengeId`. They are mostly answered on the home card or
+ * the çelınc screen, and the badge kept counting them.
+ */
+function markInviteAnswered(db: Database, userId: string, challengeId: string, at: string): void {
+  markAnsweredRead(db, userId, ['challenge_invite', 'rematch'], 'challengeId', challengeId, at);
 }
 
 export default async function challengeRoutes(app: FastifyInstance): Promise<void> {
@@ -528,6 +538,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       db.prepare(
         "UPDATE challenge_participants SET status = 'accepted', joined_at = ?, timezone = ? WHERE challenge_id = ? AND user_id = ?",
       ).run(iso, me.row.timezone, challenge.id, me.id);
+      markInviteAnswered(db, me.id, challenge.id, iso);
       // the days this phone already reported count from the first look, not
       // from the next sync (and are not typed again from memory meanwhile)
       backfillFromPhone(db, me.row, challenge, now);
@@ -558,6 +569,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
         challenge.id,
         me.id,
       );
+      markInviteAnswered(db, me.id, challenge.id, nowIso(now));
       // a no to a çelınc that is already over is news to nobody
       if (!stillOpen(challenge, now)) return;
       tellWhoIsIn(db, challenge, me.row, 'challenge_declined', nowIso(now));
@@ -606,6 +618,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
         challenge.id,
         me.id,
       );
+      if (invitee) markInviteAnswered(db, me.id, challenge.id, nowIso(now));
       if (!stillOpen(challenge, now)) return;
       tellWhoIsIn(db, challenge, me.row, invitee ? 'challenge_declined' : 'challenge_left', nowIso(now));
       if (cancelIfAbandoned(db, challenge.id, now)) return;

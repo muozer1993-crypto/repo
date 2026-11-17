@@ -476,7 +476,12 @@ dönünce kendiliğinden yenilenmez; o yüzden Gelen, rozetin gördüğü en yen
 Profil de Sıralama 20 saniyeden eskiyse sekmeye dönünce onu ve karneyi birlikte yeniden okur:
 bir kankanın kendi çelıncı bitince sana satır gelmez ama sıra değişir.
 Bir bildirime dokunmak onu okunmuş sayar: push da telefonun kendi kopyası da satırın
-`notificationId`'sini taşır.
+`notificationId`'sini taşır. Kanka isteği ve çelınc daveti çoğu zaman Gelen'den değil Kankalar'dan,
+ana sayfadaki karttan ya da çelınc ekranından cevaplanır; satırı okunmamış kalınca rozet cevaplanmış
+istekleri sayıp duruyordu, insan da rozete bakmayı bırakıyordu. Artık kabul, ret (davette "Ayrıl"
+da) aynı işlemde o isteğin ya da o çelıncın okunmamış `friend_request` / `challenge_invite` /
+`rematch` satırını okunmuş yapar (`markAnsweredRead`); satır geçmiş olarak Gelen'de kalır,
+uygulama da cevaptan sonra gelen kutusunu ve rozeti yeniden okur.
 Dokunuş (push, onun toast'ı, yoklamanın toast'ı, Gelen'deki satır) ekranı `router.navigate` ile
 açar, `push` ile değil. Öndeki ekran zaten aynı yol ve aynı yol parametresiyse (`id`) yenisi
 açılmaz; başka bir çelınc yine üstüne açılır. Eskiden açık çelınca dair bir "Dürtüldün" toast'ı ya

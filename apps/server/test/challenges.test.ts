@@ -528,6 +528,74 @@ describe('accept / decline / leave / cancel', () => {
     expect(list.json<unknown[]>()).toHaveLength(0);
   });
 
+  // Invites are mostly answered on the home card or the çelınc screen, not from
+  // Gelen, and the badge went on counting every one of them.
+  it('reads the invite in Gelen once it is answered, and only that çelınc\'s', async () => {
+    harness = await makeApp({ now: NOW });
+    const h = harness;
+    const ali = await registerUser(h.app, 'ali');
+    const veli = await registerUser(h.app, 'veli');
+    const ayse = await registerUser(h.app, 'ayse');
+    befriend(h.app, ali.me.id, veli.me.id);
+    befriend(h.app, ali.me.id, ayse.me.id);
+    befriend(h.app, veli.me.id, ayse.me.id);
+    const veliCall = authed(h.app, veli.token);
+    const create = async () =>
+      (await createChallenge(h, ali, { participantIds: [veli.me.id, ayse.me.id] })).json<Challenge>().id;
+    const veliInvite = (challengeId: string) =>
+      h.db
+        .prepare(
+          "SELECT read_at FROM notifications WHERE user_id = ? AND type = 'challenge_invite' AND json_extract(data, '$.challengeId') = ?",
+        )
+        .get(veli.me.id, challengeId) as { read_at: string | null };
+
+    const first = await create();
+    const second = await create();
+    const third = await create();
+    const untouched = await create();
+    expect((await veliCall({ method: 'GET', url: '/me/inbox/unread' })).json<{ count: number }>().count).toBe(4);
+
+    h.advance(60_000);
+    expect((await veliCall({ method: 'POST', url: `/challenges/${first}/accept` })).statusCode).toBe(200);
+    expect(veliInvite(first).read_at).toBe(h.now().toISOString());
+    expect((await veliCall({ method: 'POST', url: `/challenges/${second}/accept` })).statusCode).toBe(200);
+    expect((await veliCall({ method: 'POST', url: `/challenges/${third}/decline` })).statusCode).toBe(200);
+
+    // the accepts add their own news, so the rows and not the count say it
+    for (const id of [first, second, third]) expect(veliInvite(id).read_at).not.toBeNull();
+    expect(veliInvite(untouched).read_at).toBeNull();
+    // somebody else's invite to the same çelınc is theirs to answer
+    const ayseInvites = listByType(h.db, ayse.me.id, 'challenge_invite');
+    expect(ayseInvites).toHaveLength(4);
+    expect(ayseInvites.every((row) => row.read_at === null)).toBe(true);
+
+    // an invite brought by "Kanka ekle" after a no, answered with an invitee's "Ayrıl"
+    const reInvited = await authed(h.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${third}/invite`,
+      payload: { userIds: [veli.me.id] },
+    });
+    expect(reInvited.statusCode).toBe(200);
+    const unreadAgain = listByType(h.db, veli.me.id, 'challenge_invite').filter((row) => row.read_at === null);
+    expect(unreadAgain).toHaveLength(2);
+    expect((await veliCall({ method: 'POST', url: `/challenges/${third}/leave` })).statusCode).toBe(200);
+    const stillUnread = listByType(h.db, veli.me.id, 'challenge_invite').filter((row) => row.read_at === null);
+    expect(stillUnread.map((row) => JSON.parse(row.data).challengeId)).toEqual([untouched]);
+  });
+
+  it('reads a rematch invite in Gelen once it is answered', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await finishedChallenge(harness);
+    const rematch = await authed(harness.app, ali.token)({ method: 'POST', url: `/challenges/${challengeId}/rematch` });
+    const rematchId = rematch.json<Challenge>().id;
+    const [row] = listByType(harness.db, veli.me.id, 'rematch');
+    expect(row?.read_at).toBeNull();
+
+    const accepted = await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${rematchId}/accept` });
+    expect(accepted.statusCode).toBe(200);
+    expect(listByType(harness.db, veli.me.id, 'rematch')[0]?.read_at).not.toBeNull();
+  });
+
   it('leaves an active challenge, which head to head ends it', async () => {
     harness = await makeApp({ now: NOW });
     const { veli, challengeId } = await twoPlayerChallenge(harness);

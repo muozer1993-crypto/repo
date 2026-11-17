@@ -87,6 +87,33 @@ export function markRead(db: Database, userId: string, target: string[] | { ids?
   return run(ids);
 }
 
+/**
+ * Marks read the user's unread `types` rows about one request or invite: the
+ * ones whose `data[dataKey]` is `id`. A kanka isteği or a çelınc daveti is mostly
+ * answered where the app shows it (home, the çelınc screen, Kankalar), not from
+ * Gelen, and its row went on lighting the badge for a request that was gone;
+ * a badge that never goes down teaches people to ignore the taunts it is for.
+ * The row stays in the inbox as history. Returns how many rows changed.
+ */
+export function markAnsweredRead(
+  db: Database,
+  userId: string,
+  types: readonly NotificationType[],
+  dataKey: 'friendshipId' | 'challengeId',
+  id: string,
+  at: string,
+): number {
+  if (types.length === 0) return 0;
+  const info = db
+    .prepare(
+      `UPDATE notifications SET read_at = ?
+        WHERE user_id = ? AND read_at IS NULL AND type IN (${types.map(() => '?').join(', ')})
+          AND json_extract(data, ?) = ?`,
+    )
+    .run(at, userId, ...types, `$.${dataKey}`, id);
+  return info.changes;
+}
+
 /** `{ count, latestId }` for the tab badge (SPEC: GET /me/inbox/unread). */
 export function unreadCount(db: Database, userId: string): UnreadCount {
   const row = db

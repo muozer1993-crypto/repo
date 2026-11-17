@@ -6318,6 +6318,38 @@ describe('saying no to a çelınc', () => {
     expect(api.declineChallenge).toHaveBeenCalledWith('c-1');
   });
 
+  // the server reads an answered invite in Gelen; the badge only drops it once
+  // asked again, and an invite is mostly answered away from Gelen
+  it('reads the inbox and its badge again once an invite is answered, yes or no', async () => {
+    const { qk } = require('@/lib/query') as typeof import('@/lib/query');
+    const keysOf = (spy: jest.SpyInstance) => spy.mock.calls.map(([filters]) => filters?.queryKey);
+
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => aliInvites('invited', true));
+    api.acceptChallenge = jest.fn(async () => ({}));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const screen = renderScreen(<ChallengeScreen />);
+    await settle();
+    const fromScreen = jest.spyOn(clientOf(screen), 'invalidateQueries');
+    press(screen, 'Varım');
+    await settle();
+    expect(api.acceptChallenge).toHaveBeenCalledWith('c-1');
+    expect(keysOf(fromScreen)).toEqual(expect.arrayContaining([qk.inbox, qk.unread]));
+
+    const { challenge, participants, me } = aliInvites('invited');
+    api.challenges = jest.fn(async () => [{ challenge, participants, me, unreadTaunts: 0 }]);
+    api.declineChallenge = jest.fn(async () => ({}));
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const home = renderScreen(<HomeScreen />);
+    await settle();
+    const fromHome = jest.spyOn(clientOf(home), 'invalidateQueries');
+    press(home, 'Reddet');
+    await settle();
+    await answerAlert('Reddet');
+    expect(api.declineChallenge).toHaveBeenCalledWith('c-1');
+    expect(keysOf(fromHome)).toEqual(expect.arrayContaining([qk.inbox, qk.unread]));
+  });
+
   it('asks before a "Yokum" too, and says the way back while others may still join', async () => {
     searchParams.id = 'c-1';
     api.challenge = jest.fn(async () => aliInvites('invited', true));
