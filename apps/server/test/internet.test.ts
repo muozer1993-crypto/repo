@@ -2,11 +2,11 @@
  * `npm run internet` with a stand-in cloudflared: the script must read the
  * tunnel address, start the server with it as PUBLIC_URL (so /health reports
  * it and the app shares links with it), keep that address through a server
- * crash, through a run of crashes and through a start that waits for npm install,
- * start the server from new code on y + Enter, reopen a dropped tunnel without
- * taking the server down, serve the home Wi-Fi when no tunnel opens at the start
- * (never at cloudflared's own API address) until one does, and take both down on
- * Ctrl+C.
+ * crash, through a run of crashes and through a start that waits for npm install
+ * or another PORT, start the server from new code on y + Enter, reopen a dropped
+ * tunnel without taking the server down, serve the home Wi-Fi when no tunnel opens
+ * at the start (never at cloudflared's own API address) until one does, and take
+ * both down on Ctrl+C.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
@@ -157,6 +157,29 @@ function withoutFastify(dir: string, flag: string): string {
   );
   const preload = path.join(dir, 'preload.mjs');
   fs.writeFileSync(preload, "import { register } from 'node:module';\nregister('./hooks.mjs', import.meta.url);\n");
+  return `--import=${pathToFileURL(preload).href}`;
+}
+
+/**
+ * A `node --import` preload whose every listen fails the way a port inside a range
+ * Windows reserved for WSL, Docker or Hyper-V does (Linux below 1024 the same):
+ * Node's own `listen EACCES` error, with no privileged port really tried.
+ */
+function deniedListen(dir: string): string {
+  const preload = path.join(dir, 'denied.mjs');
+  fs.writeFileSync(
+    preload,
+    [
+      "import net from 'node:net';",
+      'net.Server.prototype.listen = function (options) {',
+      "  const port = typeof options === 'object' ? options.port : Number(options);",
+      '  const error = new Error(`listen EACCES: permission denied 0.0.0.0:${port}`);',
+      "  Object.assign(error, { code: 'EACCES', errno: -13, syscall: 'listen', address: '0.0.0.0', port });",
+      "  process.nextTick(() => this.emit('error', error));",
+      '  return this;',
+      '};',
+    ].join('\n'),
+  );
   return `--import=${pathToFileURL(preload).href}`;
 }
 
@@ -345,6 +368,22 @@ describe('npm run internet', () => {
     expect(await ctrlC()).toBe(0);
   }, 60_000);
 
+  onPosix('waits instead of crashing when the port is not allowed', async () => {
+    const dir = tempDir();
+    const fake = tunnelPerAddress(dir);
+    const port = await freePort();
+    const run = runScript(port, fake, dir, { env: { NODE_OPTIONS: deniedListen(dir), KOYDUM_CRASH_PAUSE_MS: '600000' } });
+
+    await waitFor(async () => (run.output().includes(`✗ ${port} portunu açmaya izin yok`) ? true : null), 20_000);
+    // a restart a second later would be refused the same port: the window waits with the tunnel
+    await new Promise((r) => setTimeout(r, 2_000));
+    expect(run.output()).not.toContain('Sunucu düştü');
+    expect(run.pids()).toHaveLength(1);
+    expect(child!.exitCode).toBeNull();
+
+    expect(await ctrlC()).toBe(0);
+  }, 60_000);
+
   onPosix('keeps the server up while a dropped tunnel is reopened, then serves the new address', async () => {
     const dir = tempDir();
     // The first cloudflared dies once the test drops it (the home internet went);
@@ -524,6 +563,25 @@ describe('the server entry', () => {
     expect(output).not.toContain('Cannot find package');
   }, 30_000);
 
+  it('says in Turkish that the port is not allowed, without a stack, and exits for the owner to act', async () => {
+    const dir = tempDir();
+    let output = '';
+    child = spawn(process.execPath, ['--import', tsx, 'src/index.ts'], {
+      cwd: serverRoot,
+      env: { ...process.env, NODE_OPTIONS: deniedListen(dir), PORT: '4000', DATA_DIR: path.join(dir, 'data'), LOG_LEVEL: 'warn' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stdout?.on('data', (d) => (output += d.toString()));
+    child.stderr?.on('data', (d) => (output += d.toString()));
+    const code = await new Promise<number | null>((resolve) => child!.on('exit', (c) => resolve(c)));
+
+    // 3, not 1: npm run internet pauses on it instead of restarting it into the same refusal
+    expect(code).toBe(3);
+    expect(output).toContain("✗ 4000 portunu açmaya izin yok (Windows'ta WSL, Docker ya da Hyper-V bu portu kendine ayırmış olabilir)");
+    expect(output).not.toMatch(/\n\s+at /);
+    expect(output).not.toContain('permission denied');
+  }, 30_000);
+
   it('turns only a busy port into the Turkish line', () => {
     const busy = Object.assign(new Error('listen EADDRINUSE: address already in use 0.0.0.0:4000'), {
       code: 'EADDRINUSE',
@@ -540,6 +598,26 @@ describe('the server entry', () => {
     const busy = Object.assign(new Error('listen EADDRINUSE'), { code: 'EADDRINUSE', port: 4000 });
     // a busy port is retried: it works once the other window is closed
     expect(startupErrorMessage(busy)).toEqual({ text: listenErrorMessage(busy), code: 1 });
+
+    // a port Windows reserved never opens on a retry, and y keeps the PORT npm run internet read
+    const denied = Object.assign(new Error('listen EACCES: permission denied 0.0.0.0:4000'), {
+      code: 'EACCES',
+      syscall: 'listen',
+      port: 4000,
+    });
+    expect(startupErrorMessage(denied)).toEqual({
+      text: "✗ 4000 portunu açmaya izin yok (Windows'ta WSL, Docker ya da Hyper-V bu portu kendine ayırmış olabilir): apps/server/.env'e PORT=4100 gibi başka bir port yaz, sonra sunucuyu yeniden aç. npm run internet açıksa y yetmez: Ctrl+C'ye basıp npm run internet'i yeniden aç; adres değişir, Paylaş'la yenisini gönder.",
+      code: 3,
+    });
+    expect(startupErrorMessage(Object.assign(new Error('listen EACCES'), { code: 'EACCES', syscall: 'listen' }))?.text).toMatch(
+      /^✗ Portu açmaya izin yok/,
+    );
+    // EACCES from anything but listen (a data folder it cannot write) needs its stack
+    const unreadable = Object.assign(new Error("EACCES: permission denied, open '/koydum/apps/server/data/secret'"), {
+      code: 'EACCES',
+      syscall: 'open',
+    });
+    expect(startupErrorMessage(unreadable)).toBeNull();
 
     const esm = Object.assign(new Error("Cannot find package '@fastify/cors' imported from C:\\koydum\\apps\\server\\src\\app.ts"), {
       code: 'ERR_MODULE_NOT_FOUND',

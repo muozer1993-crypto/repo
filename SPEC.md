@@ -742,10 +742,13 @@ same path with exit code 1. The scheduler starts only after `listen` succeeds.
 
 A failed start (`src/index.ts`, which imports `main.ts` with `import()` so that a failure while loading it is caught
 too) prints one Turkish line without a stack where `startupErrorMessage` (`src/listenError.ts`) knows the cause: a busy
-port (EADDRINUSE) exits 1; a missing package (ERR_MODULE_NOT_FOUND / MODULE_NOT_FOUND naming a bare package or a file
+port (EADDRINUSE) exits 1; a port the system refuses (EACCES from `listen`: on Windows a range reserved for WSL,
+Docker or Hyper-V; "another PORT in apps/server/.env", and under npm run internet a Ctrl+C and a fresh start, since `y`
+keeps the PORT it read), a missing package (ERR_MODULE_NOT_FOUND / MODULE_NOT_FOUND naming a bare package or a file
 under node_modules: "npm install") and a native module built for another Node.js (ERR_DLOPEN_FAILED or
-NODE_MODULE_VERSION: "npm rebuild better-sqlite3") exit 3, "fixed only by the owner". Anything else, a missing file of
-the server's own included, prints `KOYDUM sunucusu başlatılamadı:` and the error with its stack and exits 1.
+NODE_MODULE_VERSION: "npm rebuild better-sqlite3") exit 3, "fixed only by the owner". Anything else, an EACCES from
+anything but `listen` and a missing file of the server's own included, prints `KOYDUM sunucusu başlatılamadı:` and the
+error with its stack and exits 1.
 
 Logging: no per-request lines (`LogController({ disableRequestLogging: true })`); an `onResponse` hook writes one `warn`
 for a status ≥ 500 (except a 507 `disk_full`, a full disk's or POST /uploads', which have their own hourly lines) or a response slower

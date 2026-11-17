@@ -60,9 +60,9 @@ const CRASH_WINDOW_MS = 10 * 60_000;
  */
 const PAUSE_MS = Number.parseInt(process.env.KOYDUM_CRASH_PAUSE_MS ?? '300000', 10) || 300_000;
 /**
- * The server's exit code for "an npm install or npm rebuild away from working"
- * (NEEDS_OWNER_EXIT_CODE in src/listenError.ts, which a .mjs cannot import). It
- * printed what to do; a retry within seconds would fail the same way.
+ * The server's exit code for "an npm install, an npm rebuild or another PORT away
+ * from working" (NEEDS_OWNER_EXIT_CODE in src/listenError.ts, which a .mjs cannot
+ * import). It printed what to do; a retry within seconds would fail the same way.
  */
 const NEEDS_OWNER_EXIT_CODE = 3;
 /** Reopening a dropped tunnel backs off from 5 s to a minute and never gives up: the internet comes back. */

@@ -8,9 +8,9 @@
 
 /**
  * The exit code of a start that fails the same way until the owner does something
- * (`npm install`, `npm rebuild`). npm run internet (scripts/internet.mjs, which
- * cannot import this) does not count it as a crash: it keeps the tunnel and waits
- * for y + Enter (or its five-minute retry) instead of retrying within seconds.
+ * (`npm install`, `npm rebuild`, another PORT). npm run internet (scripts/internet.mjs,
+ * which cannot import this) does not count it as a crash: it keeps the tunnel and
+ * waits for y + Enter (or its five-minute retry) instead of retrying within seconds.
  */
 export const NEEDS_OWNER_EXIT_CODE = 3;
 
@@ -52,6 +52,18 @@ function missingPackage(message: string): string | null {
 export function startupErrorMessage(err: unknown): { text: string; code: number } | null {
   const busy = listenErrorMessage(err);
   if (busy) return { text: busy, code: 1 };
+  // A port the system will not give: on Windows one inside a range that WSL, Docker
+  // Desktop or Hyper-V reserved at boot (4000 can be), on Linux one below 1024. No
+  // retry gets it, and y cannot help either: npm run internet reads PORT once, so the
+  // new port in .env takes a fresh npm run internet, and with it a new address.
+  const denied = err as { code?: unknown; syscall?: unknown; port?: unknown } | null;
+  if (denied?.code === 'EACCES' && denied.syscall === 'listen') {
+    const port = typeof denied.port === 'number' ? `${denied.port} portunu` : 'Portu';
+    return {
+      text: `✗ ${port} açmaya izin yok (Windows'ta WSL, Docker ya da Hyper-V bu portu kendine ayırmış olabilir): apps/server/.env'e PORT=4100 gibi başka bir port yaz, sonra sunucuyu yeniden aç. npm run internet açıksa y yetmez: Ctrl+C'ye basıp npm run internet'i yeniden aç; adres değişir, Paylaş'la yenisini gönder.`,
+      code: NEEDS_OWNER_EXIT_CODE,
+    };
+  }
   const failure = err as { code?: unknown; message?: unknown } | null;
   const message = typeof failure?.message === 'string' ? failure.message : '';
   if (failure?.code === 'ERR_MODULE_NOT_FOUND' || failure?.code === 'MODULE_NOT_FOUND') {

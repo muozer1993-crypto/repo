@@ -1246,6 +1246,33 @@ kalır. Öteki pencereyi kapattıktan sonra beklemek istemezsen `npm run interne
 yazıp Enter'a bas. İki sunucuyu bilerek yan yana açıyorsan ikincisine başka bir port ver:
 `$env:PORT=4001; npm run server`.
 
+**"4000 portunu açmaya izin yok" diyor.**
+Portu başka bir pencere tutmuyor, Windows'un kendisi vermiyor. WSL, Docker Desktop ya da Hyper-V
+kuruluysa Windows her açılışta onlar için bazı port aralıklarını kendine ayırır; 4000 bazen bu
+aralıklardan birine düşer. Dün çalışıp bugün çalışmamasının sebebi de bu: aralıklar açılıştan
+açılışa değişir. Beklemek de `y` de işe yaramaz (`npm run internet` beş dakikada bir yine dener,
+yine aynı satırı yazar), sunucuya başka bir port vermen lazım:
+
+1. `apps/server/.env`'i Not Defteri'nde aç (dosya yoksa önce yukarıdaki `copy` satırıyla
+   örnekten kopyala), `PORT=4000` satırını `PORT=4100` yap, kaydet.
+2. Sunucuyu yeniden aç. `npm run internet` açıksa `y` yetmez, çünkü port açılışta bir kere
+   okunur: o pencerede Ctrl+C'ye bas, sonra yine `npm run internet`. `npm run server`
+   kullanıyorsan Ctrl+C, sonra yine `npm run server`.
+3. Kankalara yeni adresi ver. `npm run internet` yeniden açılınca adres zaten değişir:
+   Paylaş'la yenisini gönder. Evdeki Wi-Fi'dan bağlanan telefonlar adresi portuyla
+   **Ayarlar → Sunucu**'ya yazar (`192.168.1.20:4100` gibi; port yazılmazsa uygulama `:4000`
+   ekler, o da artık çalışmaz).
+
+4100 de aynı satırı verirse o da ayrılmış bir aralıkta kalmıştır. Hangi portların ayrıldığını
+PowerShell'de görebilirsin:
+
+```powershell
+netsh interface ipv4 show excludedportrange protocol=tcp
+```
+
+Her satır bir aralıktır (ilk sayıdan ikinci sayıya kadar); hiçbirinin içine düşmeyen bir port seç
+ve 1. adımdan tekrarla.
+
 **Android'de bildirim gelmiyor.**
 Expo Go kullanıyorsan normal — yukarıdaki [Expo Go'nun sınırları](#expo-gonun-sınırları)
 bölümüne bak. Geliştirme derlemesi al ve `eas init` çalıştırdığından emin ol. Ayarlar
