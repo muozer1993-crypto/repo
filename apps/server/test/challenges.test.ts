@@ -2768,6 +2768,213 @@ describe("friends in other zones play the creator's number of days", () => {
   });
 });
 
+describe('check-in çelınclar across zones', () => {
+  /** 12:50 on Tuesday in Istanbul, 04:50 in New York, 09:50 in London. */
+  const NOON_ISH = '2026-11-10T09:50:00.000Z';
+
+  async function checkIn(h: TestApp, user: RegisteredUser, challengeId: string, dayKey: string) {
+    return postEntry(h, user, challengeId, { dayKey, value: 1, source: 'checkin', clientTime: iso(h) });
+  }
+
+  function errorOf(response: { json: <T>() => T }): { code: string; message: string } {
+    return response.json<{ error: { code: string; message: string } }>().error;
+  }
+
+  async function invite(h: TestApp, user: RegisteredUser, challengeId: string, userIds: string[]) {
+    return authed(h.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/invite`, payload: { userIds } });
+  }
+
+  async function accept(h: TestApp, user: RegisteredUser, challengeId: string) {
+    return authed(h.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+  }
+
+  function rowOf(h: TestApp, challengeId: string, userId: string): { status: string } | undefined {
+    return h.db
+      .prepare('SELECT status FROM challenge_participants WHERE challenge_id = ? AND user_id = ?')
+      .get(challengeId, userId) as { status: string } | undefined;
+  }
+
+  async function detailFor(h: TestApp, user: RegisteredUser, challengeId: string) {
+    return (await authed(h.app, user.token)({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>();
+  }
+
+  it('keeps a New York friend out of a one-day erken_yat made "Hemen" in Istanbul: it has no evening for him', async () => {
+    harness = await makeApp({ now: NOON_ISH });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const mert = await registerUser(harness.app, 'mert', { displayName: 'Mert', timezone: 'America/New_York' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, mert.me.id);
+    befriend(harness.app, ali.me.id, veli.me.id);
+    // until 23:59 in Istanbul, 15:59 in New York, four hours before its 19:00
+    const oneEvening = { typeKey: 'erken_yat', deadlineTime: '23:00', endsAt: '2026-11-10T20:59:59.999Z' };
+
+    const wizard = await createChallenge(harness, ali, { ...oneEvening, participantIds: [veli.me.id, mert.me.id] });
+    expect(wizard.statusCode).toBe(400);
+    expect(errorOf(wizard)).toEqual({
+      code: 'checkin_days_short',
+      message:
+        'Saat farkı yüzünden bu çelıncın check-in saati Mert için hiçbir güne denk gelmiyor, sende 1 gün. Eksik günle eklenemez.',
+    });
+    expect(harness.db.prepare('SELECT COUNT(*) AS n FROM challenges').get()).toEqual({ n: 0 });
+
+    const created = await createChallenge(harness, ali, { ...oneEvening, participantIds: [veli.me.id] });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    const later = await invite(harness, ali, challengeId, [mert.me.id]);
+    expect(later.statusCode).toBe(400);
+    expect(errorOf(later).code).toBe('checkin_days_short');
+    expect(rowOf(harness, challengeId, mert.me.id)).toBeUndefined();
+    // and "Kanka oldunuz" does not offer it either
+    expect(invitableFor(harness.db, ali.me.id, mert.me.id, harness.now())).toEqual([]);
+
+    // Veli was asked while in Istanbul and says yes from New York: his yes pins New York
+    const moved = await authed(harness.app, veli.token)({ method: 'PATCH', url: '/me', payload: { timezone: 'America/New_York' } });
+    expect(moved.statusCode).toBe(200);
+    const refused = await accept(harness, veli, challengeId);
+    expect(refused.statusCode).toBe(400);
+    expect(errorOf(refused)).toEqual({
+      code: 'checkin_days_short',
+      message:
+        'Saat farkı yüzünden bu çelıncın check-in saati sende hiçbir güne denk gelmiyor, çelıncı açan Ali için 1 gün. Eksik günle bu çelınca katılamazsın.',
+    });
+    expect(rowOf(harness, challengeId, veli.me.id)?.status).toBe('invited');
+
+    // back home before the evening, he plays it
+    await authed(harness.app, veli.token)({ method: 'PATCH', url: '/me', payload: { timezone: 'Europe/Istanbul' } });
+    expect((await accept(harness, veli, challengeId)).statusCode).toBe(200);
+  });
+
+  it('lets London into a seven-day erken_yat made at 12:50 in Istanbul, and not New York with its six evenings', async () => {
+    harness = await makeApp({ now: NOON_ISH });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const leyla = await registerUser(harness.app, 'leyla', { displayName: 'Leyla', timezone: 'Europe/London' });
+    const mert = await registerUser(harness.app, 'mert', { displayName: 'Mert', timezone: 'America/New_York' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    for (const friend of [leyla, mert, veli]) befriend(harness.app, ali.me.id, friend.me.id);
+    befriend(harness.app, veli.me.id, mert.me.id);
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'erken_yat',
+      deadlineTime: '23:00',
+      participantIds: [leyla.me.id, veli.me.id],
+      endsAt: '2026-11-16T20:59:59.999Z',
+    });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+
+    expect((await accept(harness, leyla, challengeId)).statusCode).toBe(200);
+    // her last evening ends at 20:59, with Istanbul's: seven of them, none cut
+    expect((await detailFor(harness, leyla, challengeId)).myDays).toEqual({ first: '2026-11-10', last: '2026-11-16' });
+    expect((await accept(harness, veli, challengeId)).statusCode).toBe(200);
+
+    // the seventh evening starts at 19:00 in New York, after the end; Veli is not the one who opened it
+    const refused = await invite(harness, veli, challengeId, [mert.me.id]);
+    expect(refused.statusCode).toBe(400);
+    expect(errorOf(refused)).toEqual({
+      code: 'checkin_days_short',
+      message:
+        'Saat farkı yüzünden bu çelıncın check-in saati Mert için 6 güne denk geliyor, çelıncı açan Ali için 7 gün. Eksik günle eklenemez.',
+    });
+    expect(rowOf(harness, challengeId, mert.me.id)).toBeUndefined();
+  });
+
+  /**
+   * Ali's erken_kus made "Hemen" at 23:00 on Monday in Istanbul by an app that
+   * still started it there, until the end of Friday: Tuesday to Friday's
+   * mornings for him. In Tokyo it runs from 05:00 on Tuesday to 05:59 on
+   * Saturday, five mornings: Saturday's two hours are one more than Ali has.
+   */
+  async function lateNightErkenKus(h: TestApp) {
+    const ali = await registerUser(h.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(h.app, 'veli', { displayName: 'Veli', timezone: 'Asia/Tokyo', reminderHour: 4 });
+    befriend(h.app, ali.me.id, veli.me.id);
+    const created = await createChallenge(h, ali, {
+      typeKey: 'erken_kus',
+      deadlineTime: '07:00',
+      participantIds: [veli.me.id],
+      endsAt: '2026-01-09T20:59:59.999Z',
+    });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    expect((await accept(h, veli, challengeId)).statusCode).toBe(200);
+    return { ali, veli, challengeId };
+  }
+
+  it("scores Tokyo on the creator's number of mornings and shows everybody the zone they play in", async () => {
+    harness = await makeApp({ now: '2026-01-05T20:00:00.000Z' }); // Monday 23:00 in Istanbul, Tuesday 05:00 in Tokyo
+    const { ali, veli, challengeId } = await lateNightErkenKus(harness);
+    expect((await detailFor(harness, veli, challengeId)).myDays).toEqual({ first: '2026-01-06', last: '2026-01-09' });
+    // Ali keeps his Monday: a "Geldim" tapped after its 07:00 still goes in late, as before
+    expect((await detailFor(harness, ali, challengeId)).myDays).toEqual({ first: '2026-01-05', last: '2026-01-09' });
+
+    harness.setNow('2026-01-05T20:30:00.000Z'); // 05:30 on Tuesday in Tokyo
+    expect((await checkIn(harness, veli, challengeId, '2026-01-06')).statusCode).toBe(201);
+    for (const day of ['2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09']) {
+      if (day !== '2026-01-06') {
+        harness.setNow(`${addDays(day, -1)}T21:00:00.000Z`); // 06:00 in Tokyo
+        expect((await checkIn(harness, veli, challengeId, day)).statusCode).toBe(201);
+      }
+      harness.setNow(`${day}T03:30:00.000Z`); // 06:30 in Istanbul, 12:30 in Tokyo
+      expect((await checkIn(harness, ali, challengeId, day)).statusCode).toBe(201);
+    }
+
+    // Saturday 04:30 in Tokyo: no reminder for a morning the server refuses
+    harness.setNow('2026-01-09T19:30:00.000Z');
+    expect(sendReminders(harness.db, harness.now())).toBe(0);
+    harness.setNow('2026-01-09T20:00:00.000Z'); // 05:00 on Saturday in Tokyo
+    const extra = await checkIn(harness, veli, challengeId, '2026-01-10');
+    expect(extra.statusCode).toBe(400);
+    expect(errorOf(extra).code).toBe('day_out_of_range');
+
+    const zones = Object.fromEntries((await detailFor(harness, ali, challengeId)).participants.map((p) => [p.user.id, p.timezone]));
+    expect(zones).toEqual({ [ali.me.id]: 'Europe/Istanbul', [veli.me.id]: 'Asia/Tokyo' });
+
+    harness.setNow('2026-01-09T21:00:30.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    const outcome = harness.db.prepare('SELECT status, winner_id, is_tie FROM challenges WHERE id = ?').get(challengeId);
+    expect(outcome).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
+  });
+
+  it('still reminds Tokyo on a morning that counts', async () => {
+    harness = await makeApp({ now: '2026-01-05T20:00:00.000Z' });
+    await lateNightErkenKus(harness);
+    harness.setNow('2026-01-08T19:30:00.000Z'); // 04:30 on Friday in Tokyo
+    expect(sendReminders(harness.db, harness.now())).toBe(1);
+  });
+
+  it('changes nothing for friends in one zone, a first day past its deadline included', async () => {
+    harness = await makeApp({ now: NOW }); // Monday 12:00 in Istanbul
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    // "Hemen" from an app that started it after the 07:00: three days, two mornings
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'erken_kus',
+      deadlineTime: '07:00',
+      participantIds: [veli.me.id],
+      endsAt: '2026-01-07T20:59:59.999Z',
+    });
+    const challengeId = created.json<Challenge>().id;
+    expect((await accept(harness, veli, challengeId)).statusCode).toBe(200);
+    expect((await detailFor(harness, veli, challengeId)).myDays).toEqual({ first: '2026-01-05', last: '2026-01-07' });
+
+    const late = await checkIn(harness, veli, challengeId, '2026-01-05');
+    expect(late.statusCode).toBe(201);
+    expect(late.json<{ entry: { value: number; late: boolean } }>().entry).toMatchObject({ value: 0, late: true });
+    for (const day of ['2026-01-06', '2026-01-07']) {
+      harness.setNow(`${day}T03:30:00.000Z`); // 06:30
+      expect((await checkIn(harness, ali, challengeId, day)).statusCode).toBe(201);
+      if (day === '2026-01-06') expect((await checkIn(harness, veli, challengeId, day)).statusCode).toBe(201);
+    }
+    const zones = (await detailFor(harness, ali, challengeId)).participants.map((p) => p.timezone);
+    expect(zones).toEqual(['Europe/Istanbul', 'Europe/Istanbul']);
+
+    harness.setNow('2026-01-07T21:00:30.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    const outcome = harness.db.prepare('SELECT status, winner_id, is_tie FROM challenges WHERE id = ?').get(challengeId);
+    expect(outcome).toEqual({ status: 'finished', winner_id: ali.me.id, is_tie: 0 });
+  });
+});
+
 describe('GET /challenges/:id/results', () => {
   it('gives standings to everybody and taunt previews to the winner only', async () => {
     harness = await makeApp({ now: NOW });

@@ -82,7 +82,7 @@ import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { byLevel, declineQuestion, endsWithoutMe } from '@/utils/levelCopy';
 import { confirmTr } from '@/utils/confirm';
-import { clampToMyDays, safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
+import { clampToMyDays, safeDayKeysBetween, safeTodayKey, zoneCityTr } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import {
   dropFloatNoise,
@@ -535,6 +535,7 @@ export default function ChallengeDetailScreen() {
           closed={challenge.status === 'cancelled'}
           onPressUser={(userId) => router.push({ pathname: '/user/[id]', params: { id: userId } })}
           freshness={challenge.status === 'active' && !settling ? { now: clock, level } : undefined}
+          zone={tz}
         />
         {/* "küçük bir gayret yeter" is a lie once nothing more counts, and
             "öndesin" is one with nobody else in the race */}
@@ -1228,7 +1229,7 @@ function FocusAction({ id, detail, level, today }: ActionProps) {
 const CHECKIN_QUEUED =
   'Sunucuya ulaşamadım. Sunucu uyuyorsa bastığın saat sayılır, telefonun çekmiyorsa gittiği saat. Bağlanınca uygulamayı aç.';
 
-function CheckinAction({ id, detail, level, today, tz }: ActionProps) {
+function CheckinAction({ id, detail, level, today, tz, dayKeys }: ActionProps) {
   const addEntry = useAddEntry(id);
   const toast = useToast();
   const [result, setResult] = useState<'ok' | 'late' | 'queued' | null>(null);
@@ -1236,6 +1237,23 @@ function CheckinAction({ id, detail, level, today, tz }: ActionProps) {
   const entry = detail.myEntries.find((e) => e.dayKey === today);
   const done = !!entry;
   const deadline = detail.challenge.deadlineTime;
+  // Another zone than the creator's can hold one deadline more than the
+  // creator has; the server leaves it out of my days (`myDays`) and refuses
+  // a "Geldim" on it.
+  const todayInside = done || dayKeys.length === 0 || dayKeys.includes(today);
+  const myFirstDay = dayKeys[0];
+
+  if (!todayInside) {
+    return (
+      <View style={styles.actionBody}>
+        <Text variant="small" muted>
+          {myFirstDay !== undefined && today < myFirstDay
+            ? 'Herkes aynı sayıda check-in yapsın diye bugün sende sayılmıyor, ilk check-in günün yarın.'
+            : 'Herkes aynı sayıda check-in yapsın diye bugün sende sayılmıyor, son check-in günün dündü.'}
+        </Text>
+      </View>
+    );
+  }
 
   const checkIn = async () => {
     try {
@@ -1932,6 +1950,12 @@ function Feed({
   // Who said what, per entry: the reason is the whole point of an itiraz, and
   // the owner cannot answer an accusation they cannot read.
   const names = new Map(detail.participants.map((p) => [p.user.id, p.user.displayName]));
+  // The zone each player's check-ins were judged in, where it is not mine: a
+  // "Geldim" at 06:30 Tokyo time reads "3 saat önce" here, and only its clock
+  // says it was 00:30 for me.
+  const zones = new Map(
+    detail.participants.flatMap((p) => (p.timezone && p.timezone !== tz ? [[p.user.id, p.timezone] as const] : []))
+  );
   const disputesByEntry = new Map<string, Dispute[]>();
   for (const row of detail.disputes) {
     const list = disputesByEntry.get(row.entryId) ?? [];
@@ -2053,6 +2077,7 @@ function Feed({
                 today={today}
                 yesterday={yesterday}
                 tz={tz}
+                zone={item.source === 'checkin' ? zones.get(item.userId) : undefined}
                 level={level}
                 baseUrl={baseUrl}
                 onProof={onProof}
@@ -2197,6 +2222,7 @@ function FeedRow({
   today,
   yesterday,
   tz,
+  zone,
   level,
   baseUrl,
   onProof,
@@ -2228,6 +2254,8 @@ function FeedRow({
   today: string;
   yesterday: string;
   tz: string;
+  /** on a check-in, the zone its owner's deadline is counted in when it is not `tz` */
+  zone?: string;
   level: VulgarityLevel;
   baseUrl: string;
   onProof: (url: string) => void;
@@ -2313,6 +2341,11 @@ function FeedRow({
           {formatDayKeyFriendly(item.dayKey, today, yesterday)} · {SOURCE_ICON[item.source] ?? '•'}{' '}
           {SOURCE_LABEL[item.source] ?? item.source} · {relativeTime(feedTime(item), new Date(now), tz)}
         </Text>
+        {zone ? (
+          <Text variant="tiny" faint numberOfLines={1}>
+            {`${zoneCityTr(zone)} saatiyle ${formatTime(item.createdAt, zone)} (sende ${formatTime(item.createdAt, tz)})`}
+          </Text>
+        ) : null}
         {/* the owner's word on it is what a friend weighs before an itiraz; a
             note keeps its line breaks, so two lines bound it */}
         {item.note ? (

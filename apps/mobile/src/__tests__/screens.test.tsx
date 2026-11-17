@@ -1561,6 +1561,93 @@ describe('a friend in another zone than the creator', () => {
   });
 });
 
+describe('a rival who plays a check-in çelınc on another zone\'s clock', () => {
+  const VELI = { id: 'u-2', username: 'veli', displayName: 'Veli', avatarEmoji: '🐐', createdAt: '2026-09-01T00:00:00.000Z' };
+
+  /** Me in Istanbul, a morning behind Veli, who said yes with his profile on Tokyo. */
+  function tokyoRival() {
+    const detail = challengeDetail();
+    const me = { ...detail.me!, score: 2, rank: 2, timezone: 'Europe/Istanbul' };
+    const veli = { ...detail.me!, user: VELI, score: 3, rank: 1, timezone: 'Asia/Tokyo' };
+    return {
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        typeKey: 'erken_kus',
+        metricType: 'checkin_deadline' as const,
+        unit: 'gün',
+        title: 'Sabah Kalkma',
+        deadlineTime: '07:00',
+      },
+      participants: [veli, me],
+      me,
+      myTimezone: 'Europe/Istanbul',
+    };
+  }
+
+  /** A "Geldim" in the feed, tapped at `createdAt`. */
+  function checkinRow(id: string, user: { id: string; displayName: string }, createdAt: string) {
+    return {
+      id,
+      userId: user.id,
+      displayName: user.displayName,
+      dayKey: '2026-09-09',
+      value: 1,
+      source: 'checkin' as const,
+      status: 'ok' as const,
+      createdAt,
+      updatedAt: createdAt,
+      proofUrl: null,
+    };
+  }
+
+  it('names the clock he plays on by his name in the standings, and none by mine', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => tokyoRival());
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('(Tokyo saati)');
+    expect(text.match(/saati\)/g)).toHaveLength(1);
+  });
+
+  it('prints the clock of his "Geldim" in his zone and in mine', async () => {
+    searchParams.id = 'c-1';
+    const detail = tokyoRival();
+    // 06:30 in Tokyo is 00:30 in Istanbul
+    api.challenge = jest.fn(async () => ({
+      ...detail,
+      feed: [
+        checkinRow('e-1', VELI, '2026-09-08T21:30:00.000Z'),
+        checkinRow('e-2', detail.me.user, '2026-09-09T03:40:00.000Z'),
+      ],
+    }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Tokyo saatiyle 06:30 (sende 00:30)');
+    // mine is on my own clock: nothing to add
+    expect(text.match(/saatiyle/g)).toHaveLength(1);
+  });
+
+  it('offers no "Geldim" on a morning the server leaves out of my days', async () => {
+    const today = todayKey('Europe/Istanbul');
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => ({ ...tokyoRival(), myDays: { first: addDays(today, -3), last: addDays(today, -1) } }));
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Herkes aynı sayıda check-in yapsın diye bugün sende sayılmıyor, son check-in günün dündü.');
+    expect(text).not.toContain('GELDİM');
+  });
+});
+
 describe('the entry modal', () => {
   const today = () => todayKey('Europe/Istanbul');
   const { formatDayKey } = require('@/utils/format') as typeof import('@/utils/format');

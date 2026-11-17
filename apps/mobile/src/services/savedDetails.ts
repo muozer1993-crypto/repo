@@ -113,8 +113,11 @@ export function syncSavedWithList(summaries: readonly ChallengeSummary[], now: n
           participants: row.participants,
           me: row.me,
           unreadTaunts: row.unreadTaunts,
-          // an older server's list leaves it out; the detail had it
+          // an older server's list leaves these out; the detail had them
           myTimezone: row.myTimezone ?? detail.myTimezone,
+          // and the days I am scored on: a screen drawn from this copy offers no
+          // "Geldim" on a deadline the server refuses
+          myDays: row.myDays ?? detail.myDays,
         };
       })
       .filter((detail) => keeps(detail, ownerId, now));

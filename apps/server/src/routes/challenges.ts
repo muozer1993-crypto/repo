@@ -28,7 +28,7 @@ import {
   type ChallengeSummary,
   type FeedPage,
 } from '@koydum/shared';
-import { badRequest, conflict, forbidden, parseBody, parseQuery } from '../errors.js';
+import { badRequest, conflict, forbidden, parseBody, parseQuery, type HttpError } from '../errors.js';
 import { newId, nowIso, type ChallengeRow, type Database, type UserRow } from '../db/index.js';
 import { notify } from '../services/notifications.js';
 import { toChallenge } from '../serialize.js';
@@ -53,9 +53,13 @@ import {
   acceptedParticipants,
   activateDueChallenges,
   cancelIfAbandoned,
+  checkinDaysShort,
+  creatorTimezone,
   participantRows,
+  participantTimezone,
   startedCopy,
   stillOpen,
+  typeForChallenge,
 } from '../services/challenges.js';
 import { backfillFromPhone } from '../services/deviceSync.js';
 import { isDiskFull, warnDiskFull } from '../services/disk.js';
@@ -140,6 +144,33 @@ function requireFriend(db: Database, meId: string, userId: string): UserRow {
     throw badRequest('not_friends', `${user.display_name} kankan değil. Önce arkadaş olun.`);
   }
   return user;
+}
+
+/** "6 güne denk geliyor", or no day at all: the check-in days a zone gets (`checkinDaysShort`). */
+function checkinDaysTr(days: number): string {
+  return days === 0 ? 'hiçbir güne denk gelmiyor' : `${days} güne denk geliyor`;
+}
+
+/** "çelıncı açan Ali için": whose count of check-in days is the bar. */
+function forCreator(db: Database, challenge: ChallengeRow): string {
+  const name = getUserRow(db, challenge.creator_id)?.display_name;
+  return name ? `çelıncı açan ${name} için` : 'çelıncı açan için';
+}
+
+/**
+ * 400 `checkin_days_short` for a friend put into a check-in çelınc whose
+ * deadlines their zone gives fewer of than the creator's: "Hemen" at 12:50 in
+ * Istanbul, an erken_yat of one day ends at 15:59 in New York, and Mert lost
+ * it 1-0 without one evening to tap "Geldim" in. `whose` says whose count
+ * the bar is: "sende" to the creator, else `forCreator`. No suffix after the
+ * name: it follows the name's last vowel, and a display name can be "MSN" or
+ * "🔥".
+ */
+function invitedShortError(name: string, short: { days: number; creatorDays: number }, whose: string): HttpError {
+  return badRequest(
+    'checkin_days_short',
+    `Saat farkı yüzünden bu çelıncın check-in saati ${name} için ${checkinDaysTr(short.days)}, ${whose} ${short.creatorDays} gün. Eksik günle eklenemez.`,
+  );
 }
 
 /**
@@ -335,6 +366,20 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     // Live immediately when the start time has already passed (SPEC 2.2); a future
     // start waits for the scheduler.
     const status = Date.parse(startsAt) <= now.getTime() ? 'active' : 'pending';
+    // Nobody is asked into a check-in çelınc their zone gives fewer deadlines
+    // of: they could only lose it (the accept route refuses them too).
+    const deadlineTime =
+      body.deadlineTime ?? (type.metricType === 'checkin_deadline' ? (type.defaultDeadlineTime ?? null) : null);
+    for (const participantId of body.participantIds) {
+      const invitee = requireUserRow(db, participantId);
+      const short = checkinDaysShort(
+        { starts_at: startsAt, ends_at: endsAt, deadline_time: deadlineTime },
+        type,
+        participantTimezone(undefined, me.row),
+        participantTimezone(undefined, invitee),
+      );
+      if (short) throw invitedShortError(invitee.display_name, short, 'sende');
+    }
 
     const challengeId = newId();
     const insertChallenge = db.prepare(
@@ -369,7 +414,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
         status,
         reward_text: body.rewardText ?? null,
         penalty_text: body.penaltyText ?? null,
-        deadline_time: body.deadlineTime ?? (type.metricType === 'checkin_deadline' ? (type.defaultDeadlineTime ?? null) : null),
+        deadline_time: deadlineTime,
         daily_target: body.dailyTarget ?? null,
         proof_required: (body.proofRequired ?? type.proofRequired) ? 1 : 0,
         created_at: createdAt,
@@ -462,6 +507,20 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     }
     if (now.getTime() >= acceptClosesAt(challenge.starts_at, challenge.ends_at)) {
       throw badRequest('accept_closed', 'Çelıncın bitmesine az kaldı, artık katılamazsın.');
+    }
+    // Measured in the zone this yes pins (the profile's). A rematch's invite
+    // comes through here too: its creator may play from another zone now.
+    const short = checkinDaysShort(
+      challenge,
+      typeForChallenge(challenge),
+      creatorTimezone(db, challenge),
+      participantTimezone(undefined, me.row),
+    );
+    if (short) {
+      throw badRequest(
+        'checkin_days_short',
+        `Saat farkı yüzünden bu çelıncın check-in saati sende ${checkinDaysTr(short.days)}, ${forCreator(db, challenge)} ${short.creatorDays} gün. Eksik günle bu çelınca katılamazsın.`,
+      );
     }
 
     const iso = nowIso(now);
@@ -622,6 +681,15 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       const others = [...lineUp, ...invitees.map((i) => i.user.id)].filter((id) => id !== user.id && id !== me.id);
       if (others.some((otherId) => isBlockedBetween(db, user.id, otherId))) {
         throw badRequest('blocked_in_challenge', `${user.display_name} bu çelınca eklenemez.`);
+      }
+    }
+    // the accept route's check-in days, so nobody gets an invite only to be refused
+    const type = typeForChallenge(challenge);
+    const creatorTz = creatorTimezone(db, challenge);
+    for (const { user } of invitees) {
+      const short = checkinDaysShort(challenge, type, creatorTz, participantTimezone(undefined, user));
+      if (short) {
+        throw invitedShortError(user.display_name, short, challenge.creator_id === me.id ? 'sende' : forCreator(db, challenge));
       }
     }
 

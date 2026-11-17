@@ -423,6 +423,14 @@ export interface ParticipantView {
    * the inviter then.
    */
   invitedBy?: string | null;
+  /**
+   * The zone this player's days and check-in deadlines are counted in (pinned
+   * when they said yes), for an accepted player; null for everybody else.
+   * Shown to the others when it is not theirs: a rival pinned on Tokyo time
+   * beats a 07:00 deadline at 00:30 Istanbul, and that is something to itiraz
+   * about only once it can be seen. Older servers leave it out.
+   */
+  timezone?: string | null;
 }
 
 export interface ChallengeSummary {

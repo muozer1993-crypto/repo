@@ -44,6 +44,19 @@ Giriş doğrulaması, telefonların senkronu, sıralama ve uygulamanın "📅 N 
 "Bugün"ü (`ChallengeSummary.myDays`) aynı pencereyi kullanır. Adım, odak ve sayaç gibi toplamlar her
 dilimde aynı saatleri kapsar, onlara dokunulmaz; bitmiş çelınc bitişte yazılan sonucunu korur.
 
+Check-in çelıncında günler son saatlerle sayılır (`checkinPlayableDays`): bir gün, türün açılış
+saatinden son saatin son dakikasına kadarki aralığa çelınc değiyorsa oynanabilir. İstanbul'da 12:50'de
+"Hemen" açılan bir günlük Erken Yatma Sözü New York'ta 15:59'da biter, oradaki 19:00 hiç gelmez; yedi
+günlük olanında İstanbul, Berlin ve Londra yedi akşam oynar, New York altı. Açanın son saat sayısından
+azına denk gelen kanka çelınca girmez: sihirbaz, "Kanka ekle" ve "Varım" 400 `checkin_days_short` ile
+nedenini söyler (kabulde profilin saat dilimiyle, çünkü sabitlenecek olan o; "Kanka oldunuz" da böyle bir
+çelıncı önermez). Fazlasına denk gelen girer ama açanın sayısı kadarına puanlanır (`scoringWindow`): daha
+az kapsanan uçtaki son saat düşer, eşitlikte sonuncusu. Aynı dilimdeki oyunculara dokunulmaz. Profilini
+"Varım"dan hemen önce Tokyo'ya alan biri 07:00'lik sabahları İstanbul saatiyle 00:30'da yakalar. Kabulü
+saat dilimi değişti diye reddetmek gerçekten yolculuk yapanı cezalandırırdı; onun yerine herkesin oynadığı
+dilim görünür (`ParticipantView.timezone`): sıralamada adının yanında "(Tokyo saati)", check-in satırında
+"Tokyo saatiyle 06:30 (sende 00:30)". İtiraz eden neye itiraz ettiğini görür.
+
 Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
 
 * `clientTime` kayıt içindir, doğrulamada kullanılmaz. İstisnası sunucu yokken basılan check-in

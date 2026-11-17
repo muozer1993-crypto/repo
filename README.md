@@ -1314,6 +1314,10 @@ katıldığın andaki saat diliminde sayılmaya devam eder: İstanbul'da katıld
 Başka şehirdeki kankalar da çelıncı açanın gün sayısı kadar gün oynar: New York'ta açılan "3 gün"lük
 Sigara Yok İstanbul'da dördüncü günün sabahı biter, ama o birkaç saat evet/hayır ve ekran süresi
 çelınclarında ayrı gün sayılmaz; uygulama da İstanbul'daki kankaya "3 gün" gösterir.
+Check-in çelınclarında da çelıncı açanın kaç sabahı ya da akşamı varsa o kadar check-in sayılır. Saat
+farkı yüzünden daha azına denk gelen kanka eklenemez (İstanbul'da öğlen açılan bir günlük "Erken Yatma Sözü" New York'ta
+akşam 19:00 olmadan biter), uygulama bunu söyler. Başka saat diliminde oynayan kankanın adının yanında
+"(Tokyo saati)" yazar; "Geldim" dediği saat de hem onun hem senin saatinle görünür.
 
 **Uygulama "Sunucunun diski dolmak üzere" diyor.**
 Sunucunun çalıştığı bilgisayarda, fotoğraf klasörünün olduğu diskte 2 GB'tan az boş yer kalmış.

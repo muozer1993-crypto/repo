@@ -6,6 +6,7 @@ import { Avatar } from '@/components/Avatar';
 import { ProgressBar } from '@/components/ProgressBar';
 import { Text } from '@/components/Text';
 import { Colors, Radius, Spacing } from '@/theme';
+import { zoneCityTr } from '@/utils/datetime';
 import { forHoursTr, formatNumber, hoursSince } from '@/utils/format';
 import { byLevel } from '@/utils/levelCopy';
 
@@ -36,6 +37,13 @@ export interface StandingsProps {
    * sending at 15:00, and lost to the 11.000 it sent in the morning.
    */
   freshness?: { now: number; level: VulgarityLevel };
+  /**
+   * The reader's zone (`myTimezone`): a player whose days are counted in
+   * another one (`ParticipantView.timezone`) gets "(Tokyo saati)" by the name.
+   * A check-in deadline is that zone's, and a rival nobody knew was on Tokyo
+   * time beat a 07:00 every night at 00:30 Istanbul.
+   */
+  zone?: string;
   style?: ViewStyle;
 }
 
@@ -68,6 +76,7 @@ export function Standings({
   closed,
   onPressUser,
   freshness,
+  zone,
   style,
 }: StandingsProps) {
   // "bekliyor" is a lie once it is over, finished or called off: an invite
@@ -111,6 +120,7 @@ export function Standings({
             ? hoursSince(participant.lastSyncAt, freshness.now)
             : null;
         const silent = silentHours !== null && silentHours >= SILENT_PHONE_HOURS;
+        const away = zone && participant.timezone && participant.timezone !== zone ? participant.timezone : null;
 
         const row = (
           <>
@@ -132,6 +142,11 @@ export function Standings({
                 <Text variant="small" bold numberOfLines={1} style={styles.name}>
                   {participant.user.displayName}
                   {isMe ? ' (sen)' : ''}
+                  {away ? (
+                    <Text variant="tiny" muted>
+                      {` (${zoneCityTr(away)} saati)`}
+                    </Text>
+                  ) : null}
                 </Text>
                 <Text
                   variant="small"

@@ -153,6 +153,19 @@ describe('saved check-in details', () => {
     expect(await savedChallengeDetail('c-1')).toBeNull();
   });
 
+  it('takes the days I am scored on from the list, and keeps its own from an older server', async () => {
+    const saved = detail('c-1');
+    await saveChallengeDetail({ ...saved, myDays: { first: '2026-09-08', last: '2026-09-15' } }, NOW);
+    const row = { challenge: saved.challenge, participants: saved.participants, me: saved.me, unreadTaunts: 0 };
+
+    // a morning the server trimmed off since: Tokyo has one more than the creator
+    await syncSavedWithList([{ ...row, myDays: { first: '2026-09-09', last: '2026-09-15' } }] as unknown as ChallengeDetail[], NOW);
+    expect((await savedChallengeDetail('c-1'))?.myDays).toEqual({ first: '2026-09-09', last: '2026-09-15' });
+
+    await syncSavedWithList([row] as unknown as ChallengeDetail[], NOW);
+    expect((await savedChallengeDetail('c-1'))?.myDays).toEqual({ first: '2026-09-09', last: '2026-09-15' });
+  });
+
   it('clears on its own too', async () => {
     await saveChallengeDetail(detail('c-1'), NOW);
     await forgetSavedChallengeDetails();

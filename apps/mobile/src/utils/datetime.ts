@@ -80,6 +80,45 @@ export function clampToMyDays(
   return keys.filter((key) => key >= myDays.first && key <= myDays.last);
 }
 
+/**
+ * The cities of the zones a friend abroad is likely in whose Turkish name is
+ * not the English one: "Istanbul saati" is a capital I short, "London saati"
+ * is nobody's Turkish.
+ */
+const CITY_TR: Record<string, string> = {
+  Istanbul: 'İstanbul',
+  London: 'Londra',
+  Vienna: 'Viyana',
+  Brussels: 'Brüksel',
+  Copenhagen: 'Kopenhag',
+  Zurich: 'Zürih',
+  Rome: 'Roma',
+  Lisbon: 'Lizbon',
+  Warsaw: 'Varşova',
+  Prague: 'Prag',
+  Athens: 'Atina',
+  Bucharest: 'Bükreş',
+  Sofia: 'Sofya',
+  Belgrade: 'Belgrad',
+  Moscow: 'Moskova',
+  Kyiv: 'Kiev',
+  Nicosia: 'Lefkoşa',
+  Baku: 'Bakü',
+  Tbilisi: 'Tiflis',
+  Tehran: 'Tahran',
+  Cairo: 'Kahire',
+};
+
+/**
+ * "Asia/Tokyo" → "Tokyo", "America/New_York" → "New York": the city an IANA
+ * zone is named after, for "(Tokyo saati)". A zone with no city ("UTC") is
+ * itself.
+ */
+export function zoneCityTr(tz: string): string {
+  const city = tz.slice(tz.lastIndexOf('/') + 1).replace(/_/g, ' ');
+  return CITY_TR[city] ?? city;
+}
+
 /** Milliseconds `tz` is ahead of UTC at `date` (minute resolution). */
 function offsetMs(date: Date, tz: string): number {
   const parts = localParts(date, tz);

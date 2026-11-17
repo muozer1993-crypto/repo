@@ -11,8 +11,9 @@
  *     is one day shorter for a day the API refuses to let them log — a perfect
  *     record could lose the challenge. On the metrics scored per day it never
  *     holds more days than the creator's: another zone's extra sliver of a day
- *     was a free yes/no point. Scoring and write validation must therefore
- *     be derived from the same expression. Scoring may only cut it, never widen it:
+ *     was a free yes/no point, and its extra deadline a free check-in. Scoring
+ *     and write validation must therefore be derived from the same expression.
+ *     Scoring may only cut it, never widen it:
  *     a late joiner is scored from the first day the app let them write
  *     (`lateJoinFloor`), and a running çelınc only up to the days that are over
  *     (`rankAccepted`), so nobody is charged for a day they could not, or could
@@ -201,10 +202,76 @@ export function creatorTimezone(db: Database, challenge: Pick<ChallengeRow, 'id'
 }
 
 /**
- * Metrics scored per day key: one more day is one more yes, or one more day in
- * the average (and its 1440-minute penalty when it cannot be typed).
+ * Metrics scored per day key: one more day is one more yes, one more deadline
+ * to beat, or one more day in the average (and its 1440-minute penalty when it
+ * cannot be typed).
  */
-const SCORED_PER_DAY: readonly MetricType[] = ['daily_boolean', 'manual_lower_is_better'];
+const SCORED_PER_DAY: readonly MetricType[] = ['daily_boolean', 'checkin_deadline', 'manual_lower_is_better'];
+
+/** the zone `challengeWindow` falls back to for one it cannot read */
+function readableZone(tz: string): string {
+  return isValidTimeZone(tz) ? tz : DEFAULT_TIMEZONE;
+}
+
+/**
+ * How much of one day's check-in slot in `zone` the çelınc covers (ms, 0 or
+ * less for none): from the type's window opening (`checkinWindowStart`) to the
+ * last second of the deadline's minute, against `starts_at` up to `ends_at`,
+ * from which nothing is taken. The slot never wraps past midnight
+ * (`deadlineFitsWindow`), so it lies inside its own day.
+ */
+function checkinSlotCover(
+  challenge: Pick<ChallengeRow, 'starts_at' | 'ends_at' | 'deadline_time'>,
+  type: ChallengeType,
+  zone: string,
+): (key: string) => number {
+  const start = Date.parse(challenge.starts_at);
+  const end = Date.parse(challenge.ends_at);
+  const opens = hhmmToMinutes(type.checkinWindowStart ?? '00:00');
+  const deadline = hhmmToMinutes(effectiveDeadline(type, challenge.deadline_time));
+  return (key) => {
+    const from = localInstant(key, Math.floor(opens / 60), opens % 60, zone).getTime();
+    const to = localInstant(key, Math.floor(deadline / 60), deadline % 60, zone).getTime() + 60_000;
+    return Math.min(end, to) - Math.max(start, from);
+  };
+}
+
+/**
+ * The days of a check-in çelınc a player in `tz` can beat a deadline on: the
+ * window's days whose slot (`checkinSlotCover`) the çelınc reaches.
+ *
+ * A day key alone says nothing here. An erken_yat made "Hemen" at 12:50 in
+ * Istanbul for one day ends at 15:59 in New York, before its 19:00 opening:
+ * one day key there, no evening. Seven days from that noon give Istanbul,
+ * Berlin and London seven evenings and New York six.
+ */
+export function checkinPlayableDays(
+  challenge: Pick<ChallengeRow, 'starts_at' | 'ends_at' | 'deadline_time'>,
+  type: ChallengeType,
+  tz: string,
+): string[] {
+  const cover = checkinSlotCover(challenge, type, readableZone(tz));
+  return challengeWindow(challenge, tz).filter((key) => cover(key) > 0);
+}
+
+/**
+ * The check-in days somebody in `tz` would get next to the creator's (in
+ * `creatorTz`), when they are fewer: a check-in çelınc refuses that player
+ * (400 `checkin_days_short` on accept, invite and create). Null on any other
+ * metric, or with as many days. A player with more is let in and trimmed to the
+ * creator's count (`scoringWindow`).
+ */
+export function checkinDaysShort(
+  challenge: Pick<ChallengeRow, 'starts_at' | 'ends_at' | 'deadline_time'>,
+  type: ChallengeType,
+  creatorTz: string,
+  tz: string,
+): { days: number; creatorDays: number } | null {
+  if (type.metricType !== 'checkin_deadline') return null;
+  const days = checkinPlayableDays(challenge, type, tz).length;
+  const creatorDays = checkinPlayableDays(challenge, type, creatorTz).length;
+  return days < creatorDays ? { days, creatorDays } : null;
+}
 
 /**
  * The days a player in `tz` is scored on: `challengeWindow`, but on a metric
@@ -224,21 +291,51 @@ const SCORED_PER_DAY: readonly MetricType[] = ['daily_boolean', 'manual_lower_is
  * also when their own end cuts a day in half: a 24-hour çelınc from noon is
  * two days for everybody. Entry writes, the phones' fan-out and the standings
  * all read it, so a day a player cannot write is never one they are scored on.
+ *
+ * A check-in çelınc counts deadlines instead (`checkinPlayableDays`), and the
+ * end whose slot it covers less of goes. An Istanbul "Hemen" erken_kus opened
+ * at 23:00 has four mornings there and five in Tokyo, the first from 05:00 and
+ * the last until 05:59. Days with no slot stay where nothing was cut: one
+ * after a "Hemen" past the deadline still takes its late 0, as it does for
+ * the creator. Nobody is let in with fewer (`checkinDaysShort`).
  */
 export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string): string[] {
   const window = challengeWindow(challenge, tz);
-  if (!SCORED_PER_DAY.includes(typeForChallenge(challenge).metricType)) return window;
-  const days = challengeWindow(challenge, creatorTimezone(db, challenge)).length;
+  const type = typeForChallenge(challenge);
+  if (!SCORED_PER_DAY.includes(type.metricType)) return window;
+  const zone = readableZone(tz);
+  const creatorTz = creatorTimezone(db, challenge);
+  // the creator's own zone has the creator's days, whatever the metric
+  if (readableZone(creatorTz) === zone) return window;
+
+  if (type.metricType === 'checkin_deadline') {
+    const cover = checkinSlotCover(challenge, type, zone);
+    const playable = window.filter((key) => cover(key) > 0);
+    const days = checkinPlayableDays(challenge, type, creatorTz).length;
+    if (playable.length <= days) return window;
+    const kept = trimEnds(playable, days, cover);
+    const first = kept[0];
+    const last = kept[kept.length - 1];
+    if (first === undefined || last === undefined) return [];
+    return window.filter(
+      (key) => (first === playable[0] || key >= first) && (last === playable[playable.length - 1] || key <= last),
+    );
+  }
+
+  const days = challengeWindow(challenge, creatorTz).length;
   if (days === 0 || window.length <= days) return window;
 
-  // the zone `challengeWindow` fell back to for one it cannot read
-  const zone = isValidTimeZone(tz) ? tz : DEFAULT_TIMEZONE;
   const start = Date.parse(challenge.starts_at);
   const end = Date.parse(challenge.ends_at) + 1;
   const covered = (key: string): number =>
     Math.min(end, startOfDayInTz(addDays(key, 1), zone).getTime()) - Math.max(start, startOfDayInTz(key, zone).getTime());
-  let kept = window;
-  while (kept.length > days) {
+  return trimEnds(window, days, covered);
+}
+
+/** Drops ends off `days` until `count` are left: the one `covered` less, the last on a tie. */
+function trimEnds(days: string[], count: number, covered: (key: string) => number): string[] {
+  let kept = days;
+  while (kept.length > count) {
     kept = covered(kept[0]!) < covered(kept[kept.length - 1]!) ? kept.slice(1) : kept.slice(0, -1);
   }
   return kept;
@@ -358,11 +455,11 @@ function scoredDays(
  * stops at the last day that is over: today, with its entries, only joins the
  * average tomorrow.
  *
- * A day `scoringWindow` leaves out takes its entries with it on a yes/no
- * çelınc too, where `computeScore` counts every day with a yes whatever the
- * window: one written before the trim existed would keep its point. A finished
- * çelınc keeps the days it was scored on: its results are the stored ones
- * (`computeStandings`), and `days` must not disagree with them.
+ * A day `scoringWindow` leaves out takes its entries with it on a yes/no or
+ * check-in çelınc too, where `computeScore` counts every day with a yes
+ * whatever the window: one written before the trim existed would keep its
+ * point. A finished çelınc keeps the days it was scored on: its results are
+ * the stored ones (`computeStandings`), and `days` must not disagree with them.
  */
 function rankAccepted(
   db: Database,
@@ -522,6 +619,10 @@ export function computeStandings(db: Database, challenge: ChallengeRow, now: Dat
       isWinner: finished ? challenge.winner_id === participant.user_id : (computed?.isWinner ?? false),
       lastSyncAt: lastSyncAt(participant.user_id),
       invitedBy: invitedBy(participant),
+      // A check-in's deadline is this zone's. Pinned at "Varım", so a profile
+      // set to Tokyo for a minute took the mornings at 00:30 Istanbul for the
+      // whole çelınc, and nothing on a rival's screen gave an itiraz a reason.
+      timezone: participantTimezone(participant, user),
     });
   }
 
@@ -541,6 +642,7 @@ export function computeStandings(db: Database, challenge: ChallengeRow, now: Dat
       isWinner: false,
       lastSyncAt: null,
       invitedBy: invitedBy(participant),
+      timezone: null,
     });
   }
 
@@ -903,10 +1005,16 @@ export function invitableFor(db: Database, inviterId: string, friendId: string, 
         ORDER BY c.ends_at ASC, c.created_at ASC`,
     )
     .all(inviterId) as ChallengeRow[];
+  const friend = db.prepare('SELECT timezone FROM users WHERE id = ?').get(friendId) as
+    | { timezone: string | null }
+    | undefined;
   return mine.filter((challenge) => {
     if (!stillOpen(challenge, now) || now.getTime() >= acceptClosesAt(challenge.starts_at, challenge.ends_at)) {
       return false;
     }
+    // fewer check-in days in their zone than the creator has
+    const tz = participantTimezone(undefined, friend);
+    if (checkinDaysShort(challenge, typeForChallenge(challenge), creatorTimezone(db, challenge), tz)) return false;
     const rows = participantRows(db, challenge.id);
     const theirs = rows.find((p) => p.user_id === friendId);
     if (theirs?.status === 'accepted' || theirs?.status === 'invited') return false;
@@ -1273,7 +1381,8 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
   // geçti". Judged as entries.ts judges the tap, in the zone pinned at join time;
   // before its window opens (erken_yat before 19:00) the check-in is still ahead.
   // Nor does the sliver of a day `scoringWindow` leaves out of a friend's yes/no
-  // or screen-time days: the server refuses anything typed into it.
+  // or screen-time days, nor the extra deadline it leaves out of their check-in
+  // days: the server refuses anything sent for it.
   const live = db.prepare(
     `SELECT c.*, p.timezone AS p_timezone FROM challenge_participants p
        JOIN challenges c ON c.id = p.challenge_id AND c.status = 'active' AND c.ends_at > ?
@@ -1282,10 +1391,11 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
   const canStillPlay = (user: UserRow): boolean =>
     (live.all(iso, user.id) as (ChallengeRow & { p_timezone: string | null })[]).some((challenge) => {
       const metric = typeForChallenge(challenge).metricType;
-      if (metric !== 'checkin_deadline' && !SCORED_PER_DAY.includes(metric)) return true;
+      if (!SCORED_PER_DAY.includes(metric)) return true;
       try {
         const tz = participantTimezone({ timezone: challenge.p_timezone }, user);
-        if (metric !== 'checkin_deadline') return scoringWindow(db, challenge, tz).includes(todayKey(tz, now));
+        if (!scoringWindow(db, challenge, tz).includes(todayKey(tz, now))) return false;
+        if (metric !== 'checkin_deadline') return true;
         const deadline = effectiveDeadline(typeForChallenge(challenge), challenge.deadline_time);
         return isBeforeOrEqualHHmm(localTimeHHmm(now, tz), deadline);
       } catch {
