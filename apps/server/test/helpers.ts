@@ -44,9 +44,18 @@ export interface TestApp {
 
 export const DEFAULT_NOW = '2026-01-05T09:00:00.000Z';
 
+/**
+ * Upload dirs of apps that were never closed. Most tests let their app go without
+ * `close()`, and each run used to leave a few hundred empty `koydum-test-*` dirs in
+ * the temp folder (%TEMP% on the owner's PC); test/setup.ts removes them once the
+ * file is done.
+ */
+export const leftoverDirs = new Set<string>();
+
 export async function makeApp(overrides: MakeAppOptions = {}): Promise<TestApp> {
   let current = new Date(overrides.now ?? DEFAULT_NOW);
   const uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'koydum-test-'));
+  leftoverDirs.add(uploadDir);
 
   const { app, db, config } = await buildApp({
     now: () => current,
@@ -82,6 +91,7 @@ export async function makeApp(overrides: MakeAppOptions = {}): Promise<TestApp> 
     close: async () => {
       await app.close();
       fs.rmSync(uploadDir, { recursive: true, force: true });
+      leftoverDirs.delete(uploadDir);
     },
   };
 }
