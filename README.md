@@ -763,7 +763,8 @@ de gider, açınca adres değişir ve herkese yeni bağlantı atman gerekir. Pen
 
 2. `npm run internet` penceresine geç, `y` yazıp Enter'a bas. "Sunucu yeni kodla yeniden
    açılıyor, adres aynı" yazar, birkaç saniye sonra sunucu yeni kodla geri gelir. Kimseye
-   bağlantı atmana gerek yok, kankaların bir şey yapmaz.
+   bağlantı atmana gerek yok, kankaların bir şey yapmaz. ("Tünel kopuk" yazıyorsa internet
+   gitmiş: tünel açılınca adres büyük ihtimalle değişir, yenisini pencere yazar, onu Paylaş'la at.)
 
 `npm install` `EPERM` ya da `EBUSY` diye hata verirse açık sunucunun kullandığı bir dosyayı
 değiştiremiyordur (Windows'ta veritabanı modülü olur). `npm run internet` penceresinde `dur`
@@ -822,7 +823,8 @@ uyarı düşer ve saatte bir yeniden dener; o günün yedeği yine `data\backups
    `npm run yonet -- geri-yukle` çalıştır: iki klasördeki en yeni yedeği yükler. Belli bir günü
    istiyorsan tarihini yaz: `npm run yonet -- geri-yukle 2026-10-03`.
 3. Sunucuyu aç: `dur` yazdığın pencerede `y` yazıp Enter'a bas. Adres aynı kalır, kimseye
-   bağlantı atmazsın. `npm run server` ile açtıysan yine `npm run server`.
+   bağlantı atmazsın (pencere "Tünel kopuk" diyorsa internet gitmiş; tünel açılınca yazdığı yeni
+   adresi Paylaş'la at). `npm run server` ile açtıysan yine `npm run server`.
 
 Komut yedeği yüklemeden önce sağlam mı diye bakar; bozuksa ya da KOYDUM'un değilse dokunmaz.
 Yüklediği yedekte kaç hesap olduğunu da yazar. "Bu yedekte hiç hesap yok" derse sunucuyu açma:

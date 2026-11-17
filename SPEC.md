@@ -785,7 +785,10 @@ that fails (cloudflared exits without an address, or none in `TUNNEL_TIMEOUT_MS`
 prints the error and "Tünel açılamadı: internet yok ya da Cloudflare şu an tünel vermiyor.", starts the server with an
 empty PUBLIC_URL (links from the request's address; never the string "null") and retries on the same backoff. `y`
 and `dur` work meanwhile, and the lines that would name the address say "Tünel henüz açılmadı, açılınca adres burada
-yazar." The first address restarts the server with it and prints the first-time banner. Only a missing cloudflared
+yazar." The same lines after a drop (a `y`, a `dur`, a crash, the held line, the help for an unknown line) key "tünel
+açık" / "adres aynı" on a live tunnel, not on the address it last had: while it is being reopened they say "Tünel
+kopuk, yeniden deniyorum; açılınca adres burada yazar (çoğu zaman yenisi)." (the old address is dead, and a quick
+tunnel nearly always comes back under a new one). The first address restarts the server with it and prints the first-time banner. Only a missing cloudflared
 exits (code 1, with the install help). `.env` is read first (`scripts/env.mjs`), so PORT from the file reaches the
 tunnel too; the values it set are passed to every server start, so a changed value needs the script restarted (a new
 address), not `y`.

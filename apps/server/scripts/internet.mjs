@@ -273,7 +273,7 @@ function serverCrashed(how) {
     // causes this (a forgotten window on the port, a package missing after a pull)
     // is fixed in a minute.
     console.error(`\n✗ Sunucu 10 dakikada ${CRASH_LIMIT} kere düştü, sebebi yukarıdaki hatada.`);
-    console.error(publicUrl ? `  Tüneli açık tutuyorum, adres aynı: ${publicUrl}` : `  ${NO_TUNNEL_YET}`);
+    console.error(tunnel ? `  Tüneli açık tutuyorum, adres aynı: ${publicUrl}` : `  ${noTunnelLine()}`);
     console.error(
       `  ${Math.max(1, Math.round(PAUSE_MS / 60_000))} dakikada bir yeniden deneyeceğim; düzelttiysen burada y yazıp Enter'a bas.`,
     );
@@ -282,7 +282,7 @@ function serverCrashed(how) {
   }
   const delay = RESTART_DELAYS_MS[Math.min(crashes.length, RESTART_DELAYS_MS.length) - 1];
   console.error(
-    publicUrl
+    tunnel
       ? `\n✗ Sunucu düştü (${how}), yeniden açıyorum. Adres aynı, kimseye yeni bağlantı atma.`
       : `\n✗ Sunucu düştü (${how}), yeniden açıyorum.`,
   );
@@ -305,11 +305,21 @@ function cancelRestart() {
 
 /** Said wherever the address would be while there is none: never "null", never an old guess. */
 const NO_TUNNEL_YET = 'Tünel henüz açılmadı, açılınca adres burada yazar.';
+/** The same after a drop: the old address is dead, and a quick tunnel nearly always comes back under a new one. */
+const TUNNEL_DOWN = 'Tünel kopuk, yeniden deniyorum; açılınca adres burada yazar (çoğu zaman yenisi).';
+
+/**
+ * Where the address stands while no tunnel is up. "Adres aynı" belongs only to a
+ * live tunnel (`tunnel`), not to `publicUrl`, which keeps the dropped one's.
+ */
+function noTunnelLine() {
+  return publicUrl === null ? NO_TUNNEL_YET : TUNNEL_DOWN;
+}
 
 function heldLine() {
-  return publicUrl
+  return tunnel
     ? "• Sunucu durdu, tünel açık, adres aynı. npm install ya da geri-yukle bitince burada y yazıp Enter'a bas."
-    : "• Sunucu durdu. npm install ya da geri-yukle bitince burada y yazıp Enter'a bas.";
+    : `• Sunucu durdu. ${noTunnelLine()} npm install ya da geri-yukle bitince burada y yazıp Enter'a bas.`;
 }
 
 /**
@@ -348,7 +358,7 @@ function onCommand(line) {
     held = false;
     if (server) {
       console.log(
-        publicUrl ? `• Sunucu yeni kodla yeniden açılıyor, adres aynı: ${publicUrl}` : `• Sunucu yeni kodla yeniden açılıyor. ${NO_TUNNEL_YET}`,
+        tunnel ? `• Sunucu yeni kodla yeniden açılıyor, adres aynı: ${publicUrl}` : `• Sunucu yeni kodla yeniden açılıyor. ${noTunnelLine()}`,
       );
       restartServer();
     } else {
@@ -357,7 +367,7 @@ function onCommand(line) {
   } else if (command === 'dur') {
     held = true;
     if (server) {
-      console.log(publicUrl ? '• Sunucu kapanıyor, tünel açık kalıyor...' : '• Sunucu kapanıyor...');
+      console.log(tunnel ? '• Sunucu kapanıyor, tünel açık kalıyor...' : '• Sunucu kapanıyor...');
       restartServer();
     } else {
       cancelRestart();
@@ -365,7 +375,9 @@ function onCommand(line) {
     }
   } else {
     console.log("  Burada y yazıp Enter'a basarsan sunucu yeni kodla açılır, dur yazarsan durur (npm install ya da geri-yukle için).");
-    console.log('  İkisinde de tünel ve adres kalır. Kapatmak için Ctrl+C.');
+    console.log(
+      tunnel ? '  İkisinde de tünel ve adres kalır. Kapatmak için Ctrl+C.' : '  İkisinde de tüneli denemeye devam ederim. Kapatmak için Ctrl+C.',
+    );
   }
 }
 

@@ -476,6 +476,50 @@ describe('npm run internet', () => {
     expect(await ctrlC()).toBe(0);
   }, 60_000);
 
+  onPosix('never says "tünel açık" or "adres aynı" for y, dur or a crash while a dropped tunnel is down', async () => {
+    const dir = tempDir();
+    // The first tunnel serves until the test drops it; every try after that finds no internet.
+    const fake = countedStub(dir, [
+      `if [ "$n" = 1 ]; then echo "2026 INF |  https://tunel-1.trycloudflare.com  |" 1>&2; while [ ! -f "${dir}/drop" ]; do sleep 0.1; done; exit 1; fi`,
+      `echo '${OFFLINE_LINE}' 1>&2`,
+      'exit 1',
+    ]);
+    const port = await freePort();
+    const run = runScript(port, fake, dir, { keyboard: true });
+
+    await waitFor(async () => ((await publicUrlOf(port)) === 'https://tunel-1.trycloudflare.com' ? true : null));
+    fs.writeFileSync(path.join(dir, 'drop'), '');
+    await waitFor(async () => (run.output().includes('Tünel koptu') ? true : null), 10_000);
+    const before = run.output().length;
+    const down = 'Tünel kopuk, yeniden deniyorum; açılınca adres burada yazar (çoğu zaman yenisi).';
+
+    // the restore steps of the README, during the outage
+    run.type('y');
+    await waitFor(async () => (run.pids().length === 2 && (await healthOf(port)) ? true : null));
+    run.type('dur');
+    await waitFor(async () => (run.output().includes('• Sunucu durdu.') ? true : null), 20_000);
+    run.type('y');
+    await waitFor(async () => (run.pids().length === 3 && (await healthOf(port)) ? true : null));
+    run.type('ne');
+    // and a crash
+    process.kill(run.pids()[2], 'SIGKILL');
+    await waitFor(async () => (run.pids().length === 4 && (await healthOf(port)) ? true : null), 20_000);
+
+    const during = run.output().slice(before);
+    expect(during).toContain(`• Sunucu yeni kodla yeniden açılıyor. ${down}`);
+    expect(during).toContain('• Sunucu kapanıyor...');
+    expect(during).toContain(`• Sunucu durdu. ${down} npm install ya da geri-yukle bitince burada y yazıp Enter'a bas.`);
+    expect(during).toContain('İkisinde de tüneli denemeye devam ederim.');
+    expect(during).toContain('Sunucu düştü (SIGKILL), yeniden açıyorum.');
+    // the old address is dead, and the next one will most likely be new
+    expect(during).not.toContain('adres aynı');
+    expect(during).not.toContain('Adres aynı');
+    expect(during).not.toContain('tünel açık');
+    expect(during).not.toContain('tünel ve adres kalır');
+
+    expect(await ctrlC()).toBe(0);
+  }, 90_000);
+
   onPosix("serves the home Wi-Fi when the internet is off at start, never at Cloudflare's API address, and y and dur still work", async () => {
     const dir = tempDir();
     const fake = countedStub(dir, ['echo "2026 INF Requesting new quick Tunnel on trycloudflare.com..." 1>&2', `echo '${OFFLINE_LINE}' 1>&2`, 'exit 1']);
@@ -498,7 +542,7 @@ describe('npm run internet', () => {
     expect(run.output()).toContain('• Sunucu yeni kodla yeniden açılıyor. Tünel henüz açılmadı, açılınca adres burada yazar.');
 
     run.type('dur');
-    await waitFor(async () => (run.output().includes("• Sunucu durdu. npm install ya da geri-yukle bitince burada y yazıp Enter'a bas.") ? true : null), 20_000);
+    await waitFor(async () => (run.output().includes("• Sunucu durdu. Tünel henüz açılmadı, açılınca adres burada yazar. npm install ya da geri-yukle bitince burada y yazıp Enter'a bas.") ? true : null), 20_000);
     expect(await portClosed(port)).toBe(true);
 
     run.type('y');
