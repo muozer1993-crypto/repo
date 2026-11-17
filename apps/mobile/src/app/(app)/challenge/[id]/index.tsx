@@ -51,6 +51,7 @@ import {
   useChallengeFeed,
   useDeleteEntry,
   useDispute,
+  useFlushQueue,
   useFriends,
   useInviteToChallenge,
   usePoke,
@@ -201,7 +202,12 @@ export default function ChallengeDetailScreen() {
   const serverUrl = useAuth((s) => s.serverUrl);
 
   const query = useChallenge(id);
-  const pull = usePullRefresh(() => query.refetch());
+  const flush = useFlushQueue();
+  // a parked entry goes first, so the pull shows it counted rather than "sırada"
+  const pull = usePullRefresh(async () => {
+    await flush.mutateAsync().catch(() => {});
+    await query.refetch();
+  });
   const detail = query.data;
   // today, the window and the check-in poke in the zone the server judges this çelınc by
   const tz = useChallengeTimezone(detail);
@@ -1234,10 +1240,13 @@ function FocusAction({ id, detail, level, today }: ActionProps) {
 /**
  * A parked check-in has not counted yet. The server judges it when it arrives,
  * at the tap only when it was asleep then (SPEC 2.3), so "Saatinde geldin" here
- * was a promise nobody could keep.
+ * was a promise nobody could keep. An app left open sends it by itself once the
+ * server answers (NotificationBridge), so "uygulamayı aç" told someone looking
+ * at it to do what they were doing; a second tap is still the sure way, and
+ * keeps the first tap's time.
  */
 const CHECKIN_QUEUED =
-  'Sunucuya ulaşamadım. Sunucu uyuyorsa bastığın saat sayılır, telefonun çekmiyorsa gittiği saat. Bağlanınca uygulamayı aç.';
+  'Sunucuya ulaşamadım. Sunucu uyuyorsa bastığın saat sayılır, telefonun çekmiyorsa gittiği saat. Bağlantı gelince kendiliğinden gider; saat dolmadan emin olmak için Geldim’e tekrar bas.';
 
 function CheckinAction({ id, detail, level, today, tz, dayKeys }: ActionProps) {
   const addEntry = useAddEntry(id);

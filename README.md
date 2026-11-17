@@ -185,8 +185,9 @@ Bilinmesi gerekenler:
   için bir saat daha alır. Uyurken (ya da sunucu kapalıyken) basılan "Geldim" de basıldığı saatle
   sayılır: sunucu ne zaman uyuduğunu kendi yazar, telefon check-in'i sırada tutup uyanınca gönderir.
   Bunun için telefonun onu bilgisayar uyandıktan sonraki 12 saat içinde göndermesi lazım; kankanın
-  uygulamayı bir kez açması yeter (pencereyi kapatıp açtıysan önce yeni bağlantıya geçmesi). Hafta
-  sonu kapalı kalan bilgisayarda cuma gecesinin check-in'i de böyle sayılır. Birkaç dakikalık
+  uygulamayı bir kez açması yeter (pencereyi kapatıp açtıysan önce yeni bağlantıya geçmesi); uygulama
+  zaten açıksa sunucu cevap verir vermez, en geç 15 saniyede kendisi gönderir. Hafta sonu kapalı
+  kalan bilgisayarda cuma gecesinin check-in'i de böyle sayılır. Birkaç dakikalık
   kapanış da sayılır (`dur` ile `y` arası, çökme). Ama son gece elle yazılan sayılar, odak seansları ve uyurken biten
   bir check-in çelıncının son günü süre bittiyse reddedilir (uygulama hangi çelıncın hangi gününün
   gitmediğini söyler). Elle sayı ve odak çelınclarında bilgisayarın uyumaması şart. Bilgisayar

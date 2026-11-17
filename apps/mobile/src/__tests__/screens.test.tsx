@@ -2456,6 +2456,11 @@ describe('a check-in', () => {
     expect(mockReminders.skipToday).not.toHaveBeenCalled();
     expect(rendered(tree)).toContain('Check-in gitmedi, sırada');
     expect(rendered(tree)).toContain('Sunucu uyuyorsa bastığın saat sayılır');
+    // the open app sends it by itself: the toast and the card both say so, and
+    // neither tells someone looking at the app to open it
+    expect(rendered(tree).split('Bağlantı gelince kendiliğinden gider').length - 1).toBe(2);
+    expect(rendered(tree)).toContain('Geldim’e tekrar bas');
+    expect(rendered(tree)).not.toContain('Bağlanınca uygulamayı aç');
     expect(rendered(tree)).not.toContain('Saatinde geldin');
     expect(rendered(tree)).not.toContain('Geldin!');
     // still a button: another try once there is signal
@@ -7503,6 +7508,95 @@ describe('the pull-to-refresh spinner', () => {
     await act(async () => answer([]));
     await settle();
     expect(spinner().refreshing).toBe(false);
+  });
+});
+
+describe('a pull-to-refresh with an entry parked', () => {
+  const { enqueueEntry, readQueue, removeFromQueue } =
+    require('@/services/offlineQueue') as typeof import('@/services/offlineQueue');
+  /** what reached the server, in order */
+  let calls: string[];
+
+  beforeEach(async () => {
+    calls = [];
+    api.addEntry = jest.fn(async () => {
+      calls.push('addEntry');
+      return { entry: { value: 1, late: false }, standings: [] };
+    });
+    // parked during the outage, the app open all along
+    await enqueueEntry(
+      'c-1',
+      { dayKey: '2026-09-08', value: 1, source: 'checkin', clientTime: '2026-09-08T03:58:00.000Z' },
+      'c-1:2026-09-08:checkin:'
+    );
+  });
+
+  afterEach(async () => {
+    for (const item of await readQueue()) await removeFromQueue(item.id);
+  });
+
+  async function pull(tree: ReactTestRenderer): Promise<void> {
+    calls = [];
+    act(() => {
+      (tree.root.findByType(RefreshControl).props as { onRefresh: () => void }).onRefresh();
+    });
+    await settle();
+  }
+
+  it('sends it before Ana sayfa reads the cards again', async () => {
+    api.challenges = jest.fn(async () => {
+      calls.push('challenges');
+      return [];
+    });
+    const HomeScreen = require('@/app/(app)/(tabs)/index').default;
+    const tree = renderScreen(<HomeScreen />);
+    await settle();
+    expect(await readQueue()).toHaveLength(1);
+
+    await pull(tree);
+
+    expect(calls[0]).toBe('addEntry');
+    expect(calls).toContain('challenges');
+    expect(await readQueue()).toEqual([]);
+  });
+
+  it('sends it before the çelınc screen reads itself again', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => {
+      calls.push('challenge');
+      return challengeDetail();
+    });
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    expect(await readQueue()).toHaveLength(1);
+
+    await pull(tree);
+
+    expect(calls.slice(0, 2)).toEqual(['addEntry', 'challenge']);
+    expect(api.addEntry).toHaveBeenCalledWith('c-1', expect.objectContaining({ source: 'checkin' }));
+    expect(await readQueue()).toEqual([]);
+  });
+
+  it('still refreshes the screen when the entry cannot go yet', async () => {
+    searchParams.id = 'c-1';
+    api.addEntry = jest.fn(async () => {
+      calls.push('addEntry');
+      throw NETWORK_ERROR;
+    });
+    api.challenge = jest.fn(async () => {
+      calls.push('challenge');
+      return challengeDetail();
+    });
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    await pull(tree);
+
+    expect(calls).toEqual(['addEntry', 'challenge']);
+    expect(await readQueue()).toHaveLength(1);
+    expect((tree.root.findByType(RefreshControl).props as { refreshing: boolean }).refreshing).toBe(false);
   });
 });
 

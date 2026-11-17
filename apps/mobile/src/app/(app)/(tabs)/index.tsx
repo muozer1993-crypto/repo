@@ -20,7 +20,7 @@ import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
 import { useToast } from '@/components/Toast';
 import { UpdateBanner } from '@/components/UpdateBanner';
-import { useChallengeAction, useChallenges, useFriends } from '@/hooks/queries';
+import { useChallengeAction, useChallenges, useFlushQueue, useFriends } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { usePullRefresh } from '@/hooks/usePullRefresh';
 import { useTimezone } from '@/hooks/useTimezone';
@@ -91,7 +91,12 @@ export default function HomeScreen() {
     router.push({ pathname: '/challenge/[id]', params: { id } });
   };
 
-  const pull = usePullRefresh(() => Promise.all([challenges.refetch(), steps.reload(), refreshMe()]));
+  const flush = useFlushQueue();
+  // a parked entry goes first, so the cards it moves are read after it landed
+  const pull = usePullRefresh(async () => {
+    await flush.mutateAsync().catch(() => {});
+    await Promise.all([challenges.refetch(), steps.reload(), refreshMe()]);
+  });
 
   return (
     <View style={styles.root}>

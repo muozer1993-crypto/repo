@@ -61,6 +61,9 @@ import { goToTab } from '@/utils/navigation';
  */
 const REPLANS_REMINDERS = new Set(['challenge_accepted', 'challenge_started', 'challenge_cancelled']);
 
+/** How often an open app looks for a parked entry that never got an answer (below). */
+const PARKED_RETRY_MS = 15_000;
+
 /**
  * The screen a notification opens: the same for a push tap, its toast and the
  * poll's toast. `navigate`, not `push`: a "Dürtüldün" toast about the çelınc
@@ -440,7 +443,46 @@ export function NotificationBridge() {
       void scheduleReminders();
     });
 
+    // A "Geldim" parked while the app stays on screen waited for the next
+    // foreground: tapped two minutes before the deadline during a short outage,
+    // it went up only once the screen was switched off and on, and the server,
+    // which judges such a check-in when it arrives, stored it late. Every 15 s
+    // on screen an entry that never got an answer goes as soon as /health
+    // does. Only those: one a 5xx already counted keeps the foreground and
+    // background cadence, or a server answering 500 would use up its eight
+    // tries in two minutes; a photo the server holds back waits its hour
+    // (`photoHeldSince`) instead of going up four times a minute. Nothing
+    // parked, nothing asked: an idle phone sends no traffic.
+    let alive = true;
+    let retrying = false;
+    const retryParked = async () => {
+      if (retrying || AppState.currentState !== 'active') return;
+      retrying = true;
+      try {
+        const [queue, owner] = await Promise.all([readQueue(), currentOwnerId()]);
+        const waiting = queue.some(
+          (item) =>
+            !item.failedReason &&
+            item.attempts === 0 &&
+            !item.photoHeldSince &&
+            (!item.ownerId || item.ownerId === owner)
+        );
+        if (!waiting) return;
+        // a few bytes first: the flush would start with a photo's upload when
+        // one is first in line
+        await makeClient().health();
+        if (alive) await drain();
+      } catch {
+        // no answer: the next tick asks again
+      } finally {
+        retrying = false;
+      }
+    };
+    const parkedRetry = setInterval(() => void retryParked(), PARKED_RETRY_MS);
+
     return () => {
+      alive = false;
+      clearInterval(parkedRetry);
       stopTracking();
       setBackgroundHandler(null);
       if (replanReminders.current === scheduleReminders) replanReminders.current = null;

@@ -847,7 +847,14 @@ açılan kartlar da altlarını kendileri ayarlar.
 
 Giriş en çok çekmeyen yerde yapılır: bodrumdaki spor salonu, metro, merdiven boşluğu. Sunucuya
 ulaşamayan (ya da 5xx alan) bir giriş atılmaz, `services/offlineQueue.ts` kuyruğuna girer; ilk
-başarılı yazışta, uygulama açılınca, öne gelince ve arka plan görevinde sırayla gönderilir.
+başarılı yazışta, uygulama açılınca, öne gelince, arka plan görevinde ve ana sayfayla çelınc
+ekranında aşağı çekip yenileyince sırayla gönderilir. Uygulama ekrandayken 15 saniyede bir de
+bakılır: hiç cevap almamış bir giriş bekliyorsa ve sunucu `/health`'e cevap veriyorsa kuyruk o an
+boşaltılır. Eskiden kısa bir kesintide basılan "Geldim", uygulama açık durdukça ekran kapanıp
+açılana kadar telefonda bekliyordu; sunucu da onu geldiği saatle değerlendirip geç sayıyordu.
+Bekleyen giriş yoksa sunucuya hiçbir şey sorulmaz, boşta duran telefon trafik yapmaz. 5xx alıp
+deneme hakkı yemiş giriş ise eskisi gibi öne gelince, arka planda ve yeni bir yazışta gider; yoksa
+500 veren bir sunucu sekiz hakkı iki dakikada bitirirdi.
 Sunucunun 4xx ile reddettiği giriş kesin reddir, kullanıcıya bir kez sebebiyle söylenir.
 
 "Sunucu" derken bizim sunucumuz: o her hatayı `{ error: { code, message } }` zarfıyla döner. Arada

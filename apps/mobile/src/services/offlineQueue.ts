@@ -361,8 +361,9 @@ export interface FlushResult {
  * then says what happened to the photo. A photo still getting its tries does
  * not hold up the entries behind it.
  *
- * The flush is fired and forgotten from three places (every successful entry
- * write, mount, and every foreground), so it has to be re-entrant-safe:
+ * The flush is fired and forgotten from many places (every successful entry
+ * write, mount, every foreground, the background task, an open app's 15 s
+ * retry, a pull-to-refresh), so it has to be re-entrant-safe:
  * concurrent callers share one run, and an item is removed from storage the
  * moment its POST lands rather than in one rewrite at the end — otherwise an
  * overlapping pass would send the same entry twice and double the score.
