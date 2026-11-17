@@ -531,7 +531,7 @@ function InviteCard({
   // How long, whether a typed number wants a photo, and what is at stake: what
   // friends used to say yes to blind and then bail over. The full rules are one
   // tap away, on the çelınc screen above "Varım".
-  const schedule = [scheduleLine(summary.challenge, tz), needsProof(summary.challenge) ? '📸 Kanıt lazım' : '']
+  const schedule = [scheduleLine(summary.challenge, tz, summary.myDays), needsProof(summary.challenge) ? '📸 Kanıt lazım' : '']
     .filter(Boolean)
     .join(' · ');
   const stakes = [

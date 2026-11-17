@@ -38,7 +38,7 @@ import {
   type UserRow,
 } from '../db/index.js';
 import { badRequest, conflict, forbidden, notFound, type HttpError } from '../errors.js';
-import { challengeWindow, participantTimezone, typeForChallenge } from './challenges.js';
+import { participantTimezone, scoringWindow, typeForChallenge } from './challenges.js';
 import {
   acceptedCount,
   disputeMajorityCopy,
@@ -351,7 +351,10 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
     throw badRequest('invalid_source', 'Bu çelınc tipi için geçersiz giriş kaynağı.');
   }
 
-  const window = challengeWindow(challenge, tz);
+  // the days this player is scored on: on a yes/no or screen-time çelınc a day
+  // another zone's end cut short is refused when it would be one more than the
+  // creator's (`scoringWindow`), as `day_out_of_range`
+  const window = scoringWindow(db, challenge, tz);
   // A check-in tapped while this server was down is judged at its tap, the age
   // of its day too: a weekend with the lid shut must not make Friday night's
   // "Geldim" two days too old by Monday (`checkinInstant`; `at` is `now` for

@@ -34,6 +34,16 @@ gösterebilirdi. Uygulama da bir çelıncın "bugün"ünü o sabit saat dilimind
 uçan birinin "Geldim"i, evet/hayır günü ve odak dakikaları sunucuya "Gelecek bir gün" olarak gidip
 geri dönüyordu. Ana sayfa, gelen kutusu, sihirbaz ve haftalık özet hesabın saat dilimiyle kalır.
 
+Sihirbaz bitişi çelıncı açanın saat diliminde gün sonuna oturtur; başka bir dilimdeki kankanın
+penceresi bu yüzden bir gün uzun çıkabilir: New York'ta sabah açılan "3 gün" İstanbul'da ilk gün
+16:00'dan dördüncü günün 07:59'una kadar sürer. Gün başına puanlanan türlerde (evet/hayır, ekran
+süresi) o kırıntı gün bedava bir puan ya da yazılamayan bir günün 1440 dakikalık cezası demekti;
+eşit oynayan biri kaybediyordu. Bu türlerde oyuncu, açanın gün sayısından fazla güne puanlanmaz
+(`scoringWindow`): pencere uzunsa çelıncın daha az saatini kapsayan uç gün düşer, eşitlikte son gün.
+Giriş doğrulaması, telefonların senkronu, sıralama ve uygulamanın "📅 N gün"ü, gün seçicisi ve
+"Bugün"ü (`ChallengeSummary.myDays`) aynı pencereyi kullanır. Adım, odak ve sayaç gibi toplamlar her
+dilimde aynı saatleri kapsar, onlara dokunulmaz; bitmiş çelınc bitişte yazılan sonucunu korur.
+
 Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
 
 * `clientTime` kayıt içindir, doğrulamada kullanılmaz. İstisnası sunucu yokken basılan check-in
@@ -328,8 +338,9 @@ zaman sayılan gündür, "İçmedim" gibi.
 
 İki istisna bilinsin. `manual_lower_is_better` (ekran süresi) toplam değil **günlük ortalama**
 ile yarışır: girilmeyen gün en kötü değerden sayılır, toplam pencere gün sayısına bölünür. Böylece
-saat dilimi yüzünden bir gün fazla penceresi olan oyuncu cezalandırılmaz ve katalogdaki "ortalaması
-en düşük olan kazanır" cümlesi doğru olur. Çelınc sürerken pencere bitmiş günlere kırpılır; ikinci
+saat dilimi yüzünden penceresi bir gün kısa kalan oyuncu cezalandırılmaz (bir gün uzun olanınki
+açanın gün sayısına kırpılır, yukarıda) ve katalogdaki "ortalaması en düşük olan kazanır" cümlesi
+doğru olur. Çelınc sürerken pencere bitmiş günlere kırpılır; ikinci
 günde beş günlük "girilmedi" cezası gösterilmez. Bugün, girişleriyle birlikte, ortalamaya ancak
 yarın girer: Android telefon öğlen yarım günü gönderir (şimdiye kadar 40 dk), iPhone'cu ekran
 süresini gece yazar; yarım gün ortalamaya girse iPhone'cu bütün öğleden sonra geride görünür ve

@@ -82,7 +82,7 @@ import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { byLevel, declineQuestion, endsWithoutMe } from '@/utils/levelCopy';
 import { confirmTr } from '@/utils/confirm';
-import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
+import { clampToMyDays, safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import {
   dropFloatNoise,
@@ -291,7 +291,8 @@ export default function ChallengeDetailScreen() {
   const mine = detail.me;
   const status = STATUS_META[challenge.status] ?? STATUS_META.pending;
   const accepted = participants.filter((p) => p.status === 'accepted');
-  const dayKeys = safeDayKeysBetween(challenge.startsAt, challenge.endsAt, tz);
+  // the days the server scores me on: not a sliver another zone's end cut short
+  const dayKeys = clampToMyDays(safeDayKeysBetween(challenge.startsAt, challenge.endsAt, tz), detail.myDays);
   const today = safeTodayKey(tz);
   const yesterday = addDays(today, -1);
   const isPlayer = mine?.status === 'accepted';
@@ -570,7 +571,9 @@ export default function ChallengeDetailScreen() {
       </Card>
 
       {/* -------------------------------------------------- invite reply */}
-      {deciding ? <ChallengeRules challenge={challenge} type={type} level={level} tz={tz} initiallyOpen /> : null}
+      {deciding ? (
+        <ChallengeRules challenge={challenge} type={type} level={level} tz={tz} myDays={detail.myDays} initiallyOpen />
+      ) : null}
       {mine?.status === 'invited' && joinable ? (
         <InviteActions
           id={id}
@@ -601,7 +604,7 @@ export default function ChallengeDetailScreen() {
 
       {/* --------------------------------------------------------- rules */}
       {/* below "Senin sıran", which a player opens the screen for every day */}
-      {!deciding ? <ChallengeRules challenge={challenge} type={type} level={level} tz={tz} /> : null}
+      {!deciding ? <ChallengeRules challenge={challenge} type={type} level={level} tz={tz} myDays={detail.myDays} /> : null}
 
       {/* ---------------------------------------------------------- feed */}
       <Feed
@@ -1322,6 +1325,10 @@ function BooleanAction({ id, detail, type, level, today, yesterday, dayKeys }: A
   const todayEntry = entryFor(today);
   const yesterdayEntry = entryFor(yesterday);
   const yesterdayInside = dayKeys.includes(yesterday);
+  // A friend in another zone than the creator's can be on a sliver of a day
+  // the server does not score (`myDays`): a tap on it would only be refused.
+  const todayInside = dayKeys.length === 0 || dayKeys.includes(today);
+  const myFirstDay = dayKeys[0];
   // A shared "Yaptım / Yapmadım" read backwards in the don't-do-it types: no
   // cigarette, "Yapmadım", a clean day lost. Each type names its own answers.
   const yes = type.yesTr ?? 'Yaptım';
@@ -1379,16 +1386,24 @@ function BooleanAction({ id, detail, type, level, today, yesterday, dayKeys }: A
           {type.askTr}
         </Text>
       ) : null}
-      <BooleanRow
-        label="Bugün"
-        yes={yes}
-        no={no}
-        value={todayEntry?.value}
-        rejected={todayEntry?.status === 'rejected'}
-        busy={busyDay === today}
-        onYes={() => void send(today, 1)}
-        onNo={() => void send(today, 0)}
-      />
+      {todayInside ? (
+        <BooleanRow
+          label="Bugün"
+          yes={yes}
+          no={no}
+          value={todayEntry?.value}
+          rejected={todayEntry?.status === 'rejected'}
+          busy={busyDay === today}
+          onYes={() => void send(today, 1)}
+          onNo={() => void send(today, 0)}
+        />
+      ) : (
+        <Text variant="small" muted>
+          {myFirstDay !== undefined && today < myFirstDay
+            ? 'Herkes aynı sayıda gün oynasın diye bugün sende sayılmıyor, ilk günün yarın.'
+            : 'Herkes aynı sayıda gün oynasın diye bugün sende sayılmıyor, son günün dündü.'}
+        </Text>
+      )}
       {/* still there once answered: the server keeps one row per day and takes
           yesterday's again, so a wrong tap last night can be put right */}
       {yesterdayInside ? (
@@ -1623,6 +1638,8 @@ function LowerAction({ id, detail, type, level, today, dayKeys }: ActionProps) {
   // on day one there is no such day, so today counts with what it has, or at
   // the penalty while nothing came in (services/challenges rankAccepted).
   const firstDay = !dayKeys.some((key) => key < today);
+  // a sliver of a day the server does not score here (`myDays`, another zone than the creator's)
+  const todayScored = dayKeys.length === 0 || dayKeys.includes(today);
 
   const sync = async () => {
     setSyncing(true);
@@ -1677,9 +1694,11 @@ function LowerAction({ id, detail, type, level, today, dayKeys }: ActionProps) {
       </View>
       <Text variant="tiny" faint>
         Az olan kazanır. Girmediğin gün {penalty} {type.unitTr} sayılır;{' '}
-        {firstDay
-          ? `bugün ilk gün, değerin gelene kadar ${penalty} ${type.unitTr} görünürsün.`
-          : 'bugün ise gün bitince ortalamana katılır.'}
+        {!todayScored
+          ? 'herkes aynı sayıda gün oynasın diye bugün sende sayılmıyor.'
+          : firstDay
+            ? `bugün ilk gün, değerin gelene kadar ${penalty} ${type.unitTr} görünürsün.`
+            : 'bugün ise gün bitince ortalamana katılır.'}
       </Text>
 
       {deviceOn ? (

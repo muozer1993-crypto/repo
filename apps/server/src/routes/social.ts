@@ -38,7 +38,7 @@ import {
 import { badRequest, conflict, forbidden, notFound, parseBody } from '../errors.js';
 import { newId, nowIso, type ChallengeRow, type Database, type ParticipantRow, type UserRow } from '../db/index.js';
 import { toPublicUser, toTaunt } from '../serialize.js';
-import { challengeWindow, computeStandings, dayOverByEnd, participantTimezone, typeForChallenge } from '../services/challenges.js';
+import { challengeWindow, computeStandings, creatorTimezone, dayOverByEnd, typeForChallenge } from '../services/challenges.js';
 import { notify } from '../services/notifications.js';
 import { toChallenge } from '../serialize.js';
 import { computeUserStats } from '../services/stats.js';
@@ -395,11 +395,7 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
     // Same settings, same number of days; only the calendar moves.
     const startsAtDate = rematchStartsAt(challenge, me.row.timezone, now);
     const startsAt = startsAtDate.toISOString();
-    const originalTz = participantTimezone(
-      getParticipant(db, challenge.id, challenge.creator_id),
-      getUserRow(db, challenge.creator_id) ?? me.row,
-    );
-    const endsAt = rematchEndsAt(challenge, originalTz, me.row.timezone, startsAtDate);
+    const endsAt = rematchEndsAt(challenge, creatorTimezone(db, challenge), me.row.timezone, startsAtDate);
     const createdAt = nowIso(now);
     const rematchId = newId();
 

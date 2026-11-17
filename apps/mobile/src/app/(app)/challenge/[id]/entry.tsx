@@ -21,7 +21,7 @@ import { useChallengeTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { useAuth, useLevel } from '@/store/auth';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/theme';
-import { safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
+import { clampToMyDays, safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import { dropFloatNoise, formatDayKeyFriendly, formatNumber, parseTypedNumber } from '@/utils/format';
 import { uuidV4 } from '@/utils/ids';
@@ -64,9 +64,12 @@ export default function EntryModalScreen() {
 
   const today = safeTodayKey(tz);
   const yesterday = addDays(today, -1);
-  const windowKeys = detail
-    ? safeDayKeysBetween(detail.challenge.startsAt, detail.challenge.endsAt, tz)
-    : [];
+  const allKeys = detail ? safeDayKeysBetween(detail.challenge.startsAt, detail.challenge.endsAt, tz) : [];
+  // the days the server scores me on: a friend in another zone than the
+  // creator's would count a sliver of a day more, which the server refuses
+  const windowKeys = clampToMyDays(allKeys, detail?.myDays);
+  // today is that sliver: the first day is tomorrow, or the last was yesterday
+  const todayCut = allKeys.includes(today) && !windowKeys.includes(today);
   // Steps go back a week like the server takes them: somebody who joined on
   // day two, or whose phone started counting mid-race, writes the days before.
   // Screen time goes back as far as the server takes a typed number: a late
@@ -84,7 +87,11 @@ export default function EntryModalScreen() {
     .reverse();
 
   const requestedDay = typeof params.day === 'string' ? params.day : '';
-  const initialDay = pickableDays.includes(requestedDay) ? requestedDay : today;
+  const initialDay = pickableDays.includes(requestedDay)
+    ? requestedDay
+    : todayCut
+      ? (pickableDays[0] ?? today)
+      : today;
 
   const addEntry = useAddEntry(id, { append: type?.metricType === 'manual_count' });
   const [dayKey, setDayKey] = useState<string | null>(null);
@@ -395,7 +402,11 @@ export default function EntryModalScreen() {
           />
         ) : (
           <Text variant="small" muted>
-            Sadece bugüne giriş yapabilirsin.
+            {!todayCut
+              ? 'Sadece bugüne giriş yapabilirsin.'
+              : pickableDays.length > 0
+                ? 'Sadece düne giriş yapabilirsin, bugün sende sayılmıyor.'
+                : 'Herkes aynı sayıda gün oynasın diye bugün sende sayılmıyor, ilk günün yarın.'}
           </Text>
         )}
       </Card>
@@ -478,7 +489,7 @@ export default function EntryModalScreen() {
         size="xl"
         fullWidth
         loading={addEntry.isPending}
-        disabled={uploading || notActive || notPlaying || dayLocked}
+        disabled={uploading || notActive || notPlaying || dayLocked || (todayCut && pickableDays.length === 0)}
         onPress={() => void submit()}
       />
     </Screen>

@@ -2535,6 +2535,187 @@ describe('POST /challenges/:id/rematch', () => {
   });
 });
 
+describe("friends in other zones play the creator's number of days", () => {
+  /** A yes for `dayKey`, typed the way the detail screen's buttons send it. */
+  async function mark(h: TestApp, user: RegisteredUser, challengeId: string, dayKey: string) {
+    return postEntry(h, user, challengeId, { dayKey, value: 1, source: 'manual', clientTime: iso(h) });
+  }
+
+  function finalRows(h: TestApp, challengeId: string): { user_id: string; final_score: number }[] {
+    return h.db
+      .prepare('SELECT user_id, final_score FROM challenge_participants WHERE challenge_id = ? ORDER BY rowid')
+      .all(challengeId) as { user_id: string; final_score: number }[];
+  }
+
+  function outcome(h: TestApp, challengeId: string): { status: string; winner_id: string | null; is_tie: number } {
+    return h.db.prepare('SELECT status, winner_id, is_tie FROM challenges WHERE id = ?').get(challengeId) as {
+      status: string;
+      winner_id: string | null;
+      is_tie: number;
+    };
+  }
+
+  async function myDays(h: TestApp, user: RegisteredUser, challengeId: string) {
+    const detail = await authed(h.app, user.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+    return detail.json<ChallengeDetail>().myDays;
+  }
+
+  /**
+   * Ali's "3 gün" Sigara Yok made at 08:00 in New York, Deniz in Istanbul:
+   * 10-12 November in New York, 16:00 on the 10th to 07:59 on the 13th in Istanbul.
+   */
+  async function newYorkSigara(h: TestApp) {
+    const ali = await registerUser(h.app, 'ali', { displayName: 'Ali', timezone: 'America/New_York' });
+    const deniz = await registerUser(h.app, 'deniz', { displayName: 'Deniz' });
+    befriend(h.app, ali.me.id, deniz.me.id);
+    const created = await createChallenge(h, ali, {
+      typeKey: 'sigara_yok',
+      participantIds: [deniz.me.id],
+      endsAt: '2026-11-13T04:59:59.999Z',
+    });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    expect((await authed(h.app, deniz.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    return { ali, deniz, challengeId };
+  }
+
+  it('refuses the sliver of a fourth day Istanbul gets in a New York "3 gün", so equal play ties', async () => {
+    harness = await makeApp({ now: '2026-11-10T13:00:00.000Z' }); // 08:00 in New York, 16:00 in Istanbul
+    const { ali, deniz, challengeId } = await newYorkSigara(harness);
+    expect(await myDays(harness, deniz, challengeId)).toEqual({ first: '2026-11-10', last: '2026-11-12' });
+    expect(await myDays(harness, ali, challengeId)).toEqual({ first: '2026-11-10', last: '2026-11-12' });
+
+    for (const day of ['2026-11-10', '2026-11-11', '2026-11-12']) {
+      harness.setNow(`${day}T13:00:00.000Z`);
+      expect((await mark(harness, ali, challengeId, day)).statusCode).toBe(201);
+      expect((await mark(harness, deniz, challengeId, day)).statusCode).toBe(201);
+    }
+
+    harness.setNow('2026-11-13T03:30:00.000Z'); // 06:30 on the 13th in Istanbul, 22:30 on the 12th in New York
+    const sliver = await mark(harness, deniz, challengeId, '2026-11-13');
+    expect(sliver.statusCode).toBe(400);
+    expect(sliver.json<{ error: { code: string; message: string } }>().error).toEqual({
+      code: 'day_out_of_range',
+      message: 'Bu gün çelıncın tarih aralığında değil.',
+    });
+    // one an older server took before the trim does not count either
+    harness.db
+      .prepare(
+        `INSERT INTO entries (id, challenge_id, user_id, day_key, value, source, note, proof_url, status, client_time,
+                              session_id, late, created_at, updated_at)
+         VALUES ('sliver', ?, ?, '2026-11-13', 1, 'manual', NULL, NULL, 'ok', ?, NULL, 0, ?, ?)`,
+      )
+      .run(challengeId, deniz.me.id, iso(harness), iso(harness), iso(harness));
+
+    harness.setNow('2026-11-13T05:00:30.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    expect(outcome(harness, challengeId)).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
+    expect(finalRows(harness, challengeId)).toEqual([
+      { user_id: ali.me.id, final_score: 3 },
+      { user_id: deniz.me.id, final_score: 3 },
+    ]);
+  });
+
+  it('drops the end each friend has less of: Dubai the hour of Monday, Los Angeles the two hours of Sunday', async () => {
+    harness = await makeApp({ now: '2026-01-05T06:00:00.000Z' }); // Monday 09:00 in Istanbul
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const omar = await registerUser(harness.app, 'omar', { displayName: 'Omar', timezone: 'Asia/Dubai' });
+    const lara = await registerUser(harness.app, 'lara', { displayName: 'Lara', timezone: 'America/Los_Angeles' });
+    befriend(harness.app, ali.me.id, omar.me.id);
+    befriend(harness.app, ali.me.id, lara.me.id);
+    // Monday 09:00 to the end of Sunday in Istanbul: seven days
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'sigara_yok',
+      participantIds: [omar.me.id, lara.me.id],
+      endsAt: '2026-01-11T20:59:59.999Z',
+    });
+    const challengeId = created.json<Challenge>().id;
+    for (const user of [omar, lara]) {
+      expect((await authed(harness.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    }
+    expect(await myDays(harness, omar, challengeId)).toEqual({ first: '2026-01-05', last: '2026-01-11' });
+    expect(await myDays(harness, lara, challengeId)).toEqual({ first: '2026-01-05', last: '2026-01-11' });
+
+    harness.setNow('2026-01-05T06:30:00.000Z'); // 22:30 on Sunday the 4th in Los Angeles
+    const sunday = await mark(harness, lara, challengeId, '2026-01-04');
+    expect(sunday.statusCode).toBe(400);
+    expect(sunday.json<{ error: { code: string } }>().error.code).toBe('day_out_of_range');
+
+    for (let n = 0; n < 7; n += 1) {
+      const day = addDays('2026-01-05', n);
+      harness.setNow(`${day}T12:00:00.000Z`); // the same date in all three zones
+      for (const user of [ali, omar, lara]) expect((await mark(harness, user, challengeId, day)).statusCode).toBe(201);
+    }
+    // Los Angeles keeps its 13 hours of the last Sunday
+    harness.setNow('2026-01-11T20:00:00.000Z'); // 12:00 in Los Angeles, 00:00 on Monday in Dubai
+    expect((await mark(harness, lara, challengeId, '2026-01-11')).statusCode).toBe(200);
+    harness.setNow('2026-01-11T20:30:00.000Z');
+    const monday = await mark(harness, omar, challengeId, '2026-01-12');
+    expect(monday.statusCode).toBe(400);
+    expect(monday.json<{ error: { code: string } }>().error.code).toBe('day_out_of_range');
+
+    harness.setNow('2026-01-11T21:00:30.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    expect(outcome(harness, challengeId)).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
+    expect(finalRows(harness, challengeId).map((row) => row.final_score)).toEqual([7, 7, 7]);
+  });
+
+  it('changes nothing for friends in one zone, a day the end cuts in half included', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    // three times 24 hours from noon: four Istanbul days, the last one until noon
+    const created = await createChallenge(harness, ali, { typeKey: 'sigara_yok', participantIds: [veli.me.id] });
+    const challengeId = created.json<Challenge>().id;
+    await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` });
+    expect(await myDays(harness, veli, challengeId)).toEqual({ first: '2026-01-05', last: '2026-01-08' });
+
+    for (let n = 0; n < 4; n += 1) {
+      const day = addDays('2026-01-05', n);
+      harness.setNow(`${day}T08:00:00.000Z`); // 11:00, before the noon end on the last day
+      expect((await mark(harness, ali, challengeId, day)).statusCode).toBe(201);
+      if (n < 3) expect((await mark(harness, veli, challengeId, day)).statusCode).toBe(201);
+    }
+
+    harness.setNow('2026-01-08T09:00:30.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    expect(outcome(harness, challengeId)).toEqual({ status: 'finished', winner_id: ali.me.id, is_tie: 0 });
+    expect(finalRows(harness, challengeId).map((row) => row.final_score)).toEqual([4, 3]);
+  });
+
+  it('keeps the result of one that finished before the trim, with its four days', async () => {
+    harness = await makeApp({ now: '2026-11-10T13:00:00.000Z' });
+    const { ali, deniz, challengeId } = await newYorkSigara(harness);
+    // what an older server stored: Deniz's fourth day counted and won it
+    const insert = harness.db.prepare(
+      `INSERT INTO entries (id, challenge_id, user_id, day_key, value, source, note, proof_url, status, client_time,
+                            session_id, late, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 1, 'manual', NULL, NULL, 'ok', ?, NULL, 0, ?, ?)`,
+    );
+    for (const day of ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13']) {
+      if (day !== '2026-11-13') insert.run(`a-${day}`, challengeId, ali.me.id, day, iso(harness), iso(harness), iso(harness));
+      insert.run(`d-${day}`, challengeId, deniz.me.id, day, iso(harness), iso(harness), iso(harness));
+    }
+    harness.db
+      .prepare("UPDATE challenges SET status = 'finished', finalized_at = ?, winner_id = ?, is_tie = 0 WHERE id = ?")
+      .run(iso(harness), deniz.me.id, challengeId);
+    const store = harness.db.prepare(
+      'UPDATE challenge_participants SET final_score = ?, final_rank = ? WHERE challenge_id = ? AND user_id = ?',
+    );
+    store.run(4, 1, challengeId, deniz.me.id);
+    store.run(3, 2, challengeId, ali.me.id);
+
+    harness.setNow('2026-11-14T12:00:00.000Z');
+    const results = await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}/results` });
+    const standings = results.json<ChallengeResults>().standings;
+    expect(standings.map((p) => [p.user.id, p.score, p.days, p.rank, p.isWinner])).toEqual([
+      [deniz.me.id, 4, 4, 1, true],
+      [ali.me.id, 3, 3, 2, false],
+    ]);
+  });
+});
+
 describe('GET /challenges/:id/results', () => {
   it('gives standings to everybody and taunt previews to the winner only', async () => {
     harness = await makeApp({ now: NOW });

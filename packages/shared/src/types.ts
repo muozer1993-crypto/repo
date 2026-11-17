@@ -439,6 +439,16 @@ export interface ChallengeSummary {
    * it out; the app falls back to `me.timezone` then.
    */
   myTimezone?: string | null;
+  /**
+   * The reader's first and last scored day on this çelınc, in `myTimezone`.
+   * On a yes/no or screen-time çelınc a friend in another zone than the
+   * creator's would count one day more between `startsAt` and `endsAt` (a
+   * sliver the creator's end cut short); the server refuses it, so the rules
+   * card's "N gün", the entry form's days and the detail's "Bugün" leave it
+   * out too. Null when the reader has no row in it. Older servers leave it
+   * out; the app counts every day between start and end then.
+   */
+  myDays?: { first: string; last: string } | null;
 }
 
 export interface Entry {

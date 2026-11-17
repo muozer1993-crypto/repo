@@ -6,7 +6,7 @@ import { StorageKeys, getItem, removeItem, setItem } from '@/lib/storage';
 import { localNotifications, type LocalNotifications } from '@/services/expoNotifications';
 import { ANDROID_CHANNEL_ID, ensureAndroidChannel, installNotificationHandler } from '@/services/notifications';
 import { saveChallengeDetail, syncSavedWithList } from '@/services/savedDetails';
-import { resolveTimezone, safeDayKey, safeDayKeysBetween, safeTodayKey, zonedInstant } from '@/utils/datetime';
+import { clampToMyDays, resolveTimezone, safeDayKey, safeDayKeysBetween, safeTodayKey, zonedInstant } from '@/utils/datetime';
 
 /**
  * Local reminders scheduled on the device itself.
@@ -114,6 +114,8 @@ export interface ReminderChallenge {
    * the deadline is that zone's 23:00, not the one the phone moved to since.
    */
   tz: string;
+  /** the reader's scored days (`ChallengeSummary.myDays`); absent from an older server */
+  myDays?: ChallengeSummary['myDays'];
 }
 
 const MINUTES_BEFORE_DEADLINE = 30;
@@ -239,6 +241,7 @@ async function refresh(client: ReminderClient, level: 1 | 2 | 3, tz: string): Pr
         deadlineTime: summary.challenge.deadlineTime,
         doneToday: safeDayKey(summary.me?.lastEntryAt, zone) === safeTodayKey(zone),
         tz: zone,
+        myDays: summary.myDays,
       };
     });
   const scheduled = await syncReminders(reminders, level);
@@ -401,7 +404,8 @@ function checkinSlots(challenge: ReminderChallenge, now: Date): { dayKey: string
   const eveningBefore = at.hour * 60 + at.minute > deadline.hour * 60 + deadline.minute;
 
   const today = safeTodayKey(tz, now);
-  const days = safeDayKeysBetween(challenge.startsAt, challenge.endsAt, tz)
+  // not a sliver of a day the server does not score the reader on (`myDays`)
+  const days = clampToMyDays(safeDayKeysBetween(challenge.startsAt, challenge.endsAt, tz), challenge.myDays)
     .filter((dayKey) => dayKey > today || (dayKey === today && !challenge.doneToday))
     .slice(0, CHECKIN_DAYS_AHEAD);
 

@@ -12,9 +12,12 @@
  * a typed day friends threw out (`restoreFromPhone`): an itiraz may be upheld on
  * any day of the race, and day one's phone number must not become a 0 because it
  * was upheld on day ten. The window is read in the timezone pinned when the user
- * joined that challenge. Past the end (the phones' hour, a dispute's wait) only
- * days that were over by `ends_at` still move (`dayOverByEnd`): a later reading
- * of a day the end cut in half would add the steps walked after the whistle.
+ * joined that challenge, and on screen time it is the days the player is scored
+ * on (`scoringWindow`): a sliver of a day another zone's end cut short is not
+ * written when it would be one day more than the creator's. Past the end (the
+ * phones' hour, a dispute's wait) only days that were over by `ends_at` still
+ * move (`dayOverByEnd`): a later reading of a day the end cut in half would add
+ * the steps walked after the whistle.
  *
  * On a higher-is-better metric (steps) a device reading only ever raises a
  * day's entry; on lower-is-better (screen time) it replaces a typed value
@@ -47,7 +50,7 @@
 import { challengeTypesForDevice, type DeviceMetric, type EntrySource } from '@koydum/shared';
 import { newId, nowIso, type ChallengeRow, type Database, type EntryRow, type UserRow } from '../db/index.js';
 import { getParticipant, getUserRow } from './challengeViews.js';
-import { challengeWindow, dayOverByEnd, participantTimezone, typeForChallenge } from './challenges.js';
+import { dayOverByEnd, participantTimezone, scoringWindow, typeForChallenge } from './challenges.js';
 import { dayWindowIssue, forgetDismissedDisputes, isDeviceSource } from './entries.js';
 
 /** A challenge plus the timezone this user's days in it are measured in. */
@@ -104,7 +107,7 @@ export function fanOutDeviceDays(
   const rules = challenges.map((challenge) => {
     const tz = participantTimezone({ timezone: challenge.participant_timezone }, user);
     const type = typeForChallenge(challenge);
-    return { challenge, tz, window: challengeWindow(challenge, tz), type };
+    return { challenge, tz, window: scoringWindow(db, challenge, tz), type };
   });
 
   const findEntry = db.prepare(
@@ -233,7 +236,7 @@ export function restoreFromPhone(db: Database, challenge: ChallengeRow, entry: E
 export function backfillFromPhone(db: Database, user: UserRow, challenge: ChallengeRow, now: Date): number {
   const metric = typeForChallenge(challenge).deviceMetric;
   if (!metric) return 0;
-  const window = challengeWindow(challenge, participantTimezone(getParticipant(db, challenge.id, user.id), user));
+  const window = scoringWindow(db, challenge, participantTimezone(getParticipant(db, challenge.id, user.id), user));
   const first = window[0];
   const last = window.at(-1);
   if (first === undefined || last === undefined) return 0;

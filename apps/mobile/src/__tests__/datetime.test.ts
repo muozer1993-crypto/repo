@@ -1,6 +1,6 @@
 import { DEFAULT_TIMEZONE } from '@koydum/shared';
 
-import { resolveTimezone, safeDayKey, safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
+import { clampToMyDays, resolveTimezone, safeDayKey, safeDayKeysBetween, safeTodayKey } from '@/utils/datetime';
 
 /**
  * `me.timezone` and `challenge.startsAt` both come off the wire, and the raw
@@ -84,5 +84,29 @@ describe('safeDayKeysBetween', () => {
     expect(
       safeDayKeysBetween('2026-09-08T06:00:00.000Z', '2026-09-10T06:00:00.000Z', 'Mars/Olympus')
     ).toEqual([]);
+  });
+});
+
+describe('clampToMyDays', () => {
+  // a New York "3 gün" read in Istanbul: 16:00 on the 10th to 07:59 on the 13th
+  const istanbul = safeDayKeysBetween('2026-11-10T13:00:00.000Z', '2026-11-13T04:59:59.999Z', 'Europe/Istanbul');
+
+  it('leaves the days alone when the server sent no myDays', () => {
+    expect(clampToMyDays(istanbul, undefined)).toEqual(istanbul);
+    expect(clampToMyDays(istanbul, null)).toEqual(istanbul);
+  });
+
+  it('cuts the sliver of a day the server does not score, at either end', () => {
+    expect(istanbul).toEqual(['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13']);
+    expect(clampToMyDays(istanbul, { first: '2026-11-10', last: '2026-11-12' })).toEqual([
+      '2026-11-10',
+      '2026-11-11',
+      '2026-11-12',
+    ]);
+    expect(clampToMyDays(istanbul, { first: '2026-11-11', last: '2026-11-13' })).toEqual([
+      '2026-11-11',
+      '2026-11-12',
+      '2026-11-13',
+    ]);
   });
 });

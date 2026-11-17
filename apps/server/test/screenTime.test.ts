@@ -784,3 +784,73 @@ describe('a friend brought in late in the evening', () => {
     expect(standings[0]?.days).toBe(5);
   });
 });
+
+/**
+ * Ali's three-day Ekran Süresi Düellosu made at 08:00 in New York, without a
+ * screenshot, and Deniz in Istanbul: 10-12 November in New York, which in
+ * Istanbul runs from 16:00 on the 10th to 07:59 on the 13th.
+ */
+async function newYorkScreenTime(h: TestApp): Promise<{ ali: RegisteredUser; deniz: RegisteredUser; challengeId: string }> {
+  const ali = await registerUser(h.app, 'ali', { displayName: 'Ali', timezone: 'America/New_York' });
+  const deniz = await registerUser(h.app, 'deniz', { displayName: 'Deniz' });
+  befriend(h.app, ali.me.id, deniz.me.id);
+  const created = await authed(h.app, ali.token)({
+    method: 'POST',
+    url: '/challenges',
+    payload: {
+      typeKey: 'ekran_suresi_beyani',
+      startsAt: iso(h),
+      endsAt: '2026-11-13T04:59:59.999Z',
+      participantIds: [deniz.me.id],
+      proofRequired: false,
+    },
+  });
+  expect(created.statusCode).toBe(201);
+  const challengeId = created.json<Challenge>().id;
+  expect((await authed(h.app, deniz.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+  return { ali, deniz, challengeId };
+}
+
+describe("a friend in another zone than the creator's", () => {
+  it('is not charged 1440 minutes for the sliver of a fourth day nobody can type after the end', async () => {
+    harness = await makeApp({ now: '2026-11-10T13:00:00.000Z' }); // 08:00 in New York, 16:00 in Istanbul
+    const { ali, deniz, challengeId } = await newYorkScreenTime(harness);
+    for (const day of ['2026-11-10', '2026-11-11', '2026-11-12']) {
+      harness.setNow(`${day}T13:00:00.000Z`);
+      await typeMinutes(harness, ali, challengeId, day, 200);
+      await typeMinutes(harness, deniz, challengeId, day, 120);
+    }
+
+    // the phones' hour after the end, then the result
+    harness.setNow('2026-11-13T06:00:30.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    const results = await authed(harness.app, deniz.token)({ method: 'GET', url: `/challenges/${challengeId}/results` });
+    expect(results.json<ChallengeResults>().challenge.winnerId).toBe(deniz.me.id);
+    expect(scores(results.json<ChallengeResults>().standings)).toEqual([
+      ['deniz', 120, 1],
+      ['ali', 200, 2],
+    ]);
+  });
+
+  it("does not write the phone's reading of that sliver either", async () => {
+    harness = await makeApp({ now: '2026-11-10T13:00:00.000Z' });
+    const { deniz, challengeId } = await newYorkScreenTime(harness);
+
+    harness.setNow('2026-11-13T03:30:00.000Z'); // 06:30 on the 13th in Istanbul, the çelınc still runs
+    const synced = await authed(harness.app, deniz.token)({
+      method: 'POST',
+      url: '/me/screen-time',
+      payload: {
+        days: [
+          { dayKey: '2026-11-12', minutes: 140 },
+          { dayKey: '2026-11-13', minutes: 25 },
+        ],
+      },
+    });
+    expect(synced.statusCode).toBe(200);
+    expect(synced.json<{ updated: number }>().updated).toBe(1);
+    expect(entries(harness, challengeId, deniz.me.id)).toEqual([
+      { day_key: '2026-11-12', value: 140, source: 'usage_stats', proof_url: null },
+    ]);
+  });
+});

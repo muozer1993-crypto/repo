@@ -4,12 +4,14 @@
  * Timezone policy for standings (SPEC: day keys live in the USER's timezone):
  *   - a participant's OWN entries are written with their own local day key, so the
  *     score of a participant is always computed from their own days;
- *   - the day WINDOW is per participant: `participantDayKeys` is the very same
+ *   - the day WINDOW is per participant: `scoringWindow` is the very same
  *     expression `validateAndUpsertEntry` validates that participant's writes
- *     against. The window only matters for the `manual_lower_is_better` missing-day
+ *     against. The window matters for the `manual_lower_is_better` missing-day
  *     penalty, and a shared (union) window would charge a friend whose local window
  *     is one day shorter for a day the API refuses to let them log — a perfect
- *     record could lose the challenge. Scoring and write validation must therefore
+ *     record could lose the challenge. On the metrics scored per day it never
+ *     holds more days than the creator's: another zone's extra sliver of a day
+ *     was a free yes/no point. Scoring and write validation must therefore
  *     be derived from the same expression. Scoring may only cut it, never widen it:
  *     a late joiner is scored from the first day the app let them write
  *     (`lateJoinFloor`), and a running çelınc only up to the days that are over
@@ -31,12 +33,14 @@ import {
   effectiveDeadline,
   hhmmToMinutes,
   isBeforeOrEqualHHmm,
+  isValidTimeZone,
   localHour,
   localInstant,
   localTimeHHmm,
   rankParticipants,
   requireChallengeType,
   scoreLabel,
+  startOfDayInTz,
   t,
   todayKey,
   type ChallengeType,
@@ -168,9 +172,10 @@ export function participantTimezone(
  * Day window of a challenge in one timezone; an unknown zone degrades to the default.
  *
  * `challengeWindow(challenge, participantTimezone(participant, user))` is THE window
- * expression: entry validation, the steps fan-out and the missing-day penalty all
- * build it exactly this way, so the days a player may write and the days they are
- * scored against can never drift apart.
+ * expression, trimmed by `scoringWindow` on the metrics scored per day: entry
+ * validation, the phones' fan-out and the standings all build it exactly this way,
+ * so the days a player may write and the days they are scored against can never
+ * drift apart.
  */
 export function challengeWindow(challenge: Pick<ChallengeRow, 'starts_at' | 'ends_at'>, tz: string): string[] {
   try {
@@ -178,6 +183,65 @@ export function challengeWindow(challenge: Pick<ChallengeRow, 'starts_at' | 'end
   } catch {
     return dayKeysBetween(challenge.starts_at, challenge.ends_at, DEFAULT_TIMEZONE);
   }
+}
+
+/**
+ * The zone the creator's wizard snapped this çelınc's end in: the one pinned on
+ * their own row when they made it, whatever became of that row since (they may
+ * have left), else their profile's.
+ */
+export function creatorTimezone(db: Database, challenge: Pick<ChallengeRow, 'id' | 'creator_id'>): string {
+  const participant = db
+    .prepare('SELECT timezone FROM challenge_participants WHERE challenge_id = ? AND user_id = ?')
+    .get(challenge.id, challenge.creator_id) as { timezone: string | null } | undefined;
+  const user = db.prepare('SELECT timezone FROM users WHERE id = ?').get(challenge.creator_id) as
+    | { timezone: string | null }
+    | undefined;
+  return participantTimezone(participant, user);
+}
+
+/**
+ * Metrics scored per day key: one more day is one more yes, or one more day in
+ * the average (and its 1440-minute penalty when it cannot be typed).
+ */
+const SCORED_PER_DAY: readonly MetricType[] = ['daily_boolean', 'manual_lower_is_better'];
+
+/**
+ * The days a player in `tz` is scored on: `challengeWindow`, but on a metric
+ * scored per day never more of them than the creator has.
+ *
+ * The wizard snaps the end in the creator's zone, so a friend in another one
+ * gets an extra day key: a 3-day çelınc made in New York runs in Istanbul from
+ * 16:00 on its first day to 08:00 on a fourth. On a yes/no çelınc that sliver
+ * was one more point, and the friend won with equal play; on screen time it
+ * was one more day to average, charged 1440 minutes once the end had passed
+ * and nothing could be typed. Sums (steps, focus, counts) cover the same hours
+ * in every zone and keep all their days.
+ *
+ * The end the çelınc covers less of goes, the last one on a tie. Not simply
+ * the last: in an Istanbul friend's çelınc from 09:00, Los Angeles has a
+ * 2-hour first day and a 13-hour last one. The creator's raw count is the bar,
+ * also when their own end cuts a day in half: a 24-hour çelınc from noon is
+ * two days for everybody. Entry writes, the phones' fan-out and the standings
+ * all read it, so a day a player cannot write is never one they are scored on.
+ */
+export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string): string[] {
+  const window = challengeWindow(challenge, tz);
+  if (!SCORED_PER_DAY.includes(typeForChallenge(challenge).metricType)) return window;
+  const days = challengeWindow(challenge, creatorTimezone(db, challenge)).length;
+  if (days === 0 || window.length <= days) return window;
+
+  // the zone `challengeWindow` fell back to for one it cannot read
+  const zone = isValidTimeZone(tz) ? tz : DEFAULT_TIMEZONE;
+  const start = Date.parse(challenge.starts_at);
+  const end = Date.parse(challenge.ends_at) + 1;
+  const covered = (key: string): number =>
+    Math.min(end, startOfDayInTz(addDays(key, 1), zone).getTime()) - Math.max(start, startOfDayInTz(key, zone).getTime());
+  let kept = window;
+  while (kept.length > days) {
+    kept = covered(kept[0]!) < covered(kept[kept.length - 1]!) ? kept.slice(1) : kept.slice(0, -1);
+  }
+  return kept;
 }
 
 /**
@@ -262,6 +326,23 @@ function lateJoinFloor(participant: ParticipantRow, challenge: ChallengeRow, tz:
 }
 
 /**
+ * One player's `scoringWindow`, and their entries without the days it left out.
+ * Entries outside the full window are none of its business and stay as they were.
+ */
+function scoredDays(
+  db: Database,
+  challenge: ChallengeRow,
+  tz: string,
+  entries: ScoreInput['entries'],
+): { window: string[]; entries: ScoreInput['entries'] } {
+  const full = challengeWindow(challenge, tz);
+  const window = scoringWindow(db, challenge, tz);
+  if (window.length === full.length) return { window, entries };
+  const dropped = new Set(full.filter((key) => !window.includes(key)));
+  return { window, entries: entries.filter((entry) => !dropped.has(entry.dayKey)) };
+}
+
+/**
  * Ranks the accepted participants, each against their OWN day window.
  *
  * `rankParticipants` only knows a single shared window, so for
@@ -270,11 +351,18 @@ function lateJoinFloor(participant: ParticipantRow, challenge: ChallengeRow, tz:
  * over as one pre-summed value. Every other metric ignores the window entirely and
  * is ranked from its raw entries.
  *
- * That window is cut twice. A late joiner's starts at `lateJoinFloor`, and their
- * entries before it go with it (a phone syncs a week back): `computeScore` divides
- * every counted entry by the window's size, so a dropped day whose entry stayed
- * would skew the average. And until `ends_at` it stops at the last day that is
- * over: today, with its entries, only joins the average tomorrow.
+ * That window is `scoringWindow`, then cut twice more. A late joiner's starts at
+ * `lateJoinFloor`, and their entries before it go with it (a phone syncs a week
+ * back): `computeScore` divides every counted entry by the window's size, so a
+ * dropped day whose entry stayed would skew the average. And until `ends_at` it
+ * stops at the last day that is over: today, with its entries, only joins the
+ * average tomorrow.
+ *
+ * A day `scoringWindow` leaves out takes its entries with it on a yes/no
+ * çelınc too, where `computeScore` counts every day with a yes whatever the
+ * window: one written before the trim existed would keep its point. A finished
+ * çelınc keeps the days it was scored on: its results are the stored ones
+ * (`computeStandings`), and `days` must not disagree with them.
  */
 function rankAccepted(
   db: Database,
@@ -286,15 +374,17 @@ function rankAccepted(
   now: Date,
 ): { ranking: RankingResult; days: Map<string, number> } {
   const perUserWindow = type.metricType === 'manual_lower_is_better';
+  const trims = SCORED_PER_DAY.includes(type.metricType) && challenge.status !== 'finished';
   const days = new Map<string, number>();
   const playable = perUserWindow ? playableFrom(db, challenge) : 0;
 
   const inputs: ScoreInput[] = accepted.map((participant) => {
+    const tz = participantTimezone(participant, users.get(participant.user_id));
     let entries = entriesByUser.get(participant.user_id) ?? [];
     let window: string[] = [];
+    if (trims) ({ window, entries } = scoredDays(db, challenge, tz, entries));
+    else if (perUserWindow) window = challengeWindow(challenge, tz);
     if (perUserWindow) {
-      const tz = participantTimezone(participant, users.get(participant.user_id));
-      window = challengeWindow(challenge, tz);
       const floor = lateJoinFloor(participant, challenge, tz, playable);
       if (floor) {
         window = window.filter((key) => compareDayKeys(key, floor) >= 0);
@@ -1043,7 +1133,8 @@ const DEVICE_DAILY_TABLE: Record<DeviceMetric, string> = {
  * group wait out the rest of the hour would only delay the result.
  *
  * The day is the player's own (pinned timezone), the same window expression the
- * fan-out writes against. A player whose last day the end cut in half is not
+ * fan-out writes against (`scoringWindow`: on screen time a day another zone's
+ * end cut short may not be one). A player whose last day the end cut in half is not
  * waited for: the fan-out no longer moves that day (`dayOverByEnd`). Somebody
  * who declares steps by hand never syncs, so with them in the race the full
  * settle hour always runs.
@@ -1056,7 +1147,7 @@ function everyPhoneReported(db: Database, challenge: ChallengeRow, metric: Devic
 
   return accepted.every((participant) => {
     const tz = participantTimezone(participant, users.get(participant.user_id));
-    const lastDay = challengeWindow(challenge, tz).at(-1);
+    const lastDay = scoringWindow(db, challenge, tz).at(-1);
     if (!lastDay) return false;
     if (!dayOverByEnd(challenge, tz, lastDay)) return true;
     const row = lastSync.get(participant.user_id, lastDay) as { updated_at: string } | undefined;

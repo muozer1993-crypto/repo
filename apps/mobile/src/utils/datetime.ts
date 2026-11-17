@@ -66,6 +66,20 @@ export function safeDayKeysBetween(
   }
 }
 
+/**
+ * A çelınc's day keys cut to the ones the server scores this reader on
+ * (`ChallengeSummary.myDays`). A friend in another zone than the creator's
+ * counts one day more between start and end, a sliver the server refuses on
+ * a yes/no or screen-time çelınc. Unchanged without `myDays` (an older server).
+ */
+export function clampToMyDays(
+  keys: string[],
+  myDays: { first: string; last: string } | null | undefined
+): string[] {
+  if (!myDays) return keys;
+  return keys.filter((key) => key >= myDays.first && key <= myDays.last);
+}
+
 /** Milliseconds `tz` is ahead of UTC at `date` (minute resolution). */
 function offsetMs(date: Date, tz: string): number {
   const parts = localParts(date, tz);

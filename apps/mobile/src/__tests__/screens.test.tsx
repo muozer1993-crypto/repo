@@ -1496,6 +1496,71 @@ describe('step days the phone never counted', () => {
   });
 });
 
+describe('a friend in another zone than the creator', () => {
+  const { formatDayKey } = require('@/utils/format') as typeof import('@/utils/format');
+  const DAY = 86_400_000;
+
+  /**
+   * Three days and a few minutes in Istanbul: four day keys, the last one the
+   * sliver of today a creator's end in another zone cut short. The server
+   * scores the reader on the first three (`myDays`).
+   */
+  function slivered(typeKey: string, metricType: 'daily_boolean' | 'manual_lower_is_better') {
+    const detail = challengeDetail();
+    const endsAt = new Date(Date.now() + 5 * 60_000);
+    const today = todayKey('Europe/Istanbul');
+    return {
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        typeKey,
+        metricType,
+        direction: metricType === 'daily_boolean' ? ('higher' as const) : ('lower' as const),
+        unit: metricType === 'daily_boolean' ? 'gün' : 'dk',
+        startsAt: new Date(endsAt.getTime() - 3 * DAY).toISOString(),
+        endsAt: endsAt.toISOString(),
+      },
+      myTimezone: 'Europe/Istanbul',
+      myDays: { first: addDays(today, -3), last: addDays(today, -1) },
+    };
+  }
+
+  it('reads "3 gün" on the rules card and offers no "Bugün" on a yes/no çelınc', async () => {
+    const today = todayKey('Europe/Istanbul');
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => slivered('sigara_yok', 'daily_boolean'));
+
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain(`📅 3 gün · ${formatDayKey(addDays(today, -3))} – ${formatDayKey(addDays(today, -1))}`);
+    expect(text).toContain('Herkes aynı sayıda gün oynasın diye bugün sende sayılmıyor, son günün dündü.');
+    expect(text).toContain('DÜN (BOŞ KALMIŞ)');
+    expect(text).not.toContain('📅 4 gün');
+  });
+
+  it('opens the entry form on the last day scored, without today', async () => {
+    const today = todayKey('Europe/Istanbul');
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () => slivered('ekran_suresi_beyani', 'manual_lower_is_better'));
+
+    const EntryScreen = require('@/app/(app)/challenge/[id]/entry').default;
+    const tree = renderScreen(<EntryScreen />);
+    await settle();
+
+    const picker = tree.root.findAll(
+      (node) => Array.isArray(node.props.options) && typeof node.props.onChange === 'function'
+    )[0];
+    expect(picker?.props.options.map((option: { value: string }) => option.value)).toEqual([
+      addDays(today, -1),
+      addDays(today, -2),
+    ]);
+    expect(picker?.props.value).toBe(addDays(today, -1));
+  });
+});
+
 describe('the entry modal', () => {
   const today = () => todayKey('Europe/Istanbul');
   const { formatDayKey } = require('@/utils/format') as typeof import('@/utils/format');

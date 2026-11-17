@@ -1,12 +1,12 @@
-import type { Challenge, ChallengeType, VulgarityLevel } from '@koydum/shared';
+import type { Challenge, ChallengeSummary, ChallengeType, VulgarityLevel } from '@koydum/shared';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
 import { Colors, Spacing } from '@/theme';
-import { safeDayKeysBetween } from '@/utils/datetime';
-import { dateRange, formatNumber } from '@/utils/format';
+import { clampToMyDays, safeDayKeysBetween } from '@/utils/datetime';
+import { formatDayKey, formatNumber } from '@/utils/format';
 import { typeDescription } from '@/utils/levelCopy';
 
 /**
@@ -25,12 +25,20 @@ export function needsProof(challenge: Pick<Challenge, 'proofRequired' | 'metricT
 
 /**
  * "📅 7 gün · 1 Eylül – 7 Eylül": the days the server scores, in the account's
- * zone, both ends included. Empty for dates it cannot read.
+ * zone, both ends included. Empty for dates it cannot read. `myDays` cuts off
+ * the sliver of a day another zone than the creator's gets and the server does
+ * not score (`clampToMyDays`).
  */
-export function scheduleLine(challenge: Pick<Challenge, 'startsAt' | 'endsAt'>, tz: string): string {
-  const days = safeDayKeysBetween(challenge.startsAt, challenge.endsAt, tz).length;
-  if (days === 0) return '';
-  return `📅 ${days} gün · ${dateRange(challenge.startsAt, challenge.endsAt, tz)}`;
+export function scheduleLine(
+  challenge: Pick<Challenge, 'startsAt' | 'endsAt'>,
+  tz: string,
+  myDays?: ChallengeSummary['myDays']
+): string {
+  const days = clampToMyDays(safeDayKeysBetween(challenge.startsAt, challenge.endsAt, tz), myDays);
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (first === undefined || last === undefined) return '';
+  return `📅 ${days.length} gün · ${first === last ? formatDayKey(first) : `${formatDayKey(first)} – ${formatDayKey(last)}`}`;
 }
 
 export interface ChallengeRulesProps {
@@ -39,6 +47,8 @@ export interface ChallengeRulesProps {
   level: VulgarityLevel;
   /** the account's IANA zone, the one the server counts days in */
   tz: string;
+  /** the reader's scored days (`ChallengeSummary.myDays`), for "N gün" */
+  myDays?: ChallengeSummary['myDays'];
   /** "Nasıl sayılıyor?" starts unfolded: for somebody about to say yes */
   initiallyOpen?: boolean;
 }
@@ -51,9 +61,9 @@ export interface ChallengeRulesProps {
  * 1440-minute day before joining, not after; everybody else finds it further
  * down, folded.
  */
-export function ChallengeRules({ challenge, type, level, tz, initiallyOpen = false }: ChallengeRulesProps) {
+export function ChallengeRules({ challenge, type, level, tz, myDays, initiallyOpen = false }: ChallengeRulesProps) {
   const [open, setOpen] = useState(initiallyOpen);
-  const schedule = scheduleLine(challenge, tz);
+  const schedule = scheduleLine(challenge, tz, myDays);
   const penalty = type?.missingDayPenalty;
   // a type this app does not know, unreadable dates and no stakes: nothing to say
   const empty =
