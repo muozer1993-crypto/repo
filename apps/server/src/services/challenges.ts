@@ -61,7 +61,7 @@ import {
   type UserRow,
 } from '../db/index.js';
 import { asVulgarityLevel, toPublicUser } from '../serialize.js';
-import { disputeAwaitingAnswer, isDeviceSource, resolveDisputes } from './entries.js';
+import { DEVICE_SOURCES, disputeAwaitingAnswer, isDeviceSource, resolveDisputes } from './entries.js';
 import { isBlockedBetween } from './friends.js';
 import { notify } from './notifications.js';
 import { joinNames, sendWeeklyRecaps } from './recap.js';
@@ -1240,8 +1240,9 @@ const DEVICE_DAILY_TABLE: Record<DeviceMetric, string> = {
 /**
  * True when every accepted player's phone has reported their LAST day of the
  * çelınc after it ended. Each sync sends the past week, so a sync after the end
- * carries the final evening in full; nothing better is coming, and making the
- * group wait out the rest of the hour would only delay the result.
+ * carries the final evening in full; nothing better is coming, and when none of
+ * it moved a number (`movedAfterEnd`) making the group wait out the rest of the
+ * hour would only delay the result.
  *
  * The day is the player's own (pinned timezone), the same window expression the
  * fan-out writes against (`scoringWindow`: on screen time a day another zone's
@@ -1267,64 +1268,117 @@ function everyPhoneReported(db: Database, challenge: ChallengeRow, metric: Devic
 }
 
 /**
- * Until when a friend may still file an itiraz (epoch ms). Past its end a çelınc
- * can still be `active`: the phones' hour below, or an itiraz waiting for its
- * photo. Only the phones' hour takes new ones, because the last evening's
- * numbers land in it; after that each new itiraz would hold the result another
- * `DISPUTE_ANSWER_MS`, and one after another could hold it for days.
+ * Whether a number was typed into the çelınc, or a typed one changed, in its
+ * last `LIMITS.DEVICE_SETTLE_MS`. The entry route takes nothing from the end on,
+ * so that hour is as late as typing gets; but an itiraz is the only check on a
+ * typed number, and one posted at 23:59:30 left its rival thirty seconds to file
+ * it: six 180-minute odak seansları, or 300 pages from the app's own form, were
+ * crowned by the next pass. Such a çelınc keeps the hour after its end for
+ * itirazlar (`disputesCloseAt`) and waits it out (`stillSettling`), whatever the
+ * type: a "Beyan et" step day typed at the whistle needs it as much. A row the
+ * phone wrote is not typed (`DEVICE_SOURCES`); its late numbers are
+ * `movedAfterEnd`'s. An itiraz's turn moves `updated_at` on a typed row too,
+ * which only gives the other players the same hour to join it.
  */
-export function disputesCloseAt(challenge: ChallengeRow): number {
-  const settle = typeForChallenge(challenge).deviceMetric ? LIMITS.DEVICE_SETTLE_MS : 0;
-  return Date.parse(challenge.ends_at) + settle;
+function lateTypedEntry(db: Database, challenge: ChallengeRow): boolean {
+  const from = nowIso(new Date(Date.parse(challenge.ends_at) - LIMITS.DEVICE_SETTLE_MS));
+  const marks = DEVICE_SOURCES.map(() => '?').join(', ');
+  const row = db
+    .prepare(
+      `SELECT 1 FROM entries WHERE challenge_id = ? AND source NOT IN (${marks})
+          AND (created_at >= ? OR updated_at >= ?) LIMIT 1`,
+    )
+    .get(challenge.id, ...DEVICE_SOURCES, from, from);
+  return row !== undefined;
+}
+
+/**
+ * Whether any entry of the çelınc changed after its end: a phone's late sync
+ * raising a day (the fan-out stamps `updated_at` only on a row it changes, so a
+ * sync that brings nothing new is not one), a day restored from the phone, an
+ * itiraz's turn. Those are the numbers the phones' hour lets friends question,
+ * so "every phone has reported" must not cut it short once one of them moved: a
+ * player who kept his phone offline until his rival's post-midnight sync, then
+ * raised three days, was crowned by the next pass with the rival's itiraz
+ * refused.
+ */
+function movedAfterEnd(db: Database, challenge: ChallengeRow): boolean {
+  const end = nowIso(new Date(Date.parse(challenge.ends_at)));
+  const row = db.prepare('SELECT 1 FROM entries WHERE challenge_id = ? AND updated_at > ? LIMIT 1').get(challenge.id, end);
+  return row !== undefined;
+}
+
+/**
+ * Until when a friend may still file an itiraz (epoch ms). Past its end a çelınc
+ * can still be `active`: the hour below, or an itiraz waiting for its photo.
+ * Only that hour takes new ones, on a phone-counted type because the last
+ * evening's numbers land in it, on any other one because a number was typed in
+ * its last hour (`lateTypedEntry`); after that each new itiraz would hold the
+ * result another `DISPUTE_ANSWER_MS`, and one after another could hold it for
+ * days. A typed çelınc with nothing late closes them right at its end, as before.
+ */
+export function disputesCloseAt(db: Database, challenge: ChallengeRow): number {
+  const held = !!typeForChallenge(challenge).deviceMetric || lateTypedEntry(db, challenge);
+  return Date.parse(challenge.ends_at) + (held ? LIMITS.DEVICE_SETTLE_MS : 0);
 }
 
 /**
  * Until when an itiraz may be filed, as things stand at `now` (epoch ms):
- * `disputesCloseAt`, or the end of the phones' hour while it still holds the
- * çelınc after the server started or woke past the end (`stillSettling` from
- * `bootAt`). The last evening's numbers land in that hour wherever it falls:
- * a reading a phone sends at 08:05, after the PC slept through midnight, can
- * be disputed like one sent at 00:05. Only the phones keep it open; a restart
- * does not reopen a çelınc that only waits for an itiraz's photo, nor one
- * every phone has reported for (the next pass crowns it).
+ * `disputesCloseAt`, or the end of the hour while it still holds the çelınc
+ * after the server started or woke past the end (`stillSettling` from
+ * `bootAt`). The late numbers land in that hour wherever it falls: a reading a
+ * phone sends at 08:05, after the PC slept through midnight, can be disputed
+ * like one sent at 00:05, and so can a number typed at 23:59 that nobody could
+ * see before the PC woke. Only that hour keeps it open; a restart does not
+ * reopen a çelınc that only waits for an itiraz's photo, nor one every phone
+ * has reported for with nothing moved after the end (the next pass crowns it).
  */
 export function disputesOpenUntil(db: Database, challenge: ChallengeRow, now: Date, bootAt?: Date): number {
-  const fixed = disputesCloseAt(challenge);
+  const fixed = disputesCloseAt(db, challenge);
   if (!bootAt || !stillSettling(db, challenge, now, bootAt)) return fixed;
   return Math.max(fixed, bootAt.getTime() + LIMITS.DEVICE_SETTLE_MS);
 }
 
 /**
- * Whether an ended çelınc is still waiting for the phones.
+ * Whether an ended çelınc is still holding its result for an hour.
  *
- * Only types the phone counts on its own wait: the final evening's steps sit on
- * the device until the next background sync, and a winner crowned at midnight on
- * a 22:15 reading cannot be taken back (the fan-out stops at `finished`). Typed
- * çelınclar have nothing more to receive and finish on the dot.
+ * Types the phone counts on its own wait for the phones: the final evening's
+ * steps sit on the device until the next background sync, and a winner crowned
+ * at midnight on a 22:15 reading cannot be taken back (the fan-out stops at
+ * `finished`). They finish early once every phone has reported, unless a number
+ * moved after the end (`movedAfterEnd`): friends get the hour to question it.
+ * Any çelınc, typed or not, with a number typed in its last hour waits it out
+ * too (`lateTypedEntry`). A typed çelınc with nothing late has nothing more to
+ * receive and finishes on the dot.
  *
  * The hour runs from the end or from `bootAt`, whichever is later: a server
  * that was off at midnight must not crown anybody on boot before a single phone
- * could reach it, and a restart during the hour starts it again, which needs no
- * bookkeeping table. A PC that slept through midnight is the same server off at
- * midnight (the phones' syncs failed all night), so the scheduler moves `bootAt`
- * to the moment it wakes.
+ * could reach it, nor before a friend could see the last typed number, and a
+ * restart during the hour starts it again, which needs no bookkeeping table. A
+ * PC that slept through midnight is the same server off at midnight (the phones'
+ * syncs failed all night), so the scheduler moves `bootAt` to the moment it
+ * wakes. However it goes, the wait ends an hour after that (an itiraz filed in
+ * it holds the result its own `DISPUTE_ANSWER_MS` more, `disputeAwaitingAnswer`).
  */
 function stillSettling(db: Database, challenge: ChallengeRow, now: Date, bootAt?: Date): boolean {
-  const metric = typeForChallenge(challenge).deviceMetric;
-  if (!metric) return false;
   const settleFrom = Math.max(Date.parse(challenge.ends_at), bootAt?.getTime() ?? Number.NEGATIVE_INFINITY);
   if (now.getTime() >= settleFrom + LIMITS.DEVICE_SETTLE_MS) return false;
+  if (lateTypedEntry(db, challenge)) return true;
+  const metric = typeForChallenge(challenge).deviceMetric;
+  if (!metric) return false;
+  if (movedAfterEnd(db, challenge)) return true;
   return !everyPhoneReported(db, challenge, metric);
 }
 
 /**
  * Step 2 — every `active` challenge whose end time has passed, once the phones
- * have had their chance to report (`stillSettling`) and no disputed entry is
- * still inside its answer window (`disputeAwaitingAnswer`): an owner told "12 saat
- * içinde fotoğraf ekle" keeps those hours even when the itiraz came at the last
- * minute. Until then it stays `active`, so a late device sync still fans out into
- * it and a photo can still land; the entry route takes nothing from `ends_at` on
- * (`challenge_ended` in `validateAndUpsertEntry`).
+ * have had their chance to report and friends theirs to question the last
+ * numbers (`stillSettling`), and no disputed entry is still inside its answer
+ * window (`disputeAwaitingAnswer`): an owner told "12 saat içinde fotoğraf ekle"
+ * keeps those hours even when the itiraz came at the last minute. Until then it
+ * stays `active`, so a late device sync still fans out into it, an itiraz can
+ * still be filed and a photo can still land; the entry route takes nothing from
+ * `ends_at` on (`challenge_ended` in `validateAndUpsertEntry`).
  */
 export function finalizeEndedChallenges(
   db: Database,

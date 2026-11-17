@@ -5,9 +5,11 @@
  * calls `runSchedulerOnce(db, now)` — the same function `startScheduler` calls on
  * its 30-second timer — so the test covers exactly what the running server does:
  * a challenge going live at its start time, finishing at its end time (a step
- * çelınc once the phones have had their hour) with the right winner (or no winner
- * at all), telling every participant, handing out badges, throwing out a disputed
- * entry whose owner never answered (and holding the result for one who still may),
+ * çelınc once the phones have had their hour, any çelınc whose numbers were typed
+ * or moved at the whistle once friends have had theirs to question them) with the
+ * right winner (or no winner at all), telling every participant, handing out
+ * badges, throwing out a disputed entry whose owner never answered (and holding
+ * the result for one who still may),
  * giving both an hour after the owner's PC wakes from a night asleep (also when
  * a phone's request gets there before the interval's first beat after the wake), and
  * cancelling a pending challenge nobody joined, and sweeping the proof photos no
@@ -250,15 +252,23 @@ const MINUTE = 60 * 1000;
 async function endingAtMidnight(
   h: TestApp,
   typeKey: string,
-  extras: { reminderHour?: number } = {},
+  extras: { reminderHour?: number; proofRequired?: boolean } = {},
 ): Promise<{ ali: RegisteredUser; veli: RegisteredUser; challengeId: string }> {
-  const ali = await registerUser(h.app, 'ali', { displayName: 'Ali', ...extras });
-  const veli = await registerUser(h.app, 'veli', { displayName: 'Veli', ...extras });
+  const { proofRequired, ...userExtras } = extras;
+  const ali = await registerUser(h.app, 'ali', { displayName: 'Ali', ...userExtras });
+  const veli = await registerUser(h.app, 'veli', { displayName: 'Veli', ...userExtras });
   befriend(h.app, ali.me.id, veli.me.id);
   const created = await authed(h.app, ali.token)({
     method: 'POST',
     url: '/challenges',
-    payload: { typeKey, startsAt: iso(h), endsAt: MIDNIGHT_END, participantIds: [veli.me.id], rewardText: 'Döner' },
+    payload: {
+      typeKey,
+      startsAt: iso(h),
+      endsAt: MIDNIGHT_END,
+      participantIds: [veli.me.id],
+      rewardText: 'Döner',
+      ...(proofRequired === undefined ? {} : { proofRequired }),
+    },
   });
   expect(created.statusCode).toBe(201);
   const challengeId = created.json<Challenge>().id;
@@ -315,25 +325,27 @@ describe('scheduler: the hour the phones get after a step çelınc ends', () => 
     expect(participant(harness, challengeId, ali.me.id)).toMatchObject({ final_score: 10_000, final_rank: 2 });
   });
 
-  it('finishes early once every phone has reported the last day after the end', async () => {
+  it('finishes early once every phone has reported the last day after the end, with nothing new in it', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
 
-    at(harness, '2026-01-06T19:00:00.000Z');
+    // 23:50: both evenings are already in
+    at(harness, MIDNIGHT_END, -10 * MINUTE);
     await phoneSync(harness, ali, { '2026-01-06': 10_000 });
     await phoneSync(harness, veli, { '2026-01-06': 9_000 });
 
     // Ali's phone reports after midnight, but only the new day: the last one is not in.
     at(harness, MIDNIGHT_END, 5 * MINUTE);
     await phoneSync(harness, ali, { '2026-01-07': 40 });
-    await phoneSync(harness, veli, { '2026-01-06': 9_500, '2026-01-07': 10 });
+    await phoneSync(harness, veli, { '2026-01-06': 9_000, '2026-01-07': 10 });
     expect(tick(harness)).toMatchObject({ finalized: 0 });
 
+    // the same number again: nothing moved after the end, nothing to question
     at(harness, MIDNIGHT_END, 10 * MINUTE);
-    await phoneSync(harness, ali, { '2026-01-06': 10_200, '2026-01-07': 60 });
+    await phoneSync(harness, ali, { '2026-01-06': 10_000, '2026-01-07': 60 });
     expect(tick(harness)).toMatchObject({ finalized: 1 });
     expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
-    expect(participant(harness, challengeId, ali.me.id).final_score).toBe(10_200);
+    expect(participant(harness, challengeId, ali.me.id).final_score).toBe(10_000);
   });
 
   it('takes nothing from a phone first opened after the hour, and nothing tells an iPhone player otherwise', async () => {
@@ -760,6 +772,218 @@ describe('scheduler: an itiraz nobody answers', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// The itiraz hour for numbers that land at the whistle
+// ---------------------------------------------------------------------------
+
+/** Pages read today, typed the way the app's form sends them. */
+async function logPages(h: TestApp, user: RegisteredUser, challengeId: string, value: number): Promise<string> {
+  const response = await authed(h.app, user.token)({
+    method: 'POST',
+    url: `/challenges/${challengeId}/entries`,
+    payload: { dayKey: today(h), value, source: 'manual', clientTime: iso(h), sessionId: randomUUID() },
+  });
+  expect(response.statusCode).toBe(201);
+  return response.json<{ entry: { id: string } }>().entry.id;
+}
+
+async function disputesCloseAt(h: TestApp, user: RegisteredUser, challengeId: string): Promise<string | null | undefined> {
+  const detail = await authed(h.app, user.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+  expect(detail.statusCode).toBe(200);
+  return detail.json<{ disputesCloseAt?: string | null }>().disputesCloseAt;
+}
+
+function stepDay(h: TestApp, challengeId: string, user: RegisteredUser, dayKey: string): string {
+  return (
+    h.db
+      .prepare('SELECT id FROM entries WHERE challenge_id = ? AND user_id = ? AND day_key = ?')
+      .get(challengeId, user.me.id, dayKey) as { id: string }
+  ).id;
+}
+
+const AN_HOUR_AFTER = new Date(Date.parse(MIDNIGHT_END) + LIMITS.DEVICE_SETTLE_MS).toISOString();
+
+describe('scheduler: the itiraz hour for numbers that land at the whistle', () => {
+  it('keeps a typed çelınc open an hour for an itiraz on a number typed in its last minute', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'kitap_sayfa', { proofRequired: false });
+    at(harness, MIDNIGHT_END, -2 * HOUR);
+    await logPages(harness, ali, challengeId, 120);
+    await logPages(harness, veli, challengeId, 100);
+    expect(await disputesCloseAt(harness, ali, challengeId)).toBe(MIDNIGHT_END);
+
+    // 23:59:30: Veli's 300 pages, thirty seconds before anybody could only look
+    at(harness, MIDNIGHT_END, -30_000);
+    const late = await logPages(harness, veli, challengeId, 300);
+    expect(await disputesCloseAt(harness, ali, challengeId)).toBe(AN_HOUR_AFTER);
+
+    at(harness, MIDNIGHT_END, 10_000);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    expect(challengeRow(harness, challengeId).status).toBe('active');
+
+    // 00:00:20: Ali saw it, and an itiraz still lands with the owner's 12 hours
+    at(harness, MIDNIGHT_END, 20_000);
+    expect((await dispute(harness, ali, challengeId, late)).answerBy).not.toBeNull();
+    at(harness, MIDNIGHT_END, 30_000);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+
+    // no photo came: the 300 burns, and the result is the one without it
+    at(harness, MIDNIGHT_END, 20_000 + LIMITS.DISPUTE_ANSWER_MS);
+    expect(tick(harness)).toMatchObject({ disputes: 1, finalized: 1 });
+    expect(entryStatus(harness, late)).toBe('rejected');
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: ali.me.id });
+  });
+
+  it('waits no longer than the hour when nobody questions the late number', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'kitap_sayfa', { proofRequired: false });
+    at(harness, MIDNIGHT_END, -2 * HOUR);
+    await logPages(harness, ali, challengeId, 120);
+    at(harness, MIDNIGHT_END, -30_000);
+    await logPages(harness, veli, challengeId, 300);
+
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS - MINUTE);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS);
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: veli.me.id });
+  });
+
+  it('takes an itiraz after the end on focus sessions posted in the last minute', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'odak_seansi');
+    at(harness, '2026-01-06T15:00:00.000Z');
+    const session = (user: RegisteredUser, dayKey: string) =>
+      authed(harness!.app, user.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/entries`,
+        payload: { dayKey, value: 180, source: 'focus', clientTime: iso(harness!), sessionId: randomUUID() },
+      });
+    for (const dayKey of ['2026-01-05', '2026-01-06']) {
+      expect((await session(ali, dayKey)).statusCode).toBe(201);
+      expect((await session(ali, dayKey)).statusCode).toBe(201);
+    }
+    expect((await session(ali, '2026-01-05')).statusCode).toBe(400); // the day's 360 are in
+
+    // Veli's four 180-minute sessions all arrive thirty seconds before the end
+    at(harness, MIDNIGHT_END, -30_000);
+    const veliSessions: string[] = [];
+    for (const dayKey of ['2026-01-05', '2026-01-05', '2026-01-06', '2026-01-06']) {
+      const response = await session(veli, dayKey);
+      expect(response.statusCode).toBe(201);
+      veliSessions.push(response.json<{ entry: { id: string } }>().entry.id);
+    }
+
+    at(harness, MIDNIGHT_END, 20_000);
+    expect((await dispute(harness, ali, challengeId, veliSessions[3]!)).answerBy).not.toBeNull();
+    at(harness, MIDNIGHT_END, 30_000);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    expect(challengeRow(harness, challengeId).status).toBe('active');
+  });
+
+  it('still finishes a typed çelınc on the dot when its last number came earlier than the last hour', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'kitap_sayfa', { proofRequired: false });
+    at(harness, MIDNIGHT_END, -2 * HOUR);
+    await logPages(harness, ali, challengeId, 120);
+    const veliPages = await logPages(harness, veli, challengeId, 300);
+
+    at(harness, MIDNIGHT_END, 1);
+    expect(await disputesCloseAt(harness, ali, challengeId)).toBe(MIDNIGHT_END);
+    const late = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/${veliPages}/dispute`,
+      payload: { reason: 'okumadı o kadar' },
+    });
+    expect(late.statusCode).toBe(400);
+    expect(late.json<{ error: { code: string } }>().error.code).toBe('challenge_ended');
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: veli.me.id });
+  });
+
+  it('gives a late typed number the hour after a server that was off at the end comes back', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'kitap_sayfa', { proofRequired: false });
+    at(harness, MIDNIGHT_END, -30_000);
+    const late = await logPages(harness, veli, challengeId, 300);
+
+    // the PC was off from midnight to 08:00: nobody could see the 300 before
+    const bootAt = new Date(Date.parse(MIDNIGHT_END) + 8 * HOUR);
+    harness.app.schedulerBootAt.at = bootAt;
+    const pass = () => runSchedulerOnce(harness!.db, harness!.now(), { bootAt });
+    at(harness, bootAt.toISOString());
+    expect(pass()).toMatchObject({ finalized: 0 });
+    at(harness, bootAt.toISOString(), 10 * MINUTE);
+    expect(await disputesCloseAt(harness, ali, challengeId)).toBe(
+      new Date(bootAt.getTime() + LIMITS.DEVICE_SETTLE_MS).toISOString(),
+    );
+    await dispute(harness, ali, challengeId, late);
+    expect(entryStatus(harness, late)).toBe('disputed');
+  });
+
+  it('holds a step çelınc the whole hour when a phone raised its days after the rival had reported', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+    at(harness, '2026-01-06T19:00:00.000Z');
+    await phoneSync(harness, ali, { '2026-01-05': 9_000, '2026-01-06': 10_000 });
+    await phoneSync(harness, veli, { '2026-01-05': 8_000, '2026-01-06': 9_000 });
+
+    // 00:00:05 Ali's phone sends the last evening; 00:00:10 Veli's raises both days
+    at(harness, MIDNIGHT_END, 5_000);
+    await phoneSync(harness, ali, { '2026-01-06': 10_400, '2026-01-07': 20 });
+    at(harness, MIDNIGHT_END, 10_000);
+    await phoneSync(harness, veli, { '2026-01-05': 30_000, '2026-01-06': 30_000, '2026-01-07': 0 });
+
+    // every phone has reported, but a number moved: the hour stays for questions
+    at(harness, MIDNIGHT_END, 30_000);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    expect(challengeRow(harness, challengeId).status).toBe('active');
+    at(harness, MIDNIGHT_END, 2 * MINUTE);
+    expect((await dispute(harness, ali, challengeId, stepDay(harness, challengeId, veli, '2026-01-06'))).answerBy).not.toBeNull();
+  });
+
+  it('finishes a step çelınc an hour after its end when the numbers that moved go unquestioned', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+    at(harness, '2026-01-06T19:00:00.000Z');
+    await phoneSync(harness, ali, { '2026-01-06': 10_000 });
+    await phoneSync(harness, veli, { '2026-01-06': 9_000 });
+
+    at(harness, MIDNIGHT_END, 5 * MINUTE);
+    await phoneSync(harness, ali, { '2026-01-06': 10_400 });
+    await phoneSync(harness, veli, { '2026-01-06': 12_000 });
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS - MINUTE);
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    at(harness, MIDNIGHT_END, LIMITS.DEVICE_SETTLE_MS);
+    expect(tick(harness)).toMatchObject({ finalized: 1 });
+    expect(challengeRow(harness, challengeId)).toMatchObject({ status: 'finished', winner_id: veli.me.id });
+  });
+
+  it('holds a step çelınc for a "Beyan et" day typed at the whistle, even with every phone in', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
+    at(harness, '2026-01-06T19:00:00.000Z');
+    await phoneSync(harness, ali, { '2026-01-06': 10_000 });
+    await phoneSync(harness, veli, { '2026-01-06': 9_000 });
+
+    at(harness, MIDNIGHT_END, -30_000);
+    const typed = await authed(harness.app, veli.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries`,
+      payload: { dayKey: '2026-01-06', value: 25_000, source: 'manual', clientTime: iso(harness) },
+    });
+    expect(typed.statusCode).toBe(200);
+
+    // both phones send the last day again after the end, nothing new in it
+    at(harness, MIDNIGHT_END, 5 * MINUTE);
+    await phoneSync(harness, ali, { '2026-01-06': 10_000 });
+    await phoneSync(harness, veli, { '2026-01-06': 9_000 });
+    expect(tick(harness)).toMatchObject({ finalized: 0 });
+    at(harness, MIDNIGHT_END, 10 * MINUTE);
+    expect((await dispute(harness, ali, challengeId, stepDay(harness, challengeId, veli, '2026-01-06'))).answerBy).not.toBeNull();
+  });
+});
+
 describe('scheduler: nobody pokes into a result that is only waiting', () => {
   it('offers no poke past the end and refuses one, while an itiraz holds the result', async () => {
     harness = await makeApp({ now: NOW });
@@ -1147,7 +1371,8 @@ describe('scheduler: the owner\'s PC slept through the night', () => {
     const first = await logWater(harness, ali, challengeId, 8);
     const second = await logWater(harness, ali, challengeId, 9);
     await logWater(harness, veli, challengeId, 5);
-    at(harness, MIDNIGHT_END, -HOUR);
+    // before the last hour: an itiraz's turn in it opens the hour after the end
+    at(harness, MIDNIGHT_END, -90 * MINUTE);
     await dispute(harness, veli, challengeId, first);
 
     // restarted at 01:00: the çelınc waits for Ali's photo, not for any phone

@@ -154,18 +154,24 @@ function nowIso(): string {
 /**
  * What the server is still waiting for once the time is up (`settling`). An
  * itiraz inside its answer window holds the result longer than any phone.
+ * A phone-counted çelınc finishes early only when every phone has reported and
+ * no number moved after the end, so the hour is what to promise. A typed one
+ * is held only by a number typed in its last hour (`itirazHour`: the server
+ * keeps itirazlar open past the end); without one it is a pass away.
  */
-function settlingNote(type: ChallengeType | undefined, awaitingProof: boolean): string {
+function settlingNote(type: ChallengeType | undefined, awaitingProof: boolean, itirazHour: boolean): string {
   if (awaitingProof) {
     return 'Bir girişe itiraz var, sahibinin fotoğraf eklemesi bekleniyor. Kanıt gelince ya da süresi dolunca kazanan belli olur.';
   }
   switch (type?.deviceMetric) {
     case 'steps':
-      return 'Telefonların saydığı son adımlar toplanıyor. Herkesinki gelince, en fazla da bir saat içinde kazanan belli olur.';
+      return 'Telefonların saydığı son adımlar toplanıyor, gelen sayılara itiraz da edilebilir. En geç bir saat içinde kazanan belli olur.';
     case 'screen_time':
-      return 'Telefonların ölçtüğü son ekran süreleri toplanıyor. Herkesinki gelince, en fazla da bir saat içinde kazanan belli olur.';
+      return 'Telefonların ölçtüğü son ekran süreleri toplanıyor, gelen sayılara itiraz da edilebilir. En geç bir saat içinde kazanan belli olur.';
     default:
-      return 'Son hesap yapılıyor, bir dakikaya kalmaz.';
+      return itirazHour
+        ? 'Son saatte girilen sayılar var, kankalar bakıp itiraz edebilsin diye sonuç bekliyor. En geç bir saat içinde kazanan belli olur.'
+        : 'Son hesap yapılıyor, bir dakikaya kalmaz.';
   }
 }
 
@@ -214,9 +220,10 @@ export default function ChallengeDetailScreen() {
 
   /**
    * Past its end, a çelınc the phones count stays `active` for up to an hour on
-   * the server while it waits for the last evening's sync, and typed entries are
-   * refused from the end on. The screen says "sonuç birazdan" instead of a
-   * countdown stuck at zero and offers no entry buttons.
+   * the server while it waits for the last evening's sync (any çelınc does
+   * when a number was typed in its last hour, so friends can question it), and
+   * typed entries are refused from the end on. The screen says "sonuç birazdan"
+   * instead of a countdown stuck at zero and offers no entry buttons.
    */
   const endsAtMs = detail ? Date.parse(detail.challenge.endsAt) : Number.NaN;
   const settling = detail?.challenge.status === 'active' && Number.isFinite(endsAtMs) && endsAtMs <= renderedAt;
@@ -346,6 +353,9 @@ export default function ChallengeDetailScreen() {
   const awaitingProof = detail.feed.some(
     (item) => item.status === 'disputed' && !!item.answerBy && Date.parse(item.answerBy) > clock
   );
+  // itirazlar still open past the end; an older server sends no instant
+  const sentDisputesClose = detail.disputesCloseAt ? Date.parse(detail.disputesCloseAt) : Number.NaN;
+  const itirazHour = Number.isFinite(sentDisputesClose) && sentDisputesClose > endsAtMs;
   const canEnter = (challenge.status === 'active' || overdueStart) && !settling && isPlayer && !!type;
   /**
    * A "Hemen" çelınc is live from the moment it is made, with only its creator
@@ -463,7 +473,7 @@ export default function ChallengeDetailScreen() {
               <Text variant="label">Süre bitti</Text>
               <Text variant="big">{awaitingProof ? 'Kanıt bekleniyor' : 'Sonuç birazdan'}</Text>
               <Text variant="tiny" faint>
-                {settlingNote(type, awaitingProof)}
+                {settlingNote(type, awaitingProof, itirazHour)}
               </Text>
             </>
           ) : waitingForRival ? (
@@ -1909,9 +1919,10 @@ function Feed({
   // lets you delete your own manual rows while the çelınc is running.
   const active = detail.challenge.status === 'active';
   // A new itiraz is refused from the end on, except in the hour a phone-counted
-  // çelınc waits for the last evening's numbers: an "itiraz et" chip after that
-  // would only earn a 400. That hour starts again when the owner's PC wakes
-  // past the end, so the server's instant wins; an older server sends none.
+  // çelınc waits for the last evening's numbers, or any çelınc holds for a
+  // number typed in its last hour: an "itiraz et" chip after that would only
+  // earn a 400. That hour starts again when the owner's PC wakes past the end,
+  // so the server's instant wins; an older server sends none.
   const sentClose = detail.disputesCloseAt ? Date.parse(detail.disputesCloseAt) : Number.NaN;
   const disputesCloseAt = Number.isFinite(sentClose)
     ? sentClose

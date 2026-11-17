@@ -264,16 +264,28 @@ yarısı kapatırsak kazananı eksik sayıyla seçeriz ve sonradan gelen adımla
 göndermeye devam eder, `POST /challenges/:id/entries` ise bitişten itibaren hiçbir şey almaz
 (`challenge_ended`). Elle yazılan sayı da, elle hazırlanmış bir istekte "telefon okudu" diye
 (`pedometer`, `usage_stats`) gelen sayı da sonucu gördükten sonra seçilmiş olabilir. Herkesin
-telefonu son günü bitişten sonra gönderdiyse beklemeden kapanır. iPhone adımları arka planda pek
-göndermez, bu saat çoğu zaman ancak uygulama açılırsa işe yarar; o yüzden telefon adım çelıncının
+telefonu son günü bitişten sonra gönderdiyse ve bitişten sonra hiçbir girişin sayısı değişmediyse
+beklemeden kapanır (`movedAfterEnd`). Değiştiyse saatin sonu beklenir: o saat son akşamın sayılarına
+itiraz edilsin diye var. Eskiden "herkes gönderdi" saati kısa kesiyordu; telefonunu rakibinin gece
+yarısından sonraki senkronuna kadar kapalı tutan biri sonra üç günü birden yükseltiyor, bir sonraki tur
+onu kazanan ilan ediyor, rakibin itirazı "aktif değil" diye dönüyordu. Senkron yalnız sayısını
+değiştirdiği satırın `updated_at`'ini oynatır, yeni bir şey getirmeyen senkron erken kapanışı bozmaz.
+iPhone adımları arka planda pek göndermez, bu saat çoğu zaman ancak uygulama açılırsa işe yarar; o
+yüzden telefon adım çelıncının
 bitişinden iki dakika sonra kendi bildirimini kurar (`services/reminders.ts`). Ona dokunmak
 çelıncı açar, uygulama öne gelirken ve "Sonuç birazdan" ekranında son günü gönderir; son saat
 uyarısı da "Skorunu girmediysen" yerine bunu söyler. Sunucu bitişte kapalıysa bir
 saat açıldığı andan sayılır (`bootAt`). Bitişte uyuyan bilgisayar da kapalı sayılır: Windows
 uyanınca süreç yeniden başlamaz, ama zamanlayıcının iki vuruşu arasında beş dakikadan uzun bir
 boşluk görülünce `bootAt` uyandığı ana taşınır (`nextBootAt`). Elle girilen çelınclar tam bitişte
-kapanır. Bitişten sonra senkron yalnızca bitişte bitmiş günleri değiştirebilir (`dayOverByEnd`):
-bitiş bir günü yarıda kestiyse (başka saat dilimindeki bir oyuncu, eski usul 24 saatlik bir
+kapanır; ama son bir saatinde telefonun yazmadığı bir giriş eklendiyse ya da değiştiyse
+(`lateTypedEntry`) onlar da aynı saati bekler, itiraz da o saatte açık kalır. Elle yazılan sayının tek
+denetimi itirazdır: bitişe 30 saniye kala gönderilen altı tane 180 dakikalık odak seansı ya da 300
+sayfa, rakibine itiraz için 30 saniye bırakıyordu. Bu bekleyiş de bir saati geçmez (sunucu bitişte
+kapalıysa `bootAt`'ten bir saat); o saatte açılan bir itiraz sonucu ancak kendi 12 saatiyle tutar.
+Adım çelıncında "Beyan et" ile bitişte yazılan bir gün de böyle saati sonuna kadar işletir, herkesin
+telefonu gönderse bile. Bitişten sonra senkron yalnızca bitişte bitmiş günleri değiştirebilir
+(`dayOverByEnd`): bitiş bir günü yarıda kestiyse (başka saat dilimindeki bir oyuncu, eski usul 24 saatlik bir
 çelınc) o günün sonraki okuması bitişten sonra atılan adımları da taşır, o yüzden gün bitişteki
 haliyle kalır ve o oyuncu beklenmez. Bekleyişte dürtme de yoktur: "hâlâ açık, sıra sende" yalan
 olurdu.
@@ -318,8 +330,8 @@ göndermek de itirazı cevaplar. Fotoğrafla kapanan ya da geri çekilen itiraz�
 sayısını ya da fotoğrafını değiştirince yeniden itiraz edebilir. Bitişte süresi dolmamış bir itiraz
 varsa çelınc o süre boyunca `active` kalır; yoksa son dakika gelen bir itiraz, sahibine söz verilen
 12 saati yerdi. Bu bekleyişte yeni itiraz alınmaz (adım ve ekran süresi çelınclarının bir saati
-hariç, son akşamın sayıları o saatte gelir; `disputesCloseAt`), yoksa art arda açılan itirazlar
-sonucu günlerce bekletebilirdi. Bitişten sonra ayrılmak da kapalıdır: teke tek çelıncta kaybeden
+hariç, son akşamın sayıları o saatte gelir; son saatinde elle sayı girilen bir çelıncın bir saati de
+öyle; `disputesCloseAt`), yoksa art arda açılan itirazlar sonucu günlerce bekletebilirdi. Bitişten sonra ayrılmak da kapalıdır: teke tek çelıncta kaybeden
 ayrılıp sonucu iptal ettirebilirdi.
 
 İtiraz çelınc boyunca açıktır ama itiraz düğmesi yalnız akışın satırlarındadır, akış da en yeni

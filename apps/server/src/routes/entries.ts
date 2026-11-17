@@ -239,8 +239,9 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       if (challenge.status !== 'active') {
         throw badRequest('challenge_not_active', 'Bu çelınc bitti, artık itiraz edilemez.');
       }
-      // still `active` past its end only while it waits; only the phones'
-      // hour takes new ones (disputesOpenUntil)
+      // still `active` past its end only while it waits; only the hour for
+      // the last numbers (the phones', or the one a late typed number opens)
+      // takes new ones (disputesOpenUntil)
       if (now.getTime() >= disputesOpenUntil(db, challenge, now, app.schedulerBootAt.at)) {
         throw badRequest('challenge_ended', 'Süre bitti, artık itiraz edilemez.');
       }

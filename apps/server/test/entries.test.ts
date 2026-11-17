@@ -572,7 +572,8 @@ describe('focus_minutes entries', () => {
     harness.advance(DAY_MS - 10 * 60_000);
     const first = await focusSession(harness, ali, challengeId, 30, sessionId);
     expect(first.statusCode).toBe(201);
-    harness.advance(11 * 60_000);
+    // a session in the last hour keeps the hour after the end open for itirazlar
+    harness.advance(11 * 60_000 + LIMITS.DEVICE_SETTLE_MS);
     runSchedulerOnce(harness.db, harness.now());
     expect(harness.db.prepare('SELECT status FROM challenges WHERE id = ?').get(challengeId)).toEqual({ status: 'finished' });
 

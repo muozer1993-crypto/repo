@@ -2654,7 +2654,8 @@ describe("friends in other zones play the creator's number of days", () => {
     expect(monday.statusCode).toBe(400);
     expect(monday.json<{ error: { code: string } }>().error.code).toBe('day_out_of_range');
 
-    harness.setNow('2026-01-11T21:00:30.000Z');
+    // Lara's yes in the last hour keeps the hour after the end open for itirazlar
+    harness.setNow('2026-01-11T22:00:30.000Z');
     runSchedulerOnce(harness.db, harness.now());
     expect(outcome(harness, challengeId)).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
     expect(finalRows(harness, challengeId).map((row) => row.final_score)).toEqual([7, 7, 7]);
@@ -2678,7 +2679,8 @@ describe("friends in other zones play the creator's number of days", () => {
       if (n < 3) expect((await mark(harness, veli, challengeId, day)).statusCode).toBe(201);
     }
 
-    harness.setNow('2026-01-08T09:00:30.000Z');
+    // the last yes came at 11:00, in the last hour, which stays open for itirazlar
+    harness.setNow('2026-01-08T10:00:30.000Z');
     runSchedulerOnce(harness.db, harness.now());
     expect(outcome(harness, challengeId)).toEqual({ status: 'finished', winner_id: ali.me.id, is_tie: 0 });
     expect(finalRows(harness, challengeId).map((row) => row.final_score)).toEqual([4, 3]);

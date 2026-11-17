@@ -1415,6 +1415,55 @@ describe('a step çelınc past its end, still active on the server', () => {
   });
 });
 
+describe('a typed çelınc past its end, still active on the server', () => {
+  /** A page count that ended five minutes ago; `close` is the server's `disputesCloseAt`. */
+  function endedPages(close: (endsAt: number) => string | undefined) {
+    const detail = challengeDetail();
+    const endsAt = Date.now() - 5 * 60_000;
+    return {
+      ...detail,
+      challenge: {
+        ...detail.challenge,
+        typeKey: 'kitap_sayfa',
+        metricType: 'manual_count' as const,
+        unit: 'sayfa',
+        title: 'Sayfa Avcısı',
+        endsAt: new Date(endsAt).toISOString(),
+      },
+      disputesCloseAt: close(endsAt),
+    };
+  }
+
+  it('says the result waits an hour for itirazlar when a number came in the last hour', async () => {
+    searchParams.id = 'c-1';
+    api.challenge = jest.fn(async () =>
+      endedPages((endsAt) => new Date(endsAt + LIMITS.DEVICE_SETTLE_MS).toISOString())
+    );
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toContain('Sonuç birazdan');
+    expect(text).toContain('Son saatte girilen sayılar var');
+    expect(text).toContain('En geç bir saat içinde kazanan belli olur.');
+    expect(text).not.toContain('bir dakikaya kalmaz');
+  });
+
+  it('promises the result within a minute when nothing came late, or the server does not say', async () => {
+    searchParams.id = 'c-1';
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    for (const close of [(endsAt: number) => new Date(endsAt).toISOString(), () => undefined]) {
+      api.challenge = jest.fn(async () => endedPages(close));
+      const tree = renderScreen(<ChallengeScreen />);
+      await settle();
+      const text = rendered(tree);
+      expect(text).toContain('Son hesap yapılıyor, bir dakikaya kalmaz.');
+      expect(text).not.toContain('Son saatte girilen');
+    }
+  });
+});
+
 describe('step days the phone never counted', () => {
   // ME.timezone is unusable, so the screens fall back to the device zone
   const today = () => todayKey('Europe/Istanbul');
