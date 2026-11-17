@@ -1359,7 +1359,8 @@ Check-in çelınclarında da çelıncı açanın kaç sabahı ya da akşamı var
 farkı yüzünden daha azına denk gelen kanka eklenemez (İstanbul'da öğlen açılan bir günlük "Erken Yatma Sözü" New York'ta
 akşam 19:00 olmadan biter), uygulama bunu söyler. Güncellemeden önceki sunucu böyle bir kankayı
 çelınca almışsa o çelınc onun gün sayısıyla oynanır: çelıncı açan dahil herkesin fazla günü uçtan düşer,
-eşit oynayanlar berabere biter. Bitişin son saatten önce kestiği gün (İstanbul'da gece
+eşit oynayanlar berabere biter. Böyle bir kankaya eski sunucunun gönderdiği davet, kanka kabul etmeye
+çalışınca kapanır; çağıran nedenini hemen öğrenir, iki kişilik çelınc da o an iptal olur. Bitişin son saatten önce kestiği gün (İstanbul'da gece
 yarısı biten "Erken Yatma Sözü" Londra'da 20:59'da biter) bitişe kadar sayılır; uygulama o gün sınırı
 20:59 diye gösterir ve yarım saat önce hatırlatır. Sunucuyu güncellediğinde devam eden çelınclar da bu
 sayıma geçer. Başka şehirdeki kankanın çelıncı açandan fazla günü varsa o gün düşer, o güne girilen kayıt da

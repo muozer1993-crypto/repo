@@ -3089,6 +3089,55 @@ describe('check-in çelınclar across zones', () => {
     expect((await accept(harness, veli, challengeId)).statusCode).toBe(200);
   });
 
+  // An older server asked Mert into Ali's "Yarın" erken_yat without checking:
+  // six evenings in New York to Ali's seven. His yes was refused, the invite
+  // sat unread, Ali heard nothing for a week and then read "kimse kabul etmedi".
+  it('ends an invite an older server sent short of evenings when it is accepted, and tells whoever called', async () => {
+    harness = await makeApp({ now: NOON_ISH });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const mert = await registerUser(harness.app, 'mert', { displayName: 'Mert' });
+    befriend(harness.app, ali.me.id, mert.me.id);
+    // from 09:00 on Wednesday to the end of the next Tuesday in Istanbul
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'erken_yat',
+      deadlineTime: '23:00',
+      participantIds: [mert.me.id],
+      startsAt: '2026-11-11T06:00:00.000Z',
+      endsAt: '2026-11-17T20:59:59.999Z',
+    });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    // Mert lives in New York, and the invite came from the older server (migration 019)
+    harness.db.prepare("UPDATE users SET timezone = 'America/New_York' WHERE id = ?").run(mert.me.id);
+    harness.db
+      .prepare('UPDATE challenge_participants SET days_checked = 0 WHERE challenge_id = ? AND user_id = ?')
+      .run(challengeId, mert.me.id);
+
+    const refused = await accept(harness, mert, challengeId);
+    expect(refused.statusCode).toBe(400);
+    expect(errorOf(refused)).toEqual({
+      code: 'checkin_days_short',
+      message:
+        'Saat farkı yüzünden bu çelıncın check-in saati sende 6 güne denk geliyor, çelıncı açan Ali için 7 gün. Eksik günle bu çelınca katılamazsın. Davet kapandı.',
+    });
+    expect(rowOf(harness, challengeId, mert.me.id)?.status).toBe('declined');
+    expect(listByType(harness.db, mert.me.id, 'challenge_invite')[0]?.read_at).not.toBeNull();
+
+    // Ali hears why at once, and a 1v1 with nobody left to ask ends now
+    const told = listByType(harness.db, ali.me.id, 'challenge_declined');
+    expect(told.map((row) => [row.title, row.body, JSON.parse(row.data)])).toEqual([
+      [
+        'Mert giremedi',
+        `Saat farkı yüzünden "Erken Yatma Sözü" çelıncına giremedi, check-in saati onda daha az güne denk geliyor. Davet kapandı.`,
+        { challengeId, fromUserId: mert.me.id, reason: 'checkin_days_short' },
+      ],
+    ]);
+    expect(harness.db.prepare('SELECT status FROM challenges WHERE id = ?').get(challengeId)).toEqual({ status: 'cancelled' });
+    const cancelled = listByType(harness.db, ali.me.id, 'challenge_cancelled');
+    expect(cancelled.map((row) => JSON.parse(row.data))).toEqual([{ challengeId, reason: 'everyone_left' }]);
+    expect(listByType(harness.db, mert.me.id, 'challenge_cancelled')).toEqual([]);
+  });
+
   it('lets London into a seven-day erken_yat made at 12:50 in Istanbul, and not New York with its six evenings', async () => {
     harness = await makeApp({ now: NOON_ISH });
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });

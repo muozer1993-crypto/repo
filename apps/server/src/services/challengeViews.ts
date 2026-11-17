@@ -491,6 +491,23 @@ export function declinedCopy(level: VulgarityLevel, who: string, title: string):
 }
 
 /**
+ * To whoever called them in: an invite an older server sent into a check-in
+ * çelınc whose deadlines the invitee's zone gives fewer of ended when they
+ * tried to say yes. Nobody chickened out, so no "tırstı".
+ */
+export function zoneShortCopy(level: VulgarityLevel, who: string, title: string): CopyText {
+  const why = 'check-in saati onda daha az güne denk geliyor';
+  if (level === 1) {
+    return {
+      title: `${who} katılamıyor`,
+      body: `${who}, saat farkı yüzünden "${title}" çelıncına katılamıyor: ${why}. Davet kapandı.`,
+    };
+  }
+  if (level === 3) return { title: `${who} saat farkına takıldı`, body: `"${title}" çelıncına giremedi, ${why}. Davet yattı 🍆` };
+  return { title: `${who} giremedi`, body: `Saat farkı yüzünden "${title}" çelıncına giremedi, ${why}. Davet kapandı.` };
+}
+
+/**
  * To the creator (and whoever called them in) of a çelınc that has not
  * started, or to the players of one already running: somebody said yes.
  * `count` is how many are in now. Nothing hangs off the name: "de/da" and

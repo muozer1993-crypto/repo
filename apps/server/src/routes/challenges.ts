@@ -48,6 +48,7 @@ import {
   requireChallengeRow,
   requireMembership,
   requireUserRow,
+  zoneShortCopy,
 } from '../services/challengeViews.js';
 import {
   acceptedParticipants,
@@ -256,7 +257,9 @@ export function invitedShortError(name: string, short: { days: number; creatorDa
  * one who called if that is somebody else, while the çelınc has not started
  * (they are the ones waiting for answers), and to every other player once it
  * runs. Only people still in the race hear it, and never across a block:
- * somebody who blocked Ali does not want that name in the inbox.
+ * somebody who blocked Ali does not want that name in the inbox. A no the
+ * server said for Ali (`checkin_days_short` on an invite an older server
+ * sent) gives the reason instead of "tırstı".
  */
 function tellWhoIsIn(
   db: Database,
@@ -264,6 +267,7 @@ function tellWhoIsIn(
   who: UserRow,
   type: 'challenge_declined' | 'challenge_left' | 'challenge_accepted',
   at: string,
+  reason?: 'checkin_days_short',
 ): void {
   const players = acceptedParticipants(db, challenge.id);
   const inviter = getParticipant(db, challenge.id, who.id)?.invited_by ?? challenge.creator_id;
@@ -282,13 +286,15 @@ function tellWhoIsIn(
     const copy =
       type === 'challenge_accepted'
         ? acceptedCopy(levelOf(user), who.display_name, challenge.title, players.length)
-        : (type === 'challenge_declined' ? declinedCopy : leftCopy)(levelOf(user), who.display_name, challenge.title);
+        : reason
+          ? zoneShortCopy(levelOf(user), who.display_name, challenge.title)
+          : (type === 'challenge_declined' ? declinedCopy : leftCopy)(levelOf(user), who.display_name, challenge.title);
     notify(db, {
       userId: user.id,
       type,
       title: copy.title,
       body: copy.body,
-      data: { challengeId: challenge.id, fromUserId: who.id },
+      data: reason ? { challengeId: challenge.id, fromUserId: who.id, reason } : { challengeId: challenge.id, fromUserId: who.id },
       createdAt: at,
     });
   }
@@ -615,9 +621,27 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
       participantTimezone(undefined, me.row),
     );
     if (short) {
+      // An invite an older server sent without asking this (`days_checked` 0)
+      // can never be taken: it ends here, a no whose reason whoever called
+      // them hears at once, rather than one left waiting until "kimse kabul
+      // etmedi". One this server sent stays: its invitee moved since, and
+      // may move back.
+      const ended = membership.status === 'invited' && membership.days_checked === 0;
+      if (ended) {
+        const iso = nowIso(now);
+        db.transaction(() => {
+          db.prepare("UPDATE challenge_participants SET status = 'declined' WHERE challenge_id = ? AND user_id = ?").run(
+            challenge.id,
+            me.id,
+          );
+          markInviteAnswered(db, me.id, challenge.id, iso);
+          tellWhoIsIn(db, challenge, me.row, 'challenge_declined', iso, 'checkin_days_short');
+          cancelIfAbandoned(db, challenge.id, now);
+        })();
+      }
       throw badRequest(
         'checkin_days_short',
-        `Saat farkı yüzünden bu çelıncın check-in saati sende ${checkinDaysTr(short.days)}, ${forCreator(db, challenge)} ${short.creatorDays} gün. Eksik günle bu çelınca katılamazsın.`,
+        `Saat farkı yüzünden bu çelıncın check-in saati sende ${checkinDaysTr(short.days)}, ${forCreator(db, challenge)} ${short.creatorDays} gün. Eksik günle bu çelınca katılamazsın.${ended ? ' Davet kapandı.' : ''}`,
       );
     }
 
@@ -815,7 +839,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
         if (row) {
           // a fresh invite: it goes to the end of the line-up like a new one, and it is the new caller's
           db.prepare(
-            `UPDATE challenge_participants SET status = 'invited', invited_at = ?, invited_by = ?
+            `UPDATE challenge_participants SET status = 'invited', invited_at = ?, invited_by = ?, days_checked = 1
               WHERE challenge_id = ? AND user_id = ?`,
           ).run(iso, me.id, challenge.id, user.id);
         } else {

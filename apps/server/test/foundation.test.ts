@@ -155,8 +155,24 @@ describe('migrations', () => {
     }
     db.prepare(
       `INSERT INTO users (id, username, display_name, password_hash, invite_code, created_at, last_seen_at)
-       VALUES ('u1', 'ali', 'Ali', 'x', 'K7QF2M', '2026-11-01T10:00:00.000Z', '2026-11-16T20:19:00.000Z')`,
+       VALUES ('u1', 'ali', 'Ali', 'x', 'K7QF2M', '2026-11-01T10:00:00.000Z', '2026-11-16T20:19:00.000Z'),
+              ('u2', 'mert', 'Mert', 'x', 'P3XH8R', '2026-11-01T10:00:00.000Z', NULL)`,
     ).run();
+    // invites it sent without checking anybody's check-in days
+    const challenge = db.prepare(
+      `INSERT INTO challenges (id, creator_id, type_key, metric_type, direction, unit, title, starts_at, ends_at, created_at)
+       VALUES (?, 'u1', ?, ?, 'higher', 'gün', 'Çelınc', '2026-11-17T06:00:00.000Z', '2026-11-23T20:59:59.999Z', '2026-11-16T10:00:00.000Z')`,
+    );
+    challenge.run('checkin', 'erken_yat', 'checkin_deadline');
+    challenge.run('steps', 'adim_yarisi', 'auto_steps');
+    const participant = db.prepare(
+      `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at)
+       VALUES (?, ?, ?, '2026-11-16T10:00:00.000Z', ?)`,
+    );
+    participant.run('checkin', 'u1', 'accepted', '2026-11-16T10:00:00.000Z');
+    participant.run('checkin', 'u2', 'invited', null);
+    participant.run('steps', 'u1', 'accepted', '2026-11-16T10:00:00.000Z');
+    participant.run('steps', 'u2', 'invited', null);
 
     expect(migrate(db)).toEqual([
       '014_server_pauses',
@@ -164,9 +180,19 @@ describe('migrations', () => {
       '016_friend_refusals',
       '017_seed_last_beat',
       '018_read_answered_requests',
+      '019_unchecked_invites',
     ]);
     // the first start of the new version writes the pause from here
     expect(readLastBeat(db)?.toISOString()).toBe('2026-11-16T20:19:00.000Z');
+    // only the check-in invite still waiting is marked as sent unchecked
+    expect(
+      db.prepare('SELECT challenge_id, user_id, days_checked FROM challenge_participants ORDER BY challenge_id, user_id').all(),
+    ).toEqual([
+      { challenge_id: 'checkin', user_id: 'u1', days_checked: 1 },
+      { challenge_id: 'checkin', user_id: 'u2', days_checked: 0 },
+      { challenge_id: 'steps', user_id: 'u1', days_checked: 1 },
+      { challenge_id: 'steps', user_id: 'u2', days_checked: 1 },
+    ]);
 
     // one at 016 that already beats keeps its own beat, even behind a later request
     writeLastBeat(db, new Date('2026-11-16T21:00:00.000Z'));

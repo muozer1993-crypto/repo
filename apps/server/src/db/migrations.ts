@@ -454,6 +454,22 @@ UPDATE notifications SET read_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
  );
 `;
 
+/**
+ * Whether the server that sent an invite checked the invitee's check-in days
+ * against the creator's (`checkinDaysShort`). This one refuses such an invite
+ * when it is sent; an older one did not, so every invite into a check-in
+ * çelınc still waiting when this version first starts is marked 0. Accepting
+ * one that comes up short ends it (POST /challenges/:id/accept), where an
+ * invite this server sent stays open: its invitee only moved since, and may
+ * move back.
+ */
+const UNCHECKED_INVITES = `
+ALTER TABLE challenge_participants ADD COLUMN days_checked INTEGER NOT NULL DEFAULT 1;
+UPDATE challenge_participants SET days_checked = 0
+ WHERE status = 'invited'
+   AND challenge_id IN (SELECT id FROM challenges WHERE metric_type = 'checkin_deadline' AND status IN ('pending', 'active'));
+`;
+
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -473,4 +489,5 @@ export const MIGRATIONS: Migration[] = [
   { id: '016_friend_refusals', sql: FRIEND_REFUSALS },
   { id: '017_seed_last_beat', sql: SEED_LAST_BEAT },
   { id: '018_read_answered_requests', sql: READ_ANSWERED_REQUESTS },
+  { id: '019_unchecked_invites', sql: UNCHECKED_INVITES },
 ];

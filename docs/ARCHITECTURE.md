@@ -61,7 +61,11 @@ kankanın günü sayılmaz (New York'ta 15:59'da biten son akşam). Bitişin son
 yarım saat önce hatırlatır. Aynı dilimdeki oyunculara dokunulmaz; tek istisnası, bu kuraldan önceki
 sunucunun eksik günle aldığı kanka: o çelınc bir kez "evet" demiş herkesin en az gün sayısıyla oynanır
 (`fewestCheckinDays`), açanın dilimi dahil her dilimin ucu aynı kuralla kırpılır. Ayrılan da sayılır, yoksa
-oyun sürerken sayı değişir, kırpılıp basılamayan bir ilk akşam kaçırılmış güne dönerdi. Profilini
+oyun sürerken sayı değişir, kırpılıp basılamayan bir ilk akşam kaçırılmış güne dönerdi. Eski sunucunun
+böyle bir kankaya gönderip hâlâ bekleyen daveti migration 019'la işaretlenir
+(`challenge_participants.days_checked` 0): kabul `checkin_days_short` alınca davet reddedilmiş sayılır,
+çağırana nedeni gider, iki kişilikse çelınc o an iptal olur. Bu sunucunun gönderdiği davet açık kalır:
+o kanka sonradan taşındı, geri de dönebilir. Profilini
 "Varım"dan hemen önce Tokyo'ya alan biri 07:00'lik sabahları İstanbul saatiyle 00:30'da yakalar. Kabulü
 saat dilimi değişti diye reddetmek gerçekten yolculuk yapanı cezalandırırdı; onun yerine herkesin oynadığı
 dilim görünür (`ParticipantView.timezone`): sıralamada adının altında kendi satırında "🕐 Tokyo saati" (adın yanında

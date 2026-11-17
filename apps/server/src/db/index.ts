@@ -152,6 +152,11 @@ export interface ParticipantRow {
   timezone: string | null;
   /** The player whose invite brought them in (migration 015); NULL means the creator. */
   invited_by: string | null;
+  /**
+   * 0 for an invite into a check-in çelınc an older server sent without
+   * checking the invitee's check-in days (migration 019); 1 otherwise.
+   */
+  days_checked: number;
 }
 
 export interface EntryRow {
