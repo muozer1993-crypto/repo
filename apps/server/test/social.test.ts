@@ -404,6 +404,21 @@ describe('/me', () => {
     expect(userRow(h, user.me.id).push_platform).toBeNull();
   });
 
+  it('tells a phone that names its token whether the push slot is its own', async () => {
+    const h = await boot();
+    const user = await registerUser(h.app, 'mustafa');
+    const call = authed(h.app, user.token);
+    await call({ method: 'POST', url: '/me/push-token', payload: { token: 'ExponentPushToken[tablet]', platform: 'android' } });
+    const meOn = async (token?: string) =>
+      (await call({ method: 'GET', url: '/me', headers: token ? { 'x-push-token': token } : {} })).json<Me>();
+
+    // the slot is the tablet's: taken, but not by this phone
+    expect(await meOn('ExponentPushToken[telefon]')).toMatchObject({ hasPushToken: true, pushTokenIsThisPhone: false });
+    expect(await meOn('ExponentPushToken[tablet]')).toMatchObject({ hasPushToken: true, pushTokenIsThisPhone: true });
+    // asked nothing, it says nothing
+    expect(await meOn()).not.toHaveProperty('pushTokenIsThisPhone');
+  });
+
   it('leaves the push token to a phone that never registered one, and to an older app clears it', async () => {
     const h = await boot();
     const user = await registerUser(h.app, 'mustafa', { pushToken: 'ExponentPushToken[telefon]' });

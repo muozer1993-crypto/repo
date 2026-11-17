@@ -14,7 +14,8 @@ jest.mock('@/services/reminders', () => ({ clearReminders: () => mockClearRemind
 import type { Me } from '@koydum/shared';
 
 import { ApiClient } from '@/lib/api';
-import { StorageKeys, getItem, setItem, setJson } from '@/lib/storage';
+import { StorageKeys, getItem, getJson, removeItem, setItem, setJson } from '@/lib/storage';
+import { flushPendingPushClear } from '@/services/pushClear';
 import { useAuth } from '@/store/auth';
 import { clockSkewMs, noteServerTime } from '@/utils/serverClock';
 
@@ -81,6 +82,59 @@ describe('logout', () => {
     await useAuth.getState().logout();
 
     expect(useAuth.getState().token).toBeNull();
+  });
+});
+
+describe("a logout's push clear the server did not hear", () => {
+  const TABLET = 'ExponentPushToken[tablet]';
+  const settle = async () => {
+    for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setImmediate(resolve));
+  };
+
+  beforeEach(async () => {
+    await removeItem(StorageKeys.pendingPushClear);
+  });
+
+  it('is kept and sent again later, so the slot does not stay with a signed-out tablet', async () => {
+    await setItem(StorageKeys.pushToken, TABLET);
+    useAuth.setState({ token: 'tok', me: ME });
+    const serverUrl = useAuth.getState().serverUrl;
+    // the owner's PC is asleep: nothing answers
+    global.fetch = jest.fn(async () => {
+      throw new TypeError('Network request failed');
+    }) as unknown as typeof fetch;
+
+    await useAuth.getState().logout();
+    await settle();
+    expect(await getJson(StorageKeys.pendingPushClear)).toEqual({ serverUrl, sessionToken: 'tok', pushToken: TABLET });
+
+    // the next start, or a foreground while signed out: the PC is up again
+    const fetchMock = jest.fn(async () => new Response('{"ok":true,"hasPushToken":true}', { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    await flushPendingPushClear();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toMatch(/\/me\/push-token$/);
+    expect(init.method).toBe('DELETE');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+    expect(JSON.parse(String(init.body))).toEqual({ token: TABLET });
+    expect(await getJson(StorageKeys.pendingPushClear)).toBeNull();
+  });
+
+  it('goes with a sign-in on this phone, and with the server turning the session down', async () => {
+    const entry = { serverUrl: 'http://pc', sessionToken: 'tok', pushToken: TABLET };
+    await setJson(StorageKeys.pendingPushClear, entry);
+    await useAuth.getState().setSession('yeni', ME);
+    await settle();
+    expect(await getJson(StorageKeys.pendingPushClear)).toBeNull();
+
+    // signed out again, and the old session is dead by now (a password change)
+    await removeItem(StorageKeys.token);
+    await setJson(StorageKeys.pendingPushClear, entry);
+    global.fetch = jest.fn(
+      async () => new Response('{"error":{"code":"unauthorized","message":"Oturum kapandı."}}', { status: 401 })
+    ) as unknown as typeof fetch;
+    await flushPendingPushClear();
+    expect(await getJson(StorageKeys.pendingPushClear)).toBeNull();
   });
 });
 

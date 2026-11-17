@@ -564,6 +564,8 @@ export default function SettingsScreen() {
   /** Android's battery and alarm switches; null where there are none (iOS, web, Expo Go) */
   const [background, setBackground] = useState<BackgroundHealth | null>(null);
   const [deleting, setDeleting] = useState(false);
+  /** whether the account's push slot is this phone's; null until known (`pushSlotIsHere`) */
+  const [slotHere, setSlotHere] = useState<boolean | null>(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [serverOpen, setServerOpen] = useState(false);
 
@@ -585,21 +587,37 @@ export default function SettingsScreen() {
     try {
       const result = await registerForPush(options);
       setPush(result);
+      if (!result.token) return;
       const tap = options.askAgain !== false;
-      if (
-        result.token &&
-        (tap || (await pushTokenNeedsSending(result.token, me?.hasPushToken)))
-      ) {
+      if (tap || (await pushTokenNeedsSending(result.token, me?.hasPushToken))) {
         try {
           await api.setPushToken({ token: result.token, platform: PLATFORM });
           // as the bridge does: logout clears only the token stored here
           await setItem(StorageKeys.pushToken, result.token);
+          setSlotHere(true);
         } catch {
           // the inbox still works without a registered token
         }
+      } else {
+        setSlotHere(await pushSlotIsHere(result.token));
       }
     } finally {
       setPushBusy(false);
+    }
+  };
+
+  /**
+   * Whether the account's push slot holds this phone's token, when this phone
+   * left it alone (`pushTokenNeedsSending`): /me's `hasPushToken` says only that
+   * it is taken, and after a move, or with a tablet signed in too, the pushes go
+   * there. Null when the server does not say (an older one, no answer).
+   */
+  const pushSlotIsHere = async (deviceToken: string): Promise<boolean | null> => {
+    try {
+      const fresh = await api.me({ pushToken: deviceToken });
+      return typeof fresh.pushTokenIsThisPhone === 'boolean' ? fresh.pushTokenIsThisPhone : null;
+    } catch {
+      return null;
     }
   };
 
@@ -636,16 +654,18 @@ export default function SettingsScreen() {
       // Only when the server needs it: opening Ayarlar on an old phone took the
       // account's one push slot from the new one, and logging out here then
       // cleared it (`pushTokenNeedsSending`).
-      if (
-        pushResult.token &&
-        (await pushTokenNeedsSending(pushResult.token, me?.hasPushToken))
-      ) {
+      if (!pushResult.token) return;
+      if (await pushTokenNeedsSending(pushResult.token, me?.hasPushToken)) {
         try {
           await api.setPushToken({ token: pushResult.token, platform: PLATFORM });
           await setItem(StorageKeys.pushToken, pushResult.token);
+          if (!cancelled) setSlotHere(true);
         } catch {
           // the inbox still works without a registered token
         }
+      } else {
+        const here = await pushSlotIsHere(pushResult.token);
+        if (!cancelled) setSlotHere(here);
       }
     })();
     return () => {
@@ -926,6 +946,13 @@ export default function SettingsScreen() {
 
   const pushLine = (): { label: string; color: string; detail: string } => {
     if (!push) return { label: 'Bakılıyor…', color: Colors.textMuted, detail: 'Bildirim durumu kontrol ediliyor.' };
+    if (push.token && slotHere === false) {
+      return {
+        label: 'Başka cihazda',
+        color: Colors.yellow,
+        detail: 'Bildirimler hesabının başka bir cihazına gidiyor. Bu telefona almak için “Tekrar dene”ye bas.',
+      };
+    }
     if (push.token) {
       return {
         label: 'Açık',

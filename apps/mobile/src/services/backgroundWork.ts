@@ -6,6 +6,7 @@ import { StorageKeys, getJson } from '@/lib/storage';
 import { guessServerUrl, serverUrlIsEditable } from '@/lib/config';
 import { deliverNewInbox } from '@/services/inboxNotifier';
 import { flushQueue } from '@/services/offlineQueue';
+import { flushPendingPushClear } from '@/services/pushClear';
 import { clearReminders, refreshReminders } from '@/services/reminders';
 import { syncScreenTimeNow } from '@/services/screenTimeSync';
 import { forgetStoredSession, renewTokenIfDue } from '@/services/session';
@@ -36,6 +37,8 @@ import { resolveTimezone } from '@/utils/datetime';
  * run stops there; the offline queue stays for the next sign-in.
  */
 export async function runBackgroundWork(): Promise<void> {
+  // signed out or not: a logout's "stop pushing here" the server did not hear
+  await flushPendingPushClear();
   const [token, storedUrl] = await Promise.all([
     getJson<string>(StorageKeys.token),
     getJson<string>(StorageKeys.serverUrl),

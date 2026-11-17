@@ -289,10 +289,33 @@ function removeWithCompanions(file: string): void {
 }
 
 /**
+ * Empties every account's push slot in a backup about to be restored. The slots
+ * it holds are those of the day it was written: a friend on a new phone since,
+ * or a phone signed into another account since, would get the old one's
+ * pushes, another account's lafs included, and for good, because a phone that
+ * already sent its token leaves a slot the server says is taken alone (the
+ * app's `pushTokenNeedsSending`). Empty, it is `hasPushToken: false` to every
+ * phone at its next start or foreground, and each sends its own token again;
+ * the server's one-token-one-account rule settles who holds which.
+ */
+function forgetPushTokens(file: string): void {
+  const db = new BetterSqlite3(file, { fileMustExist: true });
+  try {
+    db.prepare('UPDATE users SET push_token = NULL, push_platform = NULL WHERE push_token IS NOT NULL').run();
+  } catch (err) {
+    // ours but with no account table (`verdict`): no slot to empty either
+    if (isDiskFull(err)) throw err;
+  } finally {
+    db.close();
+  }
+}
+
+/**
  * Puts the backup `file` in place of the database, only with the server closed
  * and room on the disk for the copy. Nothing is deleted: the database that was
  * there moves aside to `koydum-onceki-<time>.db` next to it, so a wrong pick is
- * undone by restoring that file. `accounts` is how many open accounts the restored file holds.
+ * undone by restoring that file. Every push slot in it is emptied (`forgetPushTokens`).
+ * `accounts` is how many open accounts the restored file holds.
  * Throws with a Turkish reason the CLI prints as is.
  */
 export function restoreBackup(
@@ -327,6 +350,12 @@ export function restoreBackup(
   if (problem) {
     removeWithCompanions(incoming);
     throw new Error(problem);
+  }
+  try {
+    forgetPushTokens(incoming);
+  } catch (err) {
+    removeWithCompanions(incoming);
+    throw isDiskFull(err) ? new Error(noRoomToRestore(size)) : err;
   }
 
   let previous: string | null = null;

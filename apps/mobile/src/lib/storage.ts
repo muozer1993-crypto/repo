@@ -100,4 +100,10 @@ export const StorageKeys = {
    * logout: the permission belongs to the phone, not the account.
    */
   notifAsked: 'koydum.notifAsked',
+  /**
+   * A logout's DELETE /me/push-token that did not reach the server, with the
+   * session it was for, sent again until it does (see services/pushClear).
+   * Kept on logout, dropped by the next sign-in.
+   */
+  pendingPushClear: 'koydum.pendingPushClear',
 } as const;

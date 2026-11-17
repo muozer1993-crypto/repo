@@ -357,6 +357,13 @@ export interface Me extends PublicUser {
   recapEnabled: boolean;
   inviteCode: string;
   hasPushToken: boolean;
+  /**
+   * Whether the account's push slot holds this phone's device token, answered
+   * only to a GET /me that names it (the `X-Push-Token` header; Ayarlar does).
+   * `hasPushToken` says the slot is taken, not by whom: after a move, or with a
+   * tablet signed in too, it is another device's, and this phone hears nothing.
+   */
+  pushTokenIsThisPhone?: boolean;
   stats: UserStats;
   badges: string[];
 }

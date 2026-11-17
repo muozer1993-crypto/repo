@@ -5808,6 +5808,37 @@ describe('a permission the phone said no to', () => {
     }
   });
 
+  it('Ayarlar says when the push slot is another device\'s, and is right again after "Tekrar dene"', async () => {
+    const { StorageKeys, setItem, removeItem } = storage();
+    notifications().registerForPush.mockResolvedValue({ token: 'ExponentPushToken[eski]', granted: true });
+    api.setPushToken = jest.fn(async () => ({ ok: true }));
+    // the slot holds the tablet's token: taken, but not by this phone
+    api.me = jest.fn(async () => ({ ...ME, hasPushToken: true, pushTokenIsThisPhone: false }));
+    await setItem(StorageKeys.pushToken, 'ExponentPushToken[eski]');
+    const hadToken = ME.hasPushToken;
+    ME.hasPushToken = true;
+    try {
+      const SettingsScreen = require('@/app/(app)/settings').default;
+      const tree = renderScreen(<SettingsScreen />);
+      await settle();
+      expect(api.me).toHaveBeenCalledWith({ pushToken: 'ExponentPushToken[eski]' });
+      expect(rendered(tree)).toContain('Başka cihazda');
+      expect(rendered(tree)).toContain('Bildirimler hesabının başka bir cihazına gidiyor.');
+      expect(rendered(tree)).not.toContain('Bildirimler telefonuna düşüyor.');
+
+      press(tree, 'Tekrar dene');
+      await settle();
+      expect(api.setPushToken).toHaveBeenCalledTimes(1);
+      expect(rendered(tree)).toContain('Bildirimler telefonuna düşüyor.');
+      expect(rendered(tree)).not.toContain('Başka cihazda');
+    } finally {
+      ME.hasPushToken = hadToken;
+      delete api.me;
+      notifications().registerForPush.mockResolvedValue({ token: null, reason: 'web' });
+      await removeItem(StorageKeys.pushToken);
+    }
+  });
+
   it('Ayarlar sends the token when the server has none for the account', async () => {
     notifications().registerForPush.mockResolvedValue({ token: 'ExponentPushToken[yeni]', granted: true });
     api.setPushToken = jest.fn(async () => ({ ok: true }));

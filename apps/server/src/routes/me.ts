@@ -112,7 +112,16 @@ export default async function meRoutes(app: FastifyInstance): Promise<void> {
    */
   const passwordFailures = new AttemptLimiter(LOGIN_FAILURES_PER_ACCOUNT.max, LOGIN_FAILURES_PER_ACCOUNT.windowMs);
 
-  app.get('/me', auth, async (request) => toMe(db, requireUser(request).row, app.now()));
+  // A phone that names its device token (`X-Push-Token`, Ayarlar) hears whether
+  // the account's one push slot is its own: `hasPushToken` cannot say whose, and
+  // Ayarlar said "Bildirimler telefonuna düşüyor" while another device held it.
+  app.get('/me', auth, async (request) => {
+    const { row } = requireUser(request);
+    const me = toMe(db, row, app.now());
+    const asked = request.headers['x-push-token'];
+    if (typeof asked === 'string' && asked !== '') me.pushTokenIsThisPhone = row.push_token === asked;
+    return me;
+  });
 
   app.patch('/me', auth, async (request) => {
     const { row } = requireUser(request);

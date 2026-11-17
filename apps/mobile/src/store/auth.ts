@@ -7,6 +7,7 @@ import { guessServerUrl, serverUrlIsEditable, stripTrailingSlash } from '@/lib/c
 import { queryClient } from '@/lib/query';
 import { StorageKeys, getItem, getJson, setItem, setJson } from '@/lib/storage';
 import { clearReminders } from '@/services/reminders';
+import { flushPendingPushClear, forgetPendingPushClear, sendPushClear } from '@/services/pushClear';
 import { forgetStoredSession, markTokenRenewed, renewTokenIfDue } from '@/services/session';
 import { forgetServerTime } from '@/utils/serverClock';
 
@@ -105,6 +106,8 @@ export const useAuth = create<AuthState>((set, get) => ({
         serverUrlIsEditable() && typeof storedUrl === 'string' && storedUrl ? storedUrl : guessServerUrl(),
       hydrated: true,
     });
+    // a logout's "stop pushing here" that the server did not hear
+    void flushPendingPushClear();
     if (token) {
       void get()
         .refreshMe()
@@ -126,6 +129,8 @@ export const useAuth = create<AuthState>((set, get) => ({
     const previous = get().me;
     if (previous && previous.id !== me.id) queryClient.clear();
     set({ token, me, sessionEnded: false, sessionEndReason: null });
+    // this sign-in sends its own token; an earlier logout's DELETE must not follow it
+    void forgetPendingPushClear().catch(() => {});
     // The address was right a moment ago, so this is the time to learn which
     // server it is: when the tunnel hands out a new address later, the id is
     // what tells "same server" from "another one". Best effort, never awaited.
@@ -191,9 +196,15 @@ export const useAuth = create<AuthState>((set, get) => ({
       // to a new phone and signs out of the old one used to switch off the new
       // one's push along with it.
       const pushToken = await registered;
-      void new ApiClient({ baseUrl: serverUrl, token })
-        .clearPushToken(pushToken)
-        .catch(() => {});
+      if (pushToken) {
+        // one that does not get through (the PC asleep) is sent again later
+        // (services/pushClear): the slot must not stay with a signed-out phone
+        void sendPushClear({ serverUrl, sessionToken: token, pushToken });
+      } else {
+        void new ApiClient({ baseUrl: serverUrl, token })
+          .clearPushToken(null)
+          .catch(() => {});
+      }
     }
     await forgetStoredSession();
   },

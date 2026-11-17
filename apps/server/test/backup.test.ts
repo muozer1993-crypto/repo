@@ -338,6 +338,30 @@ describe('restoring a backup', () => {
     expect(usernames(config.dbPath)).toEqual(['ali']);
   });
 
+  it('empties the push slots of the backup, so every phone sends its own token again', async () => {
+    const config = tempData();
+    const db = openDb(config.dbPath);
+    addUser(db, 'ali');
+    addUser(db, 'veli');
+    // the day of the backup: Ali's old phone P, Veli on Q
+    db.prepare("UPDATE users SET push_token = 'ExponentPushToken[P]', push_platform = 'android' WHERE username = 'ali'").run();
+    db.prepare("UPDATE users SET push_token = 'ExponentPushToken[Q]', push_platform = 'android' WHERE username = 'veli'").run();
+    const backup = (await backupIfDue(db, config, day(22)))!;
+    db.close();
+
+    restoreBackup(config, backup, day(24));
+    const restored = openDb(config.dbPath);
+    expect(restored.prepare('SELECT username, push_token, push_platform FROM users ORDER BY username').all()).toEqual([
+      { username: 'ali', push_token: null, push_platform: null },
+      { username: 'veli', push_token: null, push_platform: null },
+    ]);
+    restored.close();
+    // the backup itself is left as it was
+    const kept = new BetterSqlite3(backup, { fileMustExist: true });
+    expect(kept.prepare('SELECT COUNT(*) AS n FROM users WHERE push_token IS NOT NULL').get()).toEqual({ n: 2 });
+    kept.close();
+  });
+
   it('works on a new computer with no database yet', async () => {
     const { config, backup } = await withBackup();
     const fresh = tempData();

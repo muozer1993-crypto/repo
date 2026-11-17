@@ -139,11 +139,17 @@ export class ApiClient {
   async request<T>(
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     path: string,
-    options: { body?: unknown; query?: Query; formData?: FormData; timeoutMs?: number } = {}
+    options: {
+      body?: unknown;
+      query?: Query;
+      formData?: FormData;
+      timeoutMs?: number;
+      headers?: Record<string, string>;
+    } = {}
   ): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? this.timeoutMs);
-    const headers: Record<string, string> = { Accept: 'application/json' };
+    const headers: Record<string, string> = { ...options.headers, Accept: 'application/json' };
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
     if (options.body !== undefined) headers['Content-Type'] = 'application/json';
 
@@ -267,8 +273,17 @@ export class ApiClient {
 
   /* ----------------------------------------------------------------- me */
 
-  me() {
-    return this.request<Me>('GET', '/me');
+  /**
+   * With `pushToken` (this phone's device token) the server also says whether
+   * the account's push slot is this phone's (`Me.pushTokenIsThisPhone`); an
+   * older server leaves the field out.
+   */
+  me(options: { pushToken?: string } = {}) {
+    return this.request<Me>(
+      'GET',
+      '/me',
+      options.pushToken ? { headers: { 'X-Push-Token': options.pushToken } } : {}
+    );
   }
 
   updateMe(body: {

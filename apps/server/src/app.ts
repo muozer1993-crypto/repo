@@ -180,7 +180,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<BuiltApp> {
     origin: true,
     credentials: false,
     methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Authorization', 'Content-Type'],
+    allowedHeaders: ['Authorization', 'Content-Type', 'X-Push-Token'],
     maxAge: 86_400,
   });
 

@@ -559,6 +559,13 @@ yollar, onun çıkışı eskisi gibi ne varsa siler. O yüzden NotificationBridg
 yolladıktan sonra her öne gelişte `/me`'ye bakar; `hasPushToken: false` görürse aynı token'ı yine
 yollar. `/me` yerin dolu olup olmadığını söyler, kimin olduğunu değil: hesaba bağlı ikinci bir
 telefon yeri tutuyorsa ona dokunulmaz, iki telefon da birbirinin token'ını sürekli ezmez.
+Ayarlar ise kendi token'ını `X-Push-Token` başlığıyla sorar, `/me` o zaman yerin bu telefonun olup
+olmadığını da söyler (`pushTokenIsThisPhone`); değilse "Başka cihazda" yazar ve "Tekrar dene"yi
+gösterir, "Bildirimler telefonuna düşüyor" demez. Yer kendiliğinden geri alınmadığı için çıkışın
+silme isteği kaybolmamalı: bilgisayar uyurken çıkış yapan tabletin `DELETE`'i ulaşmazsa telefonda
+saklanır (`StorageKeys.pendingPushClear`) ve sonraki açılışta, çıkış yapılmışken öne gelişte ve arka
+plan görevinde sunucu cevap verene kadar yeniden gider; telefonda yeniden giriş yapılınca bırakılır,
+çünkü o giriş kendi token'ını yollar.
 
 Gelen kutusu 30'ar satırlık sayfalarla gelir; listenin dibine inince bir eski sayfa istenir.
 Sunucu `created_at < before` ile keser, zamanlayıcının tek bir turu da aynı kişiye aynı
@@ -1616,7 +1623,11 @@ kalır, oradaki daha eski `koydum-YYYY-AA-GG.db` dosyaları silinir. `yonet -- g
 açıkken çalışmaz: önce `/health`'e sorar, sonra canlı dosyayı bir an açıp kapatır ve `-wal`'ının
 hâlâ durup durmadığına bakar (SQLite WAL dosyasını son bağlantı kapanırken siler; duruyorsa dosyayı
 başka biri tutuyordur). Yedeği veritabanının yanına kopyalayıp orada sınar, eskisini
-`koydum-onceki-*.db` diye kenara koyar; hiçbir şey silinmez.
+`koydum-onceki-*.db` diye kenara koyar; hiçbir şey silinmez. Kopyadaki bildirim kayıtlarını
+(`push_token`) boşaltır (`forgetPushTokens`): yedek kendi gününün kayıtlarını taşır, ve token'ını
+zaten göndermiş bir telefon dolu yuvaya dokunmaz. Yedekten sonra telefon değiştiren ya da aynı
+telefonda başka hesaba giren kankanın bildirimleri yoksa hep yanlış telefona giderdi; boş yuvayı
+her telefon bir sonraki açılışında kendi token'ıyla doldurur.
 
 `users` tablosu boşken yedek alınmaz. Bilgisayarı ölen sahip yenisinde çoğu zaman önce sunucuyu
 boş klasörle açar, ancak sonra `geri-yukle`'yi hatırlar. O boş veritabanının kopyası

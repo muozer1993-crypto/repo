@@ -19,6 +19,7 @@ import {
   type NotificationRoute,
 } from '@/services/notifications';
 import { clearFailed, currentOwnerId, flushQueue, readQueue } from '@/services/offlineQueue';
+import { flushPendingPushClear } from '@/services/pushClear';
 import { refreshReminders } from '@/services/reminders';
 import { startForegroundStepTracking } from '@/services/steps';
 import { syncStepsNow } from '@/services/stepSync';
@@ -174,6 +175,17 @@ export function NotificationBridge() {
       sub.remove();
     };
   }, [token, serverUrl, makeClient, refreshMe, onboarding]);
+
+  // --- a logout's "stop pushing here" the server did not hear ------------
+  // Signed out, nothing else here runs on a foreground; the start and the
+  // background task send it too (services/pushClear).
+  useEffect(() => {
+    if (token) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void flushPendingPushClear();
+    });
+    return () => sub.remove();
+  }, [token]);
 
   // --- an invite link opened before this account existed -----------------
   useEffect(() => {

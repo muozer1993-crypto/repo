@@ -809,6 +809,9 @@ bir günü yükle (`npm run yonet -- geri-yukle 2026-10-03` gibi). Aynı gün `y
 altında da görünüyorsa önce onu dene: tarihini ya da adını yazınca yine bu bilgisayardaki boş
 kopya yüklenir, BACKUP_DIR'dakini tam yoluyla yükle (`npm run yonet -- geri-yukle
 "C:\Users\ArisK\OneDrive\KOYDUM yedek\koydum-2026-10-03.db"` gibi; komut da bu satırı yazar).
+Yüklenen yedekteki bildirim kayıtlarını boşaltır: yedekten sonra telefon değiştiren ya da aynı
+telefonda başka hesaba giren kankanın bildirimleri yanlış telefona gitmesin. Her telefon bir sonraki
+açılışta kendi kaydını yeniden gönderir, kimsenin bir şey yapmasına gerek yok.
 Eski veritabanını silmez, `data\koydum-onceki-<tarih-saat>.db` diye kenara koyar ve yanlış yedeği
 seçtiysen onu nasıl geri koyacağını ekrana yazar. Eski `koydum.db-wal` ve `koydum.db-shm`
 dosyalarını kendisi halleder, elle bir şey silme. Kenara konan dosyalar birikir; işin bitince silebilirsin. Kenarda durdukça
@@ -1249,7 +1252,10 @@ kendiliğinden gider. Android iki kere "izin verme" denince bir daha sormuyor, y
 Yeni telefona geçen bir kanka eskisinden çıkış yaparsa yeni telefonun bildirimleri kesilmez:
 çıkış sadece o telefonun kendi kaydını siler. Eski telefonda uygulamayı açmak ya da Ayarlar'a girmek
 de bildirimleri yeni telefondan geri almaz; geri almak istersen Ayarlar → Bildirimler'deki
-**Tekrar dene**'ye bas. Eski telefondaki uygulama güncellemeyi hiç almamışsa
+**Tekrar dene**'ye bas. Bildirimler hesabının başka bir cihazına gidiyorsa Ayarlar bunu
+**Başka cihazda** diye söyler. Çıkış yapılan telefon o sırada sunucuya ulaşamazsa (bilgisayar
+uyuyorsa) kaydını silme isteği telefonda bekler, sunucu açılınca uygulama açıldığında ya da arka
+planda yeniden gider. Eski telefondaki uygulama güncellemeyi hiç almamışsa
 yenisinin kaydını da siler; yeni telefonda KOYDUM'u bir kez öne getirmek (açmak ya da arka plandan
 dönmek) kaydı geri koyar.
 
