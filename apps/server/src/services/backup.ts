@@ -25,9 +25,17 @@ import { freeBytesSync, isDiskFull } from './disk.js';
 export const BACKUPS_KEPT = 7;
 const NAME_RE = /^koydum-\d{4}-\d{2}-\d{2}\.db$/;
 
-/** Refusal shared by the CLI's /health probe and the check on the file itself. */
-export const SERVER_OPEN =
-  "Sunucu açık, açıkken yedek yüklersen veritabanı bozulur. Önce sunucunun penceresini kapat (ya da o pencerede Ctrl+C'ye bas), sonra tekrar dene.";
+/**
+ * Refusal shared by the CLI's /health probe and the check on the file itself.
+ * `dur` first: closing the `npm run internet` window takes the tunnel with it,
+ * and every friend would need the new address for a restore that needed none.
+ */
+export const SERVER_OPEN = [
+  'Sunucu açık, açıkken yedek yüklersen veritabanı bozulur. Önce sunucuyu durdur:',
+  "  npm run internet ile açtıysan o pencerede dur yazıp Enter'a bas: tünel açık kalır, adres değişmez.",
+  "  npm run server ile açtıysan o pencerede Ctrl+C'ye bas.",
+  '  Sunucu durunca tekrar dene.',
+].join('\n');
 const BROKEN = 'Bu yedek bozuk, başka birini seç.';
 const NOT_OURS = 'Bu dosya bir KOYDUM yedeği değil.';
 

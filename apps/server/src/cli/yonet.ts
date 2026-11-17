@@ -44,7 +44,8 @@ const HELP = `KOYDUM yönetim komutları (sunucuyu açan kişi için)
   npm run yonet -- yedekler            veritabanının günlük yedekleri ve nerede durdukları
   npm run yonet -- geri-yukle [yedek]  bir yedeği geri yükler (adını yazmazsan en yenisini)
 
-Sunucu açıkken de çalışır. Sadece geri-yukle için önce sunucuyu kapat.`;
+Sunucu açıkken de çalışır. Sadece geri-yukle için önce sunucuyu durdur:
+npm run internet penceresinde dur yazıp Enter'a bas (npm run server ise o pencerede Ctrl+C).`;
 
 type Command = 'users' | 'reports' | 'password' | 'delete' | 'backups' | 'restore';
 
@@ -222,7 +223,8 @@ function printBackups(config: Config): void {
     return;
   }
   const newest = findBackup(config);
-  console.log(`\nGeri yüklemek için önce sunucuyu kapat, sonra: npm run yonet -- geri-yukle ${newest?.name ?? ''}`.trimEnd());
+  console.log("\nGeri yüklemek için önce sunucuyu durdur: npm run internet penceresinde dur yazıp Enter'a bas");
+  console.log(`(npm run server ise o pencerede Ctrl+C). Sonra: npm run yonet -- geri-yukle ${newest?.name ?? ''}`.trimEnd());
   console.log('Adını yazmazsan en yenisini yükler.');
 }
 
@@ -283,7 +285,11 @@ async function restore(config: Config, wanted: string | undefined): Promise<numb
     console.log('  Hangileri var: npm run yonet -- yedekler');
     return 0;
   }
-  console.log('\nŞimdi sunucuyu aç.');
+  // the window `dur` stopped brings it back behind the same tunnel; a new
+  // `npm run internet` would hand every friend a new address
+  console.log('\nŞimdi sunucuyu aç:');
+  console.log("  npm run internet penceresinde dur yazdıysan orada y yazıp Enter'a bas: adres değişmez.");
+  console.log('  Yoksa npm run internet ya da npm run server ile aç.');
   return 0;
 }
 

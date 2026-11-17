@@ -430,7 +430,8 @@ describe('restoring a backup', () => {
     const { config, backup } = await withBackup();
     const server = openDb(config.dbPath);
     try {
-      expect(() => restoreBackup(config, backup, day(24))).toThrow('Sunucu açık');
+      // the way to stop it that keeps the tunnel's address comes first
+      expect(() => restoreBackup(config, backup, day(24))).toThrow(/^Sunucu açık,[^]*\n {2}npm run internet ile açtıysan o pencerede dur yazıp Enter'a bas/);
       expect(fs.readdirSync(config.dataDir).filter((name) => name.startsWith('koydum-onceki'))).toEqual([]);
       expect(usernames(config.dbPath)).toEqual(['ali', 'veli']);
     } finally {

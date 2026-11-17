@@ -681,7 +681,7 @@ npm run yonet -- sikayetler       # gelen şikayetler, en yenisi en üstte
 npm run yonet -- sifre ali        # şifresini unutan ali'ye yeni şifre
 npm run yonet -- sil ali          # ali'nin hesabını kapatır (önce sorar, geri alınamaz)
 npm run yonet -- yedekler         # günlük yedekler: hangileri var, nerede duruyorlar
-npm run yonet -- geri-yukle       # en yeni yedeği geri yükler (önce sunucuyu kapat)
+npm run yonet -- geri-yukle       # en yeni yedeği geri yükler (önce sunucuyu durdur)
 ```
 
 Hep depo klasöründen `npm run yonet` ile çalıştır. Sunucunun kullandığı veritabanını
@@ -802,11 +802,15 @@ uyarı düşer ve saatte bir yeniden dener; o günün yedeği yine `data\backups
 
 **Geri yüklemek:**
 
-1. Sunucunun penceresini kapat (ya da o pencerede Ctrl+C). Açıkken yüklenen yedek veritabanını
-   bozar; komut sunucuyu açık bulursa hiçbir şeye dokunmadan söyler.
-2. `npm run yonet -- geri-yukle` iki klasördeki en yeni yedeği yükler. Belli bir günü
-   istiyorsan tarihini yaz: `npm run yonet -- geri-yukle 2026-10-03`.
-3. Sunucuyu aç.
+1. Sunucuyu durdur. `npm run internet` ile açtıysan o pencerede `dur` yazıp Enter'a bas,
+   "Sunucu durdu" yazana kadar bekle. Pencereyi kapatma, Ctrl+C'ye de basma: tünel de kapanır,
+   adres değişir, herkese yeni bağlantı atman gerekir. `npm run server` ile açtıysan o pencerede
+   Ctrl+C'ye bas. Açıkken yüklenen yedek veritabanını bozar; komut sunucuyu açık bulursa hiçbir
+   şeye dokunmadan söyler.
+2. Başka bir PowerShell penceresinde `npm run yonet -- geri-yukle` çalıştır: iki klasördeki en
+   yeni yedeği yükler. Belli bir günü istiyorsan tarihini yaz: `npm run yonet -- geri-yukle 2026-10-03`.
+3. Sunucuyu aç: `dur` yazdığın pencerede `y` yazıp Enter'a bas. Adres aynı kalır, kimseye
+   bağlantı atmazsın. `npm run server` ile açtıysan yine `npm run server`.
 
 Komut yedeği yüklemeden önce sağlam mı diye bakar; bozuksa ya da KOYDUM'un değilse dokunmaz.
 Yüklediği yedekte kaç hesap olduğunu da yazar. "Bu yedekte hiç hesap yok" derse sunucuyu açma:

@@ -1331,7 +1331,10 @@ yapılamazsa hiçbir şey gönderilmez. Sonradan işaretlendiği günlerde dolu 
 Güncelleme de aynı sebeple pencereyi kapatmadan olur. Betik stdin'i satır satır okur:
 `y` + Enter sunucuyu aynı tünelin arkasında yeni kodla yeniden açar, `dur` + Enter onu durdurup
 bekletir (Windows'ta çalışan sunucunun açık tuttuğu `better_sqlite3.node`'u `npm install`
-değiştiremez). readline `terminal: false` ile, çıktısız kurulur: stdin ham moda geçmez, Ctrl+C
+değiştiremez). Yedek geri yüklemek de bu yoldan geçer: `yonet -- geri-yukle` açık sunucuyu
+reddederken pencereyi kapatmayı değil `dur`'u, yükledikten sonra da aynı pencerede `y`'yi söyler.
+Eskiden "pencereyi kapat" diyordu, tünel de onunla gidiyor, herkes yeni adrese geçmek zorunda
+kalıyordu. readline `terminal: false` ile, çıktısız kurulur: stdin ham moda geçmez, Ctrl+C
 hâlâ SIGINT olarak gelir. Yeni kod açılamazsa İngilizce bir yığın izi yerine ne yapılacağı
 Türkçe yazsın diye sunucunun girişi (`src/index.ts`) asıl açılışı (`src/main.ts`) `import()`
 ile yükler: statik bir import'ta eksik bir paket bizim kodumuz hiç çalışmadan patlıyordu.

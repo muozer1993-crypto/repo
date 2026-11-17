@@ -3,8 +3,9 @@
  * tunnel address, start the server with it as PUBLIC_URL (so /health reports
  * it and the app shares links with it), keep that address through a server
  * crash, through a run of crashes and through a start that waits for npm install
- * or another PORT, start the server from new code on y + Enter, reopen a dropped
- * tunnel without taking the server down, serve the home Wi-Fi when no tunnel opens
+ * or another PORT, start the server from new code on y + Enter, load a backup
+ * between dur and y behind the same tunnel, reopen a dropped tunnel without
+ * taking the server down, serve the home Wi-Fi when no tunnel opens
  * at the start (never at cloudflared's own API address) until one does, and take
  * both down on Ctrl+C.
  */
@@ -16,11 +17,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { hashPassword } from '../src/auth/password.js';
+import { openDb } from '../src/db/index.js';
 import { listenErrorMessage, startupErrorMessage } from '../src/listenError.js';
+import { createUser } from '../src/services/accounts.js';
 
 const serverRoot = path.resolve(__dirname, '..');
 const script = path.join(serverRoot, 'scripts', 'internet.mjs');
 const tsx = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
+const tsxCli = createRequire(import.meta.url).resolve('tsx/cli');
 let child: ChildProcess | null = null;
 const dirs: string[] = [];
 const servers: net.Server[] = [];
@@ -183,6 +188,20 @@ function deniedListen(dir: string): string {
   return `--import=${pathToFileURL(preload).href}`;
 }
 
+/** `npm run yonet` against the data folder and port the supervised server uses. */
+function yonet(port: number, dir: string, args: string[]): Promise<{ code: number | null; out: string; err: string }> {
+  const cli = spawn(process.execPath, [tsxCli, 'src/cli/yonet.ts', ...args], {
+    cwd: serverRoot,
+    env: { ...process.env, PORT: String(port), DATA_DIR: path.join(dir, 'data'), JWT_SECRET: '', BACKUP_DIR: '' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let out = '';
+  let err = '';
+  cli.stdout.on('data', (d) => (out += d.toString()));
+  cli.stderr.on('data', (d) => (err += d.toString()));
+  return new Promise((resolve) => cli.on('close', (code) => resolve({ code, out, err })));
+}
+
 async function publicUrlOf(port: number): Promise<string | null> {
   const res = await fetch(`http://127.0.0.1:${port}/health`);
   return res.ok ? ((await res.json()) as { publicUrl: string | null }).publicUrl : null;
@@ -314,6 +333,46 @@ describe('npm run internet', () => {
     expect(await ctrlC()).toBe(0);
   }, 60_000);
 
+  // What geri-yukle tells the owner to do must keep the address: closing this
+  // window (its old advice) took cloudflared down too, and every friend needed a new link.
+  onPosix('loads a backup between dur and y, behind the same tunnel, the way geri-yukle says', async () => {
+    const dir = tempDir();
+    const fake = tunnelPerAddress(dir);
+    const port = await freePort();
+    const backup = path.join(dir, 'koydum-2026-11-16.db');
+    const old = openDb(path.join(dir, 'eski.db'));
+    createUser(old, { username: 'ali', displayName: 'Ali', passwordHash: await hashPassword('sifre123'), timezone: 'Europe/Istanbul' });
+    await old.backup(backup);
+    old.close();
+    const run = runScript(port, fake, dir, { keyboard: true });
+    const url = 'https://tunel-1.trycloudflare.com';
+    await waitFor(async () => ((await publicUrlOf(port)) === url ? true : null));
+
+    const refused = await yonet(port, dir, ['geri-yukle', backup]);
+    expect(refused.code).toBe(1);
+    expect(refused.err).toContain("npm run internet ile açtıysan o pencerede dur yazıp Enter'a bas: tünel açık kalır, adres değişmez.");
+
+    run.type('dur');
+    await waitFor(async () => (run.output().includes("adres aynı. npm install ya da geri-yukle bitince burada y yazıp Enter'a bas.") ? true : null), 20_000);
+    const restored = await yonet(port, dir, ['geri-yukle', backup]);
+    expect(restored.err).toBe('');
+    expect(restored.code).toBe(0);
+    expect(restored.out).toContain("npm run internet penceresinde dur yazdıysan orada y yazıp Enter'a bas: adres değişmez.");
+
+    run.type('y');
+    await waitFor(async () => ((await publicUrlOf(port)) === url ? true : null));
+    // the server reads the backup's accounts, behind the one tunnel it had
+    const login = await fetch(`http://127.0.0.1:${port}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'ali', password: 'sifre123' }),
+    });
+    expect(login.status).toBe(200);
+    expect(fs.readFileSync(path.join(dir, 'count'), 'utf8').trim()).toBe('1');
+
+    expect(await ctrlC()).toBe(0);
+  }, 90_000);
+
   onPosix('keeps the tunnel after five crashes in a row and starts again on y + Enter', async () => {
     const dir = tempDir();
     const fake = tunnelPerAddress(dir);
@@ -439,7 +498,7 @@ describe('npm run internet', () => {
     expect(run.output()).toContain('• Sunucu yeni kodla yeniden açılıyor. Tünel henüz açılmadı, açılınca adres burada yazar.');
 
     run.type('dur');
-    await waitFor(async () => (run.output().includes("• Sunucu durdu. npm install bitince burada y yazıp Enter'a bas.") ? true : null), 20_000);
+    await waitFor(async () => (run.output().includes("• Sunucu durdu. npm install ya da geri-yukle bitince burada y yazıp Enter'a bas.") ? true : null), 20_000);
     expect(await portClosed(port)).toBe(true);
 
     run.type('y');

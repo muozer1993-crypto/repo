@@ -504,11 +504,13 @@ describe('npm run yonet', () => {
     expect(listed.code).toBe(0);
     expect(listed.out).toContain(`BACKUP_DIR: ${copyDir}`);
     expect(listed.out).toMatch(/geri-yukle koydum-\d{4}-\d{2}-\d{2}\.db/);
+    expect(listed.out).toContain("önce sunucuyu durdur: npm run internet penceresinde dur yazıp Enter'a bas");
 
     const restored = await run(dataDir, ['GERİ-YÜKLE'], env);
     expect(restored.err).toBe('');
     expect(restored.code).toBe(0);
-    expect(restored.out).toContain('Şimdi sunucuyu aç.');
+    // the way back that keeps the address: the window `dur` stopped, not a new npm run internet
+    expect(restored.out).toContain(`Şimdi sunucuyu aç:\n  npm run internet penceresinde dur yazdıysan orada y yazıp Enter'a bas`);
     expect(usersIn(dbPath)).toEqual(['ali']);
     const aside = fs.readdirSync(dataDir).filter((name) => name.startsWith('koydum-onceki-'));
     expect(aside).toHaveLength(1);
@@ -536,14 +538,15 @@ describe('npm run yonet', () => {
     expect(wrong.code).toBe(0);
     expect(wrong.out).toContain(', 0 hesap)');
     expect(wrong.out).toContain('Bu yedekte hiç hesap yok');
-    expect(wrong.out).not.toContain('Şimdi sunucuyu aç.');
+    expect(wrong.out).not.toContain('Şimdi sunucuyu aç');
+    expect(wrong.out).not.toContain('y yazıp Enter');
 
     const right = await run(dataDir, ['geri-yukle', real], env);
     expect(right.err).toBe('');
     expect(right.code).toBe(0);
     expect(right.out).toContain(', 2 hesap)');
     expect(right.out).not.toContain('hiç hesap yok');
-    expect(right.out).toContain('Şimdi sunucuyu aç.');
+    expect(right.out).toContain("orada y yazıp Enter'a bas: adres değişmez.");
     expect(usersIn(dbPath).sort()).toEqual(['ali', 'veli']);
   }, 60_000);
 
@@ -574,7 +577,7 @@ describe('npm run yonet', () => {
     const twin = await run(dataDir, ['geri-yukle', real], env);
     expect(twin.err).toBe('');
     expect(twin.out).toContain(', 1 hesap)');
-    expect(twin.out).toContain('Şimdi sunucuyu aç.');
+    expect(twin.out).toContain("orada y yazıp Enter'a bas: adres değişmez.");
     expect(usersIn(path.join(dataDir, 'koydum.db'))).toEqual(['ali']);
   }, 60_000);
 
@@ -589,6 +592,9 @@ describe('npm run yonet', () => {
       const result = await run(dataDir, ['geri-yukle'], { PORT: String((stub.address() as AddressInfo).port) });
       expect(result.code).toBe(1);
       expect(result.err).toContain('Sunucu açık');
+      // dur, not the window's close: that takes the tunnel and hands every friend a new address
+      expect(result.err).toContain("npm run internet ile açtıysan o pencerede dur yazıp Enter'a bas: tünel açık kalır, adres değişmez.");
+      expect(result.err).not.toContain('penceresini kapat');
       expect(fs.readdirSync(dataDir).filter((name) => name.startsWith('koydum-onceki-'))).toEqual([]);
       expect(usersIn(dbPath).sort()).toEqual(['ali', 'veli']);
     } finally {

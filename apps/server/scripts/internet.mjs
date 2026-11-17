@@ -14,7 +14,8 @@
  * server that keeps crashing is retried every few minutes, never given up on), the
  * server keeps serving the home Wi-Fi while a dropped tunnel is reopened, and the
  * owner updates the code without closing the window: `y` + Enter starts the
- * server again from the new code, `dur` + Enter stops it for an `npm install`.
+ * server again from the new code, `dur` + Enter stops it for an `npm install`
+ * or a `yonet -- geri-yukle`.
  * No tunnel at the start (no internet, or Cloudflare handing out none) is the
  * same as a dropped one: the server starts for the home Wi-Fi and the tunnel is
  * retried until its address can be printed. Ctrl+C stops both.
@@ -76,7 +77,7 @@ let tunnel = null; // the cloudflared whose address is in use
 let publicUrl = null;
 let stopping = false;
 let restartTimer = null; // the restart after a crash or a pause; y + Enter starts the server sooner
-let held = false; // `dur` + Enter: no server until y + Enter, so npm install can replace its files
+let held = false; // `dur` + Enter: no server until y + Enter, for an npm install or a geri-yukle
 const tunnels = new Set(); // every cloudflared started, including attempts still waiting for an address
 const replaced = new WeakSet(); // servers stopped on purpose (a new address, y, dur): not a crash
 const timers = new Set();
@@ -307,8 +308,8 @@ const NO_TUNNEL_YET = 'Tünel henüz açılmadı, açılınca adres burada yazar
 
 function heldLine() {
   return publicUrl
-    ? "• Sunucu durdu, tünel açık, adres aynı. npm install bitince burada y yazıp Enter'a bas."
-    : "• Sunucu durdu. npm install bitince burada y yazıp Enter'a bas.";
+    ? "• Sunucu durdu, tünel açık, adres aynı. npm install ya da geri-yukle bitince burada y yazıp Enter'a bas."
+    : "• Sunucu durdu. npm install ya da geri-yukle bitince burada y yazıp Enter'a bas.";
 }
 
 /**
@@ -333,7 +334,8 @@ function restartServer() {
  * A line the owner typed into this window. `y` after a git pull + npm install
  * starts the server from the new code behind the same tunnel, so nobody needs a
  * new link; `dur` stops it for an npm install that must replace a file the running
- * server holds open (better-sqlite3's .node, on Windows).
+ * server holds open (better-sqlite3's .node, on Windows), or for a restore, which
+ * refuses while a server is up.
  */
 function onCommand(line) {
   if (stopping) return;
@@ -362,7 +364,7 @@ function onCommand(line) {
       console.log(heldLine());
     }
   } else {
-    console.log("  Burada y yazıp Enter'a basarsan sunucu yeni kodla açılır, dur yazarsan durur (npm install için).");
+    console.log("  Burada y yazıp Enter'a basarsan sunucu yeni kodla açılır, dur yazarsan durur (npm install ya da geri-yukle için).");
     console.log('  İkisinde de tünel ve adres kalır. Kapatmak için Ctrl+C.');
   }
 }
