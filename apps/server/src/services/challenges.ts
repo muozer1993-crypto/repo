@@ -317,7 +317,8 @@ export function checkinDaysShort(
  * 0, as it does for the creator, but New York's evening before an Istanbul
  * erken_kus from 04:00, or its Sunday that ends at 15:59 before its 19:00, is
  * no day of theirs to count or to be reminded of. Nobody is let in with fewer
- * (`checkinDaysShort`).
+ * (`checkinDaysShort`); one an older server let in sets the count for
+ * everybody (`fewestCheckinDays`), the creator's zone included.
  *
  * No row keeps an older rule: a çelınc already running when the server is
  * updated moves onto this one. A server from before the trim scored a friend
@@ -331,13 +332,15 @@ export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string)
   if (!SCORED_PER_DAY.includes(type.metricType)) return window;
   const zone = readableZone(tz);
   const creatorTz = creatorTimezone(db, challenge);
-  // the creator's own zone has the creator's days, whatever the metric
-  if (readableZone(creatorTz) === zone) return window;
+  const creatorZone = readableZone(creatorTz) === zone;
 
   if (type.metricType === 'checkin_deadline') {
+    const creatorDays = checkinPlayableDays(challenge, type, creatorTz).length;
+    const days = Math.min(creatorDays, fewestCheckinDays(db, challenge, type));
+    // the creator's own zone has the creator's days, unless a player has fewer
+    if (creatorZone && days === creatorDays) return window;
     const slot = checkinSlot(challenge, type, zone);
     const playable = window.filter((key) => slot(key).cover > 0);
-    const days = checkinPlayableDays(challenge, type, creatorTz).length;
     // a reachable deadline outranks any length of slot without one
     const kept = trimEnds(playable, days, (key) => {
       const { cover, deadlineIn } = slot(key);
@@ -346,14 +349,16 @@ export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string)
     const first = kept[0];
     const last = kept[kept.length - 1];
     const creatorSlot = checkinSlot(challenge, type, readableZone(creatorTz));
-    const creatorDays = new Set(challengeWindow(challenge, creatorTz));
+    const creatorKeys = new Set(challengeWindow(challenge, creatorTz));
     const bareForBoth = (key: string): boolean =>
-      creatorDays.has(key) && slot(key).cover <= 0 && creatorSlot(key).cover <= 0;
+      creatorKeys.has(key) && slot(key).cover <= 0 && creatorSlot(key).cover <= 0;
     return window.filter(
       (key) => (first !== undefined && last !== undefined && key >= first && key <= last) || bareForBoth(key),
     );
   }
 
+  // the creator's own zone has the creator's days, whatever the metric
+  if (creatorZone) return window;
   const days = challengeWindow(challenge, creatorTz).length;
   if (days === 0 || window.length <= days) return window;
 
@@ -366,6 +371,31 @@ export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string)
     return trimEnds(window, days, (key) => (key === lastKey ? -DAY_MS : covered(key)));
   }
   return trimEnds(window, days, covered);
+}
+
+/**
+ * The fewest check-in days (`checkinPlayableDays`) anybody who ever said yes
+ * to this çelınc has in the zone pinned on their row; Infinity for nobody.
+ *
+ * Nobody gets in with fewer than the creator (`checkinDaysShort`), but a
+ * server from before that rule let them: a New York friend in an Istanbul
+ * erken_yat opened at 12:50 has six evenings to everybody else's seven, and
+ * lost with equal play. Such a çelınc is scored on his six, every other zone
+ * trimmed to it the way `scoringWindow` trims, the creator's own included.
+ * Somebody who said yes and left still counts: the count must not move while
+ * it runs, or a first evening trimmed away and never tapped would turn into a
+ * missed one.
+ */
+function fewestCheckinDays(db: Database, challenge: ChallengeRow, type: ChallengeType): number {
+  // rows from before `joined_at` was always set count as having joined
+  const joined = participantRows(db, challenge.id).filter((p) => p.status === 'accepted' || p.joined_at !== null);
+  const users = userMap(db, joined.map((p) => p.user_id));
+  let fewest = Number.POSITIVE_INFINITY;
+  for (const participant of joined) {
+    const tz = participantTimezone(participant, users.get(participant.user_id));
+    fewest = Math.min(fewest, checkinPlayableDays(challenge, type, tz).length);
+  }
+  return fewest;
 }
 
 /** Drops ends off `days` until `count` are left: the one `covered` less, the last on a tie. */

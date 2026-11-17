@@ -3272,6 +3272,76 @@ describe('check-in çelınclar across zones', () => {
     ]);
   });
 
+  // An older server let Mert into Ali's seven-day erken_yat from 12:50: six
+  // evenings in New York. He tapped on time on every one he had, like
+  // everybody, and lost 6-7 with a loser's badge.
+  it('scores a check-in çelınc an older server let a friend into short of evenings on his count, so equal play ties', async () => {
+    harness = await makeApp({ now: NOON_ISH });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const leyla = await registerUser(harness.app, 'leyla', { displayName: 'Leyla', timezone: 'Europe/London' });
+    const sam = await registerUser(harness.app, 'sam', { displayName: 'Sam', timezone: 'Australia/Sydney' });
+    const mert = await registerUser(harness.app, 'mert', { displayName: 'Mert', timezone: 'America/New_York' });
+    befriend(harness.app, ali.me.id, leyla.me.id);
+    befriend(harness.app, ali.me.id, sam.me.id);
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'erken_yat',
+      deadlineTime: '23:00',
+      participantIds: [leyla.me.id, sam.me.id],
+      endsAt: '2026-11-16T20:59:59.999Z',
+    });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    expect((await accept(harness, leyla, challengeId)).statusCode).toBe(200);
+    expect((await accept(harness, sam, challengeId)).statusCode).toBe(200);
+    harness.db
+      .prepare(
+        `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at, final_score, final_rank, timezone)
+         VALUES (?, ?, 'accepted', ?, ?, NULL, NULL, 'America/New_York')`,
+      )
+      .run(challengeId, mert.me.id, iso(harness), iso(harness));
+
+    // everybody plays six: Ali's last evening goes on the tie, Leyla's the one
+    // the end cuts at 20:59, Sam's the first one from 20:50
+    const h = harness;
+    const days = async (user: RegisteredUser) => (await detailFor(h, user, challengeId)).myDays;
+    expect(await days(ali)).toEqual({ first: '2026-11-10', last: '2026-11-15' });
+    expect(await days(leyla)).toEqual({ first: '2026-11-10', last: '2026-11-15' });
+    expect(await days(sam)).toEqual({ first: '2026-11-11', last: '2026-11-16' });
+    expect(await days(mert)).toEqual({ first: '2026-11-10', last: '2026-11-15' });
+
+    // 21:00 where each lives, on every evening they have
+    const taps: [string, RegisteredUser, string][] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const day = addDays('2026-11-10', i);
+      taps.push([`${day}T18:00:00.000Z`, ali, day]);
+      taps.push([`${day}T21:00:00.000Z`, leyla, day]);
+      taps.push([`${addDays(day, 1)}T10:00:00.000Z`, sam, addDays(day, 1)]);
+      taps.push([`${addDays(day, 1)}T02:00:00.000Z`, mert, day]);
+    }
+    taps.sort((a, b) => a[0].localeCompare(b[0]));
+    for (const [at, user, day] of taps) {
+      harness.setNow(at);
+      expect((await checkIn(harness, user, challengeId, day)).statusCode).toBe(201);
+    }
+    harness.setNow('2026-11-16T18:00:00.000Z');
+    expect(errorOf(await checkIn(harness, ali, challengeId, '2026-11-16')).code).toBe('day_out_of_range');
+
+    harness.setNow('2026-11-16T21:00:30.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    const outcome = harness.db.prepare('SELECT status, winner_id, is_tie FROM challenges WHERE id = ?').get(challengeId);
+    expect(outcome).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
+    const stored = harness.db
+      .prepare('SELECT final_score, final_rank FROM challenge_participants WHERE challenge_id = ? ORDER BY rowid')
+      .all(challengeId);
+    expect(stored).toEqual(Array.from({ length: 4 }, () => ({ final_score: 6, final_rank: 1 })));
+    const told = listByType(harness.db, mert.me.id, 'challenge_finished')[0];
+    expect(JSON.parse(told?.data ?? '{}')).toMatchObject({ role: 'tie' });
+    // and no "Ağzının Tadını Aldın"
+    expect(harness.db.prepare('SELECT badge_key FROM badges WHERE user_id = ?').all(mert.me.id)).not.toContainEqual({
+      badge_key: 'yiyis_1',
+    });
+  });
+
   it("leaves a zone's days with no slot out of its check-in days, but not a day the creator has without one too", async () => {
     harness = await makeApp({ now: '2026-11-09T09:00:00.000Z' }); // Monday 12:00 in Istanbul
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });

@@ -58,7 +58,10 @@ saatten önce kestiği günden önce gelir (00:30'da "Hemen" açılan Erken Kuş
 kalır, 04:00-05:59 son sabahı düşer). Son saat aralığına hiç denk gelmeyen gün, açanda da öyle değilse o
 kankanın günü sayılmaz (New York'ta 15:59'da biten son akşam). Bitişin son saatten önce kestiği gün
 (Londra'nın 20:59'da biten yedinci akşamı) bitişe kadar oynanır: uygulama o gün sınırı 20:59 gösterir ve
-yarım saat önce hatırlatır. Aynı dilimdeki oyunculara dokunulmaz. Profilini
+yarım saat önce hatırlatır. Aynı dilimdeki oyunculara dokunulmaz; tek istisnası, bu kuraldan önceki
+sunucunun eksik günle aldığı kanka: o çelınc bir kez "evet" demiş herkesin en az gün sayısıyla oynanır
+(`fewestCheckinDays`), açanın dilimi dahil her dilimin ucu aynı kuralla kırpılır. Ayrılan da sayılır, yoksa
+oyun sürerken sayı değişir, kırpılıp basılamayan bir ilk akşam kaçırılmış güne dönerdi. Profilini
 "Varım"dan hemen önce Tokyo'ya alan biri 07:00'lik sabahları İstanbul saatiyle 00:30'da yakalar. Kabulü
 saat dilimi değişti diye reddetmek gerçekten yolculuk yapanı cezalandırırdı; onun yerine herkesin oynadığı
 dilim görünür (`ParticipantView.timezone`): sıralamada adının altında kendi satırında "🕐 Tokyo saati" (adın yanında

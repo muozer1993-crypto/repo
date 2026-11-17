@@ -526,7 +526,11 @@ mornings there and five in Tokyo (05:00 on the first to 05:59 on Saturday), and 
 slot too, a "Geldim" on it a late 0 as before (the first day of a "Hemen" past the deadline, in Berlin as in
 Istanbul); the others are left out (New York's evening before an Istanbul erken_kus from 04:00, or its last Sunday
 of an Istanbul erken_yat, which ends at 15:59 before its 19:00). Fewer deadlines than the creator's never get in
-(2.2 `checkin_days_short`); same-zone players are never cut. A playable day the end cuts before its deadline
+(2.2 `checkin_days_short`), but a server from before that rule let some in: a çelınc with one is scored on the fewest
+deadlines of anybody who ever said yes to it (`fewestCheckinDays`; one who left still counts, so the count never moves
+while it runs), every zone trimmed to that count as above, the creator's own included (an Istanbul erken_yat from
+12:50 with an old New York yes plays six evenings: Istanbul's last one goes, London's cut one, Sydney's first one from
+20:50), so equal play ties. Otherwise same-zone players are never cut. A playable day the end cuts before its deadline
 (London's last evening of an Istanbul erken_yat ends at 20:59) still counts until the end: the app shows that day's
 limit as the end ("Bugünün sınırı: 20:59. Çelınc saat 23:00 olmadan bitiyor, ondan önce bas.") and pokes 30 minutes
 before it. A çelınc already running when the server is updated to this rule moves onto it; no column keeps an older
