@@ -59,7 +59,7 @@ import {
 } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
 import { useProofPhoto } from '@/hooks/useProofPhoto';
-import { usePullRefresh } from '@/hooks/usePullRefresh';
+import { PULL_FLUSH_WAIT_MS, usePullRefresh, waitAtMost } from '@/hooks/usePullRefresh';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api';
 import { useChallengeTimezone } from '@/hooks/useTimezone';
@@ -203,9 +203,10 @@ export default function ChallengeDetailScreen() {
 
   const query = useChallenge(id);
   const flush = useFlushQueue();
-  // a parked entry goes first, so the pull shows it counted rather than "sırada"
+  // a parked entry goes first, so the pull shows it counted rather than "sırada";
+  // not for long: a photo still going up redraws this screen when it lands
   const pull = usePullRefresh(async () => {
-    await flush.mutateAsync().catch(() => {});
+    await waitAtMost(flush.mutateAsync(), PULL_FLUSH_WAIT_MS);
     await query.refetch();
   });
   const detail = query.data;

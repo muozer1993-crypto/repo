@@ -21,3 +21,24 @@ export function usePullRefresh(run: () => unknown): { refreshing: boolean; onRef
   };
   return { refreshing, onRefresh };
 }
+
+/** How long a pull waits for the parked entries it sends first. */
+export const PULL_FLUSH_WAIT_MS = 3_000;
+
+/**
+ * Waits for `work` at most `ms`, then lets the pull go on. The queue a pull
+ * sends first may start with a proof photo, whose upload may take two minutes
+ * on a weak uplink; the pull showed nothing new for all that time.
+ */
+export function waitAtMost(work: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    work.then(
+      () => {},
+      () => {}
+    ),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}

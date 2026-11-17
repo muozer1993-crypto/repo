@@ -866,7 +866,13 @@ ekranında aşağı çekip yenileyince sırayla gönderilir. Uygulama ekrandayke
 bakılır: hiç cevap almamış bir giriş bekliyorsa ve sunucu `/health`'e cevap veriyorsa kuyruk o an
 boşaltılır. Eskiden kısa bir kesintide basılan "Geldim", uygulama açık durdukça ekran kapanıp
 açılana kadar telefonda bekliyordu; sunucu da onu geldiği saatle değerlendirip geç sayıyordu.
-Bekleyen giriş yoksa sunucuya hiçbir şey sorulmaz, boşta duran telefon trafik yapmaz. 5xx alıp
+Bekleyen giriş yoksa sunucuya hiçbir şey sorulmaz, boşta duran telefon trafik yapmaz. Aşağı
+çekip yenileme kuyruğu en fazla 3 saniye bekler (`PULL_FLUSH_WAIT_MS`): sırada önce bir kanıt
+fotoğrafı varsa zayıf bağlantıda yüklemesi iki dakika sürebilir, çark da o kadar dönüp ekranda
+yeni bir şey göstermiyordu. Fotoğraf sonradan inince `useFlushQueue` çelınc ekranını yeniden
+okutur. Başka bir boşaltmanın (aşağı çekme, bir yazış) aldığı ret de aynı 15 saniyelik turda
+söylenir, sunucuya bir şey sormadan; eskiden bir sonraki öne gelişe kalıyordu, oysa kaybolan bir
+fotoğraf o gün hâlâ yeniden girilebilir. 5xx alıp
 deneme hakkı yemiş giriş ise eskisi gibi öne gelince, arka planda ve yeni bir yazışta gider; yoksa
 500 veren bir sunucu sekiz hakkı iki dakikada bitirirdi.
 Sunucunun 4xx ile reddettiği giriş kesin reddir, kullanıcıya bir kez sebebiyle söylenir.

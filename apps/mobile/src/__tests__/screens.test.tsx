@@ -8,6 +8,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider } from '@/components/Toast';
+import { PULL_FLUSH_WAIT_MS } from '@/hooks/usePullRefresh';
 import { ApiClient, ApiError } from '@/lib/api';
 import { clearPendingInvite, readPendingInvite, savePendingInvite } from '@/services/invite';
 import type { ScreenTimeAvailability } from '@/services/screenTime';
@@ -7945,6 +7946,66 @@ describe('a pull-to-refresh with an entry parked', () => {
     // nothing landed: the poke stays to bring the app back before the deadline
     expect(mockReminders.refresh).not.toHaveBeenCalled();
     expect((tree.root.findByType(RefreshControl).props as { refreshing: boolean }).refreshing).toBe(false);
+  });
+
+  it('waits a few seconds for an upload, not two minutes, and reads the screen again when it lands', async () => {
+    // a proof photo first in line on a weak uplink: the spinner stayed up and
+    // nothing was read again until the upload ended or timed out
+    searchParams.id = 'c-1';
+    let land: () => void = () => {};
+    api.addEntry = jest.fn(
+      () =>
+        new Promise((resolve) => {
+          calls.push('addEntry');
+          land = () => resolve({ entry: { value: 1, late: false }, standings: [] });
+        })
+    );
+    api.challenge = jest.fn(async () => {
+      calls.push('challenge');
+      return challengeDetail();
+    });
+    const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+    const tree = renderScreen(<ChallengeScreen />);
+    await settle();
+    calls = [];
+    const spinner = () => (tree.root.findByType(RefreshControl).props as { refreshing: boolean }).refreshing;
+
+    // only the timeouts wait for the test; everything else runs as usual
+    jest.useFakeTimers({
+      doNotFake: [
+        'Date', 'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',
+        'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval',
+      ],
+    });
+    const advance = async (ms: number) => {
+      for (let i = 0; i < 10; i++) {
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(i === 0 ? ms : 0);
+        });
+      }
+    };
+    try {
+      act(() => {
+        (tree.root.findByType(RefreshControl).props as { onRefresh: () => void }).onRefresh();
+      });
+      await advance(PULL_FLUSH_WAIT_MS - 1);
+      expect(calls).toEqual(['addEntry']);
+      expect(spinner()).toBe(true);
+
+      await advance(1);
+      expect(calls).toEqual(['addEntry', 'challenge']);
+      expect(spinner()).toBe(false);
+
+      // the upload ends after the pull let go: the screen shows it counted
+      await act(async () => land());
+      await advance(0);
+      expect(calls).toEqual(['addEntry', 'challenge', 'challenge']);
+      expect(await readQueue()).toEqual([]);
+    } finally {
+      // a failed expectation must not leave the flush holding the queue
+      land();
+      jest.useRealTimers();
+    }
   });
 });
 

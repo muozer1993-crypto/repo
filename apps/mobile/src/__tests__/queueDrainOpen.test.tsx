@@ -64,7 +64,10 @@ jest.mock('@/services/offlineQueue', () => ({
   flushQueue: (client: unknown) => mockFlush(client),
   readQueue: async () => mockQueue.items,
   currentOwnerId: async () => 'u1',
-  clearFailed: async () => {},
+  // told, then gone, as the real one does
+  clearFailed: async (ids: string[]) => {
+    mockQueue.items = mockQueue.items.filter((item) => !ids.includes(item.id));
+  },
 }));
 
 const ME = {
@@ -219,17 +222,41 @@ describe('an entry parked while the app stays open', () => {
     expect(mockFlush).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves a refusal waiting for its toast, and another account's entry for its owner", async () => {
+  it("asks nothing for a refusal already told, nor for another account's entries", async () => {
     mockQueue.items = [
       parkedCheckin({ failedReason: 'Süre bitti, artık giriş yok.' }),
       parkedCheckin({ id: 'u2/c1:2026-11-17:checkin:', ownerId: 'u2' }),
+      parkedCheckin({ id: 'u2/c2:2026-11-17:checkin:', ownerId: 'u2', failedReason: 'Süre bitti, artık giriş yok.' }),
     ];
-    render();
+    const tree = render();
     await settle();
+    // the mount's drain told mine
+    expect(JSON.stringify(tree.toJSON())).toContain('Bir giriş gönderilemedi');
 
-    await wait(15_000);
+    await wait(30_000);
     expect(health).not.toHaveBeenCalled();
     expect(mockFlush).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells within 15 s a refusal a pull left, with no foreground', async () => {
+    // the pull's own flush got the "no": only the bridge tells refusals, and it
+    // waited for the screen to go off and on, too late to enter the day again
+    mockQueue.items = [];
+    const tree = render();
+    await settle();
+    expect(mockFlush).toHaveBeenCalledTimes(1);
+
+    mockQueue.items = [parkedCheckin({ attempts: 1, failedReason: 'Bu çelınc şu an aktif değil.' })];
+    await wait(15_000);
+    expect(JSON.stringify(tree.toJSON())).toContain('Bu çelınc şu an aktif değil.');
+    // nothing to send: the server is not asked
+    expect(health).not.toHaveBeenCalled();
+    expect(mockFlush).toHaveBeenCalledTimes(2);
+    expect(mockQueue.items).toEqual([]);
+
+    // told once
+    await wait(30_000);
+    expect(mockFlush).toHaveBeenCalledTimes(2);
   });
 
   it('keeps it parked while /health does not answer', async () => {

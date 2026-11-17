@@ -22,7 +22,7 @@ import { useToast } from '@/components/Toast';
 import { UpdateBanner } from '@/components/UpdateBanner';
 import { useChallengeAction, useChallenges, useFlushQueue, useFriends } from '@/hooks/queries';
 import { useApi } from '@/hooks/useApi';
-import { usePullRefresh } from '@/hooks/usePullRefresh';
+import { PULL_FLUSH_WAIT_MS, usePullRefresh, waitAtMost } from '@/hooks/usePullRefresh';
 import { useTimezone } from '@/hooks/useTimezone';
 import { ApiError } from '@/lib/api';
 import { qk } from '@/lib/query';
@@ -107,9 +107,10 @@ export default function HomeScreen() {
   };
 
   const flush = useFlushQueue();
-  // a parked entry goes first, so the cards it moves are read after it landed
+  // a parked entry goes first, so the cards it moves are read after it landed;
+  // a photo still going up after a few seconds lands on its own (useFlushQueue)
   const pull = usePullRefresh(async () => {
-    await flush.mutateAsync().catch(() => {});
+    await waitAtMost(flush.mutateAsync(), PULL_FLUSH_WAIT_MS);
     await Promise.all([challenges.refetch(), steps.reload(), refreshMe()]);
   });
 

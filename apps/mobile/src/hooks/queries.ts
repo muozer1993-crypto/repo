@@ -546,6 +546,7 @@ export interface AddEntryResult {
 /** Replays anything the offline queue is holding; safe to call often. */
 export function useFlushQueue() {
   const api = useApi();
+  const qc = useQueryClient();
   const invalidate = useInvalidator();
   const level = useLevel();
   const tz = useTimezone();
@@ -554,6 +555,9 @@ export function useFlushQueue() {
     onSuccess: (result) => {
       if (result.sent > 0) {
         void invalidate.challenges();
+        // the open çelınc screen too: a pull waits only a few seconds for the
+        // flush, and a photo that lands after it has read the screen again
+        void qc.invalidateQueries({ queryKey: ['challenge'] });
         // as the bridge's drain does: a parked check-in a pull sent takes today's
         // poke with it, or "30 dakikan kaldı" rang for a morning already counted
         void refreshReminders(api, level, tz).catch(() => {});

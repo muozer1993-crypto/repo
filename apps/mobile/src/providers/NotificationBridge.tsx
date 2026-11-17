@@ -452,7 +452,8 @@ export function NotificationBridge() {
     // background cadence, or a server answering 500 would use up its eight
     // tries in two minutes; a photo the server holds back waits its hour
     // (`photoHeldSince`) instead of going up four times a minute. Nothing
-    // parked, nothing asked: an idle phone sends no traffic.
+    // parked, nothing asked: an idle phone sends no traffic. A refusal of this
+    // account waiting for its toast is told on the same tick.
     let alive = true;
     let retrying = false;
     const retryParked = async () => {
@@ -467,10 +468,15 @@ export function NotificationBridge() {
             !item.photoHeldSince &&
             (!item.ownerId || item.ownerId === owner)
         );
-        if (!waiting) return;
+        // A refusal a flush outside this bridge left (a pull, a write's own
+        // flush) waited for the next foreground: the drain tells it now, while
+        // a lost photo can still be entered again today. The flush skips a
+        // refused entry, so on its own it asks the server nothing.
+        const refused = queue.some((item) => item.failedReason && (!item.ownerId || item.ownerId === owner));
+        if (!waiting && !refused) return;
         // a few bytes first: the flush would start with a photo's upload when
         // one is first in line
-        await makeClient().health();
+        if (waiting) await makeClient().health();
         if (alive) await drain();
       } catch {
         // no answer: the next tick asks again
