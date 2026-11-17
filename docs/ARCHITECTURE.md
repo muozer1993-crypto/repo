@@ -1314,6 +1314,12 @@ bir paket) ama adres herkes için gitmiş oluyordu. Artık beş dakika bekleyip 
 (`y` + Enter beklemeden açar); tünel ve adres yerinde kalır. cloudflared kapanırsa (çoğu zaman ev interneti gitmiştir)
 sunucuya dokunmaz, evdeki Wi-Fi ve zamanlayıcı çalışmaya devam eder; tüneli 5 saniyeden bir
 dakikaya uzayan aralıklarla yeniden dener, yeni adres gelince sunucuyu onunla yeniden başlatır.
+Açılışta tünel hiç açılamazsa da (internet yok, Cloudflare o an tünel vermiyor) aynısı olur.
+Eskiden betik orada kapanıyordu, evdeki kankalar da sunucusuz kalıyordu. Şimdi sunucuyu boş
+`PUBLIC_URL` ile açar (davet bağlantıları gelen isteğin adresinden kurulur), ilk adres gelince
+onunla yeniden başlatır. İnternet yokken cloudflared'in hatasında geçen
+`https://api.trycloudflare.com` adres sayılmaz: eskiden pencere onu tünel adresi diye gösteriyordu,
+davet bağlantıları da 405 dönüyordu.
 Sunucuyu durdurmak için sinyal değil IPC mesajı gönderir: Windows'ta bir alt sürece sinyal
 göndermek TerminateProcess demektir, ne veritabanı kapanır ne yarım kalan iş biter. Sunucu da
 kapanırken zamanlayıcının o anki turunu bekler (en çok 10 saniye): yarıda kesilen bir push

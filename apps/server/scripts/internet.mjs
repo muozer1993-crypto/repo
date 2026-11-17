@@ -15,7 +15,9 @@
  * server keeps serving the home Wi-Fi while a dropped tunnel is reopened, and the
  * owner updates the code without closing the window: `y` + Enter starts the
  * server again from the new code, `dur` + Enter stops it for an `npm install`.
- * Ctrl+C stops both.
+ * No tunnel at the start (no internet, or Cloudflare handing out none) is the
+ * same as a dropped one: the server starts for the home Wi-Fi and the tunnel is
+ * retried until its address can be printed. Ctrl+C stops both.
  */
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -33,7 +35,13 @@ loadDotEnv(path.join(serverRoot, '.env'));
 
 const PORT = Number.parseInt(process.env.PORT ?? '4000', 10) || 4000;
 const CLOUDFLARED = process.env.CLOUDFLARED || 'cloudflared';
-const URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
+/**
+ * The tunnel's address, printed bare in a box. Offline, cloudflared prints the
+ * endpoint it failed to reach, https://api.trycloudflare.com/tunnel, which this
+ * must not take for one: the window would hand the group an address that answers
+ * every invite link with 405.
+ */
+const URL_RE = /https:\/\/(?!api\.)[a-z0-9-]+\.trycloudflare\.com(?![\w.\/-])/i;
 const TUNNEL_TIMEOUT_MS = Number.parseInt(process.env.TUNNEL_TIMEOUT_MS ?? '60000', 10) || 60000;
 // tsx as a loader in the server's own process, not the tsx CLI: the CLI is a
 // wrapper around a second node process, and on Windows killing the wrapper left
@@ -217,9 +225,11 @@ function reopenTunnel(delay) {
       console.log(`\n✓ Tünel geri geldi, adres aynı: ${publicUrl}`);
       return;
     }
+    // none before it (no internet at the start): the group hears of this one for the first time
+    const firstAddress = publicUrl === null;
     publicUrl = next.url;
     restartServer();
-    printBanner(true);
+    printBanner(!firstAddress);
   });
 }
 
@@ -231,7 +241,10 @@ function startServer() {
     env: {
       ...process.env,
       PORT: String(PORT),
-      PUBLIC_URL: publicUrl,
+      // No tunnel yet: spawn would pass null on as the string "null", which the
+      // server takes for an address it was given. Empty means the address each
+      // phone came in on, which is right on the home Wi-Fi.
+      PUBLIC_URL: publicUrl ?? '',
       // cloudflared connects from this machine; its X-Forwarded-For is the real visitor
       TRUST_PROXY: process.env.TRUST_PROXY ?? 'loopback',
     },
@@ -259,7 +272,7 @@ function serverCrashed(how) {
     // causes this (a forgotten window on the port, a package missing after a pull)
     // is fixed in a minute.
     console.error(`\n✗ Sunucu 10 dakikada ${CRASH_LIMIT} kere düştü, sebebi yukarıdaki hatada.`);
-    console.error(`  Tüneli açık tutuyorum, adres aynı: ${publicUrl}`);
+    console.error(publicUrl ? `  Tüneli açık tutuyorum, adres aynı: ${publicUrl}` : `  ${NO_TUNNEL_YET}`);
     console.error(
       `  ${Math.max(1, Math.round(PAUSE_MS / 60_000))} dakikada bir yeniden deneyeceğim; düzelttiysen burada y yazıp Enter'a bas.`,
     );
@@ -267,7 +280,11 @@ function serverCrashed(how) {
     return;
   }
   const delay = RESTART_DELAYS_MS[Math.min(crashes.length, RESTART_DELAYS_MS.length) - 1];
-  console.error(`\n✗ Sunucu düştü (${how}), yeniden açıyorum. Adres aynı, kimseye yeni bağlantı atma.`);
+  console.error(
+    publicUrl
+      ? `\n✗ Sunucu düştü (${how}), yeniden açıyorum. Adres aynı, kimseye yeni bağlantı atma.`
+      : `\n✗ Sunucu düştü (${how}), yeniden açıyorum.`,
+  );
   restartTimer = later(delay, startServer);
 }
 
@@ -285,7 +302,14 @@ function cancelRestart() {
   restartTimer = null;
 }
 
-const HELD = "• Sunucu durdu, tünel açık, adres aynı. npm install bitince burada y yazıp Enter'a bas.";
+/** Said wherever the address would be while there is none: never "null", never an old guess. */
+const NO_TUNNEL_YET = 'Tünel henüz açılmadı, açılınca adres burada yazar.';
+
+function heldLine() {
+  return publicUrl
+    ? "• Sunucu durdu, tünel açık, adres aynı. npm install bitince burada y yazıp Enter'a bas."
+    : "• Sunucu durdu. npm install bitince burada y yazıp Enter'a bas.";
+}
 
 /**
  * The server reads PUBLIC_URL and its code once at start; a new address or new code
@@ -299,7 +323,7 @@ function restartServer() {
   old.once('exit', () => {
     if (stopping) return;
     // `held` as it is now, not when this began: y + Enter while it was closing undoes `dur`
-    if (held) console.log(HELD);
+    if (held) console.log(heldLine());
     else startServer();
   });
   askToStop(old);
@@ -321,7 +345,9 @@ function onCommand(line) {
     crashes.length = 0;
     held = false;
     if (server) {
-      console.log(`• Sunucu yeni kodla yeniden açılıyor, adres aynı: ${publicUrl}`);
+      console.log(
+        publicUrl ? `• Sunucu yeni kodla yeniden açılıyor, adres aynı: ${publicUrl}` : `• Sunucu yeni kodla yeniden açılıyor. ${NO_TUNNEL_YET}`,
+      );
       restartServer();
     } else {
       startServer();
@@ -329,11 +355,11 @@ function onCommand(line) {
   } else if (command === 'dur') {
     held = true;
     if (server) {
-      console.log('• Sunucu kapanıyor, tünel açık kalıyor...');
+      console.log(publicUrl ? '• Sunucu kapanıyor, tünel açık kalıyor...' : '• Sunucu kapanıyor...');
       restartServer();
     } else {
       cancelRestart();
-      console.log(HELD);
+      console.log(heldLine());
     }
   } else {
     console.log("  Burada y yazıp Enter'a basarsan sunucu yeni kodla açılır, dur yazarsan durur (npm install için).");
@@ -367,22 +393,37 @@ ${first}
 
 async function main() {
   console.log(`• Tünel açılıyor (cloudflared → http://localhost:${PORT})...`);
-  let first;
+  let first = null;
   try {
     first = await startTunnel();
   } catch (error) {
-    if (!error.quiet) console.error(`\n✗ ${error.message}`);
-    stopAll(1);
-    return;
+    // cloudflared is not installed: nothing changes until the owner installs it
+    if (error.quiet) {
+      stopAll(1);
+      return;
+    }
+    if (stopping) return;
+    // Usually no internet, or Cloudflare's limit on quick tunnels: both pass. Closing
+    // the window here left the friends at home without a server too.
+    console.error(`\n✗ ${error.message.trimEnd()}`);
+    console.error('\n✗ Tünel açılamadı: internet yok ya da Cloudflare şu an tünel vermiyor.');
+    console.error("  Sunucuyu yine de açıyorum, evdeki Wi-Fi'dan bağlananlar oynayabilir.");
+    console.error('  Tüneli açılana kadar deniyorum, adres o zaman burada yazar.');
   }
   if (stopping) return;
-  tunnel = first.child;
-  publicUrl = first.url;
-  startServer();
-  printBanner();
+  if (first) {
+    tunnel = first.child;
+    publicUrl = first.url;
+    startServer();
+    printBanner();
+  } else {
+    startServer();
+    reopenTunnel(TUNNEL_RETRY_FIRST_MS);
+  }
   // Lines, with no output and terminal: false, so stdin never goes raw and Ctrl+C
   // still reaches this process as SIGINT. A stdin that ends (the tests' 'ignore')
-  // just means no commands.
+  // just means no commands. Only once a server was started: y before that would
+  // start a second one.
   readline.createInterface({ input: process.stdin, terminal: false }).on('line', onCommand);
 }
 

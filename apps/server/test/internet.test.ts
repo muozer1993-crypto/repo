@@ -4,7 +4,9 @@
  * it and the app shares links with it), keep that address through a server
  * crash, through a run of crashes and through a start that waits for npm install,
  * start the server from new code on y + Enter, reopen a dropped tunnel without
- * taking the server down, and take both down on Ctrl+C.
+ * taking the server down, serve the home Wi-Fi when no tunnel opens at the start
+ * (never at cloudflared's own API address) until one does, and take both down on
+ * Ctrl+C.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
@@ -23,13 +25,23 @@ let child: ChildProcess | null = null;
 const dirs: string[] = [];
 const servers: net.Server[] = [];
 
-afterEach(() => {
-  // SIGKILL leaves the IPC channel broken, and the server shuts itself down on that
-  if (child && child.exitCode === null) child.kill('SIGKILL');
+afterEach(async () => {
+  // A test that failed before its own Ctrl+C: the script's Ctrl+C stops its
+  // cloudflared and its server too, which a bare SIGKILL of the script would leave
+  // running. SIGKILL only if that hangs: it leaves the IPC channel broken, and the
+  // server shuts itself down on that.
+  if (child && child.exitCode === null) {
+    const running = child;
+    const exited = new Promise((resolve) => running.once('exit', resolve));
+    running.kill('SIGINT');
+    const timer = setTimeout(() => running.kill('SIGKILL'), 20_000);
+    await exited;
+    clearTimeout(timer);
+  }
   child = null;
   for (const srv of servers.splice(0)) srv.close();
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
-});
+}, 30_000);
 
 function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -152,6 +164,21 @@ async function publicUrlOf(port: number): Promise<string | null> {
   const res = await fetch(`http://127.0.0.1:${port}/health`);
   return res.ok ? ((await res.json()) as { publicUrl: string | null }).publicUrl : null;
 }
+
+/** /health itself, null while nothing answers: tells "no address" from "no server", which publicUrlOf cannot. */
+async function healthOf(port: number): Promise<{ publicUrl: string | null } | null> {
+  const res = await fetch(`http://127.0.0.1:${port}/health`);
+  return res.ok ? ((await res.json()) as { publicUrl: string | null }) : null;
+}
+
+/** A stand-in cloudflared that counts its starts in `count` and runs `body` with the count in $n. */
+function countedStub(dir: string, body: string[]): string {
+  return stub(dir, [`n=$(cat "${dir}/count" 2>/dev/null || echo 0)`, 'n=$((n+1))', `echo $n > "${dir}/count"`, ...body].join('\n'));
+}
+
+/** What cloudflared prints when the PC has no internet: the address in it is Cloudflare's own API, not a tunnel. */
+const OFFLINE_LINE =
+  '2026 ERR failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel": dial tcp: lookup api.trycloudflare.com: no such host';
 
 async function ctrlC(): Promise<number | null> {
   const exited = new Promise<number | null>((resolve) => child!.on('exit', (code) => resolve(code)));
@@ -348,6 +375,94 @@ describe('npm run internet', () => {
     // a planned restart for the new address is not a crash
     expect(run.output()).not.toContain('Sunucu düştü');
 
+    expect(await ctrlC()).toBe(0);
+  }, 60_000);
+
+  onPosix("serves the home Wi-Fi when the internet is off at start, never at Cloudflare's API address, and y and dur still work", async () => {
+    const dir = tempDir();
+    const fake = countedStub(dir, ['echo "2026 INF Requesting new quick Tunnel on trycloudflare.com..." 1>&2', `echo '${OFFLINE_LINE}' 1>&2`, 'exit 1']);
+    const port = await freePort();
+    const run = runScript(port, fake, dir, { keyboard: true });
+
+    const health = await waitFor(() => healthOf(port));
+    // no tunnel, no address: invite links come from the address each phone used,
+    // not from "null" or from https://api.trycloudflare.com, which answers 405
+    expect(health.publicUrl).toBeNull();
+    expect(run.output()).toContain('Tünel açılamadı: internet yok ya da Cloudflare şu an tünel vermiyor.');
+    expect(run.output()).toContain("Sunucuyu yine de açıyorum, evdeki Wi-Fi'dan bağlananlar oynayabilir.");
+
+    // it keeps trying, backing off, and says so once per try
+    await waitFor(async () => (run.output().includes('Tünel hâlâ açılmadı, 10 saniye sonra yine deniyorum.') ? true : null), 15_000);
+    expect(Number(fs.readFileSync(path.join(dir, 'count'), 'utf8'))).toBeGreaterThanOrEqual(2);
+
+    run.type('y');
+    await waitFor(async () => (run.pids().length === 2 && (await healthOf(port)) ? true : null));
+    expect(run.output()).toContain('• Sunucu yeni kodla yeniden açılıyor. Tünel henüz açılmadı, açılınca adres burada yazar.');
+
+    run.type('dur');
+    await waitFor(async () => (run.output().includes("• Sunucu durdu. npm install bitince burada y yazıp Enter'a bas.") ? true : null), 20_000);
+    expect(await portClosed(port)).toBe(true);
+
+    run.type('y');
+    await waitFor(async () => (run.pids().length === 3 && (await healthOf(port)) ? true : null));
+    expect((await healthOf(port))?.publicUrl).toBeNull();
+
+    const output = run.output();
+    expect(output).not.toContain('KOYDUM internette');
+    expect(output).not.toContain('Tünel geri geldi');
+    expect(output).not.toContain('Tünel koptu');
+    expect(output).not.toContain('adres aynı');
+    expect(output).not.toContain('null');
+    expect(output).not.toContain('Sunucu düştü');
+
+    expect(await ctrlC()).toBe(0);
+  }, 60_000);
+
+  onPosix('starts the server without a tunnel after a timeout and a 429, then restarts it with the first address that comes', async () => {
+    const dir = tempDir();
+    const fake = countedStub(dir, [
+      'echo "2026 INF Requesting new quick Tunnel on trycloudflare.com..." 1>&2',
+      // 1st: no address before TUNNEL_TIMEOUT_MS; 2nd: Cloudflare hands out no tunnel; 3rd: the tunnel
+      'if [ "$n" = 1 ]; then exec sleep 600; fi',
+      `if [ "$n" = 2 ]; then echo '2026 ERR failed to request quick Tunnel: quick tunnel provisioning failed with status 429' 1>&2; exit 1; fi`,
+      'echo "2026 INF |  https://tunel-$n.trycloudflare.com  |" 1>&2',
+      'exec sleep 600',
+    ]);
+    const port = await freePort();
+    const run = runScript(port, fake, dir, { env: { TUNNEL_TIMEOUT_MS: '2000' } });
+
+    // the home Wi-Fi gets a server before there is any tunnel
+    const health = await waitFor(() => healthOf(port));
+    expect(health.publicUrl).toBeNull();
+    expect(run.output()).toContain('Tünel 2 saniyede açılmadı.');
+    expect(run.output()).toContain('Tünel açılamadı');
+    expect(run.output()).not.toContain('KOYDUM internette');
+
+    const url = 'https://tunel-3.trycloudflare.com';
+    await waitFor(async () => ((await publicUrlOf(port)) === url ? true : null), 40_000);
+    // the 429 in between was the second try
+    expect(fs.readFileSync(path.join(dir, 'count'), 'utf8').trim()).toBe('3');
+    const output = run.output();
+    expect(output).toContain('Tünel hâlâ açılmadı, 10 saniye sonra yine deniyorum.');
+    // the first address the group hears of, once, with the first-time wording
+    expect(output.match(/KOYDUM internette/g)).toHaveLength(1);
+    expect(output).toContain(`KOYDUM internette:  ${url}`);
+    expect(output).toContain('Kankalar > Paylaş artık bu adresle bağlantı gönderir');
+    expect(output).not.toContain('Yeni adres: Kankalar > Paylaş');
+    // restarted on purpose for PUBLIC_URL, not a crash
+    expect(output).not.toContain('Sunucu düştü');
+    expect(run.pids()).toHaveLength(2);
+
+    expect(await ctrlC()).toBe(0);
+  }, 60_000);
+
+  onPosix("takes the tunnel's address, not the address of Cloudflare's API printed before it", async () => {
+    const dir = tempDir();
+    const fake = stub(dir, [`echo '${OFFLINE_LINE}' 1>&2`, 'echo "2026 INF |  https://tatli-kelimeler.trycloudflare.com  |" 1>&2', 'exec sleep 600'].join('\n'));
+    const port = await freePort();
+    runScript(port, fake, dir);
+
+    expect(await waitFor(() => publicUrlOf(port))).toBe('https://tatli-kelimeler.trycloudflare.com');
     expect(await ctrlC()).toBe(0);
   }, 60_000);
 

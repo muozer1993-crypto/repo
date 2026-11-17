@@ -208,6 +208,11 @@ Bilinmesi gerekenler:
   internet gelene kadar tüneli yeniden dener (en seyrek dakikada bir). Tünel geri gelince adres
   çoğu zaman değişir: pencerede yeni adres ve "Yeni adres: Kankalar > Paylaş ile gruba tekrar
   at." yazar, dediğini yap.
+* **Açarken internet yoksa da sunucu açılır.** Pencerede "Tünel açılamadı" yazar (Cloudflare
+  bazen bir süre tünel vermez, o zaman da böyle olur). Evdeki Wi-Fi'dan bağlananlar oynar, pencere
+  de tüneli kendisi denemeye devam eder; `y` ile `dur` bu arada da çalışır. Tünel açılınca
+  "KOYDUM internette" satırı adresle çıkar. Başka şehirdeki kankalara bağlantıyı ancak o zaman
+  Paylaş'la gönder.
 * **Pencereyi kapatıp açınca adres değişir.** Paylaş'la yeni bağlantıyı gönder. Kankan
   yeni bağlantıya dokununca uygulama "Bu davet yeni bir adresten" der; **Yeni adrese geç (çıkış
   yok)**'a basar, o kadar. Çıkış yapmaz, şifre yazmaz; hesabı, çelıncları ve bildirimleri
@@ -1470,7 +1475,7 @@ cd apps/mobile && npx jest
 node e2e/smoke.mjs    # gerçek sunucu + tarayıcı, uçtan uca (playwright-core ister)
 ```
 
-Windows'ta `npm test`, `npm run internet`'in altı testini atlar (`skipped` yazar, hata değildir):
+Windows'ta `npm test`, `npm run internet`'in dokuz testini atlar (`skipped` yazar, hata değildir):
 o testlerdeki sahte cloudflared, Windows'un çalıştıramadığı bir Linux betiği.
 
 `e2e/smoke.mjs` geçici bir veritabanıyla sunucuyu ayağa kaldırır, iki kullanıcı kaydeder,

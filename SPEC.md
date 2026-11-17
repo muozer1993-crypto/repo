@@ -771,8 +771,16 @@ one at once, and clears the crash count; `dur` stops the server and holds it, no
 Windows npm install cannot replace better-sqlite3's .node while a server has it open); anything else prints the two
 commands. A cloudflared that exits after printing its address leaves the server running (LAN and scheduler still work)
 and is restarted with a 5 s → 60 s backoff, forever; a new address restarts the server with it and prints the banner
-again. `.env` is read first (`scripts/env.mjs`), so PORT from the file reaches the tunnel too; the values it set are
-passed to every server start, so a changed value needs the script restarted (a new address), not `y`.
+again. The address is a bare `https://<words>.trycloudflare.com`: not `api.trycloudflare.com` (the endpoint an offline
+cloudflared names in its error, which answered invite links with 405) and nothing followed by a path. A first tunnel
+that fails (cloudflared exits without an address, or none in `TUNNEL_TIMEOUT_MS`, 60 s) does not end the script: it
+prints the error and "Tünel açılamadı: internet yok ya da Cloudflare şu an tünel vermiyor.", starts the server with an
+empty PUBLIC_URL (links from the request's address; never the string "null") and retries on the same backoff. `y`
+and `dur` work meanwhile, and the lines that would name the address say "Tünel henüz açılmadı, açılınca adres burada
+yazar." The first address restarts the server with it and prints the first-time banner. Only a missing cloudflared
+exits (code 1, with the install help). `.env` is read first (`scripts/env.mjs`), so PORT from the file reaches the
+tunnel too; the values it set are passed to every server start, so a changed value needs the script restarted (a new
+address), not `y`.
 
 `.env.example`, `Dockerfile` (node:22-alpine, `npm ci --workspaces`, `CMD npm start -w apps/server`), `docker-compose.yml`
 (volume for data+uploads), `README` section on deploying (Railway/Fly/any VPS) and on LAN usage (`HOST=0.0.0.0`,
