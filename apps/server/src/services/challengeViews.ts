@@ -522,8 +522,19 @@ export function acceptedCopy(level: VulgarityLevel, who: string, title: string, 
   return { title: `${who} "varım" dedi`, body: `"${title}" çelıncında artık ${count} kişisiniz.` };
 }
 
-/** To the players still in: somebody walked out mid-çelınc. */
-export function leftCopy(level: VulgarityLevel, who: string, title: string): CopyText {
+/**
+ * To the players still in: somebody walked out mid-çelınc. Before the start
+ * (`started` false: still `pending`, also past its start time while it waits
+ * for a second yes) there is no race to quit and no ranking to drop out of:
+ * they took their "varım" back. As everywhere here, no suffix hangs off the
+ * name.
+ */
+export function leftCopy(level: VulgarityLevel, who: string, title: string, started = true): CopyText {
+  if (!started) {
+    if (level === 1) return { title: `${who} vazgeçti`, body: `${who}, "${title}" çelıncı başlamadan çekildi.` };
+    if (level === 3) return { title: `${who} başlamadan kaçtı 🐔`, body: `"${title}" daha başlamadı bile, ödü koptu 🍆` };
+    return { title: `${who} vazgeçti`, body: `"${title}" çelıncı başlamadan "varım" sözünü geri aldı.` };
+  }
   if (level === 1) return { title: `${who} çelınctan ayrıldı`, body: `${who}, "${title}" çelıncında artık yok. Sıralamadan düştü.` };
   if (level === 3) return { title: `${who} havlu attı 🐔`, body: `"${title}" çelıncında dayanamadı, bıraktı gitti 🍆` };
   return { title: `${who} bıraktı kaçtı`, body: `"${title}" çelıncını yarıda bıraktı, sıralamadan düştü.` };

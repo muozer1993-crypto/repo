@@ -731,6 +731,94 @@ describe('declining and leaving', () => {
     expect(titles(harness, mustafa, 'challenge_cancelled')).toEqual([]);
   });
 
+  /** `creator` opens "Su İç" against `invitees`, starting `startsInMs` from now. */
+  async function startLater(h: TestApp, creator: RegisteredUser, invitees: RegisteredUser[], startsInMs: number): Promise<string> {
+    for (const invitee of invitees) befriend(h.app, creator.me.id, invitee.me.id);
+    const startsAt = h.now().getTime() + startsInMs;
+    const response = await authed(h.app, creator.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: {
+        typeKey: 'su_bardak',
+        title: 'Su İç',
+        startsAt: new Date(startsAt).toISOString(),
+        endsAt: new Date(startsAt + 3 * 24 * HOUR).toISOString(),
+        participantIds: invitees.map((user) => user.me.id),
+      },
+    });
+    expect(response.statusCode).toBe(201);
+    return response.json<Challenge>().id;
+  }
+
+  it('says "vazgeçti" when a player takes the yes back before the start, at the reader\'s level', async () => {
+    harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+    const { app, db } = harness;
+    const umut = await registerUser(app, 'umut', { displayName: 'Umut' });
+    const mert = await registerUser(app, 'mert', { displayName: 'Mert' });
+    const expected = {
+      1: { title: 'Umut vazgeçti', body: 'Umut, "Su İç" çelıncı başlamadan çekildi.' },
+      2: { title: 'Umut vazgeçti', body: '"Su İç" çelıncı başlamadan "varım" sözünü geri aldı.' },
+      3: { title: 'Umut başlamadan kaçtı 🐔', body: '"Su İç" daha başlamadı bile, ödü koptu 🍆' },
+    } as const;
+    for (const level of [1, 2, 3] as const) {
+      const ali = await registerUser(app, `ali${level}`, { displayName: 'Ali', vulgarityMax: level });
+      const id = await startLater(harness, ali, [umut, mert], 24 * HOUR);
+      expect((await answer(harness, umut, id, 'accept')).statusCode).toBe(200);
+
+      // Mert has not answered yet, so Ali still has somebody to race
+      const left = await answer(harness, umut, id, 'leave');
+      expect(left.statusCode).toBe(200);
+      expect(left.json<ChallengeDetail>().challenge.status).toBe('pending');
+
+      const rows = listByType(db, ali.me.id, 'challenge_left');
+      expect(rows.map((row) => ({ title: row.title, body: row.body }))).toEqual([expected[level]]);
+      // no race was run, so nobody quit one halfway or fell off its table
+      expect(rows[0]!.body).not.toMatch(/yarıda|sıralama/i);
+      expect(JSON.parse(rows[0]!.data)).toEqual({ challengeId: id, fromUserId: umut.me.id });
+    }
+    expect(titles(harness, mert, 'challenge_left')).toEqual([]);
+  });
+
+  it('still says "vazgeçti" past the start time, while the çelınc waits for its second yes', async () => {
+    harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+    const { app, db } = harness;
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali' });
+    const umut = await registerUser(app, 'umut', { displayName: 'Umut' });
+    const mert = await registerUser(app, 'mert', { displayName: 'Mert' });
+    const id = await startLater(harness, ali, [umut, mert], HOUR);
+
+    harness.advance(2 * HOUR);
+    // only Ali is in: the scheduler has nothing to start yet
+    expect(runSchedulerOnce(db, app.now()).activated).toBe(0);
+    // Umut's yes makes it two, and he takes it back before the next pass starts it
+    await answer(harness, umut, id, 'accept');
+    expect(getChallengeRow(db, id)?.status).toBe('pending');
+    expect((await answer(harness, umut, id, 'leave')).json<ChallengeDetail>().challenge.status).toBe('pending');
+
+    expect(titles(harness, ali, 'challenge_left')).toEqual(['Umut vazgeçti']);
+    expect(listByType(db, ali.me.id, 'challenge_started')).toEqual([]);
+  });
+
+  it('refuses a leave from a çelınc that is over, and tells nobody', async () => {
+    harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
+    const { app } = harness;
+    const ali = await registerUser(app, 'ali', { displayName: 'Ali' });
+    const umut = await registerUser(app, 'umut', { displayName: 'Umut' });
+    for (const status of ['finished', 'cancelled']) {
+      const id = seedChallenge(app, {
+        creatorId: ali.me.id,
+        accepted: [ali.me.id, umut.me.id],
+        startsAt: '2026-01-01T09:00:00.000Z',
+        endsAt: '2026-01-04T09:00:00.000Z',
+        status,
+      });
+      const left = await answer(harness, umut, id, 'leave');
+      expect(left.statusCode).toBe(400);
+      expect(left.json().error.code).toBe('challenge_closed');
+    }
+    expect(titles(harness, ali, 'challenge_left')).toEqual([]);
+  });
+
   it('waits while an invitee could still make it two, and cancels when they say no too', async () => {
     harness = await makeApp({ now: '2026-01-05T09:00:00.000Z' });
     const { app, db } = harness;

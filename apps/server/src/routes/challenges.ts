@@ -259,7 +259,10 @@ export function invitedShortError(name: string, short: { days: number; creatorDa
  * runs. Only people still in the race hear it, and never across a block:
  * somebody who blocked Ali does not want that name in the inbox. A no the
  * server said for Ali (`checkin_days_short` on an invite an older server
- * sent) gives the reason instead of "tırstı".
+ * sent) gives the reason instead of "tırstı". A walk-out from a `pending`
+ * çelınc, past its start time too while it waits for a second yes (or for the
+ * scheduler's next pass), is "Ali vazgeçti": it never started, nobody had a
+ * ranking to drop out of.
  */
 function tellWhoIsIn(
   db: Database,
@@ -288,7 +291,9 @@ function tellWhoIsIn(
         ? acceptedCopy(levelOf(user), who.display_name, challenge.title, players.length)
         : reason
           ? zoneShortCopy(levelOf(user), who.display_name, challenge.title)
-          : (type === 'challenge_declined' ? declinedCopy : leftCopy)(levelOf(user), who.display_name, challenge.title);
+          : type === 'challenge_declined'
+            ? declinedCopy(levelOf(user), who.display_name, challenge.title)
+            : leftCopy(levelOf(user), who.display_name, challenge.title, challenge.status === 'active');
     notify(db, {
       userId: user.id,
       type,

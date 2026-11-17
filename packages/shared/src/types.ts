@@ -70,7 +70,10 @@ export const NOTIFICATION_TYPES = [
    * ekle"): a no ("Ali tırstı, reddetti")
    */
   'challenge_declined',
-  /** to the players still in: somebody walked out mid-çelınc ("Ali havlu attı") */
+  /**
+   * to the players still in: somebody walked out mid-çelınc ("Ali havlu
+   * attı"), or took their yes back before the start ("Ali vazgeçti")
+   */
   'challenge_left',
   /**
    * somebody said yes ("Ali kabul etti"): to the creator (and whoever called

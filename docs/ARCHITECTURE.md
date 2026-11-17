@@ -229,8 +229,11 @@ o istekle birlikte iptal olur (`cancelIfAbandoned`). Yoksa reddedilmiş bir teke
 "önde" yürütür, sonunda da "kimse kabul etmedi" diye kapanırdı. Davetli biri hâlâ kabul edip iki
 kişi yapabilecekse bekler. Reddeden onu çağırana (sonradan "Kanka ekle" ile çağrılmadıysa açana),
 ayrılan içeride kalanlara haber verir ("Ali tırstı, reddetti", "Ali havlu attı"), engelli ikiliye
-hiçbir şey gitmez. Bitişten sonra ikisi de sessizdir ve iptal etmez: o bekleyişte sonuç
-zamanlayıcınındır, kaybeden kimse ayrılıp sonucu bozamaz.
+hiçbir şey gitmez. Henüz başlamamış bir çelınctan (`pending`; başlangıç saati geçmiş, ikinci
+"varım"ı ya da zamanlayıcının turunu bekleyen de) ayrılan "yarıda bıraktı, sıralamadan düştü" diye
+duyurulmaz: ortada ne yarış var ne sıralama, bildirim "Ali vazgeçti" der. Bitişten sonra ikisi de
+sessizdir ve iptal etmez: o bekleyişte sonuç zamanlayıcınındır, kaybeden kimse ayrılıp sonucu
+bozamaz.
 Reddetmek de son söz değildir: çelınc sürdükçe reddeden kabul edebilir, uygulama bunu çelınc
 ekranında "Katıl" diye sunar. Oynayıp ayrılan geri giremez (`already_left`): herkese "havlu attı"
 dendi, itiraz çoğunluğu da ona göre küçüldü. Davetlinin "Ayrıl"ı ise bir rettir, sunucu da onu öyle
