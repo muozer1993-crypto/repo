@@ -613,6 +613,13 @@ export interface ChallengeResults {
    */
   rematchLeftOut?: string[];
   /**
+   * Only for an accepted player of a check-in çelınc: the friends a rematch the
+   * reader opened now would still leave out because their zone gets fewer
+   * check-in deadlines in it than the reader's (a clock change inside its
+   * window). They can open their own. An older server leaves it out.
+   */
+  rematchZoneShort?: string[];
+  /**
    * Only for an accepted player: the rematch of this çelınc they are already in,
    * or invited to and can still accept (their own first), so the results screen
    * links to it instead of opening a second one. `null` when there is none; an
@@ -620,8 +627,9 @@ export interface ChallengeResults {
    */
   rematch?: RematchView | null;
   /**
-   * Only for an accepted player: how many a rematch opened by the reader would
-   * invite. 0 means nobody (the server would answer 400 `no_participants`).
+   * Only for an accepted player: how many a rematch opened by the reader now
+   * would invite. 0 means nobody (the server would answer 400 `no_participants`,
+   * or `checkin_days_short` when everybody is in `rematchZoneShort`).
    */
   rematchInvitable?: number;
 }

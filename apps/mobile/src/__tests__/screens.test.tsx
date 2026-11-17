@@ -4445,6 +4445,17 @@ describe('a rematch somebody already opened', () => {
     await settle();
     expect(rendered(nobody)).toContain('Rövanşa çağrılacak kimse kalmadı.');
   });
+
+  it('names a friend the clock difference keeps out of a rematch opened now, and who can open it', async () => {
+    api.results = jest.fn(async () => lost({ rematchInvitable: 0, rematchLeftOut: [], rematchZoneShort: [ALI.id] }));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    expect(findWith(tree, 'title', 'Rövanş İstiyorum', 'onPress').props.disabled).toBe(true);
+    expect(rendered(tree)).toContain('Saat farkından Ali bu rövanşta eksik günle kalır, çağrılmaz. Rövanşı o açsın.');
+    expect(rendered(tree)).not.toContain('Rövanşa çağrılacak kimse kalmadı.');
+  });
 });
 
 describe('a result sent to the WhatsApp group', () => {

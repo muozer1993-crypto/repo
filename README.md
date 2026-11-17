@@ -582,7 +582,9 @@ başkası üzerinden tanıştığın biri gelmez. Sonuç ekranı bunu rövanş d
 final tablosunda adına dokunup profilinden ekleyebilirsin. Rövanş eskisi kaç gün sürdüyse o kadar
 gün sürer ve açanın saatiyle gece yarısı biter. Saatli check-in'de bugünün saati geçtikten sonra
 açılan rövanş, sihirbazdaki **Yarın** gibi ertesi gün başlar (Erken Kalkan Koyar 04:00'te, Erken
-Yatma Sözü 09:00'da), ilk günü boşa gitmez. Reddedilen bir rövanş iptal olur ama yenisini
+Yatma Sözü 09:00'da), ilk günü boşa gitmez. O saatte başlayan rövanş başka şehirdeki bir kankaya
+daha az check-in günü bırakacaksa (İstanbul'da öğlen açılan Erken Yatma Sözü New York'ta son akşamdan
+önce biter) rövanş senin saatinle gece yarısı başlar, o kanka da çağrılır. Reddedilen bir rövanş iptal olur ama yenisini
 açmana engel olmaz. Bir çelıncın içinde olduğun rövanşı bir tane olur: kankan senden önce
 açtıysa düğme **Rövanş daveti sende** der ve seni o rövanşa götürür (içindeysen **Rövanşa git**,
 bittiyse **Rövanşın sonucu**). İkiniz aynı anda bassanız bile ikinci rövanş açılmaz, uygulama

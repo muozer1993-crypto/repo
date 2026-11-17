@@ -155,6 +155,29 @@ const LEFT_OUT_NOTE = (level: VulgarityLevel, names: string[]): string => {
   );
 };
 
+/**
+ * Under the rematch button: a friend the clock difference would leave a
+ * check-in short in a rematch opened now. The server does not invite them;
+ * with them as its creator the bar is their own days.
+ */
+const ZONE_SHORT_NOTE = (level: VulgarityLevel, names: string[]): string => {
+  const who = names.join(', ');
+  if (names.length > 1) {
+    return byLevel(
+      level,
+      `Saat farkı yüzünden ${who} şimdi açacağın rövanşta eksik check-in günüyle kalır, davet edilmezler. Rövanşı onlardan biri açabilir.`,
+      `Saat farkından ${who} bu rövanşta eksik günle kalır, çağrılmazlar. Rövanşı onlardan biri açsın.`,
+      `Saat farkından ${who} bu rövanşta eksik günle kalır, çağrılmazlar. Rövanşı onlardan biri açsın, orada yesinler 🍆`
+    );
+  }
+  return byLevel(
+    level,
+    `Saat farkı yüzünden ${who} şimdi açacağın rövanşta eksik check-in günüyle kalır, davet edilmez. Rövanşı o açabilir.`,
+    `Saat farkından ${who} bu rövanşta eksik günle kalır, çağrılmaz. Rövanşı o açsın.`,
+    `Saat farkından ${who} bu rövanşta eksik günle kalır, çağrılmaz. Rövanşı o açsın, orada yesin 🍆`
+  );
+};
+
 /** In place of the rematch button once a rematch exists: where it takes me. */
 const rematchLinkTitle = (rematch: RematchView): string => {
   if (rematch.status === 'finished') return 'Rövanşın sonucu';
@@ -377,7 +400,7 @@ export default function ResultsScreen() {
     );
   }
 
-  const { challenge, standings, taunts, rematchLeftOut, rematchInvitable } = query.data;
+  const { challenge, standings, taunts, rematchLeftOut, rematchZoneShort, rematchInvitable } = query.data;
   const type: ChallengeType | undefined = getChallengeType(challenge.typeKey);
   const scoreText = (value: number) => scoreLabel({ unitTr: challenge.unit }, value);
 
@@ -457,6 +480,7 @@ export default function ResultsScreen() {
     coLeaders.every((p) => taunts.some((x) => x.fromUserId === p.user.id && x.toUserId === meId));
   // the server's list (an older one sends none, and then nothing is claimed)
   const leftOut = ranked.filter((p) => p.user.id !== meId && (rematchLeftOut ?? []).includes(p.user.id));
+  const zoneShort = ranked.filter((p) => p.user.id !== meId && (rematchZoneShort ?? []).includes(p.user.id));
   // One rematch per group: once one I am in or invited to exists, the button
   // leads there instead of opening a second that invites the same friends twice.
   // The server never sends a cancelled one (nobody can join it).
@@ -813,8 +837,13 @@ export default function ResultsScreen() {
             {LEFT_OUT_NOTE(level, leftOut.map((p) => p.user.displayName))}
           </Text>
         ) : null}
+        {isPlayer && !nextRound && zoneShort.length > 0 ? (
+          <Text variant="tiny" color={Colors.yellow} style={styles.gapSm}>
+            {ZONE_SHORT_NOTE(level, zoneShort.map((p) => p.user.displayName))}
+          </Text>
+        ) : null}
         {/* everybody gone without a name to show: deleted, or a block either way */}
-        {isPlayer && nobodyToInvite && leftOut.length === 0 ? (
+        {isPlayer && nobodyToInvite && leftOut.length === 0 && zoneShort.length === 0 ? (
           <Text variant="tiny" muted style={styles.gapSm}>
             Rövanşa çağrılacak kimse kalmadı.
           </Text>

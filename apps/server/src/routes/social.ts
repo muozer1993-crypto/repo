@@ -35,7 +35,7 @@ import {
   type Taunt,
   type VulgarityLevel,
 } from '@koydum/shared';
-import { badRequest, conflict, forbidden, notFound, parseBody } from '../errors.js';
+import { badRequest, conflict, forbidden, notFound, parseBody, type HttpError } from '../errors.js';
 import { newId, nowIso, type ChallengeRow, type Database, type ParticipantRow, type UserRow } from '../db/index.js';
 import { toPublicUser, toTaunt } from '../serialize.js';
 import {
@@ -47,7 +47,6 @@ import {
   participantTimezone,
   typeForChallenge,
 } from '../services/challenges.js';
-import { invitedShortError } from './challenges.js';
 import { notify } from '../services/notifications.js';
 import { toChallenge } from '../serialize.js';
 import { computeUserStats } from '../services/stats.js';
@@ -226,6 +225,22 @@ function findRematch(db: Database, challengeId: string, meId: string, now: Date)
 }
 
 /**
+ * 400 `checkin_days_short` for a rematch whose every friend `rematchPlan` left
+ * out. The wizard's "Eksik günle eklenemez" read as if the finished çelınc,
+ * where they had all their days, was short, and as if nothing could be done:
+ * the friend can open it, with their own days the bar. No suffix after the
+ * name (`invitedShortError`).
+ */
+function rematchShortError(first: ShortInvitee): HttpError {
+  const name = first.user.display_name;
+  const days = first.days === 0 ? 'hiçbir güne denk gelmiyor' : `${first.days} güne denk geliyor`;
+  return badRequest(
+    'checkin_days_short',
+    `Saat farkı yüzünden şimdi açılacak rövanşın check-in saati ${name} için ${days}, sende ${first.creatorDays} gün. Rövanşı ${name} açsın.`,
+  );
+}
+
+/**
  * When a rematch asked for at `now` starts: in `REMATCH_START_DELAY_MS`, unless
  * it is a check-in çelınc whose deadline is gone by then in the creator's zone.
  * Its first day could not be played (erken_kus asked for at 22:00 started at
@@ -267,6 +282,63 @@ function rematchEndsAt(challenge: ChallengeRow, originalTz: string, zone: string
   let end = endOf(lastKey);
   if (end - startsAt.getTime() <= LIMITS.MIN_DURATION_MS) end = endOf(addDays(lastKey, 1));
   return new Date(end).toISOString();
+}
+
+/**
+ * The rematch `me` would open from `challenge` at `now`: when it runs and who
+ * it invites. The results screen's count (`rematchInvitable`) and the POST
+ * read the same plan, so the button never promises an invite the tap leaves
+ * out.
+ *
+ * Its start is `rematchStartsAt`'s, unless that window would give a friend in
+ * another zone fewer check-in deadlines than the creator (`checkinDaysShort`,
+ * as accept checks it): an Istanbul erken_yat asked for at 14:00 ends at 15:59
+ * on its last day in New York, six evenings there to seven. Then it starts at
+ * the creator's next local midnight, whose whole days give every zone as many
+ * deadlines, and Mert is asked into Ali's rematch instead of opening a second
+ * one that splits the group. Only a friend still short there (a clock change
+ * inside the window) is left out (`short`); they can open their own.
+ */
+function rematchPlan(
+  db: Database,
+  challenge: ChallengeRow,
+  me: UserRow,
+  now: Date,
+): { startsAt: Date; endsAt: string; invitees: UserRow[]; notFriends: string[]; short: ShortInvitee[] } {
+  const lineUp = rematchLineUp(db, challenge, me.id);
+  const type = typeForChallenge(challenge);
+  const originalTz = creatorTimezone(db, challenge);
+  const myTz = participantTimezone(undefined, me);
+  const at = (startsAt: Date) => {
+    const endsAt = rematchEndsAt(challenge, originalTz, me.timezone, startsAt);
+    const window = { starts_at: startsAt.toISOString(), ends_at: endsAt, deadline_time: challenge.deadline_time };
+    const short: ShortInvitee[] = [];
+    for (const user of lineUp.invitees) {
+      const days = checkinDaysShort(window, type, myTz, participantTimezone(undefined, user));
+      if (days) short.push({ user, ...days });
+    }
+    return { startsAt, endsAt, short };
+  };
+  let chosen = at(rematchStartsAt(challenge, me.timezone, now));
+  if (chosen.short.length > 0) {
+    const tz = isValidTimeZone(me.timezone) ? me.timezone : DEFAULT_TIMEZONE;
+    const soon = new Date(now.getTime() + LIMITS.REMATCH_START_DELAY_MS);
+    const midnight = at(startOfDayInTz(addDays(dayKeyInTz(soon, tz), 1), tz));
+    if (midnight.short.length < chosen.short.length) chosen = midnight;
+  }
+  const left = new Set(chosen.short.map((entry) => entry.user.id));
+  return {
+    ...chosen,
+    invitees: lineUp.invitees.filter((user) => !left.has(user.id)),
+    notFriends: lineUp.notFriends,
+  };
+}
+
+/** A friend a check-in rematch leaves out: their deadlines in its window next to the creator's. */
+interface ShortInvitee {
+  user: UserRow;
+  days: number;
+  creatorDays: number;
 }
 
 export default async function socialRoutes(app: FastifyInstance): Promise<void> {
@@ -402,27 +474,17 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       .get(me.id, challenge.id, me.id) as { id: string } | undefined;
     if (duplicate) throw conflict('already_rematched', 'Bu çelınc için zaten rövanş açtın.');
 
-    // Same settings, same number of days; only the calendar moves.
-    const startsAtDate = rematchStartsAt(challenge, me.row.timezone, now);
-    const startsAt = startsAtDate.toISOString();
-    const endsAt = rematchEndsAt(challenge, creatorTimezone(db, challenge), me.row.timezone, startsAtDate);
+    // Same settings, same number of days; only the calendar moves, to a start
+    // that gives every friend as many check-in deadlines as me (`rematchPlan`).
+    const plan = rematchPlan(db, challenge, me.row, now);
+    const startsAt = plan.startsAt.toISOString();
+    const endsAt = plan.endsAt;
     const createdAt = nowIso(now);
     const rematchId = newId();
-
-    // The accept route's check-in days, in the rematch's own window: an
-    // Istanbul erken_yat asked for at 14:00 has six evenings in New York to my
-    // seven, and the friend's "Varım" would only be refused (`checkinDaysShort`).
-    // He is not asked; he can open his own, with his seven.
-    const type = typeForChallenge(challenge);
-    const window = { starts_at: startsAt, ends_at: endsAt, deadline_time: challenge.deadline_time };
-    const lineUp = rematchLineUp(db, challenge, me.id).invitees.map((user) => ({
-      user,
-      short: checkinDaysShort(window, type, participantTimezone(undefined, me.row), participantTimezone(undefined, user)),
-    }));
-    const invitees = lineUp.filter((entry) => !entry.short).map((entry) => entry.user);
+    const invitees = plan.invitees;
     if (invitees.length === 0) {
-      const first = lineUp.find((entry) => entry.short);
-      if (first?.short) throw invitedShortError(first.user.display_name, first.short, 'sende');
+      const first = plan.short[0];
+      if (first) throw rematchShortError(first);
       throw badRequest('no_participants', 'Rövanş için davet edilecek kimse kalmadı.');
     }
 
@@ -517,10 +579,12 @@ export default async function socialRoutes(app: FastifyInstance): Promise<void> 
       results.tauntContexts = tauntContextsForWinner(db, challenge, me.id, summary.participants);
     }
     if (challenge.status === 'finished' && summary.me?.status === 'accepted') {
-      const lineUp = rematchLineUp(db, challenge, me.id);
-      results.rematchLeftOut = lineUp.notFriends;
+      const plan = rematchPlan(db, challenge, me.row, app.now());
+      results.rematchLeftOut = plan.notFriends;
+      results.rematchZoneShort = plan.short.map((entry) => entry.user.id);
       // nobody to invite: the button would only earn a 400 `no_participants`
-      results.rematchInvitable = lineUp.invitees.length;
+      // or `checkin_days_short`
+      results.rematchInvitable = plan.invitees.length;
       results.rematch = findRematch(db, challenge.id, me.id, app.now());
     }
 

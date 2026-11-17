@@ -267,7 +267,12 @@ yarıda kesilen son günün sonradan gelen telefon sayısı bitişten sonra atı
 Beş dakika sonra başlar; check-in çelıncında o beş dakikanın sonunda açanın saatiyle bugünün son
 saati geçmiş oluyorsa ertesi gün sihirbazın "Yarın"ı gibi başlar (`nextDayStartTime`, yukarıda:
 Erken Kalkan Koyar 04:00'te, Erken Yatma Sözü 09:00'da): akşam 22:00'de açılan Erken Kalkan Koyar
-rövanşı 22:05'te başlasaydı ilk günü kimsenin oynayamadığı bir gün olurdu.
+rövanşı 22:05'te başlasaydı ilk günü kimsenin oynayamadığı bir gün olurdu. O başlangıç başka
+dilimdeki bir kankaya açanınkinden az son saat bırakıyorsa (14:00'te açılan İstanbul Erken Yatma
+Sözü New York'ta son pazar 15:59'da biter, altı akşam) rövanş açanın bir sonraki gece yarısında başlar
+(`rematchPlan`): tam günler her dilime aynı sayıda son saat verir, kanka davet edilir ve kendi rövanşını
+açıp grubu ikiye bölmez. Oradan da eksik kalan (pencerede saat değişimi) davet edilmez; sonuç ekranı
+adını söyler (`rematchZoneShort`) ve `rematchInvitable` aynı plandan sayılır.
 Reddedilen (yani iptal olan) bir rövanş yenisini açmaya engel değildir.
 
 Bir çelıncın rövanşı bir tane olur. Rövanş düğmesi iki tarafta da kocaman durur; ikisi de basınca
