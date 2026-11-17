@@ -3428,6 +3428,40 @@ describe('check-in çelınclar across zones', () => {
     });
   });
 
+  it('does not drop everybody to 0 days for a friend an older server let into a check-in çelınc with no evening at all', async () => {
+    harness = await makeApp({ now: '2026-11-10T09:50:00.000Z' }); // Tuesday 12:50 in Istanbul, 04:50 in New York
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const leyla = await registerUser(harness.app, 'leyla', { displayName: 'Leyla' });
+    const mert = await registerUser(harness.app, 'mert', { displayName: 'Mert', timezone: 'America/New_York' });
+    befriend(harness.app, ali.me.id, leyla.me.id);
+    // one evening, ending 15:59 in New York: before his 19:00 ever comes
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'erken_yat',
+      deadlineTime: '23:00',
+      participantIds: [leyla.me.id],
+      endsAt: '2026-11-10T20:59:59.999Z',
+    });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    expect((await accept(harness, leyla, challengeId)).statusCode).toBe(200);
+    harness.db
+      .prepare(
+        `INSERT INTO challenge_participants (challenge_id, user_id, status, invited_at, joined_at, final_score, final_rank, timezone)
+         VALUES (?, ?, 'accepted', ?, ?, NULL, NULL, 'America/New_York')`,
+      )
+      .run(challengeId, mert.me.id, iso(harness), iso(harness));
+
+    const h = harness;
+    expect((await detailFor(h, ali, challengeId)).myDays).toEqual({ first: '2026-11-10', last: '2026-11-10' });
+    harness.setNow('2026-11-10T19:00:00.000Z'); // 22:00 in Istanbul
+    expect((await checkIn(harness, ali, challengeId, '2026-11-10')).statusCode).toBe(201);
+
+    harness.setNow('2026-11-10T21:00:30.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    const outcome = harness.db.prepare('SELECT status, winner_id, is_tie FROM challenges WHERE id = ?').get(challengeId);
+    expect(outcome).toEqual({ status: 'finished', winner_id: ali.me.id, is_tie: 0 });
+  });
+
   it("leaves a zone's days with no slot out of its check-in days, but not a day the creator has without one too", async () => {
     harness = await makeApp({ now: '2026-11-09T09:00:00.000Z' }); // Monday 12:00 in Istanbul
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });

@@ -386,7 +386,9 @@ export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string)
  * trimmed to it the way `scoringWindow` trims, the creator's own included.
  * Somebody who said yes and left still counts: the count must not move while
  * it runs, or a first evening trimmed away and never tapped would turn into a
- * missed one.
+ * missed one. A friend with no deadline at all (a one-day erken_yat that ends
+ * at 15:59 in New York) does not: on a count of 0 nobody could play, so he
+ * keeps his none and the others keep theirs.
  */
 function fewestCheckinDays(db: Database, challenge: ChallengeRow, type: ChallengeType): number {
   // rows from before `joined_at` was always set count as having joined
@@ -395,7 +397,9 @@ function fewestCheckinDays(db: Database, challenge: ChallengeRow, type: Challeng
   let fewest = Number.POSITIVE_INFINITY;
   for (const participant of joined) {
     const tz = participantTimezone(participant, users.get(participant.user_id));
-    fewest = Math.min(fewest, checkinPlayableDays(challenge, type, tz).length);
+    const days = checkinPlayableDays(challenge, type, tz).length;
+    // nobody can play on a count of 0: such a friend simply has no day
+    if (days > 0) fewest = Math.min(fewest, days);
   }
   return fewest;
 }
