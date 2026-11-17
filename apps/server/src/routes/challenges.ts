@@ -58,6 +58,7 @@ import {
   stillOpen,
 } from '../services/challenges.js';
 import { backfillFromPhone } from '../services/deviceSync.js';
+import { isDiskFull, warnDiskFull } from '../services/disk.js';
 import { announceDisputeClocks } from '../services/entries.js';
 import { assertNotBlocked, isBlockedBetween } from '../services/friends.js';
 import { BANNED_TEXT_MESSAGES, assertCleanTitle } from '../services/moderation.js';
@@ -231,6 +232,20 @@ function announceAccept(db: Database, challenge: ChallengeRow, who: UserRow, now
 export default async function challengeRoutes(app: FastifyInstance): Promise<void> {
   const { db } = app;
 
+  // The start a read makes on the way. On a full disk it cannot be written, and
+  // its 507 took the list and the çelınc screen from every friend while any
+  // çelınc anywhere was due to start; the read goes on with it still pending
+  // (the app shows a due start as running) and the scheduler starts it once
+  // there is room. A write route that activates first still answers 507.
+  const activateOnRead = (): void => {
+    try {
+      activateDueChallenges(db, app.now());
+    } catch (err) {
+      if (!isDiskFull(err)) throw err;
+      warnDiskFull(app, app.now().getTime());
+    }
+  };
+
   // -------------------------------------------------------------------------
   // GET /challenges
   // -------------------------------------------------------------------------
@@ -238,7 +253,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     const me = request.user;
     const query = parseQuery(ChallengeListQuerySchema, request.query ?? {});
     // started by rule is started on every read too (see GET /challenges/:id)
-    activateDueChallenges(db, app.now());
+    activateOnRead();
 
     const filters: string[] = [];
     const params: unknown[] = [me.id];
@@ -395,7 +410,7 @@ export default async function challengeRoutes(app: FastifyInstance): Promise<voi
     // its countdown runs out, and a "pending" read then had the app say the
     // server could not be reached, to a phone that had just reached it. As in the
     // entry and cancel routes: an indexed lookup that almost always finds nothing.
-    activateDueChallenges(db, app.now());
+    activateOnRead();
     const challenge = requireChallengeRow(db, id);
     requireMembership(db, challenge, me.id);
     return buildDetail(db, challenge, me.id, app.now(), app.schedulerBootAt.at);

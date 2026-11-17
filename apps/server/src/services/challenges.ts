@@ -412,7 +412,10 @@ function rankAccepted(
           window = over;
           entries = entries.filter((entry) => compareDayKeys(entry.dayKey, today) < 0);
         } else {
-          window = window.filter((key) => key === today);
+          // Today, or the first day scored when today is the sliver of a day
+          // `scoringWindow` left out (Los Angeles in an Istanbul çelınc from
+          // midnight): an empty window was a free 0 at the top for hours.
+          window = window.includes(today) ? [today] : window.slice(0, 1);
         }
       }
     }
@@ -1269,6 +1272,8 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
   // erken_kus sleeper reminded at 20:00 would only meet "Bugünün check-in saati
   // geçti". Judged as entries.ts judges the tap, in the zone pinned at join time;
   // before its window opens (erken_yat before 19:00) the check-in is still ahead.
+  // Nor does the sliver of a day `scoringWindow` leaves out of a friend's yes/no
+  // or screen-time days: the server refuses anything typed into it.
   const live = db.prepare(
     `SELECT c.*, p.timezone AS p_timezone FROM challenge_participants p
        JOIN challenges c ON c.id = p.challenge_id AND c.status = 'active' AND c.ends_at > ?
@@ -1276,9 +1281,11 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
   );
   const canStillPlay = (user: UserRow): boolean =>
     (live.all(iso, user.id) as (ChallengeRow & { p_timezone: string | null })[]).some((challenge) => {
-      if (challenge.metric_type !== 'checkin_deadline') return true;
+      const metric = typeForChallenge(challenge).metricType;
+      if (metric !== 'checkin_deadline' && !SCORED_PER_DAY.includes(metric)) return true;
       try {
         const tz = participantTimezone({ timezone: challenge.p_timezone }, user);
+        if (metric !== 'checkin_deadline') return scoringWindow(db, challenge, tz).includes(todayKey(tz, now));
         const deadline = effectiveDeadline(typeForChallenge(challenge), challenge.deadline_time);
         return isBeforeOrEqualHHmm(localTimeHHmm(now, tz), deadline);
       } catch {
@@ -1432,6 +1439,11 @@ export function sendNudges(db: Database, now: Date = new Date()): number {
         continue;
       }
       if (hour < NUDGE_FROM_HOUR || hour >= NUDGE_UNTIL_HOUR) continue;
+      // The sliver of a day `scoringWindow` leaves out of their yes/no or
+      // screen-time days: "Bugünü kaçırma" would send them to a day the server
+      // refuses (Los Angeles on the first afternoon of an Istanbul çelınc).
+      const perDay = SCORED_PER_DAY.includes(typeForChallenge(challenge).metricType);
+      if (perDay && !scoringWindow(db, challenge, timezone).includes(dayKey)) continue;
       const today = loggedOn.get(challenge.id, user.id, dayKey) as { n: number; total: number };
       const logged = today.n > 0;
       // A marked day is all a yes/no çelınc takes from today: nothing the reader

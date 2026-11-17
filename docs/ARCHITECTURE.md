@@ -1311,16 +1311,18 @@ patlıyordu, okumalar da: `authenticate` dakikada bir `last_seen_at` yazar, otur
 dakika sonra bütün grubun ekranları da oturum açması da 500 aldı. Telefonların kuyruğu her 500'de sekiz denemeden
 birini harcadı, sunucuyu açan da pencerede her 30 saniyede bir aynı İngilizceyi gördü; kimsenin
 aklına disk gelmedi. Artık `last_seen_at` yazılamazsa atlanır (onu yalnızca `yonet kullanicilar`
-gösterir), diskin dolduğunu söyleyen her hata (`SQLITE_FULL`, `ENOSPC`, `EDQUOT`;
-`services/disk.ts`) hata işleyicide 507 `disk_full` olur: "Sunucunun diski doldu, şimdilik hiçbir
-şey kaydedilemiyor. Sunucuyu açan kankana haber ver." Kuyruk girişin kendisine gelen 507'de bağlantı
-yokmuş gibi durur, deneme saymaz. Sunucuyu açan saatte bir Türkçe "disk doldu (N MB boş): …" satırı
-görür; zamanlayıcının dolu diske çarpan bütün yazmaları da (son vuruş, uyku kaydı, tur, push)
-kendi satırları yerine buraya gider. Günün yedeği sığmazsa yarım dosyası silinir, bir saat sonra yine
-denenir, pencerede ne kadar yer istediği yazar. `geri-yukle` da önce boş yere bakar: yedek artı
-10 MB yoksa "Diskte yer yok" der. Bakmasa dolu diskte açıp kapattığı veritabanının WAL'i geri
-katlanamaz, `geri-yukle` da sunucu açık sanırdı. Yer açılınca SQLite bir sonraki yazmada yine
-yazar, yeniden başlatma gerekmez.
+gösterir); liste ve çelınc ekranının okurken başlattığı, saati gelmiş bir çelınc de yer açılana kadar
+`pending` kalır, yoksa o tek çelınc yüzünden herkesin ana sayfası 507 alıyordu. Diskin dolduğunu
+söyleyen her hata (`SQLITE_FULL`, `ENOSPC`, `EDQUOT`; `services/disk.ts`) hata işleyicide 507
+`disk_full` olur: "Sunucunun diski doldu, şimdilik hiçbir şey kaydedilemiyor. Sunucuyu açan
+kankana haber ver." Kuyruk girişin kendisine gelen 507'de bağlantı yokmuş gibi durur, deneme
+saymaz. Sunucuyu açan saatte bir Türkçe "disk doldu (N MB boş): …" satırı görür; zamanlayıcının
+dolu diske çarpan bütün yazmaları da (son vuruş, uyku kaydı, tur, push) kendi satırları yerine
+buraya gider. Günün yedeği sığmazsa yarım dosyası silinir, bir saat sonra yine denenir, pencerede
+ne kadar yer istediği yazar. `geri-yukle` da önce boş yere bakar: yedek artı 10 MB yoksa "Diskte
+yer yok" der. Bakmasa dolu diskte açıp kapattığı veritabanının WAL'i geri katlanamaz, `geri-yukle`
+da sunucu açık sanırdı. Yer açılınca SQLite bir sonraki yazmada yine yazar, yeniden başlatma
+gerekmez.
 
 Arkadaşı olmayanı fotoğraftan men etmek işe yaramazdı: yeni bir hesap iletilmiş bir davet
 bağlantısıyla hemen arkadaş olur. Fotoğrafın içine de bakılmaz: başı JPG, PNG ya da WEBP gibi

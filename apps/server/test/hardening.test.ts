@@ -972,6 +972,34 @@ describe('a full disk', () => {
     expect(entries(harness, challengeId, ali.me.id)).toHaveLength(1);
   });
 
+  it('keeps the list and the çelınc screen while a çelınc due to start cannot be started', async () => {
+    harness = await makeApp({ now: NOW });
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const created = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: '/challenges',
+      payload: { typeKey: 'su_bardak', startsAt: iso(harness, 60 * 60_000), endsAt: iso(harness, 3 * DAY_MS), participantIds: [veli.me.id] },
+    });
+    const challengeId = created.json<Challenge>().id;
+    expect((await authed(harness.app, veli.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    let full = true;
+    stubDisk(harness, () => full);
+    // past its start: every read starts it on the way, and that start is a write
+    harness.advance(2 * 60 * 60_000);
+    const call = authed(harness.app, veli.token);
+
+    for (const url of ['/challenges', `/challenges/${challengeId}`]) {
+      expect((await call({ method: 'GET', url })).statusCode, url).toBe(200);
+    }
+    expect((await call({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>().challenge.status).toBe('pending');
+
+    // room again: the next read starts it
+    full = false;
+    expect((await call({ method: 'GET', url: `/challenges/${challengeId}` })).json<ChallengeDetail>().challenge.status).toBe('active');
+  });
+
   it('tells the owner once an hour, in Turkish, however many writes fail', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, challengeId } = await livePair(harness, 'su_bardak', {}, 3);

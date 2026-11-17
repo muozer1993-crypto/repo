@@ -6,7 +6,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { LIMITS, addDays, todayKey, DEFAULT_TIMEZONE, type ChallengeDetail, type ChallengeResults, type ChallengeSummary, type LeaderboardEntry, type Challenge } from '@koydum/shared';
-import { invitableFor, runSchedulerOnce } from '../src/services/challenges.js';
+import { invitableFor, runSchedulerOnce, sendNudges, sendReminders } from '../src/services/challenges.js';
 import { listByType } from '../src/services/notifications.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
 
@@ -2682,6 +2682,58 @@ describe("friends in other zones play the creator's number of days", () => {
     runSchedulerOnce(harness.db, harness.now());
     expect(outcome(harness, challengeId)).toEqual({ status: 'finished', winner_id: ali.me.id, is_tie: 0 });
     expect(finalRows(harness, challengeId).map((row) => row.final_score)).toEqual([4, 3]);
+  });
+
+  /**
+   * Ali's Istanbul çelınc from midnight on Monday, Lara in Los Angeles: her
+   * Sunday afternoon is the 11-hour sliver `scoringWindow` leaves out.
+   */
+  async function istanbulMidnight(h: TestApp, typeKey: string) {
+    const ali = await registerUser(h.app, 'ali', { displayName: 'Ali' });
+    const lara = await registerUser(h.app, 'lara', { displayName: 'Lara', timezone: 'America/Los_Angeles' });
+    befriend(h.app, ali.me.id, lara.me.id);
+    const created = await createChallenge(h, ali, {
+      typeKey,
+      participantIds: [lara.me.id],
+      endsAt: '2026-01-11T20:59:59.999Z',
+      proofRequired: false,
+    });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    expect((await authed(h.app, lara.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    return { ali, lara, challengeId };
+  }
+
+  it('shows a friend before her first scored day at the penalty on screen time, not at the top with 0', async () => {
+    harness = await makeApp({ now: '2026-01-04T21:00:00.000Z' }); // Monday 00:00 in Istanbul, Sunday 13:00 in Los Angeles
+    const { ali, lara, challengeId } = await istanbulMidnight(harness, 'ekran_suresi_beyani');
+    expect(await myDays(harness, lara, challengeId)).toEqual({ first: '2026-01-05', last: '2026-01-11' });
+
+    harness.setNow('2026-01-05T03:00:00.000Z');
+    expect((await postEntry(harness, ali, challengeId, { dayKey: '2026-01-05', value: 300, source: 'manual', clientTime: iso(harness) })).statusCode).toBe(201);
+    const detail = await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+    expect(detail.json<ChallengeDetail>().participants.map((p) => [p.user.id, p.score, p.rank])).toEqual([
+      [ali.me.id, 300, 1],
+      [lara.me.id, 1440, 2],
+    ]);
+  });
+
+  it('sends no reminder or nudge for the sliver of a day a friend cannot mark', async () => {
+    harness = await makeApp({ now: '2026-01-04T21:00:00.000Z' });
+    const { ali, lara, challengeId } = await istanbulMidnight(harness, 'sigara_yok');
+    harness.setNow('2026-01-05T03:00:00.000Z'); // 06:00 on Monday in Istanbul, 19:00 on Sunday in Los Angeles
+    expect((await postEntry(harness, ali, challengeId, { dayKey: '2026-01-05', value: 1, source: 'manual', clientTime: iso(harness) })).statusCode).toBe(201);
+    expect((await postEntry(harness, lara, challengeId, { dayKey: '2026-01-04', value: 1, source: 'manual', clientTime: iso(harness) })).statusCode).toBe(400);
+
+    // 20:30 in Los Angeles: past her reminder hour and inside the nudge hours, one day behind
+    harness.setNow('2026-01-05T04:30:00.000Z');
+    expect(sendNudges(harness.db, harness.now())).toBe(0);
+    expect(sendReminders(harness.db, harness.now())).toBe(0);
+
+    // her Monday is hers: both come, as for anybody behind who has not marked it
+    harness.setNow('2026-01-06T04:30:00.000Z');
+    expect(sendNudges(harness.db, harness.now())).toBe(1);
+    expect(sendReminders(harness.db, harness.now())).toBe(1);
   });
 
   it('keeps the result of one that finished before the trim, with its four days', async () => {
