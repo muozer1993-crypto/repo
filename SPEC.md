@@ -1065,7 +1065,11 @@ onboarding.tsx              4 slides (copy onboarding_1..4 under a title per lev
                             last fetch, "unuttu galiba, rövanş aç, bu sefer sen koy" instead; the header only says the laf is
                             "aşağıda" once there is one; under a received laf "Cevap ver" (L1 "Cevap yaz", L3 "Lafı geri sok 🍆") →
                             taunt picker `to` the winner, or, once answered, my answer as a smaller TauntBubble; the winner's
-                            loser rows show each loser's answer under the name, "💬 …"), rewards/penalty text, "Rövanş" button with a note naming `rematchLeftOut`
+                            loser rows show each loser's answer under the name, "💬 …"), rewards/penalty text (the loser's card: a written penalty
+                            as "💀 …" under "Ceza", the reward muted under it ("Kazananın ödülü: …"); with only a reward, that reward as "🎁 …"
+                            under "Kazananın ödülü", since the wizard's catalog stake is a reward the loser pays ("Kaybeden herkese döner
+                            ısmarlar."); "Ceza yazılmamış, ucuz kurtuldun." (L1 "Ceza yazılmamış. Sadece gurur meselesi.", L3 "Ceza yazmamışlar.
+                            Yediğin yeter zaten 🍆") only when neither is written), "Rövanş" button with a note naming `rematchLeftOut`
                             ("Veli kankan değil, rövanşa çağrılmaz. Tablodan adına dokun, ekle."; final-table rows open profiles, and an
                             invite nobody answered is not on the table: Standings drops `invited` rows once `finished`, and on a `cancelled` çelınc's screen and card (`closed`)),
                             and a success toast naming whoever the new çelınc really invited (read back from its detail); once
@@ -1082,8 +1086,8 @@ onboarding.tsx              4 slides (copy onboarding_1..4 under a title per lev
                             server says `canTauntCoversTie`, so none behind a block; then "Lafını attın, sıra onda.", or "Lafını attın, ödeştiniz." once every co-leader has written to me too);
                             a player behind a tie gets the loser view without a laf: the shame header with "Laf hakkı berabere
                             kalanlarda, sen arkada kaldın. Rövanş aç." (L1 "Mesaj hakkı…", L3 "…öndekilerde…"), no "bekliyor" card
-                            and no answer button, "Öndekilerle aranda … fark var." against the shared top score, the Ceza card
-                            ("Öndekilerin ödülü: …", no `challenge_finished_lost` line) and the loser's rematch label;
+                            and no answer button, "Öndekilerle aranda … fark var." against the shared top score, the stake card
+                            (its reward under "Öndekilerin ödülü", or "Öndekilerin ödülü: …" under a penalty; no `challenge_finished_lost` line) and the loser's rematch label;
                             anybody else gets "ÇELINC BİTTİ" 🏁, or in a tie the tie's title ("BERABERE" / "BERABERE LAN" /
                             "KİMSE KOYAMADI") with 🤝 but never its rematch line, under it "Sen bu çelınca girmedin, sadece izledin." for
                             somebody who never said yes (invited, declined, not in it), "Sen ayrılmıştın zaten, sonuç bu." for whoever is `left`

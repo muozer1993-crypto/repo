@@ -116,9 +116,14 @@ const NO_REWARD: Record<VulgarityLevel, string> = {
   3: 'Ödül yazmamışlar. Olsun, elinde 🍆 var.',
 };
 
+/**
+ * The loser's card when neither stake is written. A plain loser reads
+ * `challenge_finished_lost` right under it ("Bu sefer olmadı.", "Yedin."), so
+ * this does not say the same first.
+ */
 const NO_PENALTY: Record<VulgarityLevel, string> = {
-  1: 'Ceza yazılmamış. Bu sefer sadece gurur meselesi.',
-  2: 'Ceza yazılmamış. Yine de yedin.',
+  1: 'Ceza yazılmamış. Sadece gurur meselesi.',
+  2: 'Ceza yazılmamış, ucuz kurtuldun.',
   3: 'Ceza yazmamışlar. Yediğin yeter zaten 🍆',
 };
 
@@ -503,6 +508,12 @@ export default function ResultsScreen() {
   const loserGap = leader && mine ? Math.abs(leader.score - mine.score) : 0;
   const winnerGap = mine && runnerUp ? Math.abs(mine.score - runnerUp.score) : 0;
 
+  // The wizard sends one stake, and its catalog suggestion is a reward the loser
+  // pays ("Kaybeden herkese döner ısmarlar"): with no penalty written, the loser's
+  // card names that reward rather than "Ceza yazılmamış" right above it.
+  const rewardLabel = behindTie ? 'Öndekilerin ödülü' : 'Kazananın ödülü';
+  const stakeIsReward = !challenge.penaltyText && !!challenge.rewardText;
+
   // The group lives in WhatsApp: a screenshot carries the gloat but not the way
   // in, so the text goes with my invite link for whoever is not on KOYDUM yet.
   const shareResult = async () => {
@@ -739,7 +750,7 @@ export default function ResultsScreen() {
       {!iWon && isPlayer ? (
         <Card edgeColor={isTie ? Colors.info : Colors.danger}>
           <Text variant="label" style={styles.sectionLabel}>
-            {isTie ? 'Ortada kalan hesap' : 'Ceza'}
+            {isTie ? 'Ortada kalan hesap' : stakeIsReward ? rewardLabel : 'Ceza'}
           </Text>
           {isTie ? (
             <>
@@ -764,14 +775,27 @@ export default function ResultsScreen() {
             </>
           ) : (
             <>
-              <Text variant="small" color={Colors.danger}>
-                💀 <Text variant="small" bold color={Colors.danger}>{challenge.penaltyText || NO_PENALTY[level]}</Text>
-              </Text>
-              {challenge.rewardText ? (
-                <Text variant="tiny" muted style={styles.gap}>
-                  {behindTie ? 'Öndekilerin ödülü' : 'Kazananın ödülü'}: {challenge.rewardText}
+              {challenge.penaltyText ? (
+                <>
+                  <Text variant="small" color={Colors.danger}>
+                    💀 <Text variant="small" bold color={Colors.danger}>{challenge.penaltyText}</Text>
+                  </Text>
+                  {challenge.rewardText ? (
+                    <Text variant="tiny" muted style={styles.gap}>
+                      {rewardLabel}: {challenge.rewardText}
+                    </Text>
+                  ) : null}
+                </>
+              ) : challenge.rewardText ? (
+                // under the label that names whose reward it is
+                <Text variant="small">
+                  🎁 <Text variant="small" bold>{challenge.rewardText}</Text>
                 </Text>
-              ) : null}
+              ) : (
+                <Text variant="small" color={Colors.danger}>
+                  💀 <Text variant="small" bold color={Colors.danger}>{NO_PENALTY[level]}</Text>
+                </Text>
+              )}
               {/* its lines promise a winner's laf, and behind a tie none is coming */}
               {behindTie ? null : (
                 <Text variant="small" muted style={styles.gap}>

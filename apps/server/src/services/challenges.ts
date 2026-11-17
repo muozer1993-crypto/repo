@@ -774,7 +774,8 @@ function finishedTitle(level: VulgarityLevel, role: 'winner' | 'loser'): string 
  * The finish body for somebody behind a shared first place. The co-leaders drew
  * with each other, not with them: no winner to name and no laf on its way, but
  * the penalty is still theirs. Named when the çelınc has one; most have a
- * reward instead, and the results screen this opens says "Ceza yazılmamış".
+ * reward instead, which the results screen this opens shows them under
+ * "Öndekilerin ödülü".
  * No `leaders` (a block with one of them) says the same without a name.
  */
 function behindTieBody(

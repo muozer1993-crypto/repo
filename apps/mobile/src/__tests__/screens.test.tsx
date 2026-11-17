@@ -3997,6 +3997,83 @@ describe('a loser still waiting for the winner to talk', () => {
     expect(text).toContain('Ali unuttu galiba. Rövanş aç, bu sefer sen koy.');
     expect(text).not.toContain('Beklemede kal');
   });
+
+  /** The same loss with these stakes written. */
+  function lostWith(rewardText: string | null, penaltyText: string | null) {
+    const results = lostTo(3 * 3_600_000);
+    return { ...results, challenge: { ...results.challenge, rewardText, penaltyText } };
+  }
+
+  const LOST_LINE = {
+    1: 'Bu sefer olmadı. Rövanş isteyebilirsin.',
+    2: 'Yedin. Kazanan ağzını açarsa telefonun öter.',
+    3: 'Yedin işte. Laf gelirse aç da oku.',
+  } as const;
+
+  it.each([1, 2, 3] as const)(
+    'names the winner\'s reward the loser pays, not "no penalty" above it (level %i)',
+    async (level) => {
+      mockLevel.value = level;
+      searchParams.id = 'c-1';
+      // what every wizard çelınc carries: the catalog's stake as the reward, no penalty
+      api.results = jest.fn(async () => lostWith('Kaybeden herkese döner ısmarlar.', null));
+      const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+      const tree = renderScreen(<ResultsScreen />);
+      await settle();
+
+      const text = rendered(tree);
+      // section labels are drawn in capitals
+      expect(text).toMatch(/KAZANANIN ÖDÜLÜ\s+🎁\s+Kaybeden herkese döner ısmarlar\./);
+      expect(text).not.toContain('CEZA');
+      expect(text).not.toContain('Ceza yazılmamış');
+      expect(text).not.toContain('Ceza yazmamışlar');
+      expect(text).not.toContain('gurur meselesi');
+      expect(text).not.toContain('ucuz kurtuldun');
+      expect(text).toContain(LOST_LINE[level]);
+    },
+  );
+
+  it.each([
+    [1, 'Ceza yazılmamış. Sadece gurur meselesi.'],
+    [2, 'Ceza yazılmamış, ucuz kurtuldun.'],
+    [3, 'Ceza yazmamışlar. Yediğin yeter zaten 🍆'],
+  ] as const)('says no penalty was written only when neither stake was (level %i)', async (level, line) => {
+    mockLevel.value = level;
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => lostWith(null, null));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const tree = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(tree);
+    expect(text).toMatch(new RegExp(`CEZA\\s+💀\\s+${line}`));
+    expect(text).not.toContain('ÖDÜLÜ');
+    expect(text).toContain(LOST_LINE[level]);
+    // the line under it already says "Yedin."
+    expect(text).not.toContain('Yine de yedin');
+  });
+
+  it('shows a written penalty under "Ceza", and the reward under it when there is one too', async () => {
+    searchParams.id = 'c-1';
+    api.results = jest.fn(async () => lostWith(null, 'Bir hafta bulaşık sende.'));
+    const ResultsScreen = require('@/app/(app)/challenge/[id]/results').default;
+    const penaltyOnly = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const text = rendered(penaltyOnly);
+    expect(text).toMatch(/CEZA\s+💀\s+Bir hafta bulaşık sende\./);
+    expect(text).not.toContain('Kazananın ödülü');
+    expect(text).not.toContain('Ceza yazılmamış');
+    expect(text).toContain(LOST_LINE[2]);
+
+    api.results = jest.fn(async () => lostWith('Kazanana bir kahve.', 'Bir hafta bulaşık sende.'));
+    const both = renderScreen(<ResultsScreen />);
+    await settle();
+
+    const bothText = rendered(both);
+    expect(bothText).toMatch(/CEZA\s+💀\s+Bir hafta bulaşık sende\.\s+Kazananın ödülü\s*:\s+Kazanana bir kahve\./);
+    expect(bothText).not.toContain('KAZANANIN ÖDÜLÜ');
+  });
 });
 
 describe('answering back, and a tie', () => {
@@ -4124,10 +4201,12 @@ describe('answering back, and a tie', () => {
     const text = rendered(behind);
     expect(text).toContain('YEDİN');
     expect(text).not.toContain('BERABERE LAN');
-    // section labels are drawn in capitals
-    expect(text).toContain('CEZA');
+    // section labels are drawn in capitals; with no penalty written, the card
+    // names the reward he pays the co-leaders, not "Ceza yazılmamış"
+    expect(text).toMatch(/ÖNDEKİLERİN ÖDÜLÜ\s+🎁\s+Kaybeden kahve ısmarlar/);
+    expect(text).not.toContain('CEZA');
+    expect(text).not.toContain('Ceza yazılmamış');
     expect(text).not.toContain('ORTADA KALAN HESAP');
-    expect(text).toMatch(/Öndekilerin ödülü\s*:\s+Kaybeden kahve ısmarlar/);
     // measured against the shared top score
     expect(text).toMatch(/Öndekilerle\s+aranda\s+6\.000 adım\s+fark var\./);
     // no co-leader may send him a laf, so nothing waits for one
