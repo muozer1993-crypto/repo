@@ -1657,7 +1657,7 @@ describe('a rival who plays a check-in çelınc on another zone\'s clock', () =>
     };
   }
 
-  it('names the clock he plays on by his name in the standings, and none by mine', async () => {
+  it('names the clock he plays on under his name in the standings, and none by mine', async () => {
     searchParams.id = 'c-1';
     api.challenge = jest.fn(async () => tokyoRival());
     const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
@@ -1665,8 +1665,11 @@ describe('a rival who plays a check-in çelınc on another zone\'s clock', () =>
     await settle();
 
     const text = rendered(tree);
-    expect(text).toContain('(Tokyo saati)');
-    expect(text.match(/saati\)/g)).toHaveLength(1);
+    // on a line of its own, where a long name or a 360 dp screen cannot cut it off
+    expect(text).toContain('🕐 Tokyo saati');
+    expect(text.match(/🕐/g)).toHaveLength(1);
+    const label = tree.root.findAll((node) => node.props.children === '🕐 Tokyo saati' && node.props.numberOfLines === 1);
+    expect(label.length).toBeGreaterThan(0);
   });
 
   it('prints the clock of his "Geldim" in his zone and in mine', async () => {
@@ -1686,6 +1689,11 @@ describe('a rival who plays a check-in çelınc on another zone\'s clock', () =>
 
     const text = rendered(tree);
     expect(text).toContain('Tokyo saatiyle 06:30 (sende 00:30)');
+    // two lines, so a 360 dp phone with the itiraz chip beside it keeps "(sende 00:30)"
+    const clock = tree.root.findAll(
+      (node) => node.props.children === 'Tokyo saatiyle 06:30 (sende 00:30)' && node.props.numberOfLines === 2
+    );
+    expect(clock.length).toBeGreaterThan(0);
     // mine is on my own clock: nothing to add
     expect(text.match(/saatiyle/g)).toHaveLength(1);
   });

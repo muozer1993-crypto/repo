@@ -111,7 +111,7 @@ const CITY_TR: Record<string, string> = {
 
 /**
  * "Asia/Tokyo" → "Tokyo", "America/New_York" → "New York": the city an IANA
- * zone is named after, for "(Tokyo saati)". A zone with no city ("UTC") is
+ * zone is named after, for "Tokyo saati". A zone with no city ("UTC") is
  * itself.
  */
 export function zoneCityTr(tz: string): string {

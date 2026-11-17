@@ -39,7 +39,7 @@ export interface StandingsProps {
   freshness?: { now: number; level: VulgarityLevel };
   /**
    * The reader's zone (`myTimezone`): a player whose days are counted in
-   * another one (`ParticipantView.timezone`) gets "(Tokyo saati)" by the name.
+   * another one (`ParticipantView.timezone`) gets "🕐 Tokyo saati" under the name.
    * A check-in deadline is that zone's, and a rival nobody knew was on Tokyo
    * time beat a 07:00 every night at 00:30 Istanbul.
    */
@@ -142,11 +142,6 @@ export function Standings({
                 <Text variant="small" bold numberOfLines={1} style={styles.name}>
                   {participant.user.displayName}
                   {isMe ? ' (sen)' : ''}
-                  {away ? (
-                    <Text variant="tiny" muted>
-                      {` (${zoneCityTr(away)} saati)`}
-                    </Text>
-                  ) : null}
                 </Text>
                 <Text
                   variant="small"
@@ -161,6 +156,12 @@ export function Standings({
                 </Text>
               </View>
               <ProgressBar value={pending ? 0 : fill} color={barColor} height={6} />
+              {/* its own line: by the name, one line on a 360 dp phone cut it to "(Los Angel…" or hid it */}
+              {away ? (
+                <Text variant="tiny" muted numberOfLines={1}>
+                  {`🕐 ${zoneCityTr(away)} saati`}
+                </Text>
+              ) : null}
               {silent && freshness ? (
                 <Text variant="tiny" faint numberOfLines={1}>
                   {silentPhoneLine(freshness.level, silentHours)}

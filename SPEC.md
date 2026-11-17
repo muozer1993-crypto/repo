@@ -243,8 +243,8 @@ ParticipantView { user: PublicUser, status, score, days, rank, lastEntryAt, isWi
      without one was the creator's: the wizard's and a rematch's invitees), null for the creator. Older
      servers leave it out, and the app takes the creator then.
   -- timezone: an accepted player's `participantTimezone` (the zone pinned at their yes, where their days and
-     check-in deadline are counted), null for everybody else. The çelınc screen names it by a rival's name when it
-     is not mine ("(Tokyo saati)") and prints a check-in's clock in it: a profile set to Tokyo just before "Varım"
+     check-in deadline are counted), null for everybody else. The çelınc screen names it under a rival's name when it
+     is not mine ("🕐 Tokyo saati") and prints a check-in's clock in it: a profile set to Tokyo just before "Varım"
      beats a 07:00 deadline at 00:30 Istanbul every night, and an itiraz needs to see that. Older servers leave it out.
 ChallengeSummary { challenge: Challenge, participants: ParticipantView[], me: ParticipantView | null, unreadTaunts: number, myTimezone?: string | null, myDays?: { first: string; last: string } | null }
   -- myTimezone: the zone the reader's days are counted in on this çelınc (`participantTimezone`: the one pinned when
@@ -907,8 +907,9 @@ onboarding.tsx              4 slides (copy onboarding_1..4 under a title per lev
                             than the last fetch gets a faint line under the bar, at my level: "Telefonundan 5 saattir veri
                             gelmedi" / "Telefonu 5 saattir ses vermiyor, sayı eski olabilir" / "Telefonu 5 saattir ölü, bu sayı
                             bayat", "2 gündür" from 48 hours on; none on my row or with a null `lastSyncAt`; a
-                            player whose `timezone` is not mine gets "(Tokyo saati)" by the name, `zoneCityTr`: the
-                            IANA city, in Turkish where it differs, "İstanbul", "Londra"),
+                            player whose `timezone` is not mine gets "🕐 Tokyo saati" on a line of its own under the bar, `zoneCityTr`: the
+                            IANA city, in Turkish where it differs, "İstanbul", "Londra"; inside the one-line name it was cut to
+                            "(Los Angel…" on a 360 dp phone, or hidden by a long name),
                             a "Kurallar" card (components/ChallengeRules.tsx): the type's description at my level, "📅 N gün ·
                             1 Eylül – 7 Eylül" (the days I am scored on: cut to `myDays`, 1.7), "⏰ Her gün saat 07:00 olmadan “Geldim” demen lazım" with a deadline, "📸 Elle
                             girdiğin her sayıya kanıt fotoğrafı lazım" (only where a photo can back a number, the server's rule),
@@ -920,7 +921,8 @@ onboarding.tsx              4 slides (copy onboarding_1..4 under a title per lev
                             önce": a phone's row (`pedometer`, `health_connect`, `usage_stats`) is timed by `updatedAt ??
                             createdAt`, a typed one by `createdAt`, both read against the screen's clock, the last fetch,
                             as the standings' quiet-phone line is; a check-in of a player whose `timezone` is not mine
-                            adds "Tokyo saatiyle 06:30 (sende 00:30)", its `createdAt` on both clocks; under it the
+                            adds "Tokyo saatiyle 06:30 (sende 00:30)", its `createdAt` on both clocks, on up to two lines (beside the thumb
+                            and the itiraz chip one line cut off "(sende 00:30)"); under it the
                             owner's `note`, “in quotes”, two lines at most, on the author's own row too) with dispute
                             button (only while
                             the server takes one: `active` and before `disputesCloseAt`, i.e. the end, plus the settle hour

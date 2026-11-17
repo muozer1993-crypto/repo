@@ -2364,8 +2364,9 @@ function FeedRow({
           {formatDayKeyFriendly(item.dayKey, today, yesterday)} · {SOURCE_ICON[item.source] ?? '•'}{' '}
           {SOURCE_LABEL[item.source] ?? item.source} · {relativeTime(feedTime(item), new Date(now), tz)}
         </Text>
+        {/* two lines: beside the thumb and an itiraz chip a 360 dp phone cut off "(sende 00:30)", the part that matters */}
         {zone ? (
-          <Text variant="tiny" faint numberOfLines={1}>
+          <Text variant="tiny" faint numberOfLines={2}>
             {`${zoneCityTr(zone)} saatiyle ${formatTime(item.createdAt, zone)} (sende ${formatTime(item.createdAt, tz)})`}
           </Text>
         ) : null}
