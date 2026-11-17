@@ -69,9 +69,10 @@ Sunucu güncellendiğinde sürmekte olan çelınc da bu sayıma geçer; eski kur
 Bu kuraldan önceki sunucu yurt dışındaki kankayı kendi dilimindeki her güne puanlıyordu
 (`challengeWindow`); `scoringWindow` onların hep bir kısmını tutar, yani geçiş ancak kankanın açanın
 sayısından fazla olan gününü alabilir. O güne girilmiş kayıt artık sayılmaz (`scoredDays`), yenisi
-`day_out_of_range` alır. O fazla gün eşit oynayanlardan birini öne geçiriyordu (evet/hayırda ve
-check-in'de bir puan fazla, ekran süresinde bitişin kestiği günün 1440'ı); onsuz eşit oyun berabere
-biter.
+`day_out_of_range` alır. O kayda itiraz `entry_not_scored` alır (`unscoredEntry`); güncellemeden önce
+edilmiş itirazı da `disputeDeadlines` ve `disputedEntries` görmez: sonucu 12 saat bekletmez, kaydı
+yakmaz. O fazla gün eşit oynayanlardan birini öne geçiriyordu (evet/hayırda ve check-in'de bir puan
+fazla, ekran süresinde bitişin kestiği günün 1440'ı); onsuz eşit oyun berabere biter.
 
 Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
 

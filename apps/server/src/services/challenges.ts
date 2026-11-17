@@ -476,6 +476,25 @@ function scoredDays(
 }
 
 /**
+ * Whether the standings leave this entry out: its day is inside the çelınc's
+ * dates in its owner's zone, but not one of the days `scoringWindow` scores
+ * them on (`scoredDays`). Only a server from before the trim took one; this
+ * one refuses the day. An itiraz on it has nothing to take away, so it is
+ * refused, and one filed before the update starts no clock, holds no result
+ * and throws nothing out (`disputeDeadlines`, `disputedEntries`).
+ */
+export function unscoredEntry(db: Database, challenge: ChallengeRow, entry: Pick<EntryRow, 'user_id' | 'day_key'>): boolean {
+  const participant = db
+    .prepare('SELECT timezone FROM challenge_participants WHERE challenge_id = ? AND user_id = ?')
+    .get(challenge.id, entry.user_id) as { timezone: string | null } | undefined;
+  const user = db.prepare('SELECT timezone FROM users WHERE id = ?').get(entry.user_id) as
+    | { timezone: string | null }
+    | undefined;
+  const tz = participantTimezone(participant, user);
+  return challengeWindow(challenge, tz).includes(entry.day_key) && !scoringWindow(db, challenge, tz).includes(entry.day_key);
+}
+
+/**
  * Ranks the accepted participants, each against their OWN day window.
  *
  * `rankParticipants` only knows a single shared window, so for

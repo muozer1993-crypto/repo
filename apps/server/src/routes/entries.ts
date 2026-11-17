@@ -29,6 +29,7 @@ import {
   computeStandings,
   disputesOpenUntil,
   typeForChallenge,
+  unscoredEntry,
 } from '../services/challenges.js';
 import { notify } from '../services/notifications.js';
 import { awardBadges } from '../services/stats.js';
@@ -257,6 +258,13 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
       const ownerIn = getParticipant(db, challenge.id, entry.user_id)?.status === 'accepted';
       if (!ownerIn) assertNotBlocked(db, me.id, entry.user_id);
       const acrossBlock = isBlockedBetween(db, me.id, entry.user_id);
+      // A day the standings leave out of the owner's (`unscoredEntry`): only a
+      // server from before the trim took one, and an itiraz on it would hold
+      // the result 12 hours and tell the owner to prove a day that counts for
+      // nothing.
+      if (unscoredEntry(db, challenge, entry)) {
+        throw badRequest('entry_not_scored', 'Bu gün saat farkı yüzünden zaten sayılmıyor, itiraz gerekmez.');
+      }
 
       // The owner is looked up BEFORE the write: `recordDispute` commits its own
       // transaction, so a throw afterwards (an owner who deleted their account) would

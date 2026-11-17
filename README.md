@@ -1361,7 +1361,8 @@ akşam 19:00 olmadan biter), uygulama bunu söyler. Bitişin son saatten önce k
 yarısı biten "Erken Yatma Sözü" Londra'da 20:59'da biter) bitişe kadar sayılır; uygulama o gün sınırı
 20:59 diye gösterir ve yarım saat önce hatırlatır. Sunucuyu güncellediğinde devam eden çelınclar da bu
 sayıma geçer. Başka şehirdeki kankanın çelıncı açandan fazla günü varsa o gün düşer, o güne girilen kayıt da
-artık sayılmaz. O fazla gün eşit oynayanlardan birini öne geçiriyordu; artık berabere biterler. Başka saat
+artık sayılmaz. O kayda itiraz edilmez ("zaten sayılmıyor" der); güncellemeden önce edilmiş bir itiraz da
+sonucu bekletmez, kaydı yakmaz. O fazla gün eşit oynayanlardan birini öne geçiriyordu; artık berabere biterler. Başka saat
 diliminde oynayan kankanın adının altında "🕐 Tokyo saati" yazar; "Geldim" dediği saat de hem onun hem senin
 saatinle görünür.
 

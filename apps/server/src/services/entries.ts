@@ -38,7 +38,14 @@ import {
   type UserRow,
 } from '../db/index.js';
 import { badRequest, conflict, forbidden, notFound, type HttpError } from '../errors.js';
-import { challengeWindow, participantTimezone, scoringWindow, typeForChallenge } from './challenges.js';
+import {
+  challengeWindow,
+  getChallengeRow,
+  participantTimezone,
+  scoringWindow,
+  typeForChallenge,
+  unscoredEntry,
+} from './challenges.js';
 import {
   acceptedCount,
   disputeMajorityCopy,
@@ -571,14 +578,15 @@ export function disputeThreshold(acceptedParticipants: number): number {
  * Open itirazlar on each disputed entry of an accepted player in this çelınc,
  * counting only those filed by somebody still in the race: a row of somebody
  * who left scores nothing, so nothing waits on it, and an itiraz of somebody
- * who left is not a friend's vote any more.
+ * who left is not a friend's vote any more. Nor does a row on a day the
+ * standings leave out (`scoredOnly`).
  */
 export function disputedEntries(
   db: Database,
   challengeId: string,
   entryId?: string,
 ): (EntryRow & { open_count: number })[] {
-  return db
+  const rows = db
     .prepare(
       `SELECT e.*, (
          SELECT COUNT(*) FROM disputes d
@@ -592,6 +600,18 @@ export function disputedEntries(
         ORDER BY e.created_at ASC, e.id ASC`,
     )
     .all(...(entryId ? [challengeId, entryId] : [challengeId])) as (EntryRow & { open_count: number })[];
+  return scoredOnly(db, challengeId, rows);
+}
+
+/**
+ * The rows whose day the standings count: an itiraz an older server took on a
+ * day they leave out (`unscoredEntry`) has nothing to take away, so it starts
+ * no clock, holds no result and throws nothing out.
+ */
+function scoredOnly<T extends Pick<EntryRow, 'user_id' | 'day_key'>>(db: Database, challengeId: string, rows: T[]): T[] {
+  if (rows.length === 0) return rows;
+  const challenge = getChallengeRow(db, challengeId);
+  return challenge ? rows.filter((row) => !unscoredEntry(db, challenge, row)) : rows;
 }
 
 /**
@@ -673,19 +693,19 @@ export function announceDisputeClocks(db: Database, challengeId: string, now: Da
 /**
  * When each entry on the clock is thrown out unless its owner adds a photo
  * first (epoch ms, by entry id): the stored `answer_by` of disputed entries of
- * players still in the race.
+ * players still in the race, on a day the standings count (`scoredOnly`).
  */
 export function disputeDeadlines(db: Database, challengeId: string): Map<string, number> {
   const rows = db
     .prepare(
-      `SELECT e.id, e.answer_by FROM entries e
+      `SELECT e.id, e.user_id, e.day_key, e.answer_by FROM entries e
          JOIN challenge_participants p ON p.challenge_id = e.challenge_id AND p.user_id = e.user_id AND p.status = 'accepted'
         WHERE e.challenge_id = ? AND e.status = 'disputed' AND e.answer_by IS NOT NULL`,
     )
-    .all(challengeId) as { id: string; answer_by: string }[];
+    .all(challengeId) as { id: string; user_id: string; day_key: string; answer_by: string }[];
 
   const deadlines = new Map<string, number>();
-  for (const row of rows) {
+  for (const row of scoredOnly(db, challengeId, rows)) {
     const at = Date.parse(row.answer_by);
     if (Number.isFinite(at)) deadlines.set(row.id, at);
   }

@@ -2745,6 +2745,62 @@ describe("friends in other zones play the creator's number of days", () => {
     ]);
   });
 
+  // An older server took Deniz's sliver of a fourth day; the update leaves it
+  // out of her days. An itiraz on it held a 3-3 result 12 hours and told her
+  // to prove a day that counts for nothing.
+  it('takes no itiraz on a day an older server took that no longer counts, and lets one filed before hold nothing', async () => {
+    harness = await makeApp({ now: '2026-11-10T13:00:00.000Z' });
+    const { ali, deniz, challengeId } = await newYorkSigara(harness);
+    for (const day of ['2026-11-10', '2026-11-11', '2026-11-12']) {
+      harness.setNow(`${day}T13:00:00.000Z`);
+      expect((await mark(harness, ali, challengeId, day)).statusCode).toBe(201);
+      expect((await mark(harness, deniz, challengeId, day)).statusCode).toBe(201);
+    }
+    harness.setNow('2026-11-13T03:30:00.000Z'); // 06:30 on the 13th in Istanbul, 22:30 on the 12th in New York
+    harness.db
+      .prepare(
+        `INSERT INTO entries (id, challenge_id, user_id, day_key, value, source, note, proof_url, status, client_time,
+                              session_id, late, created_at, updated_at)
+         VALUES ('sliver', ?, ?, '2026-11-13', 1, 'manual', NULL, NULL, 'ok', ?, NULL, 0, ?, ?)`,
+      )
+      .run(challengeId, deniz.me.id, iso(harness), iso(harness), iso(harness));
+
+    const filed = await authed(harness.app, ali.token)({
+      method: 'POST',
+      url: `/challenges/${challengeId}/entries/sliver/dispute`,
+      payload: { reason: 'o gün yoktu ki' },
+    });
+    expect(filed.statusCode).toBe(400);
+    expect(filed.json<{ error: { code: string; message: string } }>().error).toEqual({
+      code: 'entry_not_scored',
+      message: 'Bu gün saat farkı yüzünden zaten sayılmıyor, itiraz gerekmez.',
+    });
+    expect(harness.db.prepare('SELECT COUNT(*) AS n FROM disputes').get()).toEqual({ n: 0 });
+    expect(listByType(harness.db, deniz.me.id, 'dispute')).toEqual([]);
+
+    // one the older server took on it, already on the clock
+    harness.db
+      .prepare(
+        `INSERT INTO disputes (id, entry_id, by_user_id, reason, status, created_at)
+         VALUES ('old', 'sliver', ?, 'o gün yoktu ki', 'open', ?)`,
+      )
+      .run(ali.me.id, iso(harness));
+    harness.db
+      .prepare("UPDATE entries SET status = 'disputed', answer_by = ?, answer_from = ? WHERE id = 'sliver'")
+      .run(iso(harness, LIMITS.DISPUTE_ANSWER_MS), iso(harness));
+    const detail = await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` });
+    const row = detail.json<ChallengeDetail>().feed.find((item) => item.id === 'sliver');
+    expect(row).toMatchObject({ answerBy: null, disputeVotes: null });
+
+    // the result comes at the end, not 12 hours on, and burns nothing
+    harness.setNow('2026-11-13T05:00:30.000Z');
+    expect(runSchedulerOnce(harness.db, harness.now())).toMatchObject({ disputes: 0, finalized: 1 });
+    expect(outcome(harness, challengeId)).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
+    expect(harness.db.prepare("SELECT status FROM disputes WHERE id = 'old'").get()).toEqual({ status: 'open' });
+    expect(listByType(harness.db, deniz.me.id, 'entry_rejected')).toEqual([]);
+    expect(listByType(harness.db, deniz.me.id, 'dispute')).toEqual([]);
+  });
+
   it('drops the end each friend has less of: Dubai the hour of Monday, Los Angeles the two hours of Sunday', async () => {
     harness = await makeApp({ now: '2026-01-05T06:00:00.000Z' }); // Monday 09:00 in Istanbul
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
