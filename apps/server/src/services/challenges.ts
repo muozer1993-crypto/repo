@@ -64,7 +64,7 @@ import { asVulgarityLevel, toPublicUser } from '../serialize.js';
 import { DEVICE_SOURCES, disputeAwaitingAnswer, isDeviceSource, resolveDisputes } from './entries.js';
 import { isBlockedBetween } from './friends.js';
 import { notify } from './notifications.js';
-import { pausedBetween } from './pauses.js';
+import { upSpanFrom } from './pauses.js';
 import { joinNames, sendWeeklyRecaps } from './recap.js';
 import { awardBadges } from './stats.js';
 
@@ -1408,7 +1408,19 @@ export function disputesCloseAt(db: Database, challenge: ChallengeRow): number {
 export function disputesOpenUntil(db: Database, challenge: ChallengeRow, now: Date, bootAt?: Date): number {
   const fixed = disputesCloseAt(db, challenge);
   if (!bootAt || !stillSettling(db, challenge, now, bootAt)) return fixed;
-  return Math.max(fixed, bootAt.getTime() + LIMITS.DEVICE_SETTLE_MS);
+  return Math.max(fixed, settleFrom(db, challenge, bootAt) + LIMITS.DEVICE_SETTLE_MS);
+}
+
+/**
+ * Where the hour an ended çelınc holds its result for starts (epoch ms): its
+ * end, or, when the server was not running for some of the hour after it, the
+ * first moment after which it then ran for a whole hour (`upSpanFrom`, over
+ * the pauses the scheduler writes down). Without `bootAt` (no scheduler) the
+ * end.
+ */
+function settleFrom(db: Database, challenge: ChallengeRow, bootAt?: Date): number {
+  const endsAt = Date.parse(challenge.ends_at);
+  return bootAt ? upSpanFrom(db, endsAt, LIMITS.DEVICE_SETTLE_MS) : endsAt;
 }
 
 /**
@@ -1423,14 +1435,14 @@ export function disputesOpenUntil(db: Database, challenge: ChallengeRow, now: Da
  * too (`lateTypedEntry`). A typed çelınc with nothing late has nothing more to
  * receive and finishes on the dot.
  *
- * The hour runs from the end, or from `bootAt` when the server was not running
- * for some of the hour after the end (`pausedBetween`: a sleep or a stopped
- * process, as the scheduler writes them down): a server that was off at
- * midnight must not crown anybody on boot before a single phone could reach it,
- * nor before a friend could see the last typed number, and a restart during
- * that hour starts it again. A PC that slept through midnight is the same
- * server off at midnight (the phones' syncs failed all night), so the scheduler
- * moves `bootAt` to the moment it wakes. However it goes, the wait ends an hour
+ * The hour runs from the end, or, when the server was not running for some of
+ * the hour after the end, from where it came back (`settleFrom`, over the
+ * pauses the scheduler writes down: a sleep or a stopped process): a server
+ * that was off at midnight must not crown anybody on boot before a single phone
+ * could reach it, nor before a friend could see the last typed number, and a
+ * restart during that hour starts it again. A PC that slept through midnight
+ * is the same server off at midnight (the phones' syncs failed all night), so
+ * the hour runs from its wake. However it goes, the wait ends an hour
  * after that (an itiraz filed in it holds the result its own
  * `DISPUTE_ANSWER_MS` more, `disputeAwaitingAnswer`). A wake or restart long
  * after an hour the server was up for does not run it again: with an itiraz
@@ -1438,10 +1450,7 @@ export function disputesOpenUntil(db: Database, challenge: ChallengeRow, now: Da
  * each new one held it 12 hours more.
  */
 function stillSettling(db: Database, challenge: ChallengeRow, now: Date, bootAt?: Date): boolean {
-  const endsAt = Date.parse(challenge.ends_at);
-  const downAfterEnd = !!bootAt && pausedBetween(db, endsAt, endsAt + LIMITS.DEVICE_SETTLE_MS);
-  const settleFrom = downAfterEnd ? Math.max(endsAt, bootAt.getTime()) : endsAt;
-  if (now.getTime() >= settleFrom + LIMITS.DEVICE_SETTLE_MS) return false;
+  if (now.getTime() >= settleFrom(db, challenge, bootAt) + LIMITS.DEVICE_SETTLE_MS) return false;
   if (lateTypedEntry(db, challenge)) return true;
   const metric = typeForChallenge(challenge).deviceMetric;
   if (!metric) return false;

@@ -53,15 +53,27 @@ export function writeHeldPauses(db: Database): void {
 }
 
 /**
- * Whether the server was not running for some of `from` to `to` (epoch ms),
- * by a pause written down or one still held.
+ * Where the first `span` ms after `from` that the server was up for all along
+ * begins (epoch ms): `from` itself when no pause (written down or still held)
+ * cuts into the span after it, else the end of the latest one that does, and
+ * so on from there. A night's sleep over a çelınc's end puts the phones' hour
+ * at the wake; a later sleep, after that hour ran with the PC on, moves
+ * nothing, however often the PC sleeps afterwards.
  */
-export function pausedBetween(db: Database, from: number, to: number): boolean {
-  const row = db
-    .prepare('SELECT 1 AS hit FROM server_pauses WHERE started_at < ? AND ended_at > ? LIMIT 1')
-    .get(new Date(to).toISOString(), new Date(from).toISOString());
-  if (row) return true;
-  return (held.get(db) ?? []).some((pause) => pause.startedAt.getTime() < to && pause.endedAt.getTime() > from);
+export function upSpanFrom(db: Database, from: number, span: number): number {
+  const latest = db.prepare('SELECT MAX(ended_at) AS until FROM server_pauses WHERE started_at < ? AND ended_at > ?');
+  let at = from;
+  for (;;) {
+    const row = latest.get(new Date(at + span).toISOString(), new Date(at).toISOString()) as { until: string | null };
+    let next = row.until ? Date.parse(row.until) : Number.NaN;
+    for (const pause of held.get(db) ?? []) {
+      if (pause.startedAt.getTime() < at + span && pause.endedAt.getTime() > at) {
+        next = Number.isNaN(next) ? pause.endedAt.getTime() : Math.max(next, pause.endedAt.getTime());
+      }
+    }
+    if (!(next > at)) return at;
+    at = next;
+  }
 }
 
 /** Writes down that the server was not running from `startedAt` to `endedAt`. */

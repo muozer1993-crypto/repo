@@ -600,10 +600,12 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    is ever upheld.
 2. `active` with `ends_at <= now` → finalize. A type with a `deviceMetric` (steps, screen time) first **settles**: the
    phone's last evening usually arrives with the next background sync (15+ minutes, longer under Doze), so it
-   stays `active` until `now >= max(ends_at, bootAt) + LIMITS.DEVICE_SETTLE_MS` (1 h; `bootAt` counts only when a
-   `server_pauses` row, or a pause the scheduler holds because it could not write it, overlaps the hour after `ends_at`:
-   a wake or restart long after an hour the server was up for does not run it again, or every sleep reopened
-   itirazlar on a result an itiraz holds, each new one holding it 12 h more), or earlier once every
+   stays `active` until `now >= settleFrom + LIMITS.DEVICE_SETTLE_MS` (1 h; `settleFrom` is `ends_at`, or, when a
+   `server_pauses` row or a pause the scheduler holds because it could not write it overlaps the hour after it, the
+   latest end of such a pause, and so on from there until an hour with no pause in it follows, `upSpanFrom`: the first
+   hour the server ran through after the end. A night's sleep over the end puts it at the wake, 08:00 to 09:00; a wake
+   or restart after that hour ran with the server up does not run it again, however many sleeps follow, or every
+   sleep reopened itirazlar on a result an itiraz holds, each new one holding it 12 h more), or earlier once every
    accepted participant's `steps_daily` / `screen_time_daily` row for their own last window day
    (`challengeWindow(c, participantTimezone(p, u)).at(-1)`) has `updated_at > ends_at`; a participant whose last
    day was not over by `ends_at` (another zone, an end in the middle of a day) is not waited for, because that day
@@ -630,7 +632,7 @@ After every write: recompute standings (in memory via shared `rankParticipants`)
    settling, device syncs still fan out into the last day and `POST /challenges/:id/entries` gets `challenge_ended` (2.3); the
    app shows "Sonuç birazdan" instead of the countdown, hides the entry buttons and sends its own count once.
    Every other type finalizes right at `ends_at` — unless an entry not written by a phone was created or changed in
-   its last hour (`lateTypedEntry`, 2.3): then it settles too, until `max(ends_at, bootAt) + LIMITS.DEVICE_SETTLE_MS`
+   its last hour (`lateTypedEntry`, 2.3): then it settles too, until `settleFrom + LIMITS.DEVICE_SETTLE_MS` (above)
    and no earlier, so the rival can see that number and file an itiraz on it (with one, a phone-counted type runs its
    full hour as well, every phone reported or not: a "Beyan et" day typed at the whistle). That is the longest the
    hour runs; an itiraz filed in it holds the result only by the next rule. Whatever the type, it also waits while

@@ -990,6 +990,49 @@ describe('scheduler: the itiraz hour for numbers that land at the whistle', () =
     await refuse();
   });
 
+  it('does not open the itiraz hour again on a later wake after a night the PC slept through the end', async () => {
+    harness = await makeApp({ now: NOW });
+    const { ali, veli, challengeId } = await endingAtMidnight(harness, 'kitap_sayfa', { proofRequired: false });
+    harness.app.schedulerBootAt.at = harness.now();
+    at(harness, MIDNIGHT_END, -2 * HOUR);
+    const aliPages = await logPages(harness, ali, challengeId, 120);
+    at(harness, MIDNIGHT_END, -30_000);
+    const late = await logPages(harness, veli, challengeId, 300);
+    const fileOn = (entryId: string) =>
+      authed(harness!.app, veli.token)({
+        method: 'POST',
+        url: `/challenges/${challengeId}/entries/${entryId}/dispute`,
+        payload: { reason: 'okumadı o kadar' },
+      });
+    const wake = (from: number, to: number) => {
+      const bootAt = new Date(Date.parse(MIDNIGHT_END) + to);
+      recordPause(harness!.db, new Date(Date.parse(MIDNIGHT_END) + from), bootAt);
+      harness!.app.schedulerBootAt.at = bootAt;
+      return bootAt;
+    };
+
+    // asleep from 23:59:40 to 08:00: the hour runs from the wake, and Ali's itiraz at 08:10 holds the result
+    const morning = wake(-20_000, 8 * HOUR);
+    at(harness, morning.toISOString(), 10 * MINUTE);
+    await dispute(harness, ali, challengeId, late);
+    at(harness, morning.toISOString(), 65 * MINUTE);
+    expect(runSchedulerOnce(harness.db, harness.now(), { bootAt: morning })).toMatchObject({ finalized: 0 });
+    expect((await fileOn(aliPages)).json<{ error: { code: string } }>().error.code).toBe('challenge_ended');
+
+    // asleep over lunch: that hour had run with the PC on, so nothing reopens
+    const lunch = wake(12 * HOUR, 13 * HOUR);
+    at(harness, lunch.toISOString(), 10 * MINUTE);
+    expect(runSchedulerOnce(harness.db, harness.now(), { bootAt: lunch })).toMatchObject({ finalized: 0 });
+    expect(await disputesCloseAt(harness, ali, challengeId)).toBe(new Date(Date.parse(MIDNIGHT_END) + HOUR).toISOString());
+    expect((await fileOn(aliPages)).json<{ error: { code: string } }>().error.code).toBe('challenge_ended');
+
+    // Veli never answered: Ali wins once the 12 hours from 08:10 are up
+    at(harness, morning.toISOString(), 10 * MINUTE + LIMITS.DISPUTE_ANSWER_MS + 60_000);
+    runSchedulerOnce(harness.db, harness.now(), { bootAt: lunch });
+    const outcome = harness.db.prepare('SELECT status, winner_id FROM challenges WHERE id = ?').get(challengeId);
+    expect(outcome).toEqual({ status: 'finished', winner_id: ali.me.id });
+  });
+
   it('holds a step çelınc the whole hour when a phone raised its days after the rival had reported', async () => {
     harness = await makeApp({ now: NOW });
     const { ali, veli, challengeId } = await endingAtMidnight(harness, 'adim_yarisi');
