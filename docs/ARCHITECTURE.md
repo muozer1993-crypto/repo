@@ -40,6 +40,8 @@ penceresi bu yüzden bir gün uzun çıkabilir: New York'ta sabah açılan "3 g�
 süresi) o kırıntı gün bedava bir puan ya da yazılamayan bir günün 1440 dakikalık cezası demekti;
 eşit oynayan biri kaybediyordu. Bu türlerde oyuncu, açanın gün sayısından fazla güne puanlanmaz
 (`scoringWindow`): pencere uzunsa çelıncın daha az saatini kapsayan uç gün düşer, eşitlikte son gün.
+Ekran süresinde bitişin yarıda kestiği son gün her zaman önce düşer: o gün ancak bitişe kadar
+yazılabilir, sonra 1440 sayılırdı; başlangıcın kestiği ilk gün ise bütün akşam ve ertesi gün yazılabilir.
 Giriş doğrulaması, telefonların senkronu, sıralama ve uygulamanın "📅 N gün"ü, gün seçicisi ve
 "Bugün"ü (`ChallengeSummary.myDays`) aynı pencereyi kullanır. Adım, odak ve sayaç gibi toplamlar her
 dilimde aynı saatleri kapsar, onlara dokunulmaz; bitmiş çelınc bitişte yazılan sonucunu korur.
@@ -51,7 +53,12 @@ günlük olanında İstanbul, Berlin ve Londra yedi akşam oynar, New York altı
 azına denk gelen kanka çelınca girmez: sihirbaz, "Kanka ekle" ve "Varım" 400 `checkin_days_short` ile
 nedenini söyler (kabulde profilin saat dilimiyle, çünkü sabitlenecek olan o; "Kanka oldunuz" da böyle bir
 çelıncı önermez). Fazlasına denk gelen girer ama açanın sayısı kadarına puanlanır (`scoringWindow`): daha
-az kapsanan uçtaki son saat düşer, eşitlikte sonuncusu. Aynı dilimdeki oyunculara dokunulmaz. Profilini
+az kapsanan uçtaki son saat düşer, eşitlikte sonuncusu; ama son saati çelıncın içinde kalan gün, bitişin son
+saatten önce kestiği günden önce gelir (00:30'da "Hemen" açılan Erken Kuş'ta Tokyo'nun 06:30-07:00 ilk sabahı
+kalır, 04:00-05:59 son sabahı düşer). Son saat aralığına hiç denk gelmeyen gün, açanda da öyle değilse o
+kankanın günü sayılmaz (New York'ta 15:59'da biten son akşam). Bitişin son saatten önce kestiği gün
+(Londra'nın 20:59'da biten yedinci akşamı) bitişe kadar oynanır: uygulama o gün sınırı 20:59 gösterir ve
+yarım saat önce hatırlatır. Aynı dilimdeki oyunculara dokunulmaz. Profilini
 "Varım"dan hemen önce Tokyo'ya alan biri 07:00'lik sabahları İstanbul saatiyle 00:30'da yakalar. Kabulü
 saat dilimi değişti diye reddetmek gerçekten yolculuk yapanı cezalandırırdı; onun yerine herkesin oynadığı
 dilim görünür (`ParticipantView.timezone`): sıralamada adının yanında "(Tokyo saati)", check-in satırında

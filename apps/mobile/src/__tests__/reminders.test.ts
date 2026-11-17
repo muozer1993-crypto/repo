@@ -125,6 +125,8 @@ describe('reminder scheduling maths', () => {
 function checkinSummary(
   overrides: {
     id?: string;
+    /** erken_kus by default: its slot opens at 04:00 */
+    typeKey?: string;
     startsAt?: Date;
     endsAt?: Date;
     deadlineTime?: string;
@@ -141,6 +143,7 @@ function checkinSummary(
     challenge: {
       id: overrides.id ?? 'c1',
       title: 'Sabah Kalkma',
+      typeKey: overrides.typeKey ?? 'erken_kus',
       startsAt: (overrides.startsAt ?? new Date(Date.now() - 2 * DAY_MS)).toISOString(),
       endsAt: (overrides.endsAt ?? new Date(Date.now() + 5 * HOUR_MS)).toISOString(),
       metricType: 'checkin_deadline',
@@ -166,17 +169,20 @@ describe('which days get a check-in poke', () => {
   it('sets one dated poke per day left, none at or after the end and none repeating', async () => {
     const client = listOf(checkinSummary({ endsAt: new Date(NOW.getTime() + 2 * DAY_MS) }));
 
-    // 06:30 today and tomorrow; the day after it is over by 06:00. Plus the last hour.
-    expect(await refreshReminders(client, 2, TZ)).toBe(3);
+    // 06:30 today and tomorrow; the day after it ends at 06:00, before its
+    // 07:00, and is poked at 05:30 instead. Plus the last hour.
+    expect(await refreshReminders(client, 2, TZ)).toBe(4);
 
     const checkins = checkinRequests();
     expect(checkins.map((request) => request.identifier)).toEqual([
       'koydum-checkin-c1-2026-10-05',
       'koydum-checkin-c1-2026-10-06',
+      'koydum-checkin-c1-2026-10-07',
     ]);
     expect(checkins.map((request) => request.trigger.date?.toISOString())).toEqual([
       '2026-10-05T03:30:00.000Z',
       '2026-10-06T03:30:00.000Z',
+      '2026-10-07T02:30:00.000Z',
     ]);
     expect(mockSchedule.mock.calls.every(([request]) => request.trigger.type !== 'daily')).toBe(true);
     // ready() made sure the channel exists before anything went to it
@@ -257,7 +263,10 @@ describe('which days get a check-in poke', () => {
 
     await refreshReminders(client, 2, TZ);
 
-    expect(checkinRequests().map((request) => request.identifier)).toEqual(['koydum-checkin-c1-2026-10-06']);
+    expect(checkinRequests().map((request) => request.identifier)).toEqual([
+      'koydum-checkin-c1-2026-10-06',
+      'koydum-checkin-c1-2026-10-07',
+    ]);
   });
 
   it('pokes a 00:10 deadline at 23:40 the evening before', async () => {
@@ -276,6 +285,7 @@ describe('which days get a check-in poke', () => {
     // server still wants the check-in by 23:00 Istanbul
     const client = listOf(
       checkinSummary({
+        typeKey: 'erken_yat',
         deadlineTime: '23:00',
         endsAt: new Date(NOW.getTime() + 2 * DAY_MS),
         myTimezone: 'Europe/Istanbul',
@@ -293,6 +303,36 @@ describe('which days get a check-in poke', () => {
     expect(checkins.map((request) => request.trigger.date?.toISOString())).toEqual([
       '2026-10-05T19:30:00.000Z',
       '2026-10-06T19:30:00.000Z',
+    ]);
+  });
+
+  it('pokes a day the end cuts before its deadline 30 minutes before the end', async () => {
+    // an Istanbul erken_yat ending at 23:59 there, played from London: its
+    // last evening ends at 21:59 London time, before the 23:00
+    const client = listOf(
+      checkinSummary({
+        typeKey: 'erken_yat',
+        deadlineTime: '23:00',
+        endsAt: new Date('2026-10-06T20:59:59.999Z'),
+        myTimezone: 'Europe/London',
+      })
+    );
+
+    await refreshReminders(client, 1, TZ);
+
+    const checkins = checkinRequests();
+    expect(checkins.map((request) => request.identifier)).toEqual([
+      'koydum-checkin-c1-2026-10-05',
+      'koydum-checkin-c1-2026-10-06',
+    ]);
+    // 22:30 London on the 5th; 21:30 on the 6th, half an hour before the end
+    expect(checkins.map((request) => request.trigger.date?.toISOString())).toEqual([
+      '2026-10-05T21:30:00.000Z',
+      '2026-10-06T20:30:00.000Z',
+    ]);
+    expect(checkins.map((request) => request.content.body)).toEqual([
+      'Sabah Kalkma: check-in saati 23:00. 30 dakikan kaldı.',
+      'Sabah Kalkma: çelınc bitiyor. Check-in için 30 dakikan kaldı.',
     ]);
   });
 

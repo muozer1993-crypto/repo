@@ -208,37 +208,46 @@ export function creatorTimezone(db: Database, challenge: Pick<ChallengeRow, 'id'
  */
 const SCORED_PER_DAY: readonly MetricType[] = ['daily_boolean', 'checkin_deadline', 'manual_lower_is_better'];
 
+const DAY_MS = 86_400_000;
+
 /** the zone `challengeWindow` falls back to for one it cannot read */
 function readableZone(tz: string): string {
   return isValidTimeZone(tz) ? tz : DEFAULT_TIMEZONE;
 }
 
 /**
- * How much of one day's check-in slot in `zone` the çelınc covers (ms, 0 or
- * less for none): from the type's window opening (`checkinWindowStart`) to the
- * last second of the deadline's minute, against `starts_at` up to `ends_at`,
- * from which nothing is taken. The slot never wraps past midnight
- * (`deadlineFitsWindow`), so it lies inside its own day.
+ * One day's check-in slot in `zone` against the çelınc: how much of it the
+ * çelınc covers (`cover`, ms, 0 or less for none), from the type's window
+ * opening (`checkinWindowStart`) to the last second of the deadline's minute,
+ * against `starts_at` up to `ends_at`, from which nothing is taken; and whether
+ * the deadline's minute itself is still inside the çelınc (`deadlineIn`). The
+ * slot never wraps past midnight (`deadlineFitsWindow`), so it lies inside its
+ * own day.
+ *
+ * A covered slot whose deadline is not in can still be won, by tapping before
+ * the end: a London friend's seventh evening in an Istanbul erken_yat ends at
+ * 20:59 there, two hours before its 23:00.
  */
-function checkinSlotCover(
+function checkinSlot(
   challenge: Pick<ChallengeRow, 'starts_at' | 'ends_at' | 'deadline_time'>,
   type: ChallengeType,
   zone: string,
-): (key: string) => number {
+): (key: string) => { cover: number; deadlineIn: boolean } {
   const start = Date.parse(challenge.starts_at);
   const end = Date.parse(challenge.ends_at);
   const opens = hhmmToMinutes(type.checkinWindowStart ?? '00:00');
   const deadline = hhmmToMinutes(effectiveDeadline(type, challenge.deadline_time));
   return (key) => {
     const from = localInstant(key, Math.floor(opens / 60), opens % 60, zone).getTime();
-    const to = localInstant(key, Math.floor(deadline / 60), deadline % 60, zone).getTime() + 60_000;
-    return Math.min(end, to) - Math.max(start, from);
+    const at = localInstant(key, Math.floor(deadline / 60), deadline % 60, zone).getTime();
+    const to = at + 60_000;
+    return { cover: Math.min(end, to) - Math.max(start, from), deadlineIn: at <= end && to > start };
   };
 }
 
 /**
  * The days of a check-in çelınc a player in `tz` can beat a deadline on: the
- * window's days whose slot (`checkinSlotCover`) the çelınc reaches.
+ * window's days whose slot (`checkinSlot`) the çelınc reaches.
  *
  * A day key alone says nothing here. An erken_yat made "Hemen" at 12:50 in
  * Istanbul for one day ends at 15:59 in New York, before its 19:00 opening:
@@ -250,8 +259,8 @@ export function checkinPlayableDays(
   type: ChallengeType,
   tz: string,
 ): string[] {
-  const cover = checkinSlotCover(challenge, type, readableZone(tz));
-  return challengeWindow(challenge, tz).filter((key) => cover(key) > 0);
+  const slot = checkinSlot(challenge, type, readableZone(tz));
+  return challengeWindow(challenge, tz).filter((key) => slot(key).cover > 0);
 }
 
 /**
@@ -291,13 +300,23 @@ export function checkinDaysShort(
  * also when their own end cuts a day in half: a 24-hour çelınc from noon is
  * two days for everybody. Entry writes, the phones' fan-out and the standings
  * all read it, so a day a player cannot write is never one they are scored on.
+ * On screen time a last day the end cuts goes first, whatever its hours: it
+ * can be typed only until `ends_at` and is then charged 1440 minutes, while a
+ * first day the start cuts can be typed all evening and all of the next day
+ * (`MANUAL_BACKFILL_DAYS`). New York in an Istanbul çelınc from Monday 00:00
+ * keeps its Sunday from 17:00 and loses the Sunday that ends at 16:59.
  *
- * A check-in çelınc counts deadlines instead (`checkinPlayableDays`), and the
- * end whose slot it covers less of goes. An Istanbul "Hemen" erken_kus opened
- * at 23:00 has four mornings there and five in Tokyo, the first from 05:00 and
- * the last until 05:59. Days with no slot stay where nothing was cut: one
- * after a "Hemen" past the deadline still takes its late 0, as it does for
- * the creator. Nobody is let in with fewer (`checkinDaysShort`).
+ * A check-in çelınc counts deadlines instead (`checkinPlayableDays`). A day
+ * whose deadline the çelınc reaches outranks one it cuts before its deadline,
+ * then the end whose slot it covers less of goes. An Istanbul "Hemen" erken_kus
+ * opened at 00:30 has four mornings there and five in Tokyo: the first from
+ * 06:30, its 07:00 still ahead, and the last from 04:00 until 05:59, its 07:00
+ * after the end; the last goes. Days with no slot stay only where the creator
+ * has the same day with none: a "Hemen" past the deadline still takes its late
+ * 0, as it does for the creator, but New York's evening before an Istanbul
+ * erken_kus from 04:00, or its Sunday that ends at 15:59 before its 19:00, is
+ * no day of theirs to count or to be reminded of. Nobody is let in with fewer
+ * (`checkinDaysShort`).
  */
 export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string): string[] {
   const window = challengeWindow(challenge, tz);
@@ -309,16 +328,22 @@ export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string)
   if (readableZone(creatorTz) === zone) return window;
 
   if (type.metricType === 'checkin_deadline') {
-    const cover = checkinSlotCover(challenge, type, zone);
-    const playable = window.filter((key) => cover(key) > 0);
+    const slot = checkinSlot(challenge, type, zone);
+    const playable = window.filter((key) => slot(key).cover > 0);
     const days = checkinPlayableDays(challenge, type, creatorTz).length;
-    if (playable.length <= days) return window;
-    const kept = trimEnds(playable, days, cover);
+    // a reachable deadline outranks any length of slot without one
+    const kept = trimEnds(playable, days, (key) => {
+      const { cover, deadlineIn } = slot(key);
+      return cover + (deadlineIn ? DAY_MS : 0);
+    });
     const first = kept[0];
     const last = kept[kept.length - 1];
-    if (first === undefined || last === undefined) return [];
+    const creatorSlot = checkinSlot(challenge, type, readableZone(creatorTz));
+    const creatorDays = new Set(challengeWindow(challenge, creatorTz));
+    const bareForBoth = (key: string): boolean =>
+      creatorDays.has(key) && slot(key).cover <= 0 && creatorSlot(key).cover <= 0;
     return window.filter(
-      (key) => (first === playable[0] || key >= first) && (last === playable[playable.length - 1] || key <= last),
+      (key) => (first !== undefined && last !== undefined && key >= first && key <= last) || bareForBoth(key),
     );
   }
 
@@ -329,6 +354,10 @@ export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string)
   const end = Date.parse(challenge.ends_at) + 1;
   const covered = (key: string): number =>
     Math.min(end, startOfDayInTz(addDays(key, 1), zone).getTime()) - Math.max(start, startOfDayInTz(key, zone).getTime());
+  const lastKey = window[window.length - 1]!;
+  if (type.metricType === 'manual_lower_is_better' && !dayOverByEnd(challenge, zone, lastKey)) {
+    return trimEnds(window, days, (key) => (key === lastKey ? -DAY_MS : covered(key)));
+  }
   return trimEnds(window, days, covered);
 }
 
@@ -1458,7 +1487,8 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
   // before its window opens (erken_yat before 19:00) the check-in is still ahead.
   // Nor does the sliver of a day `scoringWindow` leaves out of a friend's yes/no
   // or screen-time days, nor the extra deadline it leaves out of their check-in
-  // days: the server refuses anything sent for it. Nor does a çelınc the phone
+  // days: the server refuses anything sent for it. Nor does a check-in day with
+  // no slot (one that ends before its 19:00 opening). Nor does a çelınc the phone
   // counts by itself once a sync filled today: there is nothing to type. One
   // whose phone has sent nothing yet still does (an iPhone step racer: opening
   // the app is what sends the steps). Soonest end first: the one a reminder
@@ -1482,6 +1512,8 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
         if (!SCORED_PER_DAY.includes(type.metricType)) return true;
         if (!scoringWindow(db, challenge, tz).includes(today)) return false;
         if (type.metricType !== 'checkin_deadline') return true;
+        // a day the çelınc gives no slot (it ends before the evening opens)
+        if (!(checkinSlot(challenge, type, readableZone(tz))(today).cover > 0)) return false;
         const deadline = effectiveDeadline(type, challenge.deadline_time);
         return isBeforeOrEqualHHmm(localTimeHHmm(now, tz), deadline);
       } catch {

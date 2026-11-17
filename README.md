@@ -1336,12 +1336,17 @@ Yeni saat dilimi sadece bundan sonra katıldığın çelınclarda geçerli. Deva
 katıldığın andaki saat diliminde sayılmaya devam eder: İstanbul'da katıldığın "Erken Yatma Sözü"
 çelıncında Tokyo'dayken de İstanbul saatiyle 23:00'ten önce "Geldim" demen gerekir. Uygulama o
 çelıncın gününü ve hatırlatmasını buna göre hesaplar, senin bir şey yapmana gerek yok.
-Başka şehirdeki kankalar da çelıncı açanın gün sayısı kadar gün oynar: New York'ta açılan "3 gün"lük
-Sigara Yok İstanbul'da dördüncü günün sabahı biter, ama o birkaç saat evet/hayır ve ekran süresi
-çelınclarında ayrı gün sayılmaz; uygulama da İstanbul'daki kankaya "3 gün" gösterir.
+Başka şehirdeki kankalar da çelıncı açanın gün sayısı kadar gün oynar. New York'ta açılan "3 gün"lük
+Sigara Yok İstanbul'da dört güne yayılır; evet/hayır çelınclarında bu dört günden çelıncın daha az
+saatine denk gelen uçtaki gün sayılmaz (eşitse sonuncusu): New York'ta sabah 10:00'da "Hemen" açıldıysa
+İstanbul'daki kankanın ilk akşamı sayılmaz, dördüncü günün sabahı sayılır. Ekran süresinde ise bitişin
+yarıda kestiği son gün düşer, çünkü o gün bitişten sonra yazılamaz. Uygulama kankaya hangi günlerin
+sayıldığını gösterir ("3 gün · 6 Ocak – 8 Ocak").
 Check-in çelınclarında da çelıncı açanın kaç sabahı ya da akşamı varsa o kadar check-in sayılır. Saat
 farkı yüzünden daha azına denk gelen kanka eklenemez (İstanbul'da öğlen açılan bir günlük "Erken Yatma Sözü" New York'ta
-akşam 19:00 olmadan biter), uygulama bunu söyler. Başka saat diliminde oynayan kankanın adının yanında
+akşam 19:00 olmadan biter), uygulama bunu söyler. Bitişin son saatten önce kestiği gün (İstanbul'da gece
+yarısı biten "Erken Yatma Sözü" Londra'da 20:59'da biter) bitişe kadar sayılır; uygulama o gün sınırı
+20:59 diye gösterir ve yarım saat önce hatırlatır. Başka saat diliminde oynayan kankanın adının yanında
 "(Tokyo saati)" yazar; "Geldim" dediği saat de hem onun hem senin saatinle görünür.
 
 **Uygulama "Sunucunun diski dolmak üzere" diyor.**

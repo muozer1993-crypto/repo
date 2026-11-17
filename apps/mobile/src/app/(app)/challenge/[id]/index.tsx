@@ -82,7 +82,7 @@ import { useAuth, useLevel } from '@/store/auth';
 import { Colors, Radius, Spacing } from '@/theme';
 import { byLevel, declineQuestion, endsWithoutMe } from '@/utils/levelCopy';
 import { confirmTr } from '@/utils/confirm';
-import { clampToMyDays, safeDayKeysBetween, safeTodayKey, zoneCityTr } from '@/utils/datetime';
+import { clampToMyDays, cutShortOn, safeDayKeysBetween, safeTodayKey, zoneCityTr } from '@/utils/datetime';
 import { errorText } from '@/utils/errors';
 import {
   dropFloatNoise,
@@ -1247,6 +1247,9 @@ function CheckinAction({ id, detail, level, today, tz, dayKeys }: ActionProps) {
   const entry = detail.myEntries.find((e) => e.dayKey === today);
   const done = !!entry;
   const deadline = detail.challenge.deadlineTime;
+  // The end can come before today's deadline: in London an Istanbul
+  // erken_yat's last evening ends at 20:59, and a 22:30 tap is refused.
+  const cutAt = deadline ? cutShortOn(detail.challenge.endsAt, today, tz, deadline) : null;
   // Another zone than the creator's can hold one deadline more than the
   // creator has; the server leaves it out of my days (`myDays`) and refuses
   // a "Geldim" on it.
@@ -1306,7 +1309,12 @@ function CheckinAction({ id, detail, level, today, tz, dayKeys }: ActionProps) {
 
   return (
     <View style={styles.actionBody}>
-      {deadline ? (
+      {cutAt ? (
+        <Text variant="small" muted>
+          Bugünün sınırı: <Text variant="small" bold>{formatTime(detail.challenge.endsAt, tz)}</Text>. Çelınc saat {deadline}{' '}
+          olmadan bitiyor, ondan önce bas.
+        </Text>
+      ) : deadline ? (
         <Text variant="small" muted>
           Bugünün sınırı: <Text variant="small" bold>{deadline}</Text>
         </Text>
@@ -1620,7 +1628,7 @@ function CountAction({ id, detail, type, today }: ActionProps) {
  * iPhone / Expo Go / no permission: the honest fallback, a typed value with a
  * screenshot, plus the one-tap permission request where that is the blocker.
  */
-function LowerAction({ id, detail, type, level, today, dayKeys }: ActionProps) {
+function LowerAction({ id, detail, type, level, today, dayKeys, tz }: ActionProps) {
   const api = useApi();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -1668,6 +1676,8 @@ function LowerAction({ id, detail, type, level, today, dayKeys }: ActionProps) {
   const firstDay = !dayKeys.some((key) => key < today);
   // a sliver of a day the server does not score here (`myDays`, another zone than the creator's)
   const todayScored = dayKeys.length === 0 || dayKeys.includes(today);
+  // a last day the end cuts: nothing goes in after the end, "gün bitince" included
+  const cutAt = cutShortOn(detail.challenge.endsAt, today, tz);
 
   const sync = async () => {
     setSyncing(true);
@@ -1726,7 +1736,9 @@ function LowerAction({ id, detail, type, level, today, dayKeys }: ActionProps) {
           ? 'herkes aynı sayıda gün oynasın diye bugün sende sayılmıyor.'
           : firstDay
             ? `bugün ilk gün, değerin gelene kadar ${penalty} ${type.unitTr} görünürsün.`
-            : 'bugün ise gün bitince ortalamana katılır.'}
+            : cutAt
+              ? `çelınc bugün bitiyor: bugünü saat ${formatTime(detail.challenge.endsAt, tz)} olmadan gir, sonra giremezsin.`
+              : 'bugün ise gün bitince ortalamana katılır.'}
       </Text>
 
       {deviceOn ? (

@@ -1688,6 +1688,44 @@ describe('a rival who plays a check-in çelınc on another zone\'s clock', () =>
     expect(text.match(/saatiyle/g)).toHaveLength(1);
   });
 
+  it('gives the end as the limit on an evening the end cuts before its deadline', async () => {
+    searchParams.id = 'c-1';
+    // 19:30 in London on the last day of an Istanbul erken_yat that ends at 20:59 there
+    const NOW_AT = new Date('2026-11-16T19:30:00.000Z').getTime();
+    jest.useFakeTimers({
+      now: NOW_AT,
+      doNotFake: [
+        'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',
+        'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval',
+        'clearInterval', 'setTimeout', 'clearTimeout',
+      ],
+    });
+    try {
+      const detail = tokyoRival();
+      api.challenge = jest.fn(async () => ({
+        ...detail,
+        challenge: {
+          ...detail.challenge,
+          typeKey: 'erken_yat',
+          deadlineTime: '23:00',
+          startsAt: '2026-11-10T06:00:00.000Z',
+          endsAt: '2026-11-16T20:59:59.999Z',
+        },
+        myTimezone: 'Europe/London',
+        myDays: { first: '2026-11-10', last: '2026-11-16' },
+      }));
+      const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+      const tree = renderScreen(<ChallengeScreen />);
+      await settle();
+
+      const text = rendered(tree);
+      expect(text).toMatch(/Bugünün sınırı:\s*20:59\s*\.\s*Çelınc saat\s*23:00\s*olmadan bitiyor, ondan önce bas\./);
+      expect(text).toContain('GELDİM');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('offers no "Geldim" on a morning the server leaves out of my days', async () => {
     const today = todayKey('Europe/Istanbul');
     searchParams.id = 'c-1';
@@ -2007,6 +2045,36 @@ describe('the screen-time card', () => {
     const text = rendered(tree);
     expect(text).toMatch(/Girmediğin gün\s+1\.440\s+dk\s+sayılır;\s+bugün ise gün bitince ortalamana katılır\./);
     expect(text).not.toContain('ilk gün');
+  });
+
+  it('says a last day the end cuts goes in only before the end', async () => {
+    searchParams.id = 'c-1';
+    // 12:00 in Istanbul on a last day that ends at 15:59
+    const NOW_AT = new Date('2026-09-10T09:00:00.000Z').getTime();
+    jest.useFakeTimers({
+      now: NOW_AT,
+      doNotFake: [
+        'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',
+        'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval',
+        'clearInterval', 'setTimeout', 'clearTimeout',
+      ],
+    });
+    try {
+      const detail = screenTime(2 * 86_400_000);
+      api.challenge = jest.fn(async () => ({
+        ...detail,
+        challenge: { ...detail.challenge, endsAt: '2026-09-10T12:59:59.999Z' },
+      }));
+      const ChallengeScreen = require('@/app/(app)/challenge/[id]/index').default;
+      const tree = renderScreen(<ChallengeScreen />);
+      await settle();
+
+      const text = rendered(tree);
+      expect(text).toMatch(/sayılır;\s+çelınc bugün bitiyor: bugünü saat 15:59 olmadan gir, sonra giremezsin\./);
+      expect(text).not.toContain('gün bitince');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('says on day one that silence shows as the penalty, the way the standings show it', async () => {

@@ -1,4 +1,4 @@
-import { addDays, type ChallengeSummary } from '@koydum/shared';
+import { addDays, getChallengeType, type ChallengeSummary } from '@koydum/shared';
 import { Platform } from 'react-native';
 
 import type { ApiClient } from '@/lib/api';
@@ -6,7 +6,15 @@ import { StorageKeys, getItem, removeItem, setItem } from '@/lib/storage';
 import { localNotifications, type LocalNotifications } from '@/services/expoNotifications';
 import { ANDROID_CHANNEL_ID, ensureAndroidChannel, installNotificationHandler } from '@/services/notifications';
 import { saveChallengeDetail, syncSavedWithList } from '@/services/savedDetails';
-import { clampToMyDays, resolveTimezone, safeDayKey, safeDayKeysBetween, safeTodayKey, zonedInstant } from '@/utils/datetime';
+import {
+  clampToMyDays,
+  cutShortOn,
+  resolveTimezone,
+  safeDayKey,
+  safeDayKeysBetween,
+  safeTodayKey,
+  zonedInstant,
+} from '@/utils/datetime';
 
 /**
  * Local reminders scheduled on the device itself.
@@ -107,6 +115,8 @@ export interface ReminderChallenge {
   metricType: string;
   /** "HH:mm" for check-in challenges */
   deadlineTime: string | null;
+  /** "HH:mm" a check-in type's slot opens at (erken_yat's 19:00); none: from midnight */
+  windowStart?: string | null;
   /** true when the reader has already done today's check-in */
   doneToday: boolean;
   /**
@@ -239,6 +249,7 @@ async function refresh(client: ReminderClient, level: 1 | 2 | 3, tz: string): Pr
         endsAt: summary.challenge.endsAt,
         metricType: summary.challenge.metricType,
         deadlineTime: summary.challenge.deadlineTime,
+        windowStart: getChallengeType(summary.challenge.typeKey)?.checkinWindowStart ?? null,
         doneToday: safeDayKey(summary.me?.lastEntryAt, zone) === safeTodayKey(zone),
         tz: zone,
         myDays: summary.myDays,
@@ -302,9 +313,11 @@ export async function syncReminders(
             title:
               level === 1 ? 'Check-in vakti' : level === 2 ? 'Süre doluyor lan' : 'Yetiştir yoksa yersin 🍆',
             body:
-              level === 1
-                ? `${challenge.title}: check-in saati ${challenge.deadlineTime}. ${MINUTES_BEFORE_DEADLINE} dakikan kaldı.`
-                : `${challenge.title}: ${MINUTES_BEFORE_DEADLINE} dakikan kaldı. Check-in yapmazsan bugün sayılmaz.`,
+              level !== 1
+                ? `${challenge.title}: ${MINUTES_BEFORE_DEADLINE} dakikan kaldı. Check-in yapmazsan bugün sayılmaz.`
+                : slot.cut
+                  ? `${challenge.title}: çelınc bitiyor. Check-in için ${MINUTES_BEFORE_DEADLINE} dakikan kaldı.`
+                  : `${challenge.title}: check-in saati ${challenge.deadlineTime}. ${MINUTES_BEFORE_DEADLINE} dakikan kaldı.`,
             data: { kind: REMINDER_KIND, reminder: 'checkin', challengeId: challenge.id, type: 'reminder' },
             sound: true,
           },
@@ -386,20 +399,22 @@ export async function syncReminders(
 
 /**
  * When a check-in çelınc should be poked: 30 minutes before the deadline on
- * each remaining day, counted in the çelınc's zone like the server counts it.
+ * each remaining day, counted in the çelınc's zone like the server counts it,
+ * or 30 minutes before the end on a day the end cuts before its deadline.
  *
  * This used to be one repeating daily alarm, which knew nothing about the
  * çelınc's window: it kept ringing every morning after the end (or a cancel)
  * until the app was next opened. One dated alarm per day cannot outlive it.
  */
-function checkinSlots(challenge: ReminderChallenge, now: Date): { dayKey: string; at: Date }[] {
+function checkinSlots(challenge: ReminderChallenge, now: Date): { dayKey: string; at: Date; cut: boolean }[] {
   const { tz } = challenge;
   if (challenge.metricType !== 'checkin_deadline' || !challenge.deadlineTime) return [];
   const deadline = minusMinutes(challenge.deadlineTime, 0);
   const at = minusMinutes(challenge.deadlineTime, MINUTES_BEFORE_DEADLINE);
+  const open = minusMinutes(challenge.windowStart ?? '00:00', 0);
   const startsAt = Date.parse(challenge.startsAt);
   const endsAt = Date.parse(challenge.endsAt);
-  if (!deadline || !at || !Number.isFinite(startsAt) || !Number.isFinite(endsAt)) return [];
+  if (!deadline || !at || !open || !Number.isFinite(startsAt) || !Number.isFinite(endsAt)) return [];
   // a 00:10 deadline is poked at 23:40 the evening before
   const eveningBefore = at.hour * 60 + at.minute > deadline.hour * 60 + deadline.minute;
 
@@ -409,12 +424,22 @@ function checkinSlots(challenge: ReminderChallenge, now: Date): { dayKey: string
     .filter((dayKey) => dayKey > today || (dayKey === today && !challenge.doneToday))
     .slice(0, CHECKIN_DAYS_AHEAD);
 
-  const slots: { dayKey: string; at: Date }[] = [];
+  const slots: { dayKey: string; at: Date; cut: boolean }[] = [];
   for (const dayKey of days) {
     const slot = zonedInstant(eveningBefore ? addDays(dayKey, -1) : dayKey, at.hour, at.minute, tz);
     if (!slot) continue;
-    const time = slot.getTime();
-    if (time > now.getTime() && time >= startsAt && time < endsAt) slots.push({ dayKey, at: slot });
+    // A day the end cuts before its deadline is poked before the end: in
+    // London an Istanbul erken_yat's last evening ends at 20:59, and its
+    // 22:30 poke would never ring. Not before the slot opens, and not at all
+    // when the end comes first: that day has no check-in.
+    const cut = cutShortOn(challenge.endsAt, dayKey, tz, challenge.deadlineTime) !== null;
+    let time = slot.getTime();
+    if (cut) {
+      const opens = zonedInstant(dayKey, open.hour, open.minute, tz);
+      if (!opens || endsAt <= opens.getTime()) continue;
+      time = Math.max(Math.ceil(endsAt / 60_000) * 60_000 - MINUTES_BEFORE_DEADLINE * 60_000, opens.getTime());
+    }
+    if (time > now.getTime() && time >= startsAt && time < endsAt) slots.push({ dayKey, at: new Date(time), cut });
   }
   return slots;
 }

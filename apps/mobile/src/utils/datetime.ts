@@ -160,3 +160,20 @@ export function endOfDayInTz(dayKey: string, tz: string): Date | null {
   const nextMidnight = zonedInstant(addDays(dayKey, 1), 0, 0, tz);
   return nextMidnight ? new Date(nextMidnight.getTime() - 1) : null;
 }
+
+/**
+ * The çelınc's end when it cuts `dayKey` in `tz` short: it falls on that day,
+ * before `hhmm` when one is given, else before the day is over. Null otherwise.
+ *
+ * The wizard snaps the end in the creator's zone, so a London friend's last
+ * evening in an Istanbul erken_yat ends at 20:59 there, two hours before its
+ * 23:00: a "Geldim" counts only until then, and so does a typed number.
+ */
+export function cutShortOn(endsAt: string, dayKey: string, tz: string, hhmm?: string): Date | null {
+  const end = Date.parse(endsAt);
+  if (!Number.isFinite(end) || safeDayKey(new Date(end), tz) !== dayKey) return null;
+  if (hhmm === undefined) return safeDayKey(new Date(end + 1), tz) === dayKey ? new Date(end) : null;
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(hhmm);
+  const at = match ? zonedInstant(dayKey, Number(match[1]), Number(match[2]), tz) : null;
+  return at && end < at.getTime() ? new Date(end) : null;
+}

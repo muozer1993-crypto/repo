@@ -2716,7 +2716,14 @@ describe("friends in other zones play the creator's number of days", () => {
     harness.setNow('2026-11-13T03:30:00.000Z'); // 06:30 on the 13th in Istanbul, 22:30 on the 12th in New York
     const sliver = await mark(harness, deniz, challengeId, '2026-11-13');
     expect(sliver.statusCode).toBe(400);
+    // inside the çelınc's dates, so not "out of its dates": an older app shows it right there
     expect(sliver.json<{ error: { code: string; message: string } }>().error).toEqual({
+      code: 'day_out_of_range',
+      message: 'Saat farkı yüzünden bu gün sende sayılmıyor: herkes çelıncı açanın gün sayısı kadar gün oynar.',
+    });
+    // a day outside them still says so
+    const outside = await mark(harness, deniz, challengeId, '2026-11-09');
+    expect(outside.json<{ error: { code: string; message: string } }>().error).toEqual({
       code: 'day_out_of_range',
       message: 'Bu gün çelıncın tarih aralığında değil.',
     });
@@ -2828,18 +2835,76 @@ describe("friends in other zones play the creator's number of days", () => {
     return { ali, lara, challengeId };
   }
 
-  it('shows a friend before her first scored day at the penalty on screen time, not at the top with 0', async () => {
-    harness = await makeApp({ now: '2026-01-04T21:00:00.000Z' }); // Monday 00:00 in Istanbul, Sunday 13:00 in Los Angeles
-    const { ali, lara, challengeId } = await istanbulMidnight(harness, 'ekran_suresi_beyani');
-    expect(await myDays(harness, lara, challengeId)).toEqual({ first: '2026-01-05', last: '2026-01-11' });
+  it('keeps the screen-time Sunday Los Angeles can type all evening and drops the one the end cuts at 12:59', async () => {
+    const h = await makeApp({ now: '2026-01-04T21:00:00.000Z' }); // Monday 00:00 in Istanbul, Sunday 13:00 in Los Angeles
+    harness = h;
+    const { ali, lara, challengeId } = await istanbulMidnight(h, 'ekran_suresi_beyani');
+    // the 13 hours of the last Sunday are more, but they can be typed only until 12:59 and then cost 1440
+    expect(await myDays(harness, lara, challengeId)).toEqual({ first: '2026-01-04', last: '2026-01-10' });
 
-    harness.setNow('2026-01-05T03:00:00.000Z');
+    harness.setNow('2026-01-05T03:00:00.000Z'); // 19:00 on Sunday in Los Angeles
     expect((await postEntry(harness, ali, challengeId, { dayKey: '2026-01-05', value: 300, source: 'manual', clientTime: iso(harness) })).statusCode).toBe(201);
-    const detail = await authed(harness.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` });
-    expect(detail.json<ChallengeDetail>().participants.map((p) => [p.user.id, p.score, p.rank])).toEqual([
+    const detail = async () =>
+      (await authed(h.app, ali.token)({ method: 'GET', url: `/challenges/${challengeId}` }))
+        .json<ChallengeDetail>()
+        .participants.map((p) => [p.user.id, p.score, p.rank]);
+    // her first day, with nothing typed yet: the penalty, not a free 0
+    expect(await detail()).toEqual([
       [ali.me.id, 300, 1],
       [lara.me.id, 1440, 2],
     ]);
+    expect((await postEntry(harness, lara, challengeId, { dayKey: '2026-01-04', value: 200, source: 'manual', clientTime: iso(harness) })).statusCode).toBe(201);
+    expect(await detail()).toEqual([
+      [lara.me.id, 200, 1],
+      [ali.me.id, 300, 2],
+    ]);
+  });
+
+  it('charges nobody 1440 on screen time for a last day the end cuts, west or east of the creator', async () => {
+    harness = await makeApp({ now: '2026-01-04T21:00:00.000Z' }); // Monday 00:00 in Istanbul
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const kenji = await registerUser(harness.app, 'kenji', { displayName: 'Kenji', timezone: 'Asia/Tokyo' });
+    const mert = await registerUser(harness.app, 'mert', { displayName: 'Mert', timezone: 'America/New_York' });
+    befriend(harness.app, ali.me.id, kenji.me.id);
+    befriend(harness.app, ali.me.id, mert.me.id);
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'ekran_suresi_beyani',
+      participantIds: [kenji.me.id, mert.me.id],
+      endsAt: '2026-01-11T20:59:59.999Z',
+      proofRequired: false,
+    });
+    const challengeId = created.json<Challenge>().id;
+    for (const user of [kenji, mert]) {
+      expect((await authed(harness.app, user.token)({ method: 'POST', url: `/challenges/${challengeId}/accept` })).statusCode).toBe(200);
+    }
+    // New York runs from 16:00 on Sunday to 15:59 on the next Sunday: the first is his to type all evening
+    expect(await myDays(harness, mert, challengeId)).toEqual({ first: '2026-01-04', last: '2026-01-10' });
+    expect(await myDays(harness, kenji, challengeId)).toEqual({ first: '2026-01-05', last: '2026-01-11' });
+
+    // each types 100 at 23:30 local on every day of theirs
+    const offsets: [RegisteredUser, string, number][] = [
+      [ali, '2026-01-05', 3],
+      [kenji, '2026-01-05', 9],
+      [mert, '2026-01-04', -5],
+    ];
+    const typing: { at: number; user: RegisteredUser; dayKey: string }[] = [];
+    for (const [user, first, offset] of offsets) {
+      for (let n = 0; n < 7; n += 1) {
+        const dayKey = addDays(first, n);
+        typing.push({ at: Date.parse(`${dayKey}T23:30:00.000Z`) - offset * 3_600_000, user, dayKey });
+      }
+    }
+    typing.sort((a, b) => a.at - b.at);
+    for (const { at, user, dayKey } of typing) {
+      harness.setNow(new Date(at).toISOString());
+      const posted = await postEntry(harness, user, challengeId, { dayKey, value: 100, source: 'manual', clientTime: iso(harness) });
+      expect(posted.statusCode).toBe(201);
+    }
+
+    harness.setNow('2026-01-11T22:00:30.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    expect(outcome(harness, challengeId)).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
+    expect(finalRows(harness, challengeId).map((row) => row.final_score)).toEqual([100, 100, 100]);
   });
 
   it('sends no reminder or nudge for the sliver of a day a friend cannot mark', async () => {
@@ -2986,7 +3051,8 @@ describe('check-in çelınclar across zones', () => {
     const challengeId = created.json<Challenge>().id;
 
     expect((await accept(harness, leyla, challengeId)).statusCode).toBe(200);
-    // her last evening ends at 20:59, with Istanbul's: seven of them, none cut
+    // seven evenings: the last ends at 20:59 there, cut before its 23:00 but still from 19:00
+    // (the app shows that day's limit as 20:59 and pokes her at 20:30)
     expect((await detailFor(harness, leyla, challengeId)).myDays).toEqual({ first: '2026-11-10', last: '2026-11-16' });
     expect((await accept(harness, veli, challengeId)).statusCode).toBe(200);
 
@@ -3062,6 +3128,100 @@ describe('check-in çelınclar across zones', () => {
     harness = await makeApp({ now: '2026-01-05T20:00:00.000Z' });
     await lateNightErkenKus(harness);
     harness.setNow('2026-01-08T19:30:00.000Z'); // 04:30 on Friday in Tokyo
+    expect(sendReminders(harness.db, harness.now())).toBe(1);
+  });
+
+  it('keeps the Tokyo morning whose 07:00 a "Hemen" from 00:30 reaches over the last one the end cuts at 05:59', async () => {
+    harness = await makeApp({ now: '2026-11-09T21:30:00.000Z' }); // 00:30 on Tuesday in Istanbul, 06:30 in Tokyo
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli', timezone: 'Asia/Tokyo' });
+    befriend(harness.app, ali.me.id, veli.me.id);
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'erken_kus',
+      deadlineTime: '07:00',
+      participantIds: [veli.me.id],
+      endsAt: '2026-11-13T20:59:59.999Z',
+    });
+    expect(created.statusCode).toBe(201);
+    const challengeId = created.json<Challenge>().id;
+    expect((await accept(harness, veli, challengeId)).statusCode).toBe(200);
+    // Tuesday's half hour before 07:00 counts; Saturday's 04:00-05:59 has no 07:00 in it
+    expect((await detailFor(harness, veli, challengeId)).myDays).toEqual({ first: '2026-11-10', last: '2026-11-13' });
+
+    // both at 06:45 local every morning
+    for (const day of ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13']) {
+      harness.setNow(`${addDays(day, -1)}T21:45:00.000Z`);
+      expect((await checkIn(harness, veli, challengeId, day)).statusCode).toBe(201);
+      harness.setNow(`${day}T03:45:00.000Z`);
+      expect((await checkIn(harness, ali, challengeId, day)).statusCode).toBe(201);
+    }
+    harness.setNow('2026-11-13T19:45:00.000Z'); // 04:45 on Saturday in Tokyo
+    expect(errorOf(await checkIn(harness, veli, challengeId, '2026-11-14')).code).toBe('day_out_of_range');
+
+    harness.setNow('2026-11-13T22:00:30.000Z');
+    runSchedulerOnce(harness.db, harness.now());
+    const outcome = harness.db.prepare('SELECT status, winner_id, is_tie FROM challenges WHERE id = ?').get(challengeId);
+    expect(outcome).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
+  });
+
+  it("leaves a zone's days with no slot out of its check-in days, but not a day the creator has without one too", async () => {
+    harness = await makeApp({ now: '2026-11-09T09:00:00.000Z' }); // Monday 12:00 in Istanbul
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const mert = await registerUser(harness.app, 'mert', { displayName: 'Mert', timezone: 'America/New_York' });
+    const greta = await registerUser(harness.app, 'greta', { displayName: 'Greta', timezone: 'Europe/Berlin' });
+    befriend(harness.app, ali.me.id, mert.me.id);
+    befriend(harness.app, ali.me.id, greta.me.id);
+    // "Yarın" from 04:00 on Tuesday in Istanbul, 22:00 on Monday in New York, to the end of Saturday
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'erken_kus',
+      deadlineTime: '07:00',
+      participantIds: [mert.me.id],
+      startsAt: '2026-11-10T01:00:00.000Z',
+      endsAt: '2026-11-14T20:59:59.999Z',
+    });
+    const challengeId = created.json<Challenge>().id;
+    expect((await accept(harness, mert, challengeId)).statusCode).toBe(200);
+    // his Monday evening has no morning in it: five days, as Ali's
+    expect((await detailFor(harness, mert, challengeId)).myDays).toEqual({ first: '2026-11-10', last: '2026-11-14' });
+    expect((await detailFor(harness, ali, challengeId)).myDays).toEqual({ first: '2026-11-10', last: '2026-11-14' });
+    harness.setNow('2026-11-10T01:30:00.000Z'); // 20:30 on Monday in New York
+    expect(errorOf(await checkIn(harness, mert, challengeId, '2026-11-09'))).toEqual({
+      code: 'day_out_of_range',
+      message: 'Saat farkı yüzünden bu check-in sende sayılmıyor: herkes çelıncı açanın sayısı kadar check-in yapar.',
+    });
+
+    // "Hemen" at 12:00, past Istanbul's 07:00 and Berlin's: both keep that first day, for its late 0
+    harness.setNow('2026-11-10T09:00:00.000Z');
+    const hemen = await createChallenge(harness, ali, {
+      typeKey: 'erken_kus',
+      deadlineTime: '07:00',
+      participantIds: [greta.me.id],
+      endsAt: '2026-11-12T20:59:59.999Z',
+    });
+    const hemenId = hemen.json<Challenge>().id;
+    expect((await accept(harness, greta, hemenId)).statusCode).toBe(200);
+    expect((await detailFor(harness, greta, hemenId)).myDays).toEqual({ first: '2026-11-10', last: '2026-11-12' });
+  });
+
+  it('does not remind New York of a last erken_yat evening that ends at 15:59, before its 19:00', async () => {
+    harness = await makeApp({ now: '2026-11-08T21:30:00.000Z' }); // Monday 00:30 in Istanbul
+    const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
+    const mert = await registerUser(harness.app, 'mert', { displayName: 'Mert', timezone: 'America/New_York', reminderHour: 10 });
+    befriend(harness.app, ali.me.id, mert.me.id);
+    const created = await createChallenge(harness, ali, {
+      typeKey: 'erken_yat',
+      deadlineTime: '23:00',
+      participantIds: [mert.me.id],
+      endsAt: '2026-11-15T20:59:59.999Z',
+    });
+    const challengeId = created.json<Challenge>().id;
+    expect((await accept(harness, mert, challengeId)).statusCode).toBe(200);
+    // seven evenings from Sunday the 8th; Sunday the 15th ends at 15:59
+    expect((await detailFor(harness, mert, challengeId)).myDays).toEqual({ first: '2026-11-08', last: '2026-11-14' });
+
+    harness.setNow('2026-11-15T15:00:00.000Z'); // 10:00 on Sunday in New York
+    expect(sendReminders(harness.db, harness.now())).toBe(0);
+    harness.setNow('2026-11-14T15:00:00.000Z'); // a Saturday that has its evening
     expect(sendReminders(harness.db, harness.now())).toBe(1);
   });
 

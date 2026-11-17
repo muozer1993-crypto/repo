@@ -38,7 +38,7 @@ import {
   type UserRow,
 } from '../db/index.js';
 import { badRequest, conflict, forbidden, notFound, type HttpError } from '../errors.js';
-import { participantTimezone, scoringWindow, typeForChallenge } from './challenges.js';
+import { challengeWindow, participantTimezone, scoringWindow, typeForChallenge } from './challenges.js';
 import {
   acceptedCount,
   disputeMajorityCopy,
@@ -362,6 +362,16 @@ export function validateAndUpsertEntry(db: Database, input: EntryWriteInput): En
   const checkinDeadline = type.metricType === 'checkin_deadline' ? effectiveDeadline(type, challenge.deadline_time) : null;
   const at = checkinDeadline !== null ? checkinInstant(db, body, checkinDeadline, tz, now) : now;
   const issue = dayWindowIssue(window, type.metricType, tz, body.dayKey, at, body.source);
+  // A day inside the çelınc's dates that the trim left out is not "out of its
+  // dates": an older app, or an entry parked on one, shows it right there.
+  if (issue === 'day_out_of_range' && challengeWindow(challenge, tz).includes(body.dayKey)) {
+    throw badRequest(
+      'day_out_of_range',
+      type.metricType === 'checkin_deadline'
+        ? 'Saat farkı yüzünden bu check-in sende sayılmıyor: herkes çelıncı açanın sayısı kadar check-in yapar.'
+        : 'Saat farkı yüzünden bu gün sende sayılmıyor: herkes çelıncı açanın gün sayısı kadar gün oynar.',
+    );
+  }
   if (issue) throw dayWindowError(issue, type.metricType, body.source);
 
   if (body.value > type.maxPerEntry) {
