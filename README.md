@@ -815,8 +815,9 @@ uyarı düşer ve saatte bir yeniden dener; o günün yedeği yine `data\backups
    adres değişir, herkese yeni bağlantı atman gerekir. `npm run server` ile açtıysan o pencerede
    Ctrl+C'ye bas. Açıkken yüklenen yedek veritabanını bozar; komut sunucuyu açık bulursa hiçbir
    şeye dokunmadan söyler.
-2. Başka bir PowerShell penceresinde `npm run yonet -- geri-yukle` çalıştır: iki klasördeki en
-   yeni yedeği yükler. Belli bir günü istiyorsan tarihini yaz: `npm run yonet -- geri-yukle 2026-10-03`.
+2. Başka bir PowerShell penceresinde, depo klasöründe (`cd C:\Users\ArisK\koydum`)
+   `npm run yonet -- geri-yukle` çalıştır: iki klasördeki en yeni yedeği yükler. Belli bir günü
+   istiyorsan tarihini yaz: `npm run yonet -- geri-yukle 2026-10-03`.
 3. Sunucuyu aç: `dur` yazdığın pencerede `y` yazıp Enter'a bas. Adres aynı kalır, kimseye
    bağlantı atmazsın. `npm run server` ile açtıysan yine `npm run server`.
 
@@ -1516,7 +1517,7 @@ cd apps/mobile && npx jest
 node e2e/smoke.mjs    # gerçek sunucu + tarayıcı, uçtan uca (playwright-core ister)
 ```
 
-Windows'ta `npm test`, `npm run internet`'in dokuz testini atlar (`skipped` yazar, hata değildir):
+Windows'ta `npm test`, `npm run internet`'in on bir testini atlar (`skipped` yazar, hata değildir):
 o testlerdeki sahte cloudflared, Windows'un çalıştıramadığı bir Linux betiği.
 
 `e2e/smoke.mjs` geçici bir veritabanıyla sunucuyu ayağa kaldırır, iki kullanıcı kaydeder,
