@@ -1363,6 +1363,9 @@ describe('a step çelınc past its end, still active on the server', () => {
     expect(text).toContain('SÜRE BİTTİ');
     expect(text).toContain('Sonuç birazdan');
     expect(text).toContain('son adımlar toplanıyor');
+    // a phone's raise at 00:59 holds the result half an hour past the hour
+    expect(text).toContain('Kazanan bir saat içinde belli olur, son anda bir sayı değişirse yarım saat daha sürer.');
+    expect(text).not.toContain('En geç bir saat');
     expect(text).not.toContain('BİTMESİNE');
     expect(text).not.toContain('SENİN SIRAN');
     expect(text).not.toContain('BEYAN ET');

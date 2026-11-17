@@ -1338,11 +1338,13 @@ yükleniyor, gelmezse uygulama onsuz devam ediyor.
 
 **Çelınc bitti ama sonuç çıkmadı.**
 Sonuçlandırmayı sunucudaki zamanlayıcı yapar ve 30 saniyede bir çalışır. Adım ve ekran süresi
-çelınclarında bu bilerek bir saate kadar sürer: son akşamın adımları telefonlardan geç gelir,
+çelınclarında bu bilerek bir saate kadar sürer (son anda bir telefon sayı değiştirirse bir buçuk
+saate kadar): son akşamın adımları telefonlardan geç gelir,
 uygulama o sırada "Sonuç birazdan" yazar, ana sayfadaki kart da "⏳ Sonuç bekleniyor" der; kartta
 kalan ÖNDESİN / GERİDESİN o anki sıradır, sonuç değil. Herkesin telefonu son günü bitişten sonra
 gönderdiyse ve kimsenin sayısı bitişten sonra değişmediyse hemen kapanır. Bir telefon bitişten sonra
-bir günü yükselttiyse kankalar o sayıya itiraz edebilsin diye saatin sonu beklenir. Elle girilen
+bir günü yükselttiyse kankalar o sayıya itiraz edebilsin diye saatin sonu beklenir; saatin son
+yarım saatinde yükselttiyse o andan yarım saat sonrası. Elle girilen
 çelınclar tam bitişte kapanır; ama son bir saatte giriş yapıldıysa onlar da bitişten sonra bir saat
 bekler, uygulama da "Son saatte yapılan girişler var" der. O saatten sonra gelen adımlar sonucu
 değiştirmez. iPhone adımları arka planda pek göndermez: çelınc bitince o saat içinde uygulamayı bir

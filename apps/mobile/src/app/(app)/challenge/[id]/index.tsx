@@ -156,7 +156,9 @@ function nowIso(): string {
  * What the server is still waiting for once the time is up (`settling`). An
  * itiraz inside its answer window holds the result longer than any phone.
  * A phone-counted çelınc finishes early only when every phone has reported and
- * no number moved after the end, so the hour is what to promise. A typed one
+ * no number moved after the end, so the hour is what to promise, and the half
+ * hour a phone that moves a number late in it adds (`LATE_PHONE_MOVE_ITIRAZ_MS`):
+ * "en geç bir saat" read at 00:05 was broken by a raise at 00:59. A typed one
  * is held only by a number typed in its last hour (`itirazHour`: the server
  * keeps itirazlar open past the end); without one it is a pass away.
  */
@@ -166,9 +168,9 @@ function settlingNote(type: ChallengeType | undefined, awaitingProof: boolean, i
   }
   switch (type?.deviceMetric) {
     case 'steps':
-      return 'Telefonların saydığı son adımlar toplanıyor, gelen sayılara itiraz da edilebilir. En geç bir saat içinde kazanan belli olur.';
+      return 'Telefonların saydığı son adımlar toplanıyor, gelen sayılara itiraz da edilebilir. Kazanan bir saat içinde belli olur, son anda bir sayı değişirse yarım saat daha sürer.';
     case 'screen_time':
-      return 'Telefonların ölçtüğü son ekran süreleri toplanıyor, gelen sayılara itiraz da edilebilir. En geç bir saat içinde kazanan belli olur.';
+      return 'Telefonların ölçtüğü son ekran süreleri toplanıyor, gelen sayılara itiraz da edilebilir. Kazanan bir saat içinde belli olur, son anda bir sayı değişirse yarım saat daha sürer.';
     default:
       return itirazHour
         ? 'Son saatte yapılan girişler var, kankalar bakıp itiraz edebilsin diye sonuç bekliyor. En geç bir saat içinde kazanan belli olur.'

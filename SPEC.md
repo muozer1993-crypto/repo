@@ -1008,8 +1008,9 @@ onboarding.tsx              4 slides (copy onboarding_1..4 under a title per lev
                             DELETE); the owner's disputed row gets "Kanıt ekle", a sheet with the entry modal's camera /
                             gallery pick → /uploads → POST .../proof),
                             past `endsAt` but still `active` (settling, 2.4) → "Süre bitti / Sonuç birazdan" instead of the
-                            countdown, under it what it waits for (an itiraz's photo; the phones' last numbers, "… En geç
-                            bir saat içinde kazanan belli olur."; on a typed çelınc whose `disputesCloseAt` is past `endsAt`
+                            countdown, under it what it waits for (an itiraz's photo; the phones' last numbers, "… Kazanan
+                            bir saat içinde belli olur, son anda bir sayı değişirse yarım saat daha sürer." (2.3,
+                            `LATE_PHONE_MOVE_ITIRAZ_MS`); on a typed çelınc whose `disputesCloseAt` is past `endsAt`
                             "Son saatte yapılan girişler var, kankalar bakıp itiraz edebilsin diye sonuç bekliyor. …" (a yes/no tick or a check-in is no number), else
                             "Son hesap yapılıyor, bir dakikaya kalmaz."), no action area, "böyle devam" verdict, "laf sok" or "Ayrıl", one device sync on open
                             (the list card says "Sonuç bekleniyor" and drops its verdict line too),
