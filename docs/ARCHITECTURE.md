@@ -58,16 +58,20 @@ saatten önce kestiği günden önce gelir (00:30'da "Hemen" açılan Erken Kuş
 kalır, 04:00-05:59 son sabahı düşer). Son saat aralığına hiç denk gelmeyen gün, açanda da öyle değilse o
 kankanın günü sayılmaz (New York'ta 15:59'da biten son akşam). Bitişin son saatten önce kestiği gün
 (Londra'nın 20:59'da biten yedinci akşamı) bitişe kadar oynanır: uygulama o gün sınırı 20:59 gösterir ve
-yarım saat önce hatırlatır. Bu kural migration 019'la geldi; ondan önce açılmış çelınc, bitmiş ya da
-sürüyor, oynandığı eski kuralla kırpılır (`challenges.window_rule` 0): check-in'de son saati içeride
-olsun olmasın daha az kapsanan uç düşer, ekran süresinde daha az saatlik uç. Yoksa güncellemeyle
-reddedilmiş bir gün eksik güne, sayılmış bir giriş de sayılmayana dönerdi; kazanan değişirdi.
-Aynı dilimdeki oyunculara dokunulmaz. Profilini
+yarım saat önce hatırlatır. Aynı dilimdeki oyunculara dokunulmaz. Profilini
 "Varım"dan hemen önce Tokyo'ya alan biri 07:00'lik sabahları İstanbul saatiyle 00:30'da yakalar. Kabulü
 saat dilimi değişti diye reddetmek gerçekten yolculuk yapanı cezalandırırdı; onun yerine herkesin oynadığı
 dilim görünür (`ParticipantView.timezone`): sıralamada adının altında kendi satırında "🕐 Tokyo saati" (adın yanında
 360 dp'lik telefonda "(Los Angel…" diye kesiliyordu), check-in satırında gerektiği kadar satıra sarılan, hiç kesilmeyen
 "Tokyo saatiyle 06:30 (sende 00:30)". İtiraz eden neye itiraz ettiğini görür.
+
+Sunucu güncellendiğinde sürmekte olan çelınc da bu sayıma geçer; eski kuralı tutan bir sütun yok.
+Bu kuraldan önceki sunucu yurt dışındaki kankayı kendi dilimindeki her güne puanlıyordu
+(`challengeWindow`); `scoringWindow` onların hep bir kısmını tutar, yani geçiş ancak kankanın açanın
+sayısından fazla olan gününü alabilir. O güne girilmiş kayıt artık sayılmaz (`scoredDays`), yenisi
+`day_out_of_range` alır. O fazla gün eşit oynayanlardan birini öne geçiriyordu (evet/hayırda ve
+check-in'de bir puan fazla, ekran süresinde bitişin kestiği günün 1440'ı); onsuz eşit oyun berabere
+biter.
 
 Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
 

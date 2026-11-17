@@ -529,12 +529,13 @@ of an Istanbul erken_yat, which ends at 15:59 before its 19:00). Fewer deadlines
 (2.2 `checkin_days_short`); same-zone players are never cut. A playable day the end cuts before its deadline
 (London's last evening of an Istanbul erken_yat ends at 20:59) still counts until the end: the app shows that day's
 limit as the end ("Bugünün sınırı: 20:59. Çelınc saat 23:00 olmadan bitiyor, ondan önce bas.") and pokes 30 minutes
-before it. A çelınc made before this rule (migration 019 sets `challenges.window_rule` 0 on every row it finds; new
-rows get 1) keeps the trim it was played under, finished or not: on a check-in the end whose slot the çelınc covers
-less of goes whatever its deadline, with any slot-less day past it, and a slot-less day on a side nothing was cut
-from stays; on screen time the end covering fewer hours goes, the last on a tie. Re-trimmed mid-game, a day refused
-as `day_out_of_range` would turn into a missed one and an entry that counted would drop out. Sums (steps,
-focus, counts) cover the same hours in every zone and keep every day. The phones' fan-out writes the same window,
+before it. A çelınc already running when the server is updated to this rule moves onto it; no column keeps an older
+one. Until then a friend abroad was scored on every day key of `dayKeysBetween` in their own zone, and this count keeps
+only some of those, so the move can only take away a day they had on top of the creator's count: an entry already on
+that day stops counting and another is `day_out_of_range`. That extra day is what broke a tie on equal play (one more
+point on a yes/no or check-in; on screen time one more day to average, 1440 when the end cut it before it was typed);
+without it equal play ties. Sums (steps, focus, counts) cover the same hours in every zone and keep every day. The
+phones' fan-out writes the same window,
 the standings score it (a cut day's entries left out, written before this rule too) and `everyPhoneReported`
 waits for its last day; a finished çelınc keeps the results stored at its finish; `dayKey <= todayKey(user.tz)`; `dayKey >= todayKey − 2 days`
 (manual types) / `− 7 days` (steps); value ≤ `type.maxPerEntry`, and a whole number on a `wholeNumbers` type (400

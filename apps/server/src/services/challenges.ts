@@ -318,6 +318,12 @@ export function checkinDaysShort(
  * erken_kus from 04:00, or its Sunday that ends at 15:59 before its 19:00, is
  * no day of theirs to count or to be reminded of. Nobody is let in with fewer
  * (`checkinDaysShort`).
+ *
+ * No row keeps an older rule: a çelınc already running when the server is
+ * updated moves onto this one. A server from before the trim scored a friend
+ * abroad on every day of `challengeWindow`, and this keeps only some of them,
+ * so the move can only take away a day they had on top of the creator's
+ * count; an entry on it stops counting (`scoredDays`).
  */
 export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string): string[] {
   const window = challengeWindow(challenge, tz);
@@ -332,7 +338,6 @@ export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string)
     const slot = checkinSlot(challenge, type, zone);
     const playable = window.filter((key) => slot(key).cover > 0);
     const days = checkinPlayableDays(challenge, type, creatorTz).length;
-    if (challenge.window_rule === 0) return checkinWindowBefore019(window, playable, days, (key) => slot(key).cover);
     // a reachable deadline outranks any length of slot without one
     const kept = trimEnds(playable, days, (key) => {
       const { cover, deadlineIn } = slot(key);
@@ -357,33 +362,10 @@ export function scoringWindow(db: Database, challenge: ChallengeRow, tz: string)
   const covered = (key: string): number =>
     Math.min(end, startOfDayInTz(addDays(key, 1), zone).getTime()) - Math.max(start, startOfDayInTz(key, zone).getTime());
   const lastKey = window[window.length - 1]!;
-  if (challenge.window_rule !== 0 && type.metricType === 'manual_lower_is_better' && !dayOverByEnd(challenge, zone, lastKey)) {
+  if (type.metricType === 'manual_lower_is_better' && !dayOverByEnd(challenge, zone, lastKey)) {
     return trimEnds(window, days, (key) => (key === lastKey ? -DAY_MS : covered(key)));
   }
   return trimEnds(window, days, covered);
-}
-
-/**
- * A check-in çelınc made before migration 019 (`window_rule` 0) keeps the trim
- * it was played under: the end whose slot the çelınc covers less of goes,
- * whether or not its deadline is inside, with any slot-less day past it; a
- * slot-less day on a side nothing was cut from stays. Its players were told
- * their days by it and their entries refused or taken by it.
- */
-function checkinWindowBefore019(
-  window: string[],
-  playable: string[],
-  days: number,
-  cover: (key: string) => number,
-): string[] {
-  if (playable.length <= days) return window;
-  const kept = trimEnds(playable, days, cover);
-  const first = kept[0];
-  const last = kept[kept.length - 1];
-  if (first === undefined || last === undefined) return [];
-  return window.filter(
-    (key) => (first === playable[0] || key >= first) && (last === playable[playable.length - 1] || key <= last),
-  );
 }
 
 /** Drops ends off `days` until `count` are left: the one `covered` less, the last on a tie. */

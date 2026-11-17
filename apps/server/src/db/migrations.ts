@@ -454,22 +454,6 @@ UPDATE notifications SET read_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
  );
 `;
 
-/**
- * Which rule `scoringWindow` trims a friend abroad by. 019 changed it: a
- * check-in day whose deadline the çelınc reaches outranks one the end cuts
- * before it, a day with no slot is left out unless the creator has it bare
- * too, and on screen time a last day the end cuts goes first. A çelınc made
- * before keeps the old rule (0): its players were told their days by it,
- * entries were refused and accepted by it, and a finished one's stored scores
- * were counted by it. Re-trimmed with the new one, a refused day would become
- * a missing day and an accepted entry would drop out of a running çelınc, and
- * the wrong player would win. Every row inserted after this gets the default.
- */
-const WINDOW_RULE = `
-ALTER TABLE challenges ADD COLUMN window_rule INTEGER NOT NULL DEFAULT 1;
-UPDATE challenges SET window_rule = 0;
-`;
-
 export const MIGRATIONS: Migration[] = [
   { id: '001_init', sql: INIT },
   { id: '002_indexes', sql: INDEXES },
@@ -489,5 +473,4 @@ export const MIGRATIONS: Migration[] = [
   { id: '016_friend_refusals', sql: FRIEND_REFUSALS },
   { id: '017_seed_last_beat', sql: SEED_LAST_BEAT },
   { id: '018_read_answered_requests', sql: READ_ANSWERED_REQUESTS },
-  { id: '019_window_rule', sql: WINDOW_RULE },
 ];

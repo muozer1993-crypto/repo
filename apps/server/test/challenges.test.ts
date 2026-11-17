@@ -2860,14 +2860,6 @@ describe("friends in other zones play the creator's number of days", () => {
     ]);
   });
 
-  it('keeps a screen-time çelınc made before the update on the trim it was played under', async () => {
-    harness = await makeApp({ now: '2026-01-04T21:00:00.000Z' }); // Monday 00:00 in Istanbul
-    const { lara, challengeId } = await istanbulMidnight(harness, 'ekran_suresi_beyani');
-    harness.db.prepare('UPDATE challenges SET window_rule = 0 WHERE id = ?').run(challengeId);
-    // the old trim: the 11 hours of her first Sunday are fewer than the last one's 13
-    expect(await myDays(harness, lara, challengeId)).toEqual({ first: '2026-01-05', last: '2026-01-11' });
-  });
-
   it('charges nobody 1440 on screen time for a last day the end cuts, west or east of the creator', async () => {
     harness = await makeApp({ now: '2026-01-04T21:00:00.000Z' }); // Monday 00:00 in Istanbul
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
@@ -3172,10 +3164,10 @@ describe('check-in çelınclar across zones', () => {
     expect(outcome).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
   });
 
-  // Migration 019 marks every çelınc from before the new trim `window_rule` 0:
-  // re-trimmed mid-game, Veli's refused Tuesday would turn into a missed one
-  // and his Saturday, which counted, would drop out.
-  it('keeps a check-in çelınc made before the update on the trim it was played under', async () => {
+  // A server from before the trim scored Veli on all five Tokyo mornings. The
+  // owner updates on the last evening, after the old server took Veli's
+  // Saturday: the çelınc moves onto Ali's four, and equal play ties.
+  it("moves a check-in çelınc running when the server is updated onto the creator's count, an older server's extra morning with it", async () => {
     harness = await makeApp({ now: '2026-11-09T21:30:00.000Z' }); // 00:30 on Tuesday in Istanbul, 06:30 in Tokyo
     const ali = await registerUser(harness.app, 'ali', { displayName: 'Ali' });
     const veli = await registerUser(harness.app, 'veli', { displayName: 'Veli', timezone: 'Asia/Tokyo' });
@@ -3188,27 +3180,40 @@ describe('check-in çelınclar across zones', () => {
     });
     const challengeId = created.json<Challenge>().id;
     expect((await accept(harness, veli, challengeId)).statusCode).toBe(200);
-    harness.db.prepare('UPDATE challenges SET window_rule = 0 WHERE id = ?').run(challengeId);
-    // the old trim: the half hour of Tuesday is less than Saturday's 04:00-05:59, and goes
-    expect((await detailFor(harness, veli, challengeId)).myDays).toEqual({ first: '2026-11-11', last: '2026-11-14' });
-    expect(errorOf(await checkIn(harness, veli, challengeId, '2026-11-10')).code).toBe('day_out_of_range');
 
-    for (const day of ['2026-11-11', '2026-11-12', '2026-11-13']) {
+    // both at 06:45 local every morning
+    for (const day of ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13']) {
       harness.setNow(`${addDays(day, -1)}T21:45:00.000Z`);
       expect((await checkIn(harness, veli, challengeId, day)).statusCode).toBe(201);
-    }
-    for (const day of ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13']) {
       harness.setNow(`${day}T03:45:00.000Z`);
       expect((await checkIn(harness, ali, challengeId, day)).statusCode).toBe(201);
     }
-    harness.setNow('2026-11-13T19:45:00.000Z'); // 04:45 on Saturday in Tokyo
-    expect((await checkIn(harness, veli, challengeId, '2026-11-14')).statusCode).toBe(201);
+    // what the older server took at 04:45 on Saturday in Tokyo, before the end at 05:59
+    harness.setNow('2026-11-13T19:45:00.000Z');
+    harness.db
+      .prepare(
+        `INSERT INTO entries (id, challenge_id, user_id, day_key, value, source, note, proof_url, status, client_time,
+                              session_id, late, created_at, updated_at)
+         VALUES ('saturday', ?, ?, '2026-11-14', 1, 'checkin', NULL, NULL, 'ok', ?, NULL, 0, ?, ?)`,
+      )
+      .run(challengeId, veli.me.id, iso(harness), iso(harness), iso(harness));
+
+    // his first morning stays, the Saturday is no day of his and its "Geldim" counts for nothing
+    expect((await detailFor(harness, veli, challengeId)).myDays).toEqual({ first: '2026-11-10', last: '2026-11-13' });
+    const scores = Object.fromEntries((await detailFor(harness, ali, challengeId)).participants.map((p) => [p.user.id, p.score]));
+    expect(scores).toEqual({ [ali.me.id]: 4, [veli.me.id]: 4 });
 
     harness.setNow('2026-11-13T22:00:30.000Z');
     runSchedulerOnce(harness.db, harness.now());
     const outcome = harness.db.prepare('SELECT status, winner_id, is_tie FROM challenges WHERE id = ?').get(challengeId);
     expect(outcome).toEqual({ status: 'finished', winner_id: null, is_tie: 1 });
-    expect((await detailFor(harness, veli, challengeId)).myDays).toEqual({ first: '2026-11-11', last: '2026-11-14' });
+    const stored = harness.db
+      .prepare('SELECT user_id, final_score FROM challenge_participants WHERE challenge_id = ? ORDER BY rowid')
+      .all(challengeId);
+    expect(stored).toEqual([
+      { user_id: ali.me.id, final_score: 4 },
+      { user_id: veli.me.id, final_score: 4 },
+    ]);
   });
 
   it("leaves a zone's days with no slot out of its check-in days, but not a day the creator has without one too", async () => {

@@ -158,32 +158,15 @@ describe('migrations', () => {
        VALUES ('u1', 'ali', 'Ali', 'x', 'K7QF2M', '2026-11-01T10:00:00.000Z', '2026-11-16T20:19:00.000Z')`,
     ).run();
 
-    db.prepare(
-      `INSERT INTO challenges (id, creator_id, type_key, metric_type, direction, unit, title, starts_at, ends_at, created_at)
-       VALUES ('c1', 'u1', 'erken_kus', 'checkin_deadline', 'higher', 'gün', 'Erken Kuş',
-               '2026-11-15T21:00:00.000Z', '2026-11-22T20:59:59.999Z', '2026-11-14T10:00:00.000Z')`,
-    ).run();
-
     expect(migrate(db)).toEqual([
       '014_server_pauses',
       '015_participant_invited_by',
       '016_friend_refusals',
       '017_seed_last_beat',
       '018_read_answered_requests',
-      '019_window_rule',
     ]);
     // the first start of the new version writes the pause from here
     expect(readLastBeat(db)?.toISOString()).toBe('2026-11-16T20:19:00.000Z');
-    // a çelınc made before 019 keeps the old trim of a friend abroad's days; one made after gets the new one
-    db.prepare(
-      `INSERT INTO challenges (id, creator_id, type_key, metric_type, direction, unit, title, starts_at, ends_at, created_at)
-       SELECT 'c2', creator_id, type_key, metric_type, direction, unit, title, starts_at, ends_at, created_at
-         FROM challenges WHERE id = 'c1'`,
-    ).run();
-    expect(db.prepare('SELECT id, window_rule FROM challenges ORDER BY id').all()).toEqual([
-      { id: 'c1', window_rule: 0 },
-      { id: 'c2', window_rule: 1 },
-    ]);
 
     // one at 016 that already beats keeps its own beat, even behind a later request
     writeLastBeat(db, new Date('2026-11-16T21:00:00.000Z'));

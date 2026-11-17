@@ -138,11 +138,6 @@ export interface ChallengeRow {
   /** 0 | 1 */
   is_tie: number;
   rematch_of_id: string | null;
-  /**
-   * Which rule `scoringWindow` trims a friend abroad by (migration 019): 0 for
-   * a çelınc made before it, which keeps the rule it was played under; 1 since.
-   */
-  window_rule: number;
 }
 
 export interface ParticipantRow {
