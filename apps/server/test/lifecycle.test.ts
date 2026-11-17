@@ -351,6 +351,42 @@ describe('challenge lifecycle', () => {
     expect(sendReminders(db, app.now())).toBe(1);
   });
 
+  it('does not spend the day\'s reminder on a disk that takes the claim and not the notification', async () => {
+    harness = await makeApp({ now: '2026-01-05T17:30:00.000Z' }); // Monday 20:30 in Istanbul
+    const { app, db } = harness;
+    const ali = await registerUser(app, 'ali', { reminderHour: 20 });
+    const veli = await registerUser(app, 'veli', { reminderHour: 20 });
+    seedChallenge(app, {
+      creatorId: ali.me.id,
+      accepted: [ali.me.id, veli.me.id],
+      startsAt: '2026-01-05T08:00:00.000Z',
+      endsAt: '2026-01-09T08:00:00.000Z',
+      status: 'active',
+    });
+    // only the notification's insert fails, the way SQLite's do on a full disk: stubbed
+    type Run = (this: { source: string }, ...args: unknown[]) => unknown;
+    const proto = Object.getPrototypeOf(db.prepare('SELECT 1')) as { run: Run };
+    const run = proto.run;
+    const writes = vi.spyOn(proto, 'run').mockImplementation(function (this: { source: string }, ...args: unknown[]) {
+      if (/^\s*INSERT INTO notifications\b/i.test(this.source)) {
+        throw Object.assign(new Error('database or disk is full'), { code: 'SQLITE_FULL' });
+      }
+      return run.apply(this, args);
+    });
+    try {
+      expect(() => sendReminders(db, app.now())).toThrow('database or disk is full');
+      expect(db.prepare('SELECT COUNT(*) AS n FROM reminders_sent').get()).toEqual({ n: 0 });
+    } finally {
+      writes.mockRestore();
+    }
+
+    // room freed at 20:45: both get theirs
+    harness.setNow('2026-01-05T17:45:00.000Z');
+    expect(sendReminders(db, app.now())).toBe(2);
+    expect(listByType(db, ali.me.id, 'reminder')).toHaveLength(1);
+    expect(listByType(db, veli.me.id, 'reminder')).toHaveLength(1);
+  });
+
   describe('the daily reminder only points at something that still counts today', () => {
     /** İlker and Ufuk (both reminded at 20:00 in Istanbul) on Monday 12:00. */
     async function pair(): Promise<{ h: TestApp; ilker: RegisteredUser; ufuk: RegisteredUser }> {

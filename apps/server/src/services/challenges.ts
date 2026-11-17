@@ -1548,21 +1548,26 @@ export function sendReminders(db: Database, now: Date = new Date()): number {
     // before the claim: a çelınc accepted later this evening still gets today's
     const open = stillToPlay(user);
     if (open.length === 0) continue;
-    if (claim.run(user.id, dayKey).changes === 0) continue;
 
     const level = levelOf(user);
     // With the phone's own number already in today, "Bugün hâlâ sıfırdasın" is
     // false: the reminder names the çelınc still empty instead, and its tap opens it.
     const named = sources.length > 0 ? open[0] : null;
-    notify(db, {
-      userId: user.id,
-      type: 'reminder',
-      title: reminderTitle(level),
-      body: named ? reminderBody(level, named.title) : t('notification_daily_reminder', level),
-      data: named ? { dayKey, challengeId: named.id } : { dayKey },
-      createdAt: iso,
-    });
-    sent += 1;
+    // claim and write together: a disk that takes the small claim and not the
+    // notification must not spend the day's one reminder
+    const delivered = db.transaction(() => {
+      if (claim.run(user.id, dayKey).changes === 0) return false;
+      notify(db, {
+        userId: user.id,
+        type: 'reminder',
+        title: reminderTitle(level),
+        body: named ? reminderBody(level, named.title) : t('notification_daily_reminder', level),
+        data: named ? { dayKey, challengeId: named.id } : { dayKey },
+        createdAt: iso,
+      });
+      return true;
+    })();
+    if (delivered) sent += 1;
   }
 
   return sent;
@@ -1831,18 +1836,22 @@ export function sendTauntFollowups(db: Database, now: Date = new Date()): number
       continue;
     }
     if (hour < NUDGE_FROM_HOUR || hour >= NUDGE_UNTIL_HOUR) continue;
-    if (claim.run(challenge.id, iso).changes === 0) continue;
 
     const copy = tauntFollowupCopy(levelOf(winner), losers.map((loser) => loser.display_name));
-    notify(db, {
-      userId: winner.id,
-      type: 'reminder',
-      title: copy.title,
-      body: copy.body,
-      data: { challengeId: challenge.id, kind: 'taunt_followup' },
-      createdAt: iso,
-    });
-    sent += 1;
+    // claim and write together, as the daily reminder: once per çelınc, never lost to a half-done write
+    const delivered = db.transaction(() => {
+      if (claim.run(challenge.id, iso).changes === 0) return false;
+      notify(db, {
+        userId: winner.id,
+        type: 'reminder',
+        title: copy.title,
+        body: copy.body,
+        data: { challengeId: challenge.id, kind: 'taunt_followup' },
+        createdAt: iso,
+      });
+      return true;
+    })();
+    if (delivered) sent += 1;
   }
 
   return sent;
@@ -1855,8 +1864,9 @@ export function sendTauntFollowups(db: Database, now: Date = new Date()): number
  * app at once, a phone in a pocket on its next background run, every 15
  * minutes at the soonest (`minimumInterval` in the app's
  * services/background.ts). Before that lands, "Bugün hâlâ sıfırdasın" goes to
- * somebody who logged at 10:30, and the day's one nudge is spent on a lead that
- * is gone a minute later. Nothing is claimed meanwhile (both check everything
+ * somebody who logged at 10:30, the day's one nudge is spent on a lead that
+ * is gone a minute later, and the weekly recap names a walker from hours-old
+ * steps. Nothing is claimed meanwhile (both check everything
  * before their `reminders_sent` / `nudges_sent` claim), so the first pass after
  * it sends them with the parked entries counted, and the claims still keep them
  * to one a day. A phone that takes longer than this can still be reminded.
@@ -1892,14 +1902,22 @@ export function runSchedulerOnce(db: Database, now: Date = new Date(), deps: Sch
   step('finalize', () => finalizeEndedChallenges(db, now, { bootAt: deps.bootAt }), (n) => (summary.finalized = n));
   step('cancel', () => cancelUnderfilled(db, now), (n) => (summary.cancelled = n));
   // the phones' parked entries land first (`WAKE_GRACE_MS`)
-  const justBack = deps.bootAt !== undefined && now.getTime() - deps.bootAt.getTime() < WAKE_GRACE_MS;
+  const graceEnds = deps.bootAt ? new Date(deps.bootAt.getTime() + WAKE_GRACE_MS) : null;
+  const justBack = graceEnds !== null && now.getTime() < graceEnds.getTime();
   if (!justBack) {
     step('reminders', () => sendReminders(db, now), (n) => (summary.reminders = n));
     step('nudges', () => sendNudges(db, now), (n) => (summary.nudges = n));
   }
   step('tauntFollowups', () => sendTauntFollowups(db, now), (n) => (summary.tauntFollowups = n));
-  // after finalize, so a çelınc that ended this minute is already in the count
-  step('recaps', () => sendWeeklyRecaps(db, now), (n) => (summary.recaps = n));
+  // After finalize, so a çelınc that ended this minute is already in the count,
+  // and after the grace, so the steps the phones parked while the PC slept are
+  // too: one week's walker line is never corrected. A Monday make-up closing
+  // within the grace goes now rather than never.
+  step(
+    'recaps',
+    () => sendWeeklyRecaps(db, now, justBack ? { closingBy: graceEnds } : {}),
+    (n) => (summary.recaps = n),
+  );
 
   return summary;
 }

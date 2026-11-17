@@ -138,7 +138,9 @@ Sunucu istemcinin gönderdiği saate, tek bir istisna dışında, güvenmez:
   yapar: ekran geri sayımı bittiği anda detayı yeniden ister, vuruş 30 saniye sonra gelebilir; o
   arada dönen `pending` uygulamaya "sunucuya ulaşamadım" dedirtiyordu.
 * Açılıştan ya da uyanıştan (`bootAt`) sonraki ilk 20 dakika (`WAKE_GRACE_MS`) zamanlayıcı günlük
-  hatırlatmayı ve gün ortası dürtmeyi göndermez. Telefonlar bekleyenleri ancak bir sonraki
+  hatırlatmayı, gün ortası dürtmeyi ve haftalık özeti göndermez (öğlen 12:00'si bu 20 dakikaya düşen
+  Pazartesi telafisi hemen gider). Özet haftada bir yazılır ve düzeltilmez: uyanışın ilk turunda
+  giderse telefonların uyku boyunca beklettiği adımlar sayılmaz, haftanın en çok yürüyeni yanlış çıkar. Telefonlar bekleyenleri ancak bir sonraki
   gidişlerinde gönderir: açık uygulama hemen, cepteki telefon arka plan görevinin bir sonraki
   turunda, en erken 15 dakikada bir. Bilgisayar 10:00-13:00 uyuduğunda uyanışın ilk turu 10:30'da
   işaretleyen Veli'ye "Bugün hâlâ sıfırdasın" ve "Ali sana 1 gün fark koymuş" gönderiyor, girişi bir

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { LIMITS, type Challenge, type Entry, type Me, type RecapData } from '@koydum/shared';
 
 import { newId, nowIso } from '../src/db/index.js';
-import { runSchedulerOnce } from '../src/services/challenges.js';
+import { runSchedulerOnce, WAKE_GRACE_MS } from '../src/services/challenges.js';
 import { listInbox } from '../src/services/notifications.js';
 import { recapWeekFor, sendWeeklyRecaps } from '../src/services/recap.js';
 import { authed, befriend, makeApp, registerUser, type RegisteredUser, type TestApp } from './helpers.js';
@@ -412,6 +412,29 @@ describe('weekly recap', () => {
     expect(sendWeeklyRecaps(app.db, app.now())).toBe(1);
     expect(recapsOf(ali.me.id)).toHaveLength(1);
     expect(recapsOf(veli.me.id)).toHaveLength(0);
+  });
+
+  it('waits out the grace after a wake, so the steps the phones parked while the PC slept are in it', async () => {
+    const { app, ali, veli } = await gang('2026-01-11T12:00:00.000Z'); // Sunday 15:00
+    setSteps(app, ali.me.id, SUNDAY, 8_000);
+    setSteps(app, veli.me.id, SUNDAY, 7_000);
+
+    // asleep from 15:00, awake at 21:00: Veli's phone has not reached it yet
+    const bootAt = new Date('2026-01-11T18:00:00.000Z');
+    expect(runSchedulerOnce(app.db, bootAt, { bootAt }).recaps).toBe(0);
+    expect(app.db.prepare('SELECT COUNT(*) AS n FROM recaps_sent').get()).toEqual({ n: 0 });
+
+    // 21:10: it has, with the evening's walk
+    setSteps(app, veli.me.id, SUNDAY, 12_000);
+    expect(runSchedulerOnce(app.db, new Date(bootAt.getTime() + WAKE_GRACE_MS), { bootAt }).recaps).toBeGreaterThan(0);
+    expect(recapsOf(ali.me.id)[0].body).toContain('🚶 En çok Veli yürüdü: 12.000 adım.');
+  });
+
+  it('still sends a Monday make-up whose window closes within the grace after a wake', async () => {
+    const { app, ali, veli } = await gang('2026-01-12T08:45:00.000Z'); // Monday 11:45
+    seedFinished(app, { players: [ali.me.id, veli.me.id], winnerId: ali.me.id, finalizedAt: '2026-01-09T10:00:00.000Z' });
+    const bootAt = app.now();
+    expect(runSchedulerOnce(app.db, bootAt, { bootAt }).recaps).toBe(3);
   });
 
   it('runs as a scheduler step', async () => {

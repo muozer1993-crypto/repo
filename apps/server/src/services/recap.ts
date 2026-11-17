@@ -28,6 +28,7 @@ import {
   dayKeyToUtcDate,
   formatScore,
   localHour,
+  localInstant,
   todayKey,
   type RecapData,
   type VulgarityLevel,
@@ -392,8 +393,14 @@ export function recapCopy(
 /**
  * Scheduler step: writes the recap of everybody whose Sunday evening it is.
  * Returns how many were sent.
+ *
+ * With `closingBy` (a pass right after a wake, `WAKE_GRACE_MS`) only the Monday
+ * make-ups whose window closes by then go: the rest wait for the steps the
+ * phones parked while the PC slept, which otherwise came after a recap that
+ * named the wrong walker for good, and a make-up waited for past its noon would
+ * never go.
  */
-export function sendWeeklyRecaps(db: Database, now: Date = new Date()): number {
+export function sendWeeklyRecaps(db: Database, now: Date = new Date(), options: { closingBy?: Date } = {}): number {
   const until = nowIso(now);
   const floor = new Date(now.getTime() - WEEK_MS).toISOString();
   const reach = new Date(now.getTime() - PREVIOUS_RECAP_REACH_MS).toISOString();
@@ -417,13 +424,19 @@ export function sendWeeklyRecaps(db: Database, now: Date = new Date()): number {
       continue;
     }
     if (!weekKey || alreadySent.get(user.id, weekKey)) continue;
+    const today = todayKey(timezone, now);
+    const late = weekKey !== today;
+    if (options.closingBy) {
+      // a Sunday evening still has its Monday make-up; only a make-up closing in the grace goes now
+      const closes = late ? localInstant(today, RECAP_LATE_UNTIL_HOUR, 0, timezone).getTime() : Number.POSITIVE_INFINITY;
+      if (closes > options.closingBy.getTime()) continue;
+    }
 
     // Normally the previous recap: its moment is where this window starts, even
     // when it is a little over 7 days back (a Monday make-up, the hour lost to
     // DST, a later scheduler tick). Only a skipped week falls back to 7 days.
     const last = (previous.get(user.id) as { at: string | null }).at;
     const since = last && last > reach ? last : floor;
-    const late = weekKey !== todayKey(timezone, now);
 
     // claim and write together: a failure half-way must not burn the week
     const delivered = db.transaction(() => {
